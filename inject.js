@@ -112,8 +112,9 @@ async function injectOnce() {
       ? buildHostI18nExpression()
       : '';
   for (const page of targets) {
-    const session = await CdpSession.connect(page.webSocketDebuggerUrl);
+    let session = null;
     try {
+      session = await CdpSession.connect(page.webSocketDebuggerUrl);
       const res = await session.evaluate(expr);
       if (omniExpr) {
         await session.evaluate(omniExpr).catch(() => {});
@@ -127,8 +128,10 @@ async function injectOnce() {
         await session.evaluate(HOST_I18N_REMOVE_EXPRESSION).catch(() => {});
       }
       log(`[✓] ${shortTitle(page)} (obsidian-prism ${res.version} · 状态: ${res.status})`);
+    } catch (err) {
+      log(`[!] 跳过异常窗口 ${shortTitle(page)}: ${err.message}`);
     } finally {
-      session.close();
+      if (session) session.close();
     }
   }
 }
@@ -244,18 +247,13 @@ async function watch() {
   let selfConfigWriteUntil = 0;
 
   function isTrustedMainFrameContext(entry, executionContextId) {
-    if (!entry) return false;
-    const hasCtxId = typeof executionContextId === 'number';
-    if (hasCtxId && entry.contextFrames && entry.contextFrames.has(executionContextId)) {
-      const meta = entry.contextFrames.get(executionContextId);
-      if (!meta.isDefault || (meta.type && meta.type !== 'default')) return false;
-      if (entry.mainFrameId && meta.frameId && meta.frameId !== entry.mainFrameId) return false;
-      return true;
+    if (!entry || typeof executionContextId !== 'number') return false;
+    if (!entry.hasFrameTree || !entry.mainFrameId || !entry.contextFrames || !entry.contextFrames.has(executionContextId)) {
+      return false;
     }
-    if (entry.hasFrameTree) {
-      if (!hasCtxId) return false;
-      if (entry.contextFrames && entry.contextFrames.size > 0) return false;
-    }
+    const meta = entry.contextFrames.get(executionContextId);
+    if (!meta || !meta.isDefault || (meta.type && meta.type !== 'default')) return false;
+    if (!meta.frameId || meta.frameId !== entry.mainFrameId) return false;
     return true;
   }
 
@@ -432,7 +430,7 @@ async function watch() {
         const aux = ctx.auxData && typeof ctx.auxData === 'object' ? ctx.auxData : {};
         entry.contextFrames.set(ctx.id, {
           frameId: typeof aux.frameId === 'string' ? aux.frameId : '',
-          isDefault: aux.isDefault !== false,
+          isDefault: aux.isDefault === true,
           type: typeof aux.type === 'string' ? aux.type : 'default',
         });
       });
@@ -575,7 +573,7 @@ async function watch() {
       if (OMNI_BINDING) {
         await session.send('Runtime.addBinding', { name: OMNI_BINDING }).catch(() => {});
       }
-      if (SIDEBAR_BINDING) {
+      if (SIDEBAR_BINDING && readConfig()?.sidebarStudio === 'on') {
         await session.send('Runtime.addBinding', { name: SIDEBAR_BINDING }).catch(() => {});
       }
       const res = await apply(entry);

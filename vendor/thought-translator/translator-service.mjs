@@ -4,6 +4,7 @@
 // - Live Upstream Discovery: GET /v1/models & real-time latency test message
 // - Privacy & Open-Source Cleanliness: Keys & custom prompts live strictly in ~/.gemini/config/ (0600), NEVER in Git!
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -552,15 +553,29 @@ export class ThoughtTranslatorService {
   }
 
   _persistStore(store) {
-    const tmp = `${this.configFile}.${process.pid}.tmp`;
+    const tmp = `${this.configFile}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     try {
       fs.mkdirSync(path.dirname(this.configFile), { recursive: true });
       fs.writeFileSync(tmp, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 });
-      fs.renameSync(tmp, this.configFile);
-    } catch {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          fs.renameSync(tmp, this.configFile);
+          break;
+        } catch (err) {
+          if (process.platform !== 'win32' || attempt >= 3 || !['EBUSY', 'EPERM', 'EACCES'].includes(err?.code)) {
+            throw err;
+          }
+          try {
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15 * (attempt + 1));
+          } catch {}
+        }
+      }
+      return { ok: true };
+    } catch (err) {
       try {
         if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
       } catch {}
+      return { ok: false, error: redactSecrets(err?.message || String(err)) };
     }
   }
 
@@ -612,8 +627,12 @@ export class ThoughtTranslatorService {
     };
 
     this._config = this._normalizeStore(nextRaw);
-    this._persistStore(this._config);
-    return this.getSanitizedConfig();
+    const persisted = this._persistStore(this._config);
+    const out = this.getSanitizedConfig();
+    if (persisted && persisted.ok === false) {
+      return { ...out, ok: false, error: persisted.error || 'Failed to persist translator config' };
+    }
+    return out;
   }
 
   _resolveEffectiveCredentials(input = {}) {
@@ -644,9 +663,49 @@ export class ThoughtTranslatorService {
       }
     }
     const rawKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
-    const apiKey = rawKey && !rawKey.includes('••••') ? rawKey : saved?.apiKey || '';
+    let canReuseSavedKey = Boolean(saved?.apiKey);
+    if (hasInputUrl && canReuseSavedKey && baseUrl) {
+      try {
+        const savedChecked = validateOpenAiBaseUrl(saved?.baseUrl || '');
+        if (!savedChecked.ok || new URL(baseUrl).origin !== new URL(savedChecked.url).origin) {
+          canReuseSavedKey = false;
+        }
+      } catch {
+        canReuseSavedKey = false;
+      }
+    }
+    const apiKey = rawKey && !rawKey.includes('••••') ? rawKey : canReuseSavedKey ? saved.apiKey : '';
     const model = String(input.model || saved?.model || '').trim();
     return { baseUrl, baseUrlError, apiKey, model, store };
+  }
+
+  async _readResponseTextBounded(res, maxBytes = 4 * 1024 * 1024) {
+    if (res?.body && typeof res.body.getReader === 'function') {
+      const reader = res.body.getReader();
+      const chunks = [];
+      let total = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const buf = Buffer.from(value);
+          total += buf.byteLength;
+          if (total > maxBytes) {
+            try { await reader.cancel(); } catch {}
+            throw new Error('Upstream response exceeded size limit');
+          }
+          chunks.push(buf);
+        }
+      } finally {
+        try { reader.releaseLock(); } catch {}
+      }
+      return Buffer.concat(chunks, total).toString('utf8');
+    }
+    const text = await res.text();
+    if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+      throw new Error('Upstream response exceeded size limit');
+    }
+    return text;
   }
 
   _resolveSystemPrompt(store, targetLang = 'zh-CN') {
@@ -700,7 +759,7 @@ export class ThoughtTranslatorService {
         signal: AbortSignal.timeout(12000),
       });
       const latencyMs = Date.now() - t0;
-      const text = await res.text();
+      const text = await this._readResponseTextBounded(res, 4 * 1024 * 1024);
       if (!res.ok) {
         return {
           ok: false,
@@ -786,7 +845,7 @@ export class ThoughtTranslatorService {
         res = await sendTest(false);
       }
       const latencyMs = Date.now() - t0;
-      const text = await res.text();
+      const text = await this._readResponseTextBounded(res, 4 * 1024 * 1024);
       if (!res.ok) {
         return {
           ok: false,
@@ -1284,7 +1343,10 @@ export class ThoughtTranslatorService {
     }
 
     const sysPrompt = this._resolveSystemPrompt(store, tl) + this._buildBoundaryNote(tl);
-    const cleanedSource = String(rawText || '').trim().slice(0, 64000);
+    const cleanedSource = String(rawText || '')
+      .trim()
+      .slice(0, 64000)
+      .replace(/<\/?thought_source\b[^>]*>/gi, '');
     const userContent = `<thought_source>\n${cleanedSource}\n</thought_source>`;
 
     const noThinkParams = buildNoThinkingParams(model, baseUrl);

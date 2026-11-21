@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile as cpExecFile } from 'node:child_process';
+import { isBlockedUncPath } from '../omni-viewer/omni-server.mjs';
 
 import {
   SCHEMA_VERSION,
@@ -1159,7 +1160,10 @@ export class SidebarStudioService {
           fs.renameSync(tmpPath, this.statePath);
           break;
         } catch (err) {
-          if (process.platform !== 'win32' || attempt >= 2 || !['EBUSY', 'EPERM', 'EACCES'].includes(err?.code)) throw err;
+          if (process.platform !== 'win32' || attempt >= 3 || !['EBUSY', 'EPERM', 'EACCES'].includes(err?.code)) throw err;
+          try {
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15 * (attempt + 1));
+          } catch {}
         }
       }
     } catch (err) {
@@ -4042,6 +4046,17 @@ export class SidebarStudioService {
         snapshot: this._buildSnapshot(),
       };
     }
+    if (normalized.action === 'pick-folder') {
+      if (this.sandboxMode) {
+        return {
+          ok: false,
+          rev: this._state.rev,
+          error: makeRpcError(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'System folder picker is disabled in sandboxMode'),
+          snapshot: this._buildSnapshot(),
+        };
+      }
+      return this.pickFolder(normalized.payload);
+    }
     return this._enqueue(() => this._dispatchSerialized(normalized.action, normalized));
   }
 
@@ -4059,10 +4074,10 @@ export class SidebarStudioService {
     const rawTitle = typeof params?.title === 'string' ? params.title.trim() : '';
     const safeTitle = (rawTitle || '选择工作区文件夹').replace(/[\u0000-\u001f]/g, '').slice(0, 120);
     let safeInitDir = '';
-    if (typeof params?.initialDir === 'string' && params.initialDir.trim() && !params.initialDir.includes('\0')) {
+    if (typeof params?.initialDir === 'string' && params.initialDir.trim() && !params.initialDir.includes('\0') && !isBlockedUncPath(params.initialDir)) {
       try {
         const resolved = fs.realpathSync(params.initialDir.trim());
-        if (fs.statSync(resolved).isDirectory()) safeInitDir = resolved;
+        if (!isBlockedUncPath(resolved) && fs.statSync(resolved).isDirectory()) safeInitDir = resolved;
       } catch {
         safeInitDir = '';
       }
@@ -4132,14 +4147,14 @@ export class SidebarStudioService {
       };
     }
     const rawPath = params?.path;
-    if (typeof rawPath !== 'string' || !rawPath.trim() || rawPath.length > MAX_PATH_LEN || rawPath.includes('\0')) {
+    if (typeof rawPath !== 'string' || !rawPath.trim() || rawPath.length > MAX_PATH_LEN || rawPath.includes('\0') || isBlockedUncPath(rawPath)) {
       return { ok: false, error: '无效的目录路径' };
     }
 
     let realPath;
     try {
       realPath = fs.realpathSync(rawPath.trim());
-      if (!fs.statSync(realPath).isDirectory()) {
+      if (isBlockedUncPath(realPath) || !fs.statSync(realPath).isDirectory()) {
         return { ok: false, error: '目标路径不是有效目录' };
       }
     } catch {
