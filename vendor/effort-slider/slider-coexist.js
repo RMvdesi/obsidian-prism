@@ -180,7 +180,29 @@
         if (!closed && !touchesModel(recs, doc, open)) { stats.skippedIrrelevant += 1; return; }
         if (Array.isArray(recs)) for (let i = 0; i < recs.length && q.length < 48; i++) q.push(recs[i]);
         const el = Date.now() - lastAt, wMs = open ? MENU_THROTTLE_MS : THROTTLE_MS;
-        if (closed || (open && !wasOpen) || (el >= wMs && tm === null)) {
+        let subAdded = false;
+        if (open && Array.isArray(recs)) {
+          for (let ri = 0; ri < recs.length && !subAdded; ri++) {
+            const an = recs[ri]?.addedNodes;
+            if (!an) continue;
+            for (let aj = 0; aj < an.length; aj++) {
+              const nd = an[aj];
+              const nr = nd && nd.nodeType === 1 ? nd.getAttribute?.('role') : '';
+              if (
+                nd &&
+                nd.nodeType === 1 &&
+                (nr === 'menu' ||
+                  nr === 'listbox' ||
+                  nd.classList?.contains('agy-overlay') ||
+                  nd.querySelector?.('[role="menu"],[role="listbox"],[role^="menuitem"],[data-testid="context-menu-submenu-popup"],.agy-overlay'))
+              ) {
+                subAdded = true;
+                break;
+              }
+            }
+          }
+        }
+        if (closed || subAdded || (open && !wasOpen) || (el >= wMs && tm === null)) {
           if (tm !== null) { clearTimeout(tm); tm = null; }
           flush(closed);
         } else if (tm === null) {
