@@ -524,7 +524,7 @@
 
     let lastHealAt = 0;
     const IGN_STREAM_SEL =
-      '[data-testid="autoscroll-viewport"],[data-testid="planner-response-text"],[data-testid="background-task-command"],[data-testid="running-items-card"],aside,[data-op-thought="1"],.ag-prism-thought-overlay,.ag-cs-conv-aura-host,.ag-cs-crab,.ag-cs-prism-rim-cv,.ag-anim-icon,.ag-cs-thinking-spark';
+      '[data-testid="autoscroll-viewport"],[data-testid="planner-response-text"],[data-testid="agent-response"],[data-markdown-root],[data-testid="background-task-command"],[data-testid="running-items-card"],aside,[data-op-thought="1"],.ag-prism-thought-overlay,.ag-cs-conv-aura-host,.ag-cs-crab,.ag-cs-prism-rim-cv,.ag-anim-icon,.ag-cs-thinking-spark';
     const isIgnoredStreamNode = (t) =>
       Boolean(
         t?.closest &&
@@ -588,7 +588,9 @@
             if (!rel) return;
           }
           const inC = isConv(doc, w);
-          if (!inC && (fbEl || findExtBars(doc).some((b) => b && b.getAttribute?.(HID_ATTR) !== '1'))) {
+          let bc;
+          const gB = () => bc || (bc = findExtBars(doc));
+          if (!inC && (fbEl || gB().some((b) => b && b.getAttribute?.(HID_ATTR) !== '1'))) {
             schedHeal(true);
             return;
           }
@@ -596,11 +598,11 @@
             schedHeal(!fbEl);
             return;
           }
-          if (inC && ((tierEl && !tierEl.isConnected) || findExtBars(doc).some((b) => b && b.getAttribute?.(HID_ATTR) !== '1' && b.shadowRoot && !b.shadowRoot.querySelector?.(`style[${TIER_STYLE_ATTR}="1"]`)))) {
+          if (inC && ((tierEl && !tierEl.isConnected) || gB().some((b) => b && b.getAttribute?.(HID_ATTR) !== '1' && b.shadowRoot && !b.shadowRoot.querySelector?.(`style[${TIER_STYLE_ATTR}="1"]`)))) {
             schedHeal(false);
             return;
           }
-          if (inC && mode === 'on' && findExtBars(doc).some((b) => b && b.getAttribute?.(FALLBACK_ATTR) !== '1' && b.getAttribute?.(HID_ATTR) !== '1')) {
+          if (inC && mode === 'on' && gB().some((b) => b && b.getAttribute?.(FALLBACK_ATTR) !== '1' && b.getAttribute?.(HID_ATTR) !== '1')) {
             schedHeal(false);
           }
         });
@@ -747,7 +749,7 @@
       try { w.__agPulseExternalBridge?.({ event: 'mount' }); } catch {}
       void refresh();
       clrPoll();
-      pollTm = setInterval(() => { if (!doc.hidden) void refresh(); }, 4000);
+      pollTm = setInterval(() => { if (!doc.hidden && doc.documentElement?.getAttribute?.('data-ag-cs-win-blur') !== '1') void refresh(); }, 4000);
       pollTm?.unref?.();
       return true;
     }

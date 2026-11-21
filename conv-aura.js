@@ -346,6 +346,8 @@
       return undefined;
     }
 
+    const isP = () => typeof document !== 'undefined' && (document.hidden || document.documentElement?.getAttribute?.('data-ag-cs-win-blur') === '1');
+
     function checkWindowFocused() {
       if (typeof isWindowFocused === 'function') return Boolean(isWindowFocused());
       try {
@@ -614,7 +616,7 @@
         const nextPhase = advancePhase(readNowMs());
         const shouldResumeFromMotionOrVis =
           isMotionStandardOrUltra() &&
-          !document.hidden &&
+          !isP() &&
           convAura.sleeping &&
           convAura.sleepReason !== 'settled' &&
           convAura.sleepReason !== 'ambient-zero';
@@ -746,7 +748,7 @@
           return;
         }
 
-        const allowLivingFlow = isMotionStandardOrUltra() && !document.hidden;
+        const allowLivingFlow = isMotionStandardOrUltra() && !isP();
         const liftElapsed = state.liftoffAt > 0 ? now - state.liftoffAt : -1;
         const inLiftoffEbb = allowLivingFlow && liftElapsed >= 0 && liftElapsed < 520;
         if (state.liftoffAt > 0 && !inLiftoffEbb) {
@@ -889,7 +891,7 @@
         }
 
         if (isDestroyed() || !allowLivingFlow || settleIdleSleep) {
-          const reason = !allowLivingFlow ? (document.hidden ? 'hidden' : 'motion-still') : 'settled';
+          const reason = !allowLivingFlow ? (isP() ? 'hidden' : 'motion-still') : 'settled';
           enterAuraSleep(reason);
           return;
         }
@@ -929,7 +931,7 @@
           state.timer = 0;
         }
         if (isDestroyed() || convAura !== state) return;
-        if (document.hidden) {
+        if (isP()) {
           if (!drawnOnce) {
             forceImmediateDraw = true;
             drawNow(readNowMs());

@@ -1962,7 +1962,7 @@ export class PrismDaemon {
       };
       try {
         if (client?.server?.mode === 'renderer-proxy' && typeof client.trajectory === 'function') {
-          const fullTraj = await client.trajectory(id, { force: gmOffset === 0 });
+          const fullTraj = await client.trajectory(id, { force: false, summary: summaryStub });
           this._recordDiscoveredSubagents(id, fullTraj, workspace);
           const allSteps = Array.isArray(fullTraj?.trajectory?.steps) ? fullTraj.trajectory.steps : [];
           const allGms = Array.isArray(fullTraj?.trajectory?.generatorMetadata) ? fullTraj.trajectory.generatorMetadata : [];

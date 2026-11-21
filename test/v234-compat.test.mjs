@@ -521,3 +521,72 @@ test('v2.34.0 Orchestrator patch: Claude planner shows Claude icon & tunable Orc
   assert.equal(cssSrc.includes('.ces-knob-notch'), true);
 });
 
+test('v2.34.0 renderer-proxy perf: WeakRef LS cache, in-flight coalescing & settled/summary TTL avoid redundant full trajectory deserializations', async () => {
+  const cidIdle = '44444444-5555-6666-7777-888888888888';
+  const cidRun = '55555555-6666-7777-8888-999999999999';
+  const expr = buildRendererRpcExpression('Probe', {});
+  assert.equal(expr.includes('__agPrismLsRef'), true, 'renderer-rpc-adapter must cache discovered LS wrapper via WeakRef');
+
+  let nowMs = 2_000_000;
+  let trajCalls = 0;
+  let releasePending = null;
+  const rendererRpc = async (method, body) => {
+    if (method === 'Probe') return { available: true };
+    if (method === 'GetCascadeTrajectory') {
+      trajCalls += 1;
+      if (body.cascadeId === cidRun && trajCalls === 1) {
+        await new Promise((r) => { releasePending = r; });
+      }
+      return {
+        status: body.cascadeId === cidIdle ? 'CASCADE_RUN_STATUS_1' : 'CASCADE_RUN_STATUS_2',
+        numTotalSteps: 2,
+        numTotalGeneratorMetadata: 1,
+        trajectory: { cascadeId: body.cascadeId, steps: [], generatorMetadata: [] },
+      };
+    }
+    return {};
+  };
+
+  const client = new AntigravityClient({
+    now: () => nowMs,
+    paths: () => ({ log: '/nonexistent/ls.log', logCandidates: ['/nonexistent/ls.log'] }),
+    readLog: async () => 'Language server listening on http://127.0.0.1:11244\n',
+    processes: async () => [{ ProcessId: 99, CommandLine: 'language_server --standalone', Ports: [11244] }],
+    rendererRpc,
+  });
+
+  try {
+    // 1) Concurrent calls to same cascadeId coalesce into a single renderer RPC
+    const p1 = client.trajectory(cidRun);
+    const p2 = client.trajectory(cidRun);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(trajCalls, 1, 'Concurrent trajectory() calls must coalesce');
+    releasePending();
+    await Promise.all([p1, p2]);
+
+    // 2) Active trajectory caches for 4s (not bypassed by unconditional force=true)
+    nowMs += 2000;
+    await client.trajectory(cidRun);
+    assert.equal(trajCalls, 1, 'Active trajectory must reuse cache within 4s');
+    nowMs += 3000;
+    await client.trajectory(cidRun);
+    assert.equal(trajCalls, 2, 'Active trajectory must refresh after 4s');
+
+    // 3) Settled (status=1 / IDLE) trajectory reuses cache for 20s, and 60s when summary stamp matches
+    const sum = { stepCount: 2, lastModifiedTime: { seconds: '1795214500', nanos: 0 } };
+    await client.trajectory(cidIdle, { summary: sum });
+    assert.equal(trajCalls, 3);
+    nowMs += 15000;
+    await client.trajectory(cidIdle, { summary: sum });
+    assert.equal(trajCalls, 3, 'Settled trajectory must reuse cache at 15s');
+    nowMs += 30000;
+    await client.trajectory(cidIdle, { summary: sum });
+    assert.equal(trajCalls, 3, 'Settled trajectory with unchanged summary stamp must reuse cache up to 60s');
+    // Force bypasses cache immediately
+    await client.trajectory(cidIdle, { force: true, summary: sum });
+    assert.equal(trajCalls, 4, 'force: true must bypass proxy cache immediately');
+  } finally {
+    client.dispose();
+  }
+});
+

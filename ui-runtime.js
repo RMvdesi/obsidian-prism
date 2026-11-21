@@ -2094,6 +2094,27 @@
     }
   }
 
+  let axE = null, axO = null;
+  const AX_A = 'data-ag-cs-aux-dual', AX_H = /(?:^|[;\s])(?:width\s*:\s*0(?:\s|;|px|%|$)|display\s*:\s*none)/i;
+  const axV = (e) => !!(e && /^div$/i.test(e.tagName || '') && !e.hidden && !e.hasAttribute?.('hidden') && e.getAttribute?.('aria-hidden') !== 'true' && !AX_H.test(e.getAttribute?.('style') || ''));
+  const axU = (s) => { if (!s || s.isConnected === false) return; const f = s.firstElementChild, l = s.lastElementChild, d = !!(f && l && f !== l && axV(f) && axV(l)); d ? s.getAttribute?.(AX_A) !== '1' && s.setAttribute?.(AX_A, '1') : s.removeAttribute?.(AX_A); };
+  function syncAuxSplit() {
+    const s = document.querySelector?.('[data-testid="aux-pane-split"]') || null;
+    if (s !== axE) {
+      try { axO?.disconnect?.(); } catch {}
+      axO = null;
+      axE?.isConnected !== false && axE?.removeAttribute?.(AX_A);
+      axE = s;
+      if (s && typeof MutationObserver === 'function') {
+        const o = { attributes: true, attributeFilter: ['hidden', 'aria-hidden', 'style'] };
+        const rb = () => { if (!destroyed && axO && axE) { axO.disconnect(); try { axO.observe(axE, { childList: true }); const f = axE.firstElementChild, l = axE.lastElementChild; f && axO.observe(f, o); l && l !== f && axO.observe(l, o); } catch {} } };
+        axO = new MutationObserver((rs) => { if (!destroyed && axE) { rs?.some?.((r) => r.type === 'childList') && rb(); runGuardedMut(() => axU(axE)); } });
+        rb();
+      }
+    }
+    s && axU(s);
+  }
+
   // Host Turbo: 去重官方重复 alert.css <style>（仅 disabled 不删 React 节点）+ <img> 异步懒解码
   const AH_ID = 'ag-prism-host-alert-css';
   const TS_A = 'data-ag-turbo-dedup';
@@ -2446,6 +2467,7 @@
       if (effectiveFull || turboRoots) {
         syncHostTurbo(effectiveFull ? document : turboRoots);
       }
+      if (effectiveFull || flags.route || flags.sidebar || !axE || axE.isConnected === false) syncAuxSplit();
 
       if (flags.full || flags.route || measured.inHero !== homeStudioCtl.wasHero()) {
         homeStudioCtl.syncGreeting(measured.inHero);
@@ -2641,7 +2663,12 @@
   function clearWinBlur() {
     if (blurTm) { clearTimeout(blurTm); blurTm = 0; }
     const h = document.documentElement;
-    if (h?.hasAttribute?.(BLUR_ATTR)) runGuardedMut(() => h.removeAttribute(BLUR_ATTR));
+    if (h?.hasAttribute?.(BLUR_ATTR)) {
+      runGuardedMut(() => h.removeAttribute(BLUR_ATTR));
+      try { mascotState.rig?.syncPowerState?.(); } catch {}
+      try { convAuraCtl.sync(true); } catch {}
+      try { window.__agPrismTelemetry?.refresh?.(); } catch {}
+    }
   }
   function wakeWinBlur() {
     if (blurTm || document.documentElement?.hasAttribute?.(BLUR_ATTR)) {
@@ -2656,6 +2683,7 @@
       const h = document.documentElement;
       if (!destroyed && (!document.hasFocus || !document.hasFocus()) && h?.getAttribute?.(BLUR_ATTR) !== '1') {
         runGuardedMut(() => h.setAttribute(BLUR_ATTR, '1'));
+        try { mascotState.rig?.syncPowerState?.(); } catch {}
       }
     }, 1200);
   }
@@ -3071,6 +3099,8 @@
     try {
       observer.disconnect();
     } catch {}
+    try { axO?.disconnect?.(); axE?.removeAttribute?.(AX_A); } catch {}
+    axO = axE = null;
     for (const [evName, handler] of DOC_LISTENERS) {
       try {
         document.removeEventListener(evName, handler, true);

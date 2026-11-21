@@ -367,7 +367,13 @@ export function buildRendererRpcExpression(method, body = {}) {
   }
   const argLiteral = serializeJsonForEval(safeParams);
   return `(async (params) => {
+    const isLs = (v) => Boolean(v && typeof v === 'object' && typeof v.getUserStatus === 'function' && typeof v.getCascadeTrajectory === 'function');
     const findLs = () => {
+      try {
+        const ref = globalThis.__agPrismLsRef;
+        const cached = ref && typeof ref.deref === 'function' ? ref.deref() : ref;
+        if (isLs(cached)) return cached;
+      } catch {}
       const root = document.getElementById('root') || document.body;
       if (!root) return null;
       const fk = Object.keys(root).find((k) => k.startsWith('__reactContainer$') || k.startsWith('__reactFiber$'));
@@ -381,7 +387,8 @@ export function buildRendererRpcExpression(method, body = {}) {
         seen.add(f);
         visited += 1;
         const v = f.memoizedProps && f.memoizedProps.value;
-        if (v && typeof v === 'object' && typeof v.getUserStatus === 'function' && typeof v.getCascadeTrajectory === 'function') {
+        if (isLs(v)) {
+          try { globalThis.__agPrismLsRef = typeof WeakRef === 'function' ? new WeakRef(v) : v; } catch {}
           return v;
         }
         if (f.child) q.push(f.child);
@@ -618,6 +625,7 @@ export function buildRendererRpcExpression(method, body = {}) {
       }
       return { ok: false, error: 'unsupported_method' };
     } catch (err) {
+      try { delete globalThis.__agPrismLsRef; } catch {}
       return { ok: false, error: String((err && err.message) || err || 'renderer_rpc_failed') };
     }
   })(${argLiteral})`;

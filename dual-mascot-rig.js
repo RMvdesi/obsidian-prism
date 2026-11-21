@@ -615,19 +615,22 @@
   }
 
   function drawLayerSet(ctx, oxGrid, oyGrid, pxSize, palette, layers, colorResolver = null) {
+    let lf = '';
     for (const part of layers) {
       if (!part || !part.rows || !part.rows.length) continue;
       for (let ry = 0; ry < part.rows.length; ry++) {
-        const row = part.rows[ry];
+        const row = part.rows[ry], py = (oyGrid + part.oy + ry) * pxSize;
         for (let rx = 0; rx < row.length; rx++) {
           const ch = row[rx];
           if (ch === '.' || ch === ' ') continue;
           const gx = part.ox + rx;
-          const gy = part.oy + ry;
-          const color = colorResolver ? colorResolver(ch, gx, gy, palette) : palette[ch];
+          const color = colorResolver ? colorResolver(ch, gx, part.oy + ry, palette) : palette[ch];
           if (!color) continue;
-          ctx.fillStyle = color;
-          ctx.fillRect((oxGrid + gx) * pxSize, (oyGrid + gy) * pxSize, pxSize, pxSize);
+          let r = 1;
+          if (!colorResolver) while (rx + r < row.length && row[rx + r] === ch) r++;
+          if (color !== lf) ctx.fillStyle = lf = color;
+          ctx.fillRect((oxGrid + gx) * pxSize, py, pxSize * r, pxSize);
+          rx += r - 1;
         }
       }
     }
@@ -782,7 +785,7 @@
   }
 
   function renderPixelLayers(canvas, dpr, oxGrid, oyGrid, pxSize, palette, layers, options = {}) {
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.__agCtx2d || (canvas.__agCtx2d = canvas.getContext('2d'));
     if (!ctx) return;
     const cssW = canvas.width / dpr;
     const cssH = canvas.height / dpr;
@@ -1314,7 +1317,7 @@
         body = c.body.loaf;
         eyes = poseKey === 'sleep' || phase4 === 3 ? c.eyes.loafShut : c.eyes.loafHalf;
         legs = null;
-        tail = frameMod ? c.tail.loaf : c.tail.curl;
+        tail = poseKey === 'sleep' ? c.tail.loaf : Math.floor(tickIdx / 4) % 2 ? c.tail.loaf : c.tail.curl;
         break;
       case 'dangle':
         shadow = null;
@@ -3254,8 +3257,7 @@
                 : pose === 'angry'
                   ? 'vein'
                   : null;
-        const speedMul = pose === 'write' ? (streamTier === 3 ? 2 : 1) : 1;
-        const localTick = Math.floor(tickIdx * speedMul);
+        const localTick = pose === 'write' ? Math.floor(tickIdx / (streamTier === 3 ? 2 : 3)) : tickIdx;
         const fx = updateIdleFx(a, pose, now);
         a.lastFx = fx;
         const hasRider = Boolean(findDirectRider(id));
@@ -4788,7 +4790,7 @@
     const partnerActor = () => (camp === 'claude' ? actors.cat : actors.clawd);
     const faceToward = (from, to) => (to.x >= from.x ? 'right' : 'left');
 
-    const isDocHidden = () => Boolean(doc && doc.hidden);
+    const isDocHidden = () => Boolean(doc && (doc.hidden || doc.documentElement?.getAttribute?.('data-ag-cs-win-blur') === '1'));
     const hasDozeTransition = (now) =>
       (actors.cat.overridePose && now < actors.cat.overrideUntil) ||
       (actors.clawd.overridePose && now < actors.clawd.overrideUntil);
@@ -5404,6 +5406,9 @@
             };
           }),
         };
+      },
+      syncPowerState() {
+        syncHeartbeat();
       },
       dispose() {
         disposed = true;

@@ -479,6 +479,7 @@
           });
       }
       clearPanelRowGlyphs();
+      document?.documentElement?.removeAttribute?.('data-ag-cs-model-menu');
       if (crystalMount.bar && crystalMount.bar.parentElement) {
         crystalMount.bar.remove();
       }
@@ -535,19 +536,22 @@
     }
 
     function syncModelSelectorPanel(primaryModelInfo) {
+      const panel = document.querySelector('[data-testid="model-selector-panel"]'), r = document?.documentElement;
+      if (panel) {
+        r && setAttrIfChanged(r, 'data-ag-cs-model-menu', '1');
+        const ov = panel.closest?.('.agy-overlay');
+        ov && setAttrIfChanged(ov, 'data-ag-cs-model-overlay', '1');
+      } else r?.removeAttribute?.('data-ag-cs-model-menu');
       if (!isComposerRestyleEnabled()) {
         clearPanelRowGlyphs();
         if (crystalMount.panel || crystalMount.bar) teardownCrystalMount();
         return;
       }
-      const panel = document.querySelector('[data-testid="model-selector-panel"]');
       if (!panel) {
         clearPanelRowGlyphs();
         if (crystalMount.panel || crystalMount.bar) teardownCrystalMount();
         return;
       }
-      const modelOverlay = panel.closest?.('.agy-overlay');
-      if (modelOverlay) setAttrIfChanged(modelOverlay, 'data-ag-cs-model-overlay', '1');
       if (crystalMount.panel && crystalMount.panel !== panel) {
         teardownCrystalMount();
       }

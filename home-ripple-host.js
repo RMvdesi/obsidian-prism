@@ -297,6 +297,7 @@
         setAttrIfChanged(host, 'data-ripple-sleep', '1');
       }
 
+      const hP = () => document.hidden || document.documentElement?.getAttribute?.('data-ag-cs-win-blur') === '1';
       function wake() {
         if (state.timer) {
           clearTimeout(state.timer);
@@ -305,7 +306,7 @@
         if (isDestroyed() || state.parked || frameWanted) return;
         state.sleeping = false;
         if (host.hasAttribute('data-ripple-sleep')) host.removeAttribute('data-ripple-sleep');
-        if (document.hidden) {
+        if (hP()) {
           if (!drawnOnce && canvas.width > 0) drawFrame(performance.now());
           enterIdleSleep();
           return;
@@ -388,7 +389,7 @@
           drawnOnce = true;
         }
 
-        if (isDestroyed() || document.hidden || still) {
+        if (isDestroyed() || hP() || still) {
           enterIdleSleep();
           return;
         }

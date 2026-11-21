@@ -6387,6 +6387,7 @@ const REMOVE_EXPRESSION = `(() => {
       'data-ag-cs-sidebar-compact',
       'data-ag-cs-sidebar-collapsed',
       'data-ag-cs-has-crab',
+      'data-ag-cs-model-menu',
       'data-ag-cs-lang',
       'data-ag-cs-cjk',
       'data-ag-cs-effort-accent',
@@ -6461,6 +6462,7 @@ const REMOVE_EXPRESSION = `(() => {
     'data-ag-cs-spark-streaming',
     'data-ag-cs-prism-cv',
     'data-ag-cs-code-folded',
+    'data-ag-cs-aux-dual',
   ].forEach((attr) => {
     document.querySelectorAll('[' + attr + ']').forEach((el) => el.removeAttribute(attr));
   });

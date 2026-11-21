@@ -63,6 +63,7 @@ export class AntigravityClient {
     this.cdpPort = cdpPort ?? debugPort ?? null;
     this.rendererRpc = typeof rendererRpc === 'function' ? rendererRpc : null;
     this._proxyTrajCache = new Map();
+    this._proxyTrajInFlight = new Map();
     this.agent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 15000, maxSockets: 2, maxFreeSockets: 2, timeout: 25000 });
     this.reader = new TrajectoryReader(this);
   }
@@ -196,18 +197,51 @@ export class AntigravityClient {
     return this.server;
   }
 
-  async _getProxyTrajectory(cascadeId, force = false) {
+  _isProxySettled(data) {
+    const st = data?.status;
+    if (st === 1 || st === 'CASCADE_RUN_STATUS_1') return true;
+    return /IDLE|DONE|COMPLETED|CANCELLED|CANCELED|STOPPED|FAILED|ERROR/.test(String(st || ''));
+  }
+
+  _proxySummaryStamp(summary) {
+    if (!summary || typeof summary !== 'object') return '';
+    const lm = summary.lastModifiedTime;
+    const lmStr = typeof lm === 'string' ? lm : lm && typeof lm === 'object' ? `${lm.seconds ?? ''}:${lm.nanos ?? 0}` : '';
+    const sc = summary.stepCount ?? '';
+    return lmStr || sc !== '' ? `${lmStr}|${sc}` : '';
+  }
+
+  async _getProxyTrajectory(cascadeId, force = false, summary = null) {
     const key = String(cascadeId || '').toLowerCase();
     const now = this.now();
+    const sumStamp = this._proxySummaryStamp(summary);
     const cached = !force ? this._proxyTrajCache.get(key) : null;
-    if (cached && now - cached.at < 2500) return cached.data;
-    const data = await this.rendererRpc('GetCascadeTrajectory', { cascadeId });
-    this._proxyTrajCache.delete(key);
-    this._proxyTrajCache.set(key, { at: now, data });
-    while (this._proxyTrajCache.size > 8) {
-      this._proxyTrajCache.delete(this._proxyTrajCache.keys().next().value);
+    if (cached) {
+      const age = now - cached.at;
+      const settled = this._isProxySettled(cached.data);
+      const ttl = settled
+        ? (sumStamp && cached.sumStamp && sumStamp === cached.sumStamp ? 60000 : 20000)
+        : 4000;
+      if (age < ttl) return cached.data;
     }
-    return data;
+    const existing = this._proxyTrajInFlight.get(key);
+    if (existing) return existing;
+    const req = (async () => {
+      const data = await this.rendererRpc('GetCascadeTrajectory', { cascadeId });
+      const fetchedAt = this.now();
+      this._proxyTrajCache.delete(key);
+      this._proxyTrajCache.set(key, { at: fetchedAt, data, sumStamp });
+      while (this._proxyTrajCache.size > 12) {
+        this._proxyTrajCache.delete(this._proxyTrajCache.keys().next().value);
+      }
+      return data;
+    })().finally(() => {
+      if (this._proxyTrajInFlight.get(key) === req) {
+        this._proxyTrajInFlight.delete(key);
+      }
+    });
+    this._proxyTrajInFlight.set(key, req);
+    return req;
   }
 
   async _callRendererProxy(method, body = {}) {
@@ -215,11 +249,11 @@ export class AntigravityClient {
       throw new Error('当前版本未提供可用的本地检测凭据');
     }
     if (method === 'GetCascadeTrajectory') {
-      return this._getProxyTrajectory(body?.cascadeId, true);
+      return this._getProxyTrajectory(body?.cascadeId, Boolean(body?.force));
     }
     if (method === 'GetCascadeTrajectorySteps') {
       const offset = Math.max(0, Math.floor(Number(body?.stepOffset || 0)));
-      const full = await this._getProxyTrajectory(body?.cascadeId, offset === 0);
+      const full = await this._getProxyTrajectory(body?.cascadeId, false);
       const all = Array.isArray(full?.trajectory?.steps) ? full.trajectory.steps : [];
       return {
         steps: offset < all.length ? all.slice(offset) : [],
@@ -481,6 +515,7 @@ export class AntigravityClient {
 
   resetTrajectories() {
     this._proxyTrajCache?.clear?.();
+    this._proxyTrajInFlight?.clear?.();
     this.reader.reset();
   }
   async trajectory(id, options = {}) {
@@ -489,7 +524,7 @@ export class AntigravityClient {
       if (options?.isCurrent && options.isCurrent() !== true) {
         throw new Error('后台已重新连接，请等待刷新');
       }
-      const data = await this._getProxyTrajectory(id, true);
+      const data = await this._getProxyTrajectory(id, Boolean(options?.force), options?.summary || null);
       if (options?.isCurrent && options.isCurrent() !== true) {
         throw new Error('后台已重新连接，请等待刷新');
       }
@@ -503,6 +538,7 @@ export class AntigravityClient {
   dispose() {
     try { this.agent?.destroy?.(); } catch {}
     this._proxyTrajCache?.clear?.();
+    this._proxyTrajInFlight?.clear?.();
     this.reader?.reset?.();
   }
 }

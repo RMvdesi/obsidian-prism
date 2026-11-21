@@ -300,12 +300,10 @@ test('perf guard 6: upstream-client unbind clears __cesAgBound so reused panel r
   assert.equal(up.includes('__cesAgPanelBound'), false);
 });
 
-test('perf guard 7: style.css & omni-client have zero hot :has(), unscoped ::highlight(), universal * motion-off, or *:nth-last-child', () => {
+test('perf guard 7: style.css & omni-client have zero :has(), unscoped ::highlight(), universal * motion-off, or *:nth-last-child', () => {
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
-  const strippedHas = css
-    .replace(/\[data-testid="aux-pane-split"\]:has\([^\n{}]+\)(?=\{)/g, '')
-    .replace(/(?:html|\.agy-overlay):has\(\[data-testid="model-selector-panel"\]\)/g, '');
-  assert.equal((strippedHas.match(/:has\(/g) || []).length, 0, 'style.css must contain zero hot :has() selectors');
+  assert.equal((css.match(/:has\(/g) || []).length, 0, 'style.css must contain zero :has() selectors (avoid Blink full-subtree RecalcStyle on aux-pane-split/html)');
+  assert.ok(css.includes('[data-testid="aux-pane-split"][data-ag-cs-aux-dual="1"]'), 'aux-pane-split dual layout must use O(1) data-ag-cs-aux-dual attribute');
   assert.equal(/^\s*::highlight\(/m.test(css), false, 'style.css must anchor ::highlight() to :root (not universal *)');
   assert.ok(css.includes(':root::highlight(ag-stream-f0)'), 'style.css must use O(1) :root::highlight() inheritance');
   assert.equal(css.includes('&,& *,& *::before,& *::after'), false, 'motion=off universal * rule must be mounted on demand only');
@@ -1602,4 +1600,102 @@ test('perf guard 20: Host Turbo alert.css dedup+restore, async img, hidden sidec
     globalThis.setTimeout = origSetTo;
     globalThis.clearTimeout = origClrTo;
   }
+});
+
+test('perf guard 21: macOS compositor stepped spinners, zero html:has/.ag-cs-crab *, mascot RLE draw + win-blur 0fps pause, and v2.34 slider ignore', () => {
+  const cdp = require('../cdp.js');
+  const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  assert.equal(css.includes('html:has('), false, 'style.css must never attach :has() to document root <html>');
+  assert.equal(css.includes('.ag-cs-crab *'), false, 'style.css must never use universal wildcard .ag-cs-crab *');
+  assert.ok(css.includes('html[data-ag-cs-model-menu="1"] .ag-cs-crab'), 'Model menu click-through must use O(1) root attribute');
+  assert.ok(css.includes('ag-cs-orbit-spin 1.9s steps('), 'Cancel button orbit spin must step compositor frames');
+  assert.ok(css.includes('ag-cs-orbit-spin 2.4s steps('), 'Status loading spinner orbit spin must step compositor frames');
+  assert.ok(css.includes('ag-cs-star-pulse 2.2s steps('), 'Status loading spinner pulse must step compositor frames');
+  assert.ok(cdp.REMOVE_EXPRESSION.includes("'data-ag-cs-model-menu'"), 'REMOVE_EXPRESSION must clean data-ag-cs-model-menu');
+  assert.ok(cdp.REMOVE_EXPRESSION.includes("'data-ag-cs-aux-dual'"), 'REMOVE_EXPRESSION must clean data-ag-cs-aux-dual');
+
+  const sliderCoexistSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'effort-slider', 'slider-coexist.js'), 'utf8');
+  assert.ok(sliderCoexistSrc.includes('[data-testid="agent-response"]'), 'slider-coexist must ignore v2.34 agent-response mutations');
+  assert.ok(sliderCoexistSrc.includes('[data-markdown-root]'), 'slider-coexist must ignore v2.34 markdown-root mutations');
+
+  const fbSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'pulse-dashboard', 'inline-fallback.js'), 'utf8');
+  assert.ok(fbSrc.includes('[data-testid="agent-response"],[data-markdown-root]'), 'inline-fallback IGN_STREAM_SEL must ignore v2.34 streaming containers');
+  assert.ok(fbSrc.includes("data-ag-cs-win-blur"), 'inline-fallback poll must pause on macOS window blur');
+
+  const vialBridgeSrc = fs.readFileSync(path.join(ROOT, 'pulse-vial-bridge.js'), 'utf8');
+  assert.ok(vialBridgeSrc.includes("K+'win-blur'"), 'pulse-vial-bridge must pause polling and rAF on macOS window blur');
+  assert.ok(Buffer.byteLength(vialBridgeSrc, 'utf8') < 31000, `pulse-vial-bridge.js must stay < 31,000 B`);
+
+  // Verify mascot RLE fillRect batching + data-ag-cs-win-blur="1" 0fps heartbeat pause & 0ms wake
+  const rig = require('../dual-mascot-rig.js');
+  let fillRectCalls = 0;
+  let maxFillW = 0;
+  const htmlAttrs = new Map();
+  const mockHtml = {
+    getAttribute: (k) => (htmlAttrs.has(k) ? htmlAttrs.get(k) : null),
+    setAttribute: (k, v) => htmlAttrs.set(k, String(v)),
+    removeAttribute: (k) => htmlAttrs.delete(k),
+  };
+  const makeEl = (tag) => {
+    const el = {
+      tagName: tag.toUpperCase(),
+      className: '',
+      style: {},
+      children: [],
+      clientWidth: 720,
+      width: 96,
+      height: 84,
+      dataset: {},
+      setAttribute() {},
+      getAttribute: () => null,
+      removeAttribute() {},
+      addEventListener() {},
+      removeEventListener() {},
+      appendChild(ch) { el.children.push(ch); ch.parentNode = el; return ch; },
+      removeChild(ch) { const i = el.children.indexOf(ch); if (i >= 0) el.children.splice(i, 1); return ch; },
+      getBoundingClientRect() { return { left: 0, top: 0, right: 96, bottom: 84, width: 96, height: 84 }; },
+      getContext() {
+        return {
+          imageSmoothingEnabled: false,
+          fillStyle: '',
+          save() {}, restore() {}, setTransform() {}, clearRect() {},
+          beginPath() {}, rect() {}, clip() {}, translate() {}, scale() {}, rotate() {}, drawImage() {},
+          fillRect(_x, _y, w) { fillRectCalls += 1; if (w > maxFillW) maxFillW = w; },
+        };
+      },
+    };
+    return el;
+  };
+  const doc = {
+    hidden: false,
+    documentElement: mockHtml,
+    defaultView: { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) },
+    createElement: (t) => { const e = makeEl(t); e.ownerDocument = doc; return e; },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const host = makeEl('div');
+  host.ownerDocument = doc;
+  const stage = rig.mountDualMascotStage(host, { camp: 'gemini', streaming: false, reducedMotion: false });
+  try {
+    assert.ok(maxFillW >= rig.PX * 4, `Expected RLE horizontal batching width >= ${rig.PX * 4}px, got ${maxFillW}`);
+    assert.ok(fillRectCalls < 220, `Expected RLE batched fillRect calls < 220 for initial mount of both mascots, got ${fillRectCalls}`);
+    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 100);
+
+    // Simulate 1.2s window blur attribute set by ui-runtime (macOS CalculateNativeWinOcclusion disabled)
+    mockHtml.setAttribute('data-ag-cs-win-blur', '1');
+    stage.syncPowerState();
+    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 0, 'Window blur must pause mascot heartbeat to 0fps');
+
+    // Focus/pointer return clears attribute -> 0ms wake back to 100ms
+    mockHtml.removeAttribute('data-ag-cs-win-blur');
+    stage.syncPowerState();
+    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 100, 'Clearing win-blur must restore active mascot heartbeat immediately');
+  } finally {
+    stage.dispose();
+  }
+
+  // Bundle size still strictly <= 704,000 B
+  const bytes = Buffer.byteLength(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), 'utf8');
+  assert.ok(bytes <= 704000, `Default bundle must stay <= 704,000 B, got ${bytes} B`);
 });
