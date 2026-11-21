@@ -1734,7 +1734,12 @@ export class PrismDaemon {
       return async (input) => {
         this.syncClientCdpPort(this._lazyStore);
         const safeId = input?.conversationId && GUID_RE.test(input.conversationId) ? input.conversationId : null;
-        const base = await this._lazyStore.snapshot({ conversationId: safeId, force: Boolean(input?.force) });
+        const base = await this._lazyStore.snapshot({
+          conversationId: safeId,
+          force: Boolean(input?.force),
+          quotaRefresh: Boolean(input?.quotaRefresh),
+          selectLatest: input?.selectLatest === false ? false : true,
+        });
         let usageSnap = null;
         if (input?.includeUsage === true) {
           if (!this._lazyUsage) {

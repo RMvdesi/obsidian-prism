@@ -61,10 +61,11 @@
     runGuardedMut,
   }) {
     const usageRecords = new Map();
-    let usageLoading = false, quotaLoading = false, usageHasData = false;
-    let lastUsageFetchAt = 0, lastQuotaFetchAt = 0, liveQuotaSnap = null, quotaEpoch = 0;
+    let uLd = false, qL = false, uHas = false;
+    let lastUsageFetchAt = 0, qAt = 0, qSn = null, qE = 0;
+    let qSq = 0, qP = null, qR = false;
     let bookPick = 0.07, activeTab = 'overview', activeRange = 'all', activeWorkspace = 'all', detectedCurrentWorkspace = '';
-    let modelsExpanded = false, lastPanelRenderKey = '', usageDataEpoch = 0, cachedAggKey = '', cachedAggData = null;
+    let modelsExpanded = false, lKey = '', uEp = 0, cachedAggKey = '', cachedAggData = null;
     let deferredUsageTimer = 0, saveUsageTimer = 0, saveUsageIdle = 0, wasHero = false;
     const replacedGreetings = new Map();
     let panelSeat = null, panelEl = null, heatTipEl = null, shownHeatCell = null, pendingHeatCell = null, pendingHeatGrid = null, heatTipRaf = 0;
@@ -81,7 +82,7 @@
         const raw = JSON.parse(localStorage.getItem(storageUsageCacheKey) || '{}');
         if (raw && typeof raw === 'object') {
           for (const [id, rec] of Object.entries(raw)) if (rec?.days) usageRecords.set(id, rec);
-          if (usageRecords.size > 0) { usageHasData = true; usageDataEpoch += 1; }
+          if (usageRecords.size > 0) { uHas = true; uEp += 1; }
         }
       }
     } catch {}
@@ -173,35 +174,61 @@
       return latestWs;
     }
 
+    const hasQ = (s) => s?.groups?.some((g) => g && (!usageCore?.quotaWindows || usageCore.quotaWindows(g).length > 0));
+    const rTo = (fn, ms, onT) => new Promise((r) => {
+      const t = setTimeout(() => { onT?.(); r(null); }, ms);
+      t?.unref?.();
+      Promise.resolve().then(fn).then((v) => (clearTimeout(t), r(v || null)), () => (clearTimeout(t), r(null)));
+    });
+    const cdpQ = (w, i) => {
+      const mc = '__agPrismMetricsCall', mr = '__agPrismMetricsResolve', id = 8e8 + (++qSq), pv = w[mr];
+      let cb, end = () => { if (w[mr] === cb) pv ? (w[mr] = pv) : delete w[mr]; };
+      return rTo(() => new Promise((r) => {
+        cb = (k, v) => (k === id ? (end(), r(v && typeof v === 'object' ? v : null)) : pv?.(k, v));
+        w[mr] = cb;
+        try { w[mc](JSON.stringify({ id, input: i })); } catch { end(); r(null); }
+      }), 10500, end);
+    };
+
     async function refreshLiveTelemetrySnapshot(force = false) {
-      if (isDestroyed() || quotaLoading) return liveQuotaSnap;
-      const now = Date.now();
-      if (!force && liveQuotaSnap && now - lastQuotaFetchAt < 45000) return liveQuotaSnap;
-      const win = typeof window !== 'undefined' ? window : G;
-      if (!win) return null;
-      quotaLoading = true;
+      if (isDestroyed()) return qSn;
+      if (qL && qP) { if (force) qR = true; return qP; }
+      if (!force && hasQ(qSn) && Date.now() - qAt < 45000) return qSn;
+      const w = typeof window !== 'undefined' ? window : G;
+      if (!w) return null;
+      qL = true;
       if (activeTab === 'quotas') renderHomePanel();
-      try {
-        const snap = win.agPulseHost?.getMetrics
-          ? await win.agPulseHost.getMetrics({ conversationId: null, force: Boolean(force) })
-          : win.__agPrismTelemetry?.refresh
-          ? await win.__agPrismTelemetry.refresh()
-          : win.__agPrismTelemetry?.getLatestSnapshot?.() || null;
-        if (snap && typeof snap === 'object') { liveQuotaSnap = snap; lastQuotaFetchAt = Date.now(); quotaEpoch += 1; }
-        return liveQuotaSnap;
-      } catch {
-        return liveQuotaSnap;
-      } finally {
-        quotaLoading = false;
-        if (!isDestroyed()) renderHomePanel();
-      }
+      return (qP = (async () => {
+        try {
+          const F = Boolean(force), rq = { conversationId: null, force: F, quotaRefresh: F, selectLatest: false };
+          const h = w.agPulseHost, isP = Boolean(h?.__prismFallback), tel = w.__agPrismTelemetry, br = w.__agPrismMetricsBridge;
+          const pk = (v) => { if (hasQ(v) || (!s && v && typeof v === 'object')) s = v; };
+          let s = typeof h?.getMetrics === 'function' ? await rTo(() => h.getMetrics(rq), isP ? 10500 : 3000) : null;
+          if (!hasQ(s) && !isP) {
+            if (typeof br?.getMetrics === 'function') pk(await rTo(() => br.getMetrics(rq), 10500));
+            if (!hasQ(s) && typeof w.__agPrismMetricsCall === 'function') pk(await cdpQ(w, rq));
+          }
+          if (!hasQ(s) && !h?.getMetrics && typeof tel?.refresh === 'function') pk(await rTo(() => tel.refresh(), 4500));
+          if (!hasQ(s)) pk(tel?.getLatestSnapshot?.());
+          if (hasQ(s)) { qSn = s; qAt = Date.now(); qE += 1; }
+          else if (s && typeof s === 'object' && !hasQ(qSn)) { qSn = s; qAt = 0; qE += 1; }
+          return qSn;
+        } catch {
+          return qSn;
+        } finally {
+          qL = false; qP = null;
+          if (!isDestroyed()) renderHomePanel();
+          if (qR && !isDestroyed()) { qR = false; void refreshLiveTelemetrySnapshot(true); }
+          else qR = false;
+        }
+      })());
     }
 
     function scheduleUsageRollupRefresh(delayMs = 1800) {
-      if (isDestroyed() || usageLoading || getHomeLayout() !== 'studio') return;
-      if (!usageHasData && !canMountRealCanvas(document.body)) { void refreshUsageRollup(false); return; }
+      if (isDestroyed() || uLd || getHomeLayout() !== 'studio') return;
+      if (!uHas && !canMountRealCanvas(document.body)) { void refreshUsageRollup(false); return; }
       if (deferredUsageTimer) return;
-      const wait = usageHasData ? Math.max(400, delayMs) : Math.min(600, Math.max(120, delayMs));
+      const wait = uHas ? Math.max(400, delayMs) : Math.min(600, Math.max(120, delayMs));
       deferredUsageTimer = setTimeout(() => {
         deferredUsageTimer = 0;
         if (isDestroyed() || !document.querySelector('.agy-home') || getHomeLayout() !== 'studio') return;
@@ -212,12 +239,12 @@
     }
 
     async function refreshUsageRollup(force = false) {
-      if (isDestroyed() || usageLoading || !usageCore) return;
+      if (isDestroyed() || uLd || !usageCore) return;
       const liveSnapProm = refreshLiveTelemetrySnapshot(force);
       const h = ensureHooks();
       if (!h) return;
       const now = Date.now();
-      if (!force && usageHasData && now - lastUsageFetchAt < 60000) return;
+      if (!force && uHas && now - lastUsageFetchAt < 60000) return;
 
       const win = typeof window !== 'undefined' ? window : G;
       const usageBridge = win?.__agPrismUsageBridge || null;
@@ -246,12 +273,12 @@
             }
           }
         } catch {}
-      } else if (!liveQuotaSnap) {
+      } else if (!qSn) {
         try { await liveSnapProm; } catch {}
       }
 
-      if (Array.isArray(liveQuotaSnap?.conversations)) {
-        for (const c of liveQuotaSnap.conversations) {
+      if (Array.isArray(qSn?.conversations)) {
+        for (const c of qSn.conversations) {
           if (c?.id && !sumsMap.has(c.id)) {
             sumsMap.set(c.id, { stepCount: Number(c.steps || 0), subagent: Boolean(c.subagent), parentConversationId: c.parentConversationId || '', rootConversationId: c.rootConversationId || '', workspace: c.workspace || '', modifiedAt: c.modifiedAt || '' });
           }
@@ -259,7 +286,7 @@
       }
       const entries = Array.from(sumsMap.entries());
       detectedCurrentWorkspace = detectCurrentWorkspaceName(entries) || detectedCurrentWorkspace;
-      if (entries.length === 0) { usageHasData = true; renderHomePanel(); return; }
+      if (entries.length === 0) { uHas = true; renderHomePanel(); return; }
 
       const staleIds = [], presentIds = new Set();
       let patchedMeta = false;
@@ -273,7 +300,7 @@
           patchedMeta = true;
         }
       }
-      if (patchedMeta) usageDataEpoch += 1;
+      if (patchedMeta) uEp += 1;
       staleIds.sort((a, b) => extractMeta(b[1]).lastModifiedSec - extractMeta(a[1]).lastModifiedSec);
 
       let deletedAny = false;
@@ -285,11 +312,11 @@
           deletedAny = true;
         }
       }
-      if (deletedAny) usageDataEpoch += 1;
-      if (staleIds.length === 0) { usageHasData = true; lastUsageFetchAt = now; if (patchedMeta) saveUsageCache(); renderHomePanel(); return; }
+      if (deletedAny) uEp += 1;
+      if (staleIds.length === 0) { uHas = true; lastUsageFetchAt = now; if (patchedMeta) saveUsageCache(); renderHomePanel(); return; }
 
-      usageLoading = true;
-      if (!usageHasData) renderHomePanel();
+      uLd = true;
+      if (!uHas) renderHomePanel();
       try {
         if (usageBridge && typeof usageBridge.fetchBatch === 'function' && usageBridge.isOnline?.()) {
           for (let i = 0; i < staleIds.length && !isDestroyed(); i += 6) {
@@ -311,7 +338,7 @@
             if (i + 6 < staleIds.length && !isDestroyed()) await new Promise((r) => setTimeout(r, 40));
           }
         } else {
-          const CONC = usageHasData ? 1 : 2;
+          const CONC = uHas ? 1 : 2;
           for (let i = 0; i < staleIds.length && !isDestroyed(); i += CONC) {
             await Promise.all(
               staleIds.slice(i, i + CONC).map(async ([id, sum]) => {
@@ -328,19 +355,19 @@
                 }
               })
             );
-            if (i + CONC < staleIds.length && !isDestroyed()) await new Promise((r) => setTimeout(r, usageHasData ? 120 : 24));
+            if (i + CONC < staleIds.length && !isDestroyed()) await new Promise((r) => setTimeout(r, uHas ? 120 : 24));
           }
         }
-        if (!isDestroyed()) { usageHasData = true; usageDataEpoch += 1; lastUsageFetchAt = Date.now(); saveUsageCache(); }
+        if (!isDestroyed()) { uHas = true; uEp += 1; lastUsageFetchAt = Date.now(); saveUsageCache(); }
       } finally {
-        usageLoading = false;
+        uLd = false;
         if (!isDestroyed()) renderHomePanel();
       }
     }
 
     function syncGreeting(inHero) {
       if (inHero && !wasHero) {
-        if (!usageHasData) bookPick = Math.random();
+        if (!uHas) bookPick = Math.random();
         if (getHomeLayout() === 'studio') scheduleUsageRollupRefresh(1800);
       } else if (!inHero && deferredUsageTimer) { clearTimeout(deferredUsageTimer); deferredUsageTimer = 0; }
       wasHero = Boolean(inHero);
@@ -417,7 +444,7 @@
       if (panelSeat?.parentElement) panelSeat.parentElement.removeChild(panelSeat);
       panelSeat = panelEl = heatTipEl = shownHeatCell = null;
       if (heatTipRaf && typeof cancelAnimationFrame === 'function') { cancelAnimationFrame(heatTipRaf); heatTipRaf = 0; }
-      lastPanelRenderKey = '';
+      lKey = '';
     }
 
     function ensurePanelSeat() {
@@ -451,24 +478,24 @@
       const wrap = mk('div', 'ag-cs-quota-wrap');
       const toolbar = mk('div', 'ag-cs-quota-toolbar');
       toolbar.appendChild(mk('span', '', ui.quotaPoolsTitle || 'Model Quota Pools Remaining'));
-      const refreshBtn = mk('button', 'ag-cs-quota-refresh', quotaLoading ? ui.thinkingEllipsis || 'Loading…' : ui.refreshBtnTitle || 'Refresh');
+      const refreshBtn = mk('button', 'ag-cs-quota-refresh', qL ? ui.thinkingEllipsis || 'Loading…' : ui.refreshBtnTitle || 'Refresh');
       refreshBtn.type = 'button';
-      refreshBtn.disabled = quotaLoading;
+      refreshBtn.disabled = qL;
       refreshBtn.addEventListener('click', () => void refreshLiveTelemetrySnapshot(true));
       toolbar.appendChild(refreshBtn);
       wrap.appendChild(toolbar);
 
-      const groups = Array.isArray(liveQuotaSnap?.groups)
-        ? liveQuotaSnap.groups.filter((g) => g && (usageCore.quotaWindows ? usageCore.quotaWindows(g).length > 0 : true))
+      const groups = Array.isArray(qSn?.groups)
+        ? qSn.groups.filter((g) => g && (usageCore.quotaWindows ? usageCore.quotaWindows(g).length > 0 : true))
         : [];
       if (groups.length === 0) {
-        wrap.appendChild(mk('div', 'ag-cs-home-models-empty', quotaLoading ? ui.quotaLoading || 'Loading…' : ui.quotaEmptyHint || 'Waiting for live quota snapshot…'));
+        wrap.appendChild(mk('div', 'ag-cs-home-models-empty', qL ? ui.quotaLoading || 'Loading…' : ui.quotaEmptyHint || 'Waiting for live quota snapshot…'));
         panel.appendChild(wrap);
         return;
       }
 
       const grid = mk('div', 'ag-cs-quota-grid');
-      const quotaWinUsage = liveQuotaSnap?.usage?.quotaWindows || null;
+      const quotaWinUsage = qSn?.usage?.quotaWindows || null;
       const healthBadgeFor = (minRem) => {
         if (!(minRem >= 0 && minRem <= 1)) return { status: 'idle', label: '—' };
         if (minRem <= 0.15) {
@@ -533,8 +560,8 @@
       if (!usageCore) return;
       const panel = ensurePanelSeat();
       if (!panel) return;
-      const lang = getLang(), ui = uiText(lang), skeleton = !usageHasData && usageLoading;
-      const aggKey = `${usageDataEpoch}|${usageRecords.size}|${activeRange}|${activeWorkspace}|${lang}|${bookPick}`;
+      const lang = getLang(), ui = uiText(lang), skeleton = !uHas && uLd;
+      const aggKey = `${uEp}|${usageRecords.size}|${activeRange}|${activeWorkspace}|${lang}|${bookPick}`;
       let data = cachedAggData;
       if (!data || cachedAggKey !== aggKey) {
         data = usageCore.aggregateUsageRollup(Array.from(usageRecords.values()), activeRange, bookPick, lang, undefined, { workspace: activeWorkspace });
@@ -545,9 +572,9 @@
         activeWorkspace = 'all';
         return renderHomePanel(true);
       }
-      const renderKey = [lang, activeTab, activeRange, activeWorkspace, modelsExpanded ? 1 : 0, skeleton ? 1 : 0, quotaLoading ? 1 : 0, quotaEpoch, usageRecords.size, data.sessions, data.calls, data.tokens, data.subagentTokens || 0, data.cacheHitRate != null ? data.cacheHitRate.toFixed(3) : '-', data.activeDays, data.model || ''].join('|');
-      if (!force && renderKey === lastPanelRenderKey && panel.childElementCount > 0) return;
-      lastPanelRenderKey = renderKey;
+      const renderKey = [lang, activeTab, activeRange, activeWorkspace, modelsExpanded ? 1 : 0, skeleton ? 1 : 0, qL ? 1 : 0, qE, usageRecords.size, data.sessions, data.calls, data.tokens, data.subagentTokens || 0, data.cacheHitRate != null ? data.cacheHitRate.toFixed(3) : '-', data.activeDays, data.model || ''].join('|');
+      if (!force && renderKey === lKey && panel.childElementCount > 0) return;
+      lKey = renderKey;
 
       runGuardedMut(() => {
         panel.innerHTML = '';
@@ -565,7 +592,7 @@
           if (activeTab === id) btn.setAttribute('data-active', '');
           btn.addEventListener('click', () => {
             activeTab = id;
-            if (id === 'quotas' && !liveQuotaSnap) void refreshLiveTelemetrySnapshot(true);
+            if (id === 'quotas' && !hasQ(qSn)) void refreshLiveTelemetrySnapshot(true);
             renderHomePanel();
           });
           tabs.appendChild(btn);

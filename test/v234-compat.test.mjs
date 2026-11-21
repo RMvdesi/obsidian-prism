@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildRendererRpcExpression,
@@ -19,6 +20,7 @@ import { MetricsStore } from '../vendor/pulse-dashboard/sidecars/panel/store.mjs
 import { quotaMetrics, trajectoryMetrics } from '../vendor/pulse-dashboard/sidecars/panel/metrics.mjs';
 import { quotaModelFamily } from '../vendor/pulse-dashboard/sidecars/panel/usage.mjs';
 import { formatModelName } from '../vendor/pulse-dashboard/sidecars/panel/context.mjs';
+import { PrismDaemon } from '../sidecars/daemon/main.mjs';
 
 const require = createRequire(import.meta.url);
 globalThis.__agCodexEffortSliderDisableAutoBoot = true;
@@ -933,6 +935,290 @@ test('v2.34.0 Effort Slider: switching from Gemini 4 Neon (XHigh) to Gemini 4 Ca
     assert.equal(effortSpan.style.color, '', 'Locked single-tier Carbon must clear residual purple inline color');
   } finally {
     ctrl.destroy();
+  }
+});
+
+test('v2.34.0 Home Studio Quotas: external agPulseHost offline/error falls back to __agPrismMetricsBridge & __agPrismMetricsCall, skips caching empty snapshots, and forwards selectLatest:false', async () => {
+  const homeStudioPanel = require('../home-studio-panel.js');
+  const prevWin = globalThis.window;
+  const prevDoc = globalThis.document;
+  const prevStorage = globalThis.localStorage;
+
+  function makeQuotaDom() {
+    const storeMem = new Map();
+    function makeNode(tag) {
+      const attrs = new Map();
+      const listeners = new Map();
+      const children = [];
+      const el = {
+        nodeType: 1,
+        tagName: String(tag).toUpperCase(),
+        children,
+        parentNode: null,
+        parentElement: null,
+        isConnected: true,
+        disabled: false,
+        type: '',
+        value: '',
+        id: '',
+        className: '',
+        _text: '',
+        style: { setProperty() {}, removeProperty() {}, transform: '', width: '' },
+        set textContent(v) { children.length = 0; this._text = String(v); },
+        get textContent() { return children.length ? children.map((c) => c.textContent).join('') : this._text; },
+        set innerHTML(v) { children.length = 0; this._text = String(v); },
+        get innerHTML() { return this._text; },
+        get childElementCount() { return children.length; },
+        get firstChild() { return children[0] || null; },
+        get nextSibling() {
+          if (!this.parentElement) return null;
+          const idx = this.parentElement.children.indexOf(this);
+          return idx >= 0 ? this.parentElement.children[idx + 1] || null : null;
+        },
+        get previousSibling() {
+          if (!this.parentElement) return null;
+          const idx = this.parentElement.children.indexOf(this);
+          return idx > 0 ? this.parentElement.children[idx - 1] || null : null;
+        },
+        appendChild(ch) {
+          if (ch.parentElement) ch.parentElement.removeChild(ch);
+          ch.parentElement = el;
+          ch.parentNode = el;
+          children.push(ch);
+          return ch;
+        },
+        insertBefore(ch, ref) {
+          if (ch.parentElement) ch.parentElement.removeChild(ch);
+          ch.parentElement = el;
+          ch.parentNode = el;
+          const idx = ref ? children.indexOf(ref) : -1;
+          if (idx >= 0) children.splice(idx, 0, ch);
+          else children.push(ch);
+          return ch;
+        },
+        removeChild(ch) {
+          const idx = children.indexOf(ch);
+          if (idx >= 0) children.splice(idx, 1);
+          ch.parentElement = null;
+          ch.parentNode = null;
+          return ch;
+        },
+        setAttribute(k, v) { attrs.set(k, String(v)); if (k === 'id') this.id = String(v); },
+        getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+        hasAttribute(k) { return attrs.has(k); },
+        addEventListener(ev, fn) { if (!listeners.has(ev)) listeners.set(ev, []); listeners.get(ev).push(fn); },
+        click() { for (const fn of listeners.get('click') || []) fn({ type: 'click' }); },
+        querySelector(sel) { return el.querySelectorAll(sel)[0] || null; },
+        querySelectorAll(sel) {
+          const out = [];
+          const walk = (n) => {
+            for (const c of n.children || []) {
+              if (sel.startsWith('.') && String(c.className || '').split(/\s+/).includes(sel.slice(1))) out.push(c);
+              else if (sel === '[data-testid="home-greeting"]' && c.getAttribute('data-testid') === 'home-greeting') out.push(c);
+              else if (sel.startsWith('[data-tab="') && c.getAttribute('data-tab') === sel.slice(11, -2)) out.push(c);
+              walk(c);
+            }
+          };
+          walk(el);
+          return out;
+        },
+      };
+      return el;
+    }
+    const root = makeNode('html');
+    const head = makeNode('head');
+    const body = makeNode('body');
+    const home = makeNode('div');
+    home.className = 'agy-home';
+    const greeting = makeNode('div');
+    greeting.setAttribute('data-testid', 'home-greeting');
+    home.appendChild(greeting);
+    body.appendChild(home);
+    root.appendChild(head);
+    root.appendChild(body);
+    const doc = {
+      title: 'obsidian-prism - Antigravity',
+      head,
+      body,
+      createElement: (t) => makeNode(t),
+      getElementById: (id) => root.children.flatMap((c) => [c, ...c.children]).find((c) => c.id === id) || null,
+      querySelector: (s) => root.querySelector(s),
+      querySelectorAll: (s) => root.querySelectorAll(s),
+    };
+    const storage = {
+      getItem: (k) => (storeMem.has(k) ? storeMem.get(k) : null),
+      setItem: (k, v) => storeMem.set(k, String(v)),
+    };
+    return { doc, home, storage };
+  }
+
+  const future5h = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  const futureWeek = new Date(Date.now() + 4 * 86400 * 1000).toISOString();
+  const liveGroups = [
+    {
+      id: 'gemini',
+      name: 'Gemini Models',
+      windows: {
+        '5h': { available: true, id: 'gemini-5h', remaining: 0.88, resetAt: future5h },
+        weekly: { available: true, id: 'gemini-weekly', remaining: 0.91, resetAt: futureWeek },
+      },
+    },
+    {
+      id: '3p',
+      name: 'Claude and GPT models',
+      windows: {
+        '5h': { available: true, id: '3p-5h', remaining: 1, resetAt: future5h },
+        weekly: { available: true, id: '3p-weekly', remaining: 0.5, resetAt: futureWeek },
+      },
+    },
+  ];
+
+  const makeCtl = () => homeStudioPanel.createHomeStudioPanelController({
+    usageCore,
+    storageUsageCacheKey: 'test:quotas:v234',
+    isDestroyed: () => false,
+    getHomeLayout: () => 'studio',
+    getLang: () => 'zh-CN',
+    uiText: () => ({ quotaEmptyHint: '暂未获取到实时配额池快照', tabQuotas: '模型配额' }),
+    getDisplayName: () => 'Dev',
+    ensureHooks: () => ({ store: { getState: () => ({ trajectorySummaries: { summaries: {} } }) }, svc: {} }),
+    canMountRealCanvas: () => false,
+    setAttrIfChanged: (el, k, v) => el?.setAttribute?.(k, v),
+    runGuardedMut: (fn) => fn(),
+  });
+
+  try {
+    // 1) External agPulseHost returns offline empty groups -> falls back to __agPrismMetricsBridge & renders quota cards
+    {
+      const { doc, home, storage } = makeQuotaDom();
+      const bridgeInputs = [];
+      globalThis.document = doc;
+      globalThis.localStorage = storage;
+      globalThis.window = {
+        agPulseHost: {
+          getMetrics: async () => ({ connection: 'offline', error: '当前版本未提供可用的本地检测凭据', groups: [] }),
+        },
+        __agPrismMetricsBridge: {
+          getMetrics: async (inp) => {
+            bridgeInputs.push(inp);
+            return { connection: 'live', groups: liveGroups };
+          },
+        },
+        __agPrismTelemetry: {
+          refresh: async () => null,
+          getLatestSnapshot: () => null,
+        },
+      };
+      const ctl = makeCtl();
+      ctl.renderHomePanel(true);
+      const quotasTab = home.querySelector('[data-tab="quotas"]');
+      assert.ok(quotasTab);
+      quotasTab.click();
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(bridgeInputs.length, 1);
+      assert.equal(bridgeInputs[0].selectLatest, false);
+      assert.equal(bridgeInputs[0].quotaRefresh, true);
+      assert.equal(home.querySelectorAll('.ag-cs-quota-card').length, 2, 'Must render 2 live quota cards via __agPrismMetricsBridge fallback');
+      assert.equal(home.querySelectorAll('.ag-cs-home-models-empty').length, 0);
+    }
+
+    // 2) External agPulseHost throws AND __agPrismMetricsBridge missing -> falls back to __agPrismMetricsCall;
+    //    empty snapshot does NOT block Quotas tab retry, and later empty snapshot does NOT wipe cached live groups.
+    {
+      const { doc, home, storage } = makeQuotaDom();
+      let hostCalls = 0;
+      let bindingCalls = 0;
+      let returnLiveFromBinding = false;
+      const prevResolveMarker = () => {};
+      globalThis.document = doc;
+      globalThis.localStorage = storage;
+      globalThis.window = {
+        agPulseHost: {
+          getMetrics: () => {
+            hostCalls += 1;
+            if (hostCalls === 1) throw new Error('boom');
+            return Promise.reject(new Error('offline'));
+          },
+        },
+        __agPrismMetricsResolve: prevResolveMarker,
+        __agPrismMetricsCall: (payloadStr) => {
+          bindingCalls += 1;
+          const req = JSON.parse(payloadStr);
+          setTimeout(() => {
+            globalThis.window.__agPrismMetricsResolve?.(
+              req.id,
+              returnLiveFromBinding ? { connection: 'live', groups: liveGroups } : { connection: 'offline', groups: [] }
+            );
+          }, 5);
+        },
+      };
+      const ctl = makeCtl();
+      ctl.renderHomePanel(true);
+      const initialSnap = await ctl.refreshLiveTelemetrySnapshot(false);
+      assert.equal(Array.isArray(initialSnap?.groups) ? initialSnap.groups.length : 0, 0);
+      assert.equal(globalThis.window.__agPrismMetricsResolve, prevResolveMarker, 'Must restore previous __agPrismMetricsResolve');
+
+      // Clicking Quotas tab MUST retry because previous snapshot had no usable groups!
+      returnLiveFromBinding = true;
+      home.querySelector('[data-tab="quotas"]').click();
+      await new Promise((r) => setTimeout(r, 40));
+      assert.equal(bindingCalls, 2);
+      assert.equal(home.querySelectorAll('.ag-cs-quota-card').length, 2, 'Must populate cards from __agPrismMetricsCall fallback on retry');
+
+      // Subsequent empty/offline snapshot must NOT overwrite previously cached live quota groups!
+      returnLiveFromBinding = false;
+      const afterEmpty = await ctl.refreshLiveTelemetrySnapshot(true);
+      assert.equal(afterEmpty.groups.length, 2, 'Must retain previously fetched valid quota groups when refresh returns empty');
+      assert.equal(home.querySelectorAll('.ag-cs-quota-card').length, 2);
+    }
+
+    // 3) PrismDaemon.ensureMetricsCollector forwards selectLatest:false and quotaRefresh:true to MetricsStore.snapshot()
+    {
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+      const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-daemon-quota-'));
+      try {
+        const daemon = new PrismDaemon({ rootDir: repoRoot, enableAutoUpdateTimer: false });
+        const rpcCalls = [];
+        const fakeClient = {
+          server: { port: 0, csrf: '', pid: 1, mode: 'renderer-proxy' },
+          setCdpPort() {},
+          async discover() { return this.server; },
+          async call(method) {
+            rpcCalls.push(method);
+            if (method === 'GetUserStatus') return { userStatus: { email: 'dev@example.com' } };
+            if (method === 'RetrieveUserQuotaSummary') {
+              return {
+                response: {
+                  groups: [{
+                    displayName: 'Gemini Models',
+                    buckets: [{ bucketId: 'gemini-5h', window: '5h', remainingFraction: 0.77, resetTime: future5h }],
+                  }],
+                },
+              };
+            }
+            throw new Error(`Unexpected RPC ${method}`);
+          },
+          dispose() {},
+        };
+        daemon._lazyStore = new MetricsStore(fakeClient, { dataDir: tmpDataDir });
+        const collector = await daemon.ensureMetricsCollector();
+        const res = await collector({ conversationId: null, force: true, quotaRefresh: true, selectLatest: false });
+        assert.equal(res.connection, 'live');
+        assert.equal(res.groups.length, 1);
+        assert.equal(res.speed, null);
+        assert.deepEqual(rpcCalls, ['GetUserStatus', 'RetrieveUserQuotaSummary']);
+        daemon._lazyStore.dispose();
+      } finally {
+        fs.rmSync(tmpDataDir, { recursive: true, force: true });
+      }
+    }
+  } finally {
+    if (prevWin === undefined) delete globalThis.window;
+    else globalThis.window = prevWin;
+    if (prevDoc === undefined) delete globalThis.document;
+    else globalThis.document = prevDoc;
+    if (prevStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = prevStorage;
   }
 });
 
