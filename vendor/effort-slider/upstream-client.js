@@ -1516,10 +1516,18 @@ else if (rowEl.hasAttribute("data-ces-max")) rowEl.removeAttribute("data-ces-max
 }
 var valEl = opts.valueElement || (rowEl && findValueElement(rowEl));
 if (valEl) {
-if (label && valEl.textContent !== label) {
+// Track the last logical effort label rendered instead of comparing live
+// valEl.textContent, so external i18n scripts (e.g. "Medium" -> "中")
+// won't cause an overwrite <-> re-translate loop and repeated rise animations.
+var hadLastLabel = typeof valEl.__cesLastLabel === "string";
+var logicalChanged = Boolean(label) && valEl.__cesLastLabel !== label;
+if (logicalChanged) {
+valEl.__cesLastLabel = label;
+if (valEl.textContent !== label) {
 valEl.textContent = label;
+}
 // 无论是 Claude 还是 Codex (Argon / Flash)，文字切换时统一触发顺滑向上翻转动效
-if (!prefersReducedMotion(win)) {
+if (hadLastLabel && !prefersReducedMotion(win)) {
 if (valEl.__cesRiseTimer) {
 clearTimeout(valEl.__cesRiseTimer);
 valEl.__cesRiseTimer = null;
@@ -2316,14 +2324,26 @@ if (!profile.locked && profile.baseName) {
 if (firstNode && firstNode.nodeType === 3 && firstNode.nodeValue !== profile.baseName) {
 firstNode.nodeValue = profile.baseName;
 }
-if (effortSpan) _setTxt(effortSpan, " " + profile.currentLabel);
+if (effortSpan) {
+var nextTrigText = " " + profile.currentLabel;
+if (effortSpan.__cesLastText !== nextTrigText) {
+effortSpan.__cesLastText = nextTrigText;
+_setTxt(effortSpan, nextTrigText);
+}
+}
 } else if (profile.locked) {
 var lp = profile.modelOption && parseModelLabel(profile.modelOption.label);
 var lBase = lp ? lp.base : (profile.modelOption && profile.modelOption.label) || profile.baseName;
 if (lBase && firstNode && firstNode.nodeType === 3 && firstNode.nodeValue !== lBase) {
 firstNode.nodeValue = lBase;
 }
-if (effortSpan) _setTxt(effortSpan, lp ? " " + lp.effortLabel : "");
+if (effortSpan) {
+var nextLockedText = lp ? " " + lp.effortLabel : "";
+if (effortSpan.__cesLastText !== nextLockedText) {
+effortSpan.__cesLastText = nextLockedText;
+_setTxt(effortSpan, nextLockedText);
+}
+}
 }
 }
 }
@@ -2611,6 +2631,7 @@ valueEl.setAttribute("data-ces-part", "value");
 var initProf = getActiveProfile(ctx);
 if (initProf && initProf.currentLabel) {
 valueEl.textContent = initProf.currentLabel;
+valueEl.__cesLastLabel = initProf.currentLabel;
 }
 head.appendChild(title);
 head.appendChild(valueEl);
@@ -2701,7 +2722,16 @@ var MO = opts.MutationObserver || (win && win.MutationObserver) || (typeof Mutat
 if (typeof MO === "function") {
 observer = new MO(function (recs) {
 if (_intMut) return;
-if (Array.isArray(recs) && recs.length && !activePanel) {
+if (Array.isArray(recs) && recs.length) {
+if (activeSection && activePanel && activePanel.contains(activeSection)) {
+var allInsideSlider = true;
+for (var si = 0; si < recs.length; si += 1) {
+var sr = recs[si], st = sr && sr.target, sel = st && (st.nodeType === 1 ? st : st.parentElement);
+if (!sel || !activeSection.contains(sel)) { allInsideSlider = false; break; }
+}
+if (allInsideSlider) return;
+}
+if (!activePanel) {
 var rel = false;
 var ctrlSel = '[data-testid="model-selector-trigger"],button[aria-label^="Select model"],[data-testid="model-selector-panel"],[role="menu"]';
 var noiseSel = '[data-testid="autoscroll-viewport"],.toast-viewport,[data-testid="sidebar-split"]>div:first-child';
@@ -2713,6 +2743,7 @@ if (el.closest(ctrlSel)) { rel = true; break; }
 } else if (el.closest(ctrlSel) || !el.closest(noiseSel)) { rel = true; break; }
 }
 if (!rel) return;
+}
 }
 scan();
 });

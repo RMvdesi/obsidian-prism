@@ -1178,4 +1178,53 @@ test('Scenario 7 (R1~R5 防风控加固): 拖动松手单次提交 + 零原型�
   assert.equal(foldClicks, 4, 'R5: destroy() must cancel remaining pending foldRafId');
 });
 
+test('External i18n text rewrite on effort value does not trigger overwrite loop or rise-animation flicker', () => {
+  const env = createSimEnv();
+  const rowEl = env.makeEl('div', { className: 'ces-ag-effort-row' });
+  const valEl = env.makeEl('span', { className: 'ces-ag-effort-value' });
+  const container = env.makeEl('div', { className: 'ces-inline' });
+  rowEl.appendChild(valEl);
+  rowEl.appendChild(container);
+  env.body.appendChild(rowEl);
+
+  let official = 'medium';
+  const mount = upstreamLib.mountCodexEffortSlider({
+    container,
+    row: rowEl,
+    valueElement: valEl,
+    document: env.doc,
+    window: env.win,
+    seat: {
+      isClaude: false,
+      locked: false,
+      effortLevels: [
+        { effort: 'low', label: 'Low' },
+        { effort: 'medium', label: 'Medium' },
+        { effort: 'high', label: 'High' },
+      ],
+      get currentEffort() { return official; },
+      selectEffort() {},
+    },
+  });
+
+  assert.equal(valEl.textContent, 'Medium');
+  assert.equal(valEl.classList.contains('ces-text-rise'), false, 'Initial mount must not trigger rise flicker');
+
+  // Simulate external i18n patch (e.g. antigravity-chinese) translating "Medium" -> "中"
+  valEl.textContent = '中';
+  mount.refresh();
+  assert.equal(valEl.textContent, '中', 'refresh() with unchanged logical tier must preserve external i18n text');
+  assert.equal(valEl.classList.contains('ces-text-rise'), false, 'refresh() with unchanged logical tier must not replay ces-text-rise');
+  assert.equal(valEl.classList.contains('is-claude-changing'), false);
+
+  // Genuine tier change must still update text and trigger rise animation once
+  official = 'high';
+  mount.refresh();
+  assert.equal(valEl.textContent, 'High');
+  assert.equal(valEl.classList.contains('ces-text-rise'), true, 'Real tier transition must still trigger rise animation');
+
+  mount.unmount();
+});
+
+
 
