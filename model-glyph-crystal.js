@@ -498,6 +498,15 @@
     };
 
     const detectPanelIsOrchestrator = (panel, fallbackModelInfo) => {
+      if (panel) {
+        const cesSel = qs(panel, '[data-ces-model-selected="true"]');
+        if (cesSel) {
+          if (ga(cesSel, 'data-testid') === 'model-selector-orchestrator' || Boolean(qs(cesSel, '[data-testid="model-selector-orchestrator"]'))) {
+            return true;
+          }
+          return /\borchestrator\b|编排|调度器/i.test(stripTranslatedEffortSuffix(readButtonLabelWithoutGlyph(cesSel)));
+        }
+      }
       if (fallbackModelInfo && typeof fallbackModelInfo.isOrchestrator === 'boolean') return fallbackModelInfo.isOrchestrator;
       if (panel) {
         let sel = qs(panel, '[data-selected="true"], [aria-checked="true"], [data-state="checked"], [data-ces-model-selected="true"]');

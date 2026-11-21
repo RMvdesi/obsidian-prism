@@ -3516,11 +3516,17 @@ const SAFE_STMT_START_KW = new Set([
   'delete', 'throw', 'break', 'continue',
 ]);
 
-function serializeTokens(tokens) {
+function serializeTokens(tokens, mergeDecls = true) {
   const out = [];
   let lastCh = '';
   let lastTokenVal = '';
   let pendingNL = false;
+  const parenIsCtrl = [];
+  let lastCloseWasCtrl = false;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  const declAtBrace = [];
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
@@ -3529,19 +3535,101 @@ function serializeTokens(tokens) {
       pendingNL = true;
       continue;
     }
-    const val = t.val;
+    let val = t.val;
     if (!val) continue;
+    if (t.type === 'num' && val.length > 2 && val[0] === '0' && val[1] === '.') {
+      val = val.slice(1);
+    }
+    if (t.type === 'punc' && val === ';') {
+      if (lastTokenVal === ';' && parenIsCtrl.length === 0) {
+        pendingNL = false;
+        continue;
+      }
+      let nextIdx = -1;
+      let nextVal = '';
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (tokens[j].type !== 'ws' && tokens[j].type !== 'nl') {
+          nextIdx = j;
+          nextVal = tokens[j].val;
+          break;
+        }
+      }
+      const curDecl = declAtBrace[braceDepth];
+      if (
+        mergeDecls &&
+        curDecl &&
+        parenDepth === curDecl.p &&
+        bracketDepth === curDecl.b &&
+        nextIdx >= 0 &&
+        tokens[nextIdx].type === 'id' &&
+        nextVal === curDecl.kind
+      ) {
+        out.push(',');
+        lastCh = ',';
+        lastTokenVal = ',';
+        pendingNL = false;
+        lastCloseWasCtrl = false;
+        i = nextIdx;
+        continue;
+      }
+      if (curDecl && parenDepth === curDecl.p && bracketDepth === curDecl.b) declAtBrace[braceDepth] = null;
+      if (
+        nextVal === '}' &&
+        lastTokenVal &&
+        lastTokenVal !== ';' &&
+        lastTokenVal !== '{' &&
+        lastTokenVal !== ':' &&
+        lastTokenVal !== 'else' &&
+        lastTokenVal !== 'do' &&
+        !(lastTokenVal === ')' && lastCloseWasCtrl)
+      ) {
+        pendingNL = false;
+        continue;
+      }
+    }
+    if (
+      t.type === 'id' &&
+      (val === 'let' || val === 'var' || val === 'const') &&
+      (lastTokenVal === '' || lastTokenVal === ';' || lastTokenVal === '{' || lastTokenVal === '}')
+    ) {
+      declAtBrace[braceDepth] = { kind: val, p: parenDepth, b: bracketDepth };
+    }
+    if (t.type === 'punc' && val === '{') {
+      braceDepth++;
+      declAtBrace[braceDepth] = null;
+      lastCloseWasCtrl = false;
+    } else if (t.type === 'punc' && val === '}') {
+      declAtBrace[braceDepth] = null;
+      if (braceDepth > 0) braceDepth--;
+      lastCloseWasCtrl = false;
+    } else if (t.type === 'punc' && val === '[') {
+      bracketDepth++;
+      lastCloseWasCtrl = false;
+    } else if (t.type === 'punc' && val === ']') {
+      if (bracketDepth > 0) bracketDepth--;
+      lastCloseWasCtrl = false;
+    } else if (t.type === 'punc' && val === '(') {
+      parenDepth++;
+      parenIsCtrl.push(lastTokenVal === 'if' || lastTokenVal === 'while' || lastTokenVal === 'for' || lastTokenVal === 'with');
+      lastCloseWasCtrl = false;
+    } else if (t.type === 'punc' && val === ')') {
+      if (parenDepth > 0) parenDepth--;
+      lastCloseWasCtrl = Boolean(parenIsCtrl.pop());
+    } else {
+      lastCloseWasCtrl = false;
+    }
     const nextCh = val[0];
     if (lastCh) {
       if (pendingNL) {
         const safeDropNL =
           SAFE_PREV_NO_ASI.has(lastCh) ||
           SAFE_NEXT_NO_ASI.has(nextCh) ||
+          (t.type === 'punc' && (val === '.' || val === '?.')) ||
           lastTokenVal === '=>' ||
           lastTokenVal === '&&' ||
           lastTokenVal === '||' ||
           lastTokenVal === '??' ||
-          (lastCh === '}' && SAFE_STMT_START_KW.has(val)) ||
+          (lastCh === '}' && (SAFE_STMT_START_KW.has(val) || val === '{')) ||
           ((lastCh === '+' || lastCh === '-') && lastTokenVal !== '++' && lastTokenVal !== '--');
         if (!safeDropNL) {
           out.push('\n');
@@ -4051,6 +4139,8 @@ function scanModulePoolCandidates(tokens, allowMemberProps = false) {
 }
 
 const SAFE_ALIAS_GLOBALS = new Set([
+  'document',
+  'window',
   'Math',
   'Number',
   'Boolean',
@@ -4065,6 +4155,8 @@ const SAFE_ALIAS_GLOBALS = new Set([
   'RegExp',
   'Error',
   'Date',
+  'URL',
+  'console',
   'Uint8Array',
   'Uint16Array',
   'Int32Array',
@@ -4073,6 +4165,7 @@ const SAFE_ALIAS_GLOBALS = new Set([
   'parseFloat',
   'parseInt',
   'isFinite',
+  'isNaN',
   'encodeURIComponent',
   'decodeURIComponent',
   'setTimeout',
@@ -4082,8 +4175,8 @@ const SAFE_ALIAS_GLOBALS = new Set([
   'performance',
 ]);
 
-function applyModulePoolReplacements(tokens, selectedEntries, headerBuilder) {
-  if (selectedEntries.length === 0) return serializeTokens(tokens);
+function applyModulePoolReplacements(tokens, selectedEntries, headerBuilder, sharedGlobalIndexMap = null) {
+  if (selectedEntries.length === 0 && !sharedGlobalIndexMap) return serializeTokens(tokens);
 
   const usedIds = new Set();
   for (const tk of tokens) {
@@ -4136,6 +4229,7 @@ function applyModulePoolReplacements(tokens, selectedEntries, headerBuilder) {
 
   const globalPositions = new Map();
   const poisonedGlobals = new Set();
+  const typeofSeenGlobals = new Set();
   for (let i = 0; i < tokens.length; i++) {
     const tk = tokens[i];
     if (tk.type !== 'id' || !SAFE_ALIAS_GLOBALS.has(tk.val)) continue;
@@ -4143,9 +4237,18 @@ function applyModulePoolReplacements(tokens, selectedEntries, headerBuilder) {
     const nx = nextSig[i];
     if (p && (p.val === '.' || p.val === '?.' || p.val === 'function')) continue;
     if (nx && nx.val === ':') continue;
+    if (p && p.val === 'typeof' && (tk.val === 'document' || tk.val === 'window')) {
+      if (nx && (nx.val === '.' || nx.val === '?.')) {
+        if (!globalPositions.has(tk.val)) globalPositions.set(tk.val, []);
+        globalPositions.get(tk.val).push(i);
+        continue;
+      }
+      typeofSeenGlobals.add(tk.val);
+      continue;
+    }
     if (
       nx &&
-      (nx.val === '.' || nx.val === '?.') &&
+      (nx.val === '.' || nx.val === '?.' || (nx.val === '(' && !(p && (p.val === 'async' || p.val === 'get' || p.val === 'set' || p.val === '{' || p.val === ';' || p.val === '}')))) &&
       !(p && (p.val === 'let' || p.val === 'const' || p.val === 'var' || p.val === 'typeof'))
     ) {
       if (!globalPositions.has(tk.val)) globalPositions.set(tk.val, []);
@@ -4205,11 +4308,27 @@ function applyModulePoolReplacements(tokens, selectedEntries, headerBuilder) {
   const globalAliasDecls = [];
   const globalReplaceAt = new Map();
   for (const [gName, idxs] of globalPositions.entries()) {
-    if (poisonedGlobals.has(gName) || idxs.length < 3) continue;
+    if (poisonedGlobals.has(gName)) continue;
+    const gPoolIdx = sharedGlobalIndexMap ? sharedGlobalIndexMap.get(gName) : undefined;
+    if (gPoolIdx !== undefined) {
+      if (idxs.length < 2) continue;
+      const alias = stagedVar;
+      const idxBytes = gPoolIdx < 88 ? 1 : gPoolIdx < 1975 ? 2 : 3;
+      const save = idxs.length * (gName.length - alias.length) - (alias.length + 1 + idxBytes);
+      if (save >= 2) {
+        activeItems.push({ strVal: gName, poolIdx: gPoolIdx, list: [], varName: alias });
+        stagedVar = nextVar();
+        for (const pos of idxs) globalReplaceAt.set(pos, alias);
+      }
+      continue;
+    }
+    if (idxs.length < 3) continue;
     const alias = nextVar();
-    const save = idxs.length * (gName.length - alias.length) - (alias.length + 1 + gName.length + 1);
+    const rhs = typeofSeenGlobals.has(gName) ? `typeof ${gName}<"u"?${gName}:void 0` : gName;
+    const decl = `${alias}=${rhs}`;
+    const save = idxs.length * (gName.length - alias.length) - (decl.length + 1);
     if (save >= 8) {
-      globalAliasDecls.push(`${alias}=${gName}`);
+      globalAliasDecls.push(decl);
       for (const pos of idxs) globalReplaceAt.set(pos, alias);
     }
   }
@@ -4593,14 +4712,21 @@ function stripJsFunctionsByName(src, replacementsByName) {
     }
     out.push(tk);
   }
-  return serializeTokens(out);
+  return serializeTokens(out, false);
 }
 
 function stripUnusedUpstreamMenuObserver(src) {
-  const stripped = stripJsFunctionsByName(src, {
+  const preCleaned = src.replace(/(?<!function\s)\btracePush\([^\n;]*\);?/g, '');
+  const stripped = stripJsFunctionsByName(preCleaned, {
     installMenuObserver: 'function installMenuObserver(){return{stop:function(){},rescan:function(){},getCurrent:function(){return null;}};}',
     openSettingsPanel: 'function openSettingsPanel(){return function(){};}',
     installSettingsUi: 'function installSettingsUi(){return{stop:function(){}};}',
+    installCodexEffortSlider:
+      'function installCodexEffortSlider(o){o=o||{};var d=o.document||(typeof document!=="undefined"?document:null),w=o.window||(d&&d.defaultView)||(typeof window!=="undefined"?window:globalRoot);if(!d||!d.body)return null;if(w&&w.__agCodexEffortSliderInstance&&typeof w.__agCodexEffortSliderInstance.stop==="function")try{w.__agCodexEffortSliderInstance.stop();}catch(e){}installStyles(d);var i=function(e){if(!e||e.key===SETTINGS_KEY||e.key===LEGACY_SETTINGS_KEY)_invCfg();};if(w&&typeof w.addEventListener==="function"){w.addEventListener("storage",i);w.addEventListener(SETTINGS_EVENT,_invCfg);}var a=installAntigravityObserver({document:d,window:w,MutationObserver:o.MutationObserver});var n={stop:function(){a.stop();if(w&&typeof w.removeEventListener==="function"){w.removeEventListener("storage",i);w.removeEventListener(SETTINGS_EVENT,_invCfg);}_invCfg();if(w&&w.__agCodexEffortSliderInstance===n)delete w.__agCodexEffortSliderInstance;},rescan:function(){a.rescan();}};if(w)w.__agCodexEffortSliderInstance=n;return n;}',
+    findEffortTrigger: 'function findEffortTrigger(){return null;}',
+    findValueElement: 'function findValueElement(r){return r&&r.querySelector?r.querySelector(\'[data-ces-part="value"],.ces-ag-effort-value\'):null;}',
+    schemaDefaults: 'function schemaDefaults(){return{v:1,motion:"fast",ticks:"highlight"};}',
+    normalizeSettings: 'function normalizeSettings(r){var b=schemaDefaults();if(!r||typeof r!=="object")return b;if(/^(?:fast|quick|full)$/.test(r.motion))b.motion=r.motion;else if(!r.motion&&r.reducedMotion===true)b.motion="quick";if(/^(?:highlight|dim|hidden)$/.test(r.ticks))b.ticks=r.ticks;return b;}',
     findInferenceRow: '',
     traceClear: '',
     tracePush: 'function tracePush(){}',
@@ -4613,9 +4739,8 @@ function stripUnusedUpstreamMenuObserver(src) {
     starBrightnessFor: '',
   });
   return stripped
-    .replace(/\bvar\s+(?:SET_TITLE_I18N|FILL_RADIUS_CSS|TRACK_HEIGHT|BASE_SPEEDUP|MIN_HEIGHT_SLOTS|CLAUDE_ROWS|CLAUDE_KNOB_[WHR]|TRACE_CAPACITY|traceRingBuffer)\s*=\s*(?:\{[^{}]*\}|[^;\n]+);?/g, '')
-    .replace(/,\s*(?:label|hint)\s*:\s*"(?:动画效果|快速动画|拨过[^"]*|简洁动画|无过渡[^"]*|完整动画|匀变速[^"]*|已到达档位[^"]*|亮白显示|默认 · 已滑过[^"]*|与未到达同色|所有刻度点[^"]*|隐藏|不显示任何[^"]*)"/g, '')
-    .replace(/(?<!function\s)\btracePush\([^;]*\);?/g, '')
+    .replace(/\bvar\s+SETTINGS_SCHEMA\s*=\s*_F\(\[[\s\S]*?\]\);/, '')
+    .replace(/\bvar\s+(?:_tr|INFERENCE_LABELS|SET_TITLE_I18N|FILL_RADIUS_CSS|TRACK_HEIGHT|BASE_SPEEDUP|MIN_HEIGHT_SLOTS|CLAUDE_ROWS|CLAUDE_KNOB_[WHR]|TRACE_CAPACITY|traceRingBuffer|SETTINGS_VERSION)\s*=\s*(?:\{[^{}]*\}|\[[^\[\]]*\]|[^;\n]+);?/g, '')
     .replace(/if\s*\(\s*typeof\s+window\s*!==\s*"undefined"\s*&&[\s\S]*?(?=\nreturn\s*\{)/, '')
     .replace(/(var\s+SLIDER_CSS\s*=\s*)("(?:\\.|[^"\\])*")/, (full, p1, lit) => {
       try {
@@ -5044,11 +5169,20 @@ function compileUnifiedBundle() {
   // Assign 2-byte UTF-8 index slots (0..1791) to entries referenced by the most modules!
   chosenPool.sort((a, b) => b.moduleHits - a.moduleHits || b.totalOccs - a.totalOccs || b.sortScore - a.sortScore);
 
+  const HOT_POOL_GLOBALS = [
+    'Math', 'Object', 'Array', 'String', 'Boolean', 'Number', 'clearTimeout', 'setTimeout',
+    'document', 'window', 'WeakMap', 'Promise', 'JSON', 'Set', 'Map', 'parseFloat',
+  ];
+  const TAIL_POOL_GLOBALS = ['parseInt', 'performance', 'Float32Array', 'Uint8Array', 'Error', 'RegExp', 'Date', 'isFinite'];
+  const sharedGlobalIndexMap = new Map();
+  for (let gi = 0; gi < HOT_POOL_GLOBALS.length; gi++) sharedGlobalIndexMap.set(HOT_POOL_GLOBALS[gi], gi);
   const sharedPoolList = chosenPool.map((x) => x.strVal);
   const poolIndexMap = new Map();
   for (let idx = 0; idx < sharedPoolList.length; idx++) {
-    poolIndexMap.set(sharedPoolList[idx], idx);
+    poolIndexMap.set(sharedPoolList[idx], idx + HOT_POOL_GLOBALS.length);
   }
+  const tailBase = HOT_POOL_GLOBALS.length + sharedPoolList.length;
+  for (let gi = 0; gi < TAIL_POOL_GLOBALS.length; gi++) sharedGlobalIndexMap.set(TAIL_POOL_GLOBALS[gi], tailBase + gi);
 
   const ASCII_SLOT_COUNT = 88; // 0x23..0x3B (25) + 0x3F..0x5B (29) + 0x5D..0x7E (34): 1-byte unescaped ASCII
   const SINGLE_TOTAL_LIMIT = ASCII_SLOT_COUNT + DIRECT_SINGLE_LIMIT;
@@ -5062,8 +5196,10 @@ function compileUnifiedBundle() {
   };
 
   const packedPoolExpr = packTextJsExpr(sharedPoolList.join(SEP), 5600);
+  const hotExpr = `[${HOT_POOL_GLOBALS.map((g) => (g === 'document' || g === 'window' ? `typeof ${g}<"u"?${g}:void 0` : g)).join(',')}]`;
+  const tailExpr = `[${TAIL_POOL_GLOBALS.join(',')}]`;
   const bootstrapHeader =
-    `globalThis.__agSP=${packedPoolExpr}.split(${JSON.stringify(SEP)});` +
+    `globalThis.__agSP=${hotExpr}.concat(${packedPoolExpr}.split(${JSON.stringify(SEP)}),${tailExpr});` +
     `globalThis.__agM=s=>{let p=globalThis.__agSP,r=[],i=0;for(;i<s.length;i++){let c=s.charCodeAt(i);r.push(p[c<${POOL_IDX_BASE}?(c<60?c-35:c<92?c-38:c-39):c<${HI_CHAR_BASE}?c-${POOL_IDX_BASE - ASCII_SLOT_COUNT}:${SINGLE_TOTAL_LIMIT}+((c-${HI_CHAR_BASE})<<6)+s.charCodeAt(++i)-${POOL_IDX_BASE}])}return r};`;
 
   const partCodeByName = new Map();
@@ -5082,12 +5218,17 @@ function compileUnifiedBundle() {
       selected.sort((a, b) => b.list.length - a.list.length || b.totalOrig - a.totalOrig);
 
       const plainMin = serializeTokens(u.tokens);
-      const pooledCode = applyModulePoolReplacements(u.tokens, selected, (activeItems, bodyCode) => {
-        const varNames = activeItems.map((x) => x.varName);
-        const idxChars = activeItems.map((x) => encodePoolIndex(x.poolIdx)).join('');
-        const bodySep = bodyCode.endsWith(';') || bodyCode.endsWith('}') ? bodyCode : bodyCode + ';';
-        return `{let[${varNames.join(',')}]=__agM(${serializeJsValue(idxChars)});${bodySep}}`;
-      });
+      const pooledCode = applyModulePoolReplacements(
+        u.tokens,
+        selected,
+        (activeItems, bodyCode) => {
+          const varNames = activeItems.map((x) => x.varName);
+          const idxChars = activeItems.map((x) => encodePoolIndex(x.poolIdx)).join('');
+          const folded = bodyCode.startsWith('let ') ? `,${bodyCode.slice(4)}` : `;${bodyCode}`;
+          return `{let[${varNames.join(',')}]=__agM(${serializeJsValue(idxChars)})${folded}}`;
+        },
+        sharedGlobalIndexMap
+      );
 
       const bestBody =
         Buffer.byteLength(pooledCode, 'utf8') < Buffer.byteLength(plainMin, 'utf8')
@@ -6477,6 +6618,10 @@ const REMOVE_EXPRESSION = `(() => {
     'data-ag-cs-code-folded',
     'data-ag-cs-aux-dual',
     'data-ag-cs-model-overlay',
+    'data-ag-cs-model-submenu',
+    'data-ag-cs-orch-l2',
+    'data-ag-cs-orch-l3',
+    'data-ces-orch-row',
   ].forEach((attr) => {
     document.querySelectorAll('[' + attr + ']').forEach((el) => el.removeAttribute(attr));
   });

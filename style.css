@@ -469,6 +469,7 @@ position:absolute;left:0;right:0;width:auto;bottom:calc(100% - 9px);height:84px;
 [data-testid="agent-input-box"][data-ag-cs-menu-open="1"] .ag-cs-crab{opacity:0 !important;pointer-events:none !important;& :is(.ag-v2-mascot-actor,canvas){pointer-events:none !important;}}
 html[data-ag-cs-model-menu="1"] .ag-cs-crab,html[data-ag-cs-model-menu="1"] .ag-cs-crab :is(.ag-v2-mascot-actor,canvas){pointer-events:none !important;}
 .agy-overlay[data-ag-cs-model-overlay="1"]{z-index:60 !important;}
+html[data-ag-cs-model-menu="1"] :is([data-ag-cs-model-submenu="1"],[data-testid="context-menu-submenu-popup"]){z-index:65 !important;}
 html[data-ag-cs-style][data-ag-cs-has-crab="1"] :is([data-testid="interaction-takeover-card"],[data-testid="side-question-panel"]){position:relative !important;z-index: 12 !important;}
 html[data-ag-cs-style] :is([data-testid="agent-input-box"]>div[data-ag-cs-queued="1"],[data-ag-cs-queued="1"],[data-ag-cs-takeover="1"]){margin-bottom: 46px !important;position:relative !important;z-index: 12 !important;}
 

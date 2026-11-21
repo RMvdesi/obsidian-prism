@@ -419,17 +419,17 @@ function createSimEnv(options = {}) {
     const pu = { type: 'pointerup', button: 0, bubbles: true };
     const mu = { type: 'mouseup', button: 0, bubbles: true };
     const ck = { type: 'click', button: 0, bubbles: true };
-    const panel = target.closest('[data-testid="model-selector-panel"]');
+    const host = target.closest('[data-testid="model-selector-panel"],[role="menu"],[role="listbox"]');
     let nativeCalled = false;
     const handler = (ev) => {
       nativeCalled = true;
       if (typeof nativeOnClick === 'function') nativeOnClick(ev);
     };
-    if (panel) panel.addEventListener('click', handler, false);
+    if (host) host.addEventListener('click', handler, false);
     target.dispatchEvent(pu);
     target.dispatchEvent(mu);
     target.dispatchEvent(ck);
-    if (panel) panel.removeEventListener('click', handler, false);
+    if (host) host.removeEventListener('click', handler, false);
     return { pu, mu, ck, nativeCalled };
   }
 
@@ -1177,5 +1177,193 @@ test('Scenario 7 (R1~R5 防风控加固): 拖动松手单次提交 + 零原型�
   hweEnv.advanceRaf();
   assert.equal(foldClicks, 4, 'R5: destroy() must cancel remaining pending foldRafId');
 });
+
+test('Scenario 8 (Orchestrator 集群切入 + 右侧子菜单选型保持常开): 点击集群行与子菜单均不退出选择页且严格 Fail-Open', () => {
+  const env = createSimEnv();
+  const neonLow = { label: 'Gemini 4 Neon (Low)', modelId: 'gemini-4-neon-low', value: 1534 };
+  const neonMed = { label: 'Gemini 4 Neon (Medium)', modelId: 'gemini-4-neon-medium', value: 1533 };
+  const neonHigh = { label: 'Gemini 4 Neon (High)', modelId: 'gemini-4-neon-high', value: 1532 };
+  const neonXHigh = { label: 'Gemini 4 Neon (XHigh)', modelId: 'gemini-4-neon-xhigh', value: 1535 };
+  const carbLow = { label: 'Gemini 4 Carbon (Low)', modelId: 'gemini-4-carbon-low', value: 1520 };
+  const carbMed = { label: 'Gemini 4 Carbon (Medium)', modelId: 'gemini-4-carbon-medium', value: 1521 };
+  const carbHigh = { label: 'Gemini 4 Carbon (High)', modelId: 'gemini-4-carbon-high', value: 1522 };
+  const opusLow = { label: 'Claude Opus 5.5 (Low)', modelId: 'claude-opus-5-5-low', value: 1400 };
+  const opusMed = { label: 'Claude Opus 5.5 (Medium)', modelId: 'claude-opus-5-5-medium', value: 1401 };
+  const opusHigh = { label: 'Claude Opus 5.5 (High)', modelId: 'claude-opus-5-5-high', value: 1402 };
+  const orchNeon = { label: 'Orchestrator (Neon)', modelId: 'gemini-pro-orchestrator-neon', value: 1537 };
+
+  const planners = [neonLow, neonMed, neonHigh, neonXHigh, carbLow, carbMed, carbHigh, opusLow, opusMed, opusHigh];
+  const modelOptions = [...planners, orchNeon];
+  let selectedModel = neonXHigh;
+  let isOpen = true;
+  const commits = [];
+  const orchPicks = [];
+
+  const plannerIdx = new Map([
+    ['gemini-4-neon', new Map([['low', neonLow], ['medium', neonMed], ['high', neonHigh], ['xhigh', neonXHigh]])],
+    ['gemini-4-carbon', new Map([['low', carbLow], ['medium', carbMed], ['high', carbHigh]])],
+    ['claude-opus-5-5', new Map([['low', opusLow], ['medium', opusMed], ['high', opusHigh]])],
+  ]);
+  const selectorCtx = {
+    effortIndex: plannerIdx,
+    modelOptions,
+    get selectedModel() { return selectedModel; },
+    orchestratorPlanners: planners,
+    orchestratorPlannerIndex: plannerIdx,
+    orchestratorDefaultPlanner: neonXHigh,
+    orchestratorPick: {
+      model: null,
+      select(v) { orchPicks.push(v); this.model = v === 0 ? null : v; },
+    },
+  };
+  const globalModelCtx = {
+    setModelConfigByLabelForConversation(label, convId, keepOpen) {
+      commits.push({ label, convId, keepOpen });
+      selectedModel = modelOptions.find((o) => o.label === label) || selectedModel;
+    },
+  };
+
+  const trigger = env.makeTrigger('Gemini 4 Neon', 'Extra');
+  env.body.appendChild(trigger);
+  const { panel, listWrap } = env.makePanel();
+  const neonRow = env.addGroupRow(listWrap, 'Gemini 4 Neon', 'Extra');
+  const orchRow = env.makeEl('div', { attrs: { role: 'menuitem', 'data-testid': 'model-selector-orchestrator' }, text: 'Orchestrator Gemini 4 Neon Extra New' });
+  listWrap.appendChild(orchRow);
+  env.body.appendChild(panel);
+  env.attachFiberChain(panel, { selectorCtx, convId: 'conv-orch-8', globalModelCtx });
+
+  const agObs = upstreamLib.installAntigravityObserver({ document: env.doc, window: env.win, MutationObserver: env.win.MutationObserver });
+
+  // 1) 从普通模型 (Gemini 4 Neon) 初次点击 Orchestrator 行 -> 拦截关闭并保持选择页常开
+  const rEnterOrch = env.simulateNativeClick(orchRow, () => { isOpen = false; });
+  assert.equal(rEnterOrch.pu._stopped, true);
+  assert.equal(rEnterOrch.ck.defaultPrevented, true);
+  assert.equal(rEnterOrch.nativeCalled, false, 'Switching from normal model to Orchestrator must keep menu open');
+  assert.equal(isOpen, true);
+  assert.equal(selectedModel, orchNeon);
+  assert.equal(panel.getAttribute('data-ces-orch-tunable'), 'true');
+  assert.equal(orchRow.getAttribute('data-ces-model-selected'), 'true');
+  assert.equal(neonRow.row.getAttribute('data-ces-model-selected'), 'false');
+
+  // 2) 再次点击已选中的 Orchestrator 行 -> 放行原生事件关闭菜单
+  const rSecondOrch = env.simulateNativeClick(orchRow, () => { isOpen = false; });
+  assert.equal(rSecondOrch.ck.defaultPrevented, false);
+  assert.equal(rSecondOrch.nativeCalled, true);
+  assert.equal(isOpen, false);
+  isOpen = true;
+
+  // 3) 挂载右侧 Orchestrator Layer 2 规划模型子菜单（sibling portal）+ Layer 3 推理档位子菜单（Low / Medium ✓ / High）+ 无关右键菜单
+  const subOverlay = env.makeEl('div', { className: 'agy-overlay' });
+  const subMenu = env.makeEl('div', { attrs: { role: 'menu' } });
+  const subNeon = env.makeEl('div', { attrs: { role: 'menuitemradio' }, text: 'Gemini 4 Neon Medium' });
+  const subCarb = env.makeEl('div', { attrs: { role: 'menuitemradio' }, text: 'Gemini 4 Carbon Medium' });
+  const subOpus = env.makeEl('div', { attrs: { role: 'menuitemradio' }, text: 'Claude Opus 5.5 Medium' });
+  const subDis = env.makeEl('div', { attrs: { role: 'menuitemradio', 'aria-disabled': 'true' }, text: 'Gemini 4 Carbon Medium' });
+  subMenu.appendChild(subNeon);
+  subMenu.appendChild(subCarb);
+  subMenu.appendChild(subOpus);
+  subMenu.appendChild(subDis);
+  subOverlay.appendChild(subMenu);
+  env.body.appendChild(subOverlay);
+
+  const l3Overlay = env.makeEl('div', { className: 'agy-overlay' });
+  const l3Menu = env.makeEl('div', { attrs: { role: 'menu' } });
+  l3Menu.appendChild(env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Low' }));
+  l3Menu.appendChild(env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Medium ✓' }));
+  l3Menu.appendChild(env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'High' }));
+  l3Overlay.appendChild(l3Menu);
+  env.body.appendChild(l3Overlay);
+
+  const unrelatedMenu = env.makeEl('div', { attrs: { role: 'menu' } });
+  const copyItem = env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Copy' });
+  const pasteItem = env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Paste' });
+  unrelatedMenu.appendChild(copyItem);
+  unrelatedMenu.appendChild(pasteItem);
+  env.body.appendChild(unrelatedMenu);
+
+  agObs.rescan();
+  assert.equal(subMenu.getAttribute('data-ag-cs-model-submenu'), '1');
+  assert.equal(subMenu.getAttribute('data-ag-cs-orch-l2'), '1');
+  assert.equal(subOverlay.getAttribute('data-ag-cs-model-submenu'), '1');
+  assert.equal(subNeon.getAttribute('data-ces-orch-row'), '1');
+  assert.equal(subNeon.getAttribute('data-ces-model-selected'), 'true');
+  assert.equal(l3Menu.getAttribute('data-ag-cs-orch-l3'), '1', 'Redundant Layer 3 effort submenu must be hidden');
+  assert.equal(l3Overlay.getAttribute('data-ag-cs-orch-l3'), '1', 'Layer 3 dedicated overlay must be hidden');
+  assert.equal(subOverlay.hasAttribute('data-ag-cs-orch-l3'), false, 'Layer 2 overlay must NEVER be hidden as Layer 3');
+  assert.equal(unrelatedMenu.hasAttribute('data-ag-cs-model-submenu'), false, 'Unrelated context menu must never be touched');
+  assert.equal(unrelatedMenu.hasAttribute('data-ag-cs-orch-l3'), false, 'Unrelated context menu must never be hidden as Layer 3');
+
+  // 4) 在 Layer 2 子菜单中点击 Claude Opus 5.5 -> 拦截 pointerdown/mousedown/pointerup/mouseup/click、保持常开并切到 claude 主题
+  const pdEv = { type: 'pointerdown', button: 0, bubbles: true };
+  const mdEv = { type: 'mousedown', button: 0, bubbles: true };
+  subOpus.dispatchEvent(pdEv);
+  subOpus.dispatchEvent(mdEv);
+  assert.equal(pdEv._stopped, true, 'pointerdown on Layer 2 planner must be stopped');
+  assert.equal(mdEv._stopped, true, 'mousedown on Layer 2 planner must be stopped');
+  assert.equal(mdEv.defaultPrevented, true, 'mousedown on Layer 2 planner must preventDefault to avoid blur-close');
+
+  const rPickOpus = env.simulateNativeClick(subOpus, () => { isOpen = false; });
+  assert.equal(rPickOpus.pu._stopped, true);
+  assert.equal(rPickOpus.ck.defaultPrevented, true);
+  assert.equal(rPickOpus.nativeCalled, false, 'Clicking new Orchestrator planner in submenu must keep model selector open');
+  assert.equal(isOpen, true);
+  assert.equal(orchPicks[orchPicks.length - 1], opusMed.value);
+  assert.equal(subOpus.getAttribute('data-ces-model-selected'), 'true');
+  assert.equal(subNeon.getAttribute('data-ces-model-selected'), 'false');
+  assert.equal(panel.querySelector('.ces-root').getAttribute('data-theme'), 'claude');
+
+  // 立即拖动/按键调整刚刚切到的 Claude Opus 5.5 档位 (Home -> Low)
+  panel.querySelector('.ces-root').dispatchEvent({ type: 'keydown', key: 'Home' });
+  assert.equal(orchPicks[orchPicks.length - 1], opusLow.value);
+
+  // 5) 禁用 planner 与无关菜单 100% Fail-Open
+  const picksBeforeDis = orchPicks.length;
+  const rDis = env.simulateNativeClick(subDis, () => { isOpen = false; });
+  assert.equal(rDis.ck.defaultPrevented, false);
+  assert.equal(rDis.nativeCalled, true);
+  assert.equal(orchPicks.length, picksBeforeDis);
+
+  isOpen = true;
+  const rCopy = env.simulateNativeClick(copyItem, () => { isOpen = false; });
+  assert.equal(rCopy.ck.defaultPrevented, false);
+  assert.equal(rCopy.nativeCalled, true);
+
+  // 6) 先切回普通模型 Gemini 4 Neon，再直接点无 role="menu" 的 .agy-overlay + <button> 形态 Layer 2 -> 同时切入 Orchestrator + Carbon 且保持常开
+  subOverlay.remove();
+  agObs.rescan();
+  const btnOverlay = env.makeEl('div', { className: 'agy-overlay' });
+  const btnNeon = env.makeEl('button', { text: 'Gemini 4 Neon Medium' });
+  const btnCarb = env.makeEl('button', { text: 'Gemini 4 Carbon Medium' });
+  btnOverlay.appendChild(btnNeon);
+  btnOverlay.appendChild(btnCarb);
+  env.body.appendChild(btnOverlay);
+  agObs.rescan();
+  assert.equal(btnOverlay.getAttribute('data-ag-cs-orch-l2'), '1', 'Overlay without role=menu containing button planner rows must still be detected as Layer 2');
+
+  isOpen = true;
+  const rBackNeon = env.simulateNativeClick(neonRow.groupSpan, () => { isOpen = false; });
+  assert.equal(rBackNeon.ck.defaultPrevented, true);
+  assert.equal(selectedModel.label.startsWith('Gemini 4 Neon'), true);
+  assert.equal(isOpen, true);
+
+  const rDirectCarb = env.simulateNativeClick(btnCarb, () => { isOpen = false; });
+  assert.equal(rDirectCarb.ck.defaultPrevented, true);
+  assert.equal(rDirectCarb.nativeCalled, false);
+  assert.equal(isOpen, true);
+  assert.equal(selectedModel, orchNeon);
+  assert.equal(orchPicks[orchPicks.length - 1], carbMed.value);
+  assert.equal(btnCarb.getAttribute('data-ces-model-selected'), 'true');
+
+  // 7) 面板关闭后自动解绑 Layer 2 监听并清理 Layer 2 / Layer 3 标记
+  panel.remove();
+  agObs.rescan();
+  assert.equal(btnOverlay.hasAttribute('data-ag-cs-model-submenu'), false);
+  assert.equal(btnOverlay.hasAttribute('data-ag-cs-orch-l2'), false);
+  assert.equal(btnCarb.hasAttribute('data-ces-orch-row'), false);
+  assert.equal(l3Menu.hasAttribute('data-ag-cs-orch-l3'), false);
+  assert.equal(l3Overlay.hasAttribute('data-ag-cs-orch-l3'), false);
+  agObs.stop();
+});
+
 
 

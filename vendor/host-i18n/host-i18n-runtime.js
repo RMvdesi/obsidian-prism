@@ -271,7 +271,7 @@
     if (!el || el.nodeType !== 1) return false;
     var tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
     if (tid && hasOwn.call(MODEL_SELECTOR_TESTIDS, tid)) return true;
-    if (hasAttr(el, 'data-effort')) return true;
+    if (hasAttr(el, 'data-effort') || hasAttr(el, 'data-ag-cs-model-submenu')) return true;
     return false;
   }
 
