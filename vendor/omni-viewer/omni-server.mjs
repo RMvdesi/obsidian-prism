@@ -121,10 +121,10 @@ const KIND_BY_EXT = Object.freeze({
 });
 
 const BLOCKED_EXTERNAL_EXEC_EXTS = new Set([
-  '.bat', '.cmd', '.ps1', '.vbs', '.vbe', '.wsf', '.wsh', '.hta', '.scr', '.pif', '.com',
-  '.msi', '.msp', '.reg', '.lnk', '.url', '.scf', '.exe', '.dll', '.cpl', '.msc', '.jar',
-  '.jse', '.js', '.cjs', '.mjs', '.appref-ms', '.search-ms', '.library-ms', '.app',
-  '.command', '.terminal',
+  '.bat', '.cmd', '.ps1', '.psm1', '.psd1', '.vbs', '.vbe', '.wsf', '.wsh', '.ws', '.sct',
+  '.hta', '.scr', '.pif', '.com', '.msi', '.msp', '.reg', '.lnk', '.url', '.scf', '.exe',
+  '.dll', '.cpl', '.msc', '.jar', '.jse', '.js', '.cjs', '.mjs', '.appref-ms', '.search-ms',
+  '.library-ms', '.app', '.command', '.terminal', '.chm', '.iso', '.img', '.vhd', '.vhdx', '.inf',
 ]);
 
 const SENSITIVE_BASENAMES = new Set([
@@ -134,6 +134,14 @@ const SENSITIVE_BASENAMES = new Set([
   '.pypirc',
   '.git-credentials',
   '.netrc',
+  '.envrc',
+  '.pgpass',
+  '.bash_history',
+  'consolehost_history.txt',
+  'hosts.yml',
+  'logins.json',
+  'key4.db',
+  'obsidian-prism-sidebar.json',
   'credentials.json',
   'kubeconfig',
   'cookies',
@@ -185,9 +193,13 @@ export function isBlockedUncPath(rawInput) {
     const rest = s.replace(/^[\\/]{2}/, '');
     if (/^[?.][\\/]/.test(rest)) {
       const inner = rest.slice(2);
-      if (/^unc[\\/]/i.test(inner)) {
-        const uncHost = inner.slice(4).split(/[\\/]/)[0].toLowerCase();
+      const uncMatch = inner.match(/^(?:global[\\/])?unc[\\/](.+)$/i);
+      if (uncMatch) {
+        const uncHost = uncMatch[1].split(/[\\/]/)[0].toLowerCase();
         return uncHost !== 'localhost' && uncHost !== '127.0.0.1' && uncHost !== 'wsl.localhost' && uncHost !== 'wsl$';
+      }
+      if (/^globalroot[\\/]device[\\/]mup[\\/]/i.test(inner)) {
+        return true;
       }
       return false;
     }
@@ -646,7 +658,7 @@ export class OmniServer {
 
   _isValidHostHeader(req) {
     const rawHost = typeof req.headers.host === 'string' ? req.headers.host.trim().toLowerCase() : '';
-    if (!rawHost) return true;
+    if (!rawHost) return false;
     return rawHost === `127.0.0.1:${this.port}` || rawHost === '127.0.0.1';
   }
 
@@ -1208,17 +1220,20 @@ export class OmniServer {
         return { ok: true, absPath, isDir };
       }
       if (process.platform === 'win32') {
-        const winPath = absPath.replace(/\//g, '\\');
+        const winPath = realTarget.replace(/\//g, '\\');
         const args = isDir ? [winPath] : [`/select,${winPath}`];
         const child = spawn('explorer.exe', args, { detached: true, stdio: 'ignore', windowsHide: false });
+        child.on('error', () => {});
         child.unref();
       } else if (process.platform === 'darwin') {
-        const args = isDir ? [absPath] : ['-R', absPath];
+        const args = isDir ? [realTarget] : ['-R', realTarget];
         const child = spawn('open', args, { detached: true, stdio: 'ignore' });
+        child.on('error', () => {});
         child.unref();
       } else {
-        const targetDir = isDir ? absPath : path.dirname(absPath);
+        const targetDir = isDir ? realTarget : path.dirname(realTarget);
         const child = spawn('xdg-open', [targetDir], { detached: true, stdio: 'ignore' });
+        child.on('error', () => {});
         child.unref();
       }
       return { ok: true, absPath, isDir };
@@ -1227,10 +1242,10 @@ export class OmniServer {
     if (act === 'openExternal') {
       const rawTarget = String(rawParams.target ?? rawParams.url ?? rawParams.path ?? '').trim();
       if (!rawTarget || /[\x00-\x1f\x7f]/.test(rawTarget)) {
-        return { ok: false, error: 'Invalid or unsafe target' };
+        return { ok: false, blocked: true, error: 'Invalid or unsafe target' };
       }
       if (isBlockedUncPath(rawTarget)) {
-        return { ok: false, error: 'Blocked remote UNC path' };
+        return { ok: false, blocked: true, error: 'Blocked remote UNC path' };
       }
 
       // 分支 A: 网页或邮件协议白名单 (http / https / mailto)
@@ -1239,11 +1254,11 @@ export class OmniServer {
         try {
           parsedUrl = new URL(rawTarget);
         } catch {
-          return { ok: false, error: 'Malformed URL' };
+          return { ok: false, blocked: true, error: 'Malformed URL' };
         }
         const proto = parsedUrl.protocol.toLowerCase();
         if (proto !== 'http:' && proto !== 'https:' && proto !== 'mailto:') {
-          return { ok: false, error: `Blocked unsafe protocol: ${proto}` };
+          return { ok: false, blocked: true, error: `Blocked unsafe protocol: ${proto}` };
         }
         const safeHref = parsedUrl.href;
         if (this.execHooks && typeof this.execHooks.openExternal === 'function') {
@@ -1256,12 +1271,15 @@ export class OmniServer {
             stdio: 'ignore',
             windowsHide: true,
           });
+          child.on('error', () => {});
           child.unref();
         } else if (process.platform === 'darwin') {
           const child = spawn('open', [safeHref], { detached: true, stdio: 'ignore' });
+          child.on('error', () => {});
           child.unref();
         } else {
           const child = spawn('xdg-open', [safeHref], { detached: true, stdio: 'ignore' });
+          child.on('error', () => {});
           child.unref();
         }
         return { ok: true, target: safeHref, kind: 'url' };
@@ -1269,14 +1287,14 @@ export class OmniServer {
 
       // 分支 B: 已存在且非敏感、非可执行脚本/快捷方式的本地文件（经 realpath 双重校验）
       const parsed = parseRawPathInput(rawTarget, rawParams.workspaceHint || '');
-      if (parsed.blockedUnc) return { ok: false, error: 'Blocked remote UNC path' };
+      if (parsed.blockedUnc) return { ok: false, blocked: true, error: 'Blocked remote UNC path' };
       if (!parsed.cleanPath) return { ok: false, error: 'Invalid file path' };
       if (isSensitiveFilePath(parsed.cleanPath)) {
-        return { ok: false, error: 'Blocked sensitive file' };
+        return { ok: false, blocked: true, error: 'Blocked sensitive file' };
       }
       const lexExt = path.extname(parsed.cleanPath).toLowerCase();
       if (BLOCKED_EXTERNAL_EXEC_EXTS.has(lexExt)) {
-        return { ok: false, error: `Blocked executable extension: ${lexExt}` };
+        return { ok: false, blocked: true, error: `Blocked executable extension: ${lexExt}` };
       }
       let realTarget;
       let st;
@@ -1285,11 +1303,11 @@ export class OmniServer {
         realTarget = resolved.realTarget;
         st = resolved.stat;
       } catch (err) {
-        return { ok: false, error: err?.message || 'Target file does not exist' };
+        return { ok: false, blocked: /blocked|sensitive|unc/i.test(String(err?.message || '')), error: err?.message || 'Target file does not exist' };
       }
       const realExt = path.extname(realTarget).toLowerCase();
       if (BLOCKED_EXTERNAL_EXEC_EXTS.has(realExt)) {
-        return { ok: false, error: `Blocked executable target extension: ${realExt}` };
+        return { ok: false, blocked: true, error: `Blocked executable target extension: ${realExt}` };
       }
       if (!st.isFile() && !st.isDirectory()) {
         return { ok: false, error: 'Unsupported target type' };
@@ -1301,12 +1319,15 @@ export class OmniServer {
       if (process.platform === 'win32') {
         const winPath = realTarget.replace(/\//g, '\\');
         const child = spawn('explorer.exe', [winPath], { detached: true, stdio: 'ignore', windowsHide: false });
+        child.on('error', () => {});
         child.unref();
       } else if (process.platform === 'darwin') {
         const child = spawn('open', [realTarget], { detached: true, stdio: 'ignore' });
+        child.on('error', () => {});
         child.unref();
       } else {
         const child = spawn('xdg-open', [realTarget], { detached: true, stdio: 'ignore' });
+        child.on('error', () => {});
         child.unref();
       }
       return { ok: true, target: realTarget, kind: 'file' };

@@ -860,6 +860,7 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
 
   function hasOnlySafeCssUrls(valStr) {
     const lower = valStr.toLowerCase();
+    if (lower.includes('image-set(') || lower.includes('-webkit-image-set(')) return false;
     let pos = 0;
     while (pos < lower.length) {
       const idx = lower.indexOf('url(', pos);
@@ -1414,8 +1415,20 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
     const svgEl = mountSafeSvgDom(document, svgMarkup);
     if (!svgEl) return;
     const dims = readSvgDimensionsFromElement(svgEl);
-    const outW = Math.max(1, Math.round(dims.width * scaleMul));
-    const outH = Math.max(1, Math.round(dims.height * scaleMul));
+    const MAX_DIM = 8192;
+    const MAX_PIXELS = 33554432;
+    let outW = Math.max(1, Math.round(dims.width * scaleMul));
+    let outH = Math.max(1, Math.round(dims.height * scaleMul));
+    if (outW > MAX_DIM || outH > MAX_DIM) {
+      const k = MAX_DIM / Math.max(outW, outH);
+      outW = Math.max(1, Math.round(outW * k));
+      outH = Math.max(1, Math.round(outH * k));
+    }
+    if (outW * outH > MAX_PIXELS) {
+      const k = Math.sqrt(MAX_PIXELS / (outW * outH));
+      outW = Math.max(1, Math.round(outW * k));
+      outH = Math.max(1, Math.round(outH * k));
+    }
     const cleanXml = serializeSafeSvgNode(svgEl);
     if (!cleanXml) return;
     const blob = new Blob([cleanXml], { type: 'image/svg+xml;charset=utf-8' });
@@ -1999,16 +2012,19 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
       waveCanvas.addEventListener('pointerup', stopScrub);
       waveCanvas.addEventListener('pointercancel', stopScrub);
 
+      let waveAborted = false;
+      const waveAbortCtl = typeof AbortController === 'function' ? new AbortController() : null;
       const maxDecodeBytes = 8 * 1024 * 1024;
       if (state.meta && state.meta.size > 0 && state.meta.size <= maxDecodeBytes && typeof AudioContext !== 'undefined') {
-        fetch(streamUrl)
+        fetch(streamUrl, waveAbortCtl ? { signal: waveAbortCtl.signal } : undefined)
           .then((r) => (r.ok ? r.arrayBuffer() : null))
           .then(async (buf) => {
-            if (!buf) return;
+            if (!buf || waveAborted) return;
             const OfflineOrCtx = window.OfflineAudioContext || window.AudioContext;
             const decodeCtx = OfflineOrCtx === window.AudioContext ? new AudioContext() : new OfflineOrCtx(1, 2, 44100);
             const audioBuf = await decodeCtx.decodeAudioData(buf);
             if (typeof decodeCtx.close === 'function') decodeCtx.close().catch(() => {});
+            if (waveAborted) return;
             const ch0 = audioBuf.getChannelData(0);
             const ch1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : null;
             const buckets = 220;
@@ -2027,18 +2043,27 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
               if (pk > maxPeak) maxPeak = pk;
             }
             for (let b = 0; b < buckets; b++) peaks[b] /= maxPeak;
+            if (waveAborted) return;
             wavePeaks = peaks;
             drawWaveformOnce();
           })
           .catch(() => {});
       }
       requestAnimationFrame(drawWaveformOnce);
+      state._abortWaveDecode = () => {
+        waveAborted = true;
+        try { waveAbortCtl?.abort(); } catch {}
+      };
     }
 
     state.onThemeRefresh = isAudio ? drawWaveformOnce : null;
 
     return () => {
       state.onThemeRefresh = null;
+      if (typeof state._abortWaveDecode === 'function') {
+        state._abortWaveDecode();
+        state._abortWaveDecode = null;
+      }
       if (rafId) cancelAnimationFrame(rafId);
       try {
         mediaEl.pause();
@@ -2146,20 +2171,23 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
         : `${state.baseUrl.replace(/\/$/, '')}${state.sandboxUrl}`;
       frame.src = sandboxUrl;
     } else {
+      const showSandboxFail = () => {
+        frame.removeAttribute('src');
+        const errBox = mk('div', 'wb-error', tr('loadError'));
+        frameWrap.replaceChildren(errBox);
+      };
       fetch(buildApiUrl('/sandbox-init'))
-        .then((r) => r.json())
+        .then((r) => (r.ok ? r.json() : null))
         .then((res) => {
           if (res && res.ok && res.url) {
             sandboxUrl = res.url.startsWith('http') ? res.url : `${state.baseUrl.replace(/\/$/, '')}${res.url}`;
             frame.src = sandboxUrl;
           } else {
-            sandboxUrl = buildApiUrl('/stream');
-            frame.src = sandboxUrl;
+            showSandboxFail();
           }
         })
         .catch(() => {
-          sandboxUrl = buildApiUrl('/stream');
-          frame.src = sandboxUrl;
+          showSandboxFail();
         });
     }
     return () => {};

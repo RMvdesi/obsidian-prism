@@ -615,11 +615,17 @@ export class UpdateService {
       timeoutMs: 15_000,
     });
     if (!res.ok) {
+      try { await res.body?.cancel?.(); } catch {}
       throw new Error(`sha256sums_http_${res.status}`);
     }
     const buf = await readResponseBufferWithLimit(res, 1024 * 1024);
     const sums = parseSha256Sums(buf.toString('utf8'));
-    return sums.get(sel.targetAsset.name) || null;
+    if (sums.has(sel.targetAsset.name)) return sums.get(sel.targetAsset.name);
+    const lowerTarget = sel.targetAsset.name.toLowerCase();
+    for (const [k, v] of sums.entries()) {
+      if (k.toLowerCase() === lowerTarget) return v;
+    }
+    return null;
   }
 
   async applyReleaseUpdate({ confirm = false, auto = false } = {}) {
@@ -698,9 +704,16 @@ export class UpdateService {
           timeoutMs: 120_000,
         });
         if (!dlRes.ok) {
+          try { await dlRes.body?.cancel?.(); } catch {}
           throw new Error(`download_http_${dlRes.status}`);
         }
         const buf = await readResponseBufferWithLimit(dlRes, this.maxAssetBytes);
+
+        // Verify SHA-256 in memory BEFORE writing any untrusted executable to disk
+        const actualSha256 = crypto.createHash('sha256').update(buf).digest('hex').toLowerCase();
+        if (actualSha256 !== expectedSha256) {
+          throw new Error('sha256_mismatch');
+        }
 
         const rootStat = this.lstatSyncFn(this.tmpRoot);
         if (
@@ -732,19 +745,13 @@ export class UpdateService {
           throw new Error('asset_too_large');
         }
 
-        const actualSha256 = crypto.createHash('sha256').update(buf).digest('hex').toLowerCase();
-        if (actualSha256 !== expectedSha256) {
-          try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-          tmpDir = null;
-          throw new Error('sha256_mismatch');
-        }
-
         const child = this.spawnFn(exePath, ['--install', '--silent', '--no-relaunch-prompt'], {
           detached: true,
           cwd: this.tmpRoot,
           stdio: 'ignore',
           windowsHide: true,
         });
+        child?.on?.('error', () => {});
         child?.unref?.();
 
         this._lastError = null;
