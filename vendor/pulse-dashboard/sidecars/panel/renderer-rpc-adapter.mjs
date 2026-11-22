@@ -174,8 +174,10 @@ export function normalizeRendererSummaries(raw) {
       const key = id.toLowerCase();
       const modIso = protoTimestampToIso(sum.lastModifiedTime);
       const createdIso = protoTimestampToIso(sum.createdTime);
+      const stepCount = Number(sum.stepCount ?? sum.numTotalSteps ?? 0);
       out[key] = {
         summary: typeof sum.summary === 'string' ? sum.summary : typeof sum.title === 'string' ? sum.title : '未命名会话',
+        ...(Number.isSafeInteger(stepCount) && stepCount > 0 ? { stepCount } : {}),
         ...(modIso ? { lastModifiedTime: modIso } : {}),
         ...(createdIso ? { createdTime: createdIso } : {}),
         ...(typeof sum.status === 'string' ? { status: sum.status } : {}),
@@ -529,9 +531,7 @@ export function buildRendererRpcExpression(method, body = {}) {
           return '';
         };
         const scopeHint = readScopeHint();
-        if (typeof activeLs.getAllCascadeTrajectories === 'function') {
-          const r = await activeLs.getAllCascadeTrajectories({ excludeSubtrajectories: false });
-          const sums = (r && r.trajectorySummaries) || {};
+        const projectSummariesMap = (sums) => {
           const out = {};
           const keys = Object.keys(sums)
             .sort((a, b) => tsSec(sums[b] && sums[b].lastModifiedTime) - tsSec(sums[a] && sums[a].lastModifiedTime))
@@ -541,7 +541,8 @@ export function buildRendererRpcExpression(method, body = {}) {
             const v = sums[k];
             if (!v || typeof v !== 'object') continue;
             out[k] = {
-              summary: typeof v.summary === 'string' ? v.summary : undefined,
+              summary: typeof v.summary === 'string' && v.summary ? v.summary : undefined,
+              stepCount: numVal(v.stepCount !== undefined ? v.stepCount : v.numTotalSteps),
               lastModifiedTime: ts(v.lastModifiedTime),
               createdTime: ts(v.createdTime),
               status: v.status,
@@ -552,6 +553,72 @@ export function buildRendererRpcExpression(method, body = {}) {
                 nestingDepth: numVal(v.trajectoryMetadata.nestingDepth),
               } : undefined,
             };
+          }
+          return out;
+        };
+        if (typeof activeLs.getAllCascadeTrajectories === 'function') {
+          const r = await activeLs.getAllCascadeTrajectories({ excludeSubtrajectories: false });
+          const out = projectSummariesMap((r && r.trajectorySummaries) || {});
+          return { ok: true, data: scopeHint ? { trajectorySummaries: out, scopeHint } : { trajectorySummaries: out } };
+        }
+        const findReduxSummaries = () => {
+          try {
+            const ref = g && g.__agPrismStoreRef;
+            const cached = ref && typeof ref.deref === 'function' ? ref.deref() : ref;
+            if (cached && typeof cached.getState === 'function') {
+              const s = cached.getState();
+              if (s && s.trajectorySummaries && s.trajectorySummaries.summaries) return s.trajectorySummaries.summaries;
+            }
+          } catch {}
+          try {
+            if (typeof document === 'undefined' || !document || typeof document.querySelectorAll !== 'function') return null;
+            const anchors = document.querySelectorAll('[data-testid="new-conversation-button"], [data-testid="home-greeting"], [data-testid="agent-input-box"], [data-testid="conversation-view"], [data-testid="conversation-row-sidebar"]');
+            for (let i = 0; i < anchors.length; i += 1) {
+              const el = anchors[i];
+              const fk = el && Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
+              for (let f = fk && el[fk], depth = 0; f && depth < 60; f = f.return, depth += 1) {
+                const mp = f.memoizedProps;
+                if (mp && mp.store && typeof mp.store.getState === 'function') {
+                  try { if (g) g.__agPrismStoreRef = typeof WeakRef === 'function' ? new WeakRef(mp.store) : mp.store; } catch {}
+                  const s = mp.store.getState();
+                  return (s && s.trajectorySummaries && s.trajectorySummaries.summaries) || null;
+                }
+                for (let d = f.dependencies && f.dependencies.firstContext; d; d = d.next) {
+                  const v = d.memoizedValue;
+                  if (v && v.store && typeof v.store.getState === 'function') {
+                    try { if (g) g.__agPrismStoreRef = typeof WeakRef === 'function' ? new WeakRef(v.store) : v.store; } catch {}
+                    const s = v.store.getState();
+                    return (s && s.trajectorySummaries && s.trajectorySummaries.summaries) || null;
+                  }
+                }
+              }
+            }
+          } catch {}
+          return null;
+        };
+        const reduxSums = findReduxSummaries();
+        if (reduxSums && typeof reduxSums === 'object' && Object.keys(reduxSums).length > 0) {
+          const out = projectSummariesMap(reduxSums);
+          if (typeof activeLs.searchConversations === 'function') {
+            try {
+              const sr = await activeLs.searchConversations({ query: '' });
+              const sList = Array.isArray(sr && sr.results) ? sr.results : [];
+              for (let i = 0; i < sList.length; i += 1) {
+                const it = sList[i];
+                const cid = it && typeof it.cascadeId === 'string' ? it.cascadeId.trim() : '';
+                if (!cid) continue;
+                if (out[cid]) {
+                  if (!out[cid].summary && typeof it.title === 'string' && it.title.trim()) out[cid].summary = it.title.trim();
+                } else if (Object.keys(out).length < 1024) {
+                  const ws = typeof it.workspaceName === 'string' ? it.workspaceName.trim() : '';
+                  out[cid] = {
+                    summary: typeof it.title === 'string' && it.title.trim() ? it.title.trim() : undefined,
+                    lastModifiedTime: ts(it.lastModifiedTime),
+                    ...(ws ? { workspaces: [{ workspaceFolderAbsoluteUri: ws }] } : {}),
+                  };
+                }
+              }
+            } catch {}
           }
           return { ok: true, data: scopeHint ? { trajectorySummaries: out, scopeHint } : { trajectorySummaries: out } };
         }

@@ -2479,5 +2479,176 @@ test('Redteam #193 [P0-2, P1-3, P2-1]: style hot-upgrade overwrite, data-ag-pris
   }
 });
 
+test('v1.0.7-beta.2 regression: Home Studio handles Protobuf BigInt timestamps in Redux summaries and renderer-rpc-adapter falls back to Redux store when getAllCascadeTrajectories is absent', async () => {
+  const vm = await import('node:vm');
+  const homeStudioPanel = require('../home-studio-panel.js');
+  const { buildRendererRpcExpression, normalizeRendererSummaries } = await import(
+    '../vendor/pulse-dashboard/sidecars/panel/renderer-rpc-adapter.mjs'
+  );
+  const prevWin = globalThis.window;
+  const prevDoc = globalThis.document;
+  const prevStorage = globalThis.localStorage;
+  const storeMem = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (storeMem.has(k) ? storeMem.get(k) : null),
+    setItem: (k, v) => { storeMem.set(k, String(v)); },
+    removeItem: (k) => { storeMem.delete(k); },
+  };
+  const cid = '22779ae5-6a08-4dcb-b118-09731c05030a';
+  const secNum = 1763400900;
+  const secBig = BigInt(secNum);
+  const dKey = usageCore.homeDayKey(new Date(secNum * 1000));
+
+  try {
+    const dom = createMockStudioDom('Antigravity');
+    globalThis.document = dom.doc;
+    const reduxSums = {
+      [cid]: {
+        summary: '',
+        stepCount: 6n,
+        lastModifiedTime: { seconds: secBig, nanos: 0 },
+        createdTime: { seconds: secBig, nanos: 0 },
+        workspaces: [{ workspaceFolderAbsoluteUri: 'file:///d:/proj/vibe-coding' }],
+        trajectoryMetadata: {
+          workspaces: [{ workspaceFolderAbsoluteUri: 'file:///d:/proj/vibe-coding' }],
+          nestingDepth: 0n,
+        },
+      },
+    };
+    globalThis.window = {
+      document: dom.doc,
+      location: { href: 'https://127.0.0.1:12497/' },
+      __agPrismUsageBridge: {
+        isOnline: () => true,
+        listSummaries: async () => ({
+          ok: true,
+          scopeKey: 'local',
+          summaries: [{ id: cid, stepCount: 6, lastModifiedSec: secNum, workspaces: ['file:///d:/proj/vibe-coding'] }],
+          records: [],
+        }),
+        fetchBatch: async (items) => ({
+          ok: true,
+          scopeKey: 'local',
+          records: items.map((it) => ({
+            id: it.id,
+            mode: 'full',
+            record: {
+              cascadeId: it.id,
+              stepCount: it.stepCount,
+              lastModifiedSec: it.lastModifiedSec,
+              gmCount: 1,
+              subagent: false,
+              workspace: 'vibe-coding',
+              parentId: '',
+              calls: 3,
+              days: {
+                [dKey]: {
+                  calls: 3,
+                  input: 20000,
+                  output: 5000,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 25000,
+                  hours: new Array(24).fill(0),
+                  models: { 'Gemini 4 Argon': { input: 20000, output: 5000, cacheRead: 0, cacheWrite: 0, total: 25000, calls: 3 } },
+                },
+              },
+            },
+          })),
+        }),
+      },
+    };
+
+    const ctl = homeStudioPanel.createHomeStudioPanelController({
+      usageCore,
+      storageUsageCacheKey: 'test:bigint:v1',
+      isDestroyed: () => false,
+      getHomeLayout: () => 'studio',
+      getLang: () => 'zh-CN',
+      uiText: () => ({}),
+      getDisplayName: () => 'Dev',
+      ensureHooks: () => ({ store: { getState: () => ({ trajectorySummaries: { summaries: reduxSums } }) }, svc: {} }),
+      canMountRealCanvas: () => true,
+      setAttrIfChanged: (el, k, v) => el?.setAttribute?.(k, v),
+      runGuardedMut: (fn) => fn(),
+    });
+
+    ctl.renderHomePanel(true);
+    await assert.doesNotReject(() => ctl.refreshUsageRollup(true));
+    assert.equal(dom.doc.querySelectorAll('[data-skeleton]').length, 0, 'BigInt timestamps must not leave overview stuck in skeleton state');
+    const tokVal = dom.doc.querySelector('[data-stat="tokens"] .ag-cs-home-stat-value');
+    assert.equal(tokVal?.textContent, '25k', 'Overview must render aggregated token count after BigInt summary resolution');
+    ctl.flushUsageCacheNow();
+    assert.ok(JSON.parse(storeMem.get('test:bigint:v1') || '{}')[cid], 'Flushed cache must contain record');
+
+    // A controller whose loadScopeCache is empty and never completed refreshUsageRollup must NOT overwrite existing localStorage cache on teardown flushUsageCacheNow()
+    const savedBefore = storeMem.get('test:bigint:v1');
+    storeMem.set('test:bigint:v1', '{}');
+    const idleCtl = homeStudioPanel.createHomeStudioPanelController({
+      usageCore,
+      storageUsageCacheKey: 'test:bigint:v1',
+      isDestroyed: () => false,
+      getHomeLayout: () => 'studio',
+      getLang: () => 'zh-CN',
+      uiText: () => ({}),
+      getDisplayName: () => 'Dev',
+      ensureHooks: () => null,
+      canMountRealCanvas: () => true,
+      setAttrIfChanged: () => {},
+      runGuardedMut: (fn) => fn(),
+    });
+    storeMem.set('test:bigint:v1', savedBefore);
+    idleCtl.flushUsageCacheNow();
+    assert.ok(JSON.parse(storeMem.get('test:bigint:v1') || '{}')[cid], 'Teardown flushUsageCacheNow() on un-fetched controller must never wipe existing cache');
+
+    // Also verify renderer-rpc-adapter GetAllCascadeTrajectories uses Redux Fiber store when getAllCascadeTrajectories is absent
+    const lsWithoutGetAll = {
+      getUserStatus: async () => ({}),
+      getCascadeTrajectory: async () => ({}),
+      searchConversations: async () => ({
+        results: [{ cascadeId: cid, title: 'Backfilled Title', workspaceName: 'vibe-coding', lastModifiedTime: { seconds: secBig, nanos: 0 } }],
+      }),
+    };
+    const anchorEl = {
+      '__reactFiber$1': {
+        memoizedProps: { store: { getState: () => ({ trajectorySummaries: { summaries: reduxSums } }) } },
+        return: null,
+      },
+    };
+    const rootEl = {
+      '__reactContainer$1': {
+        memoizedProps: { value: lsWithoutGetAll },
+        child: null,
+        sibling: null,
+      },
+    };
+    const sandbox = vm.createContext({
+      document: {
+        getElementById: (id) => (id === 'root' ? rootEl : null),
+        querySelectorAll: () => [anchorEl],
+        body: rootEl,
+      },
+      WeakRef: globalThis.WeakRef,
+      Promise,
+    });
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    const expr = buildRendererRpcExpression('GetAllCascadeTrajectories', {});
+    const rpcRes = await vm.runInContext(expr, sandbox);
+    assert.equal(rpcRes.ok, true);
+    const norm = normalizeRendererSummaries(rpcRes.data);
+    assert.equal(norm.trajectorySummaries[cid].summary, 'Backfilled Title');
+    assert.equal(norm.trajectorySummaries[cid].stepCount, 6);
+    assert.equal(norm.trajectorySummaries[cid].workspaces[0].workspaceFolderAbsoluteUri, 'file:///d:/proj/vibe-coding');
+  } finally {
+    if (prevWin === undefined) delete globalThis.window;
+    else globalThis.window = prevWin;
+    if (prevDoc === undefined) delete globalThis.document;
+    else globalThis.document = prevDoc;
+    if (prevStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = prevStorage;
+  }
+});
+
 
 

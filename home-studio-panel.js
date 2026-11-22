@@ -185,7 +185,7 @@
 
     const flushUsageCacheNow = () => {
       clearSaveTimers();
-      if (curScope === 'local' && localSaveBlocked) return;
+      if ((curScope === 'local' && localSaveBlocked) || (!usageRecords.size && !lastUsageFetchAt)) return;
       try {
         const ls = getLs();
         if (!ls) return;
@@ -211,12 +211,12 @@
       }, 1200);
     };
 
-    const toSec = (n, o, iso) => (+(n || o?.seconds) || 0) || (typeof iso === 'string' ? Math.floor((Date.parse(iso) || 0) / 1000) : 0);
+    const toSec = (n, o, iso) => (Number(n || o?.seconds) || 0) || (typeof iso === 'string' ? Math.floor((Date.parse(iso) || 0) / 1000) : 0);
     const extractMeta = (sum) => {
       const tm = sum?.trajectoryMetadata;
       const workspace = usageCore?.extractWorkspaceId ? usageCore.extractWorkspaceId(sum) : String(sum?.workspace || '');
       const parentId = String(tm?.parentConversationId || sum?.parentConversationId || sum?.parentId || sum?.rootConversationId || sum?.rootId || '').trim();
-      return { workspace, u: wsUrisOf(sum), parentId, subagent: !!(sum?.subagent || parentId || usageCore?.isSubagentSummary?.(sum)), lastModifiedSec: toSec(sum?.lastModifiedSec, sum?.lastModifiedTime, sum?.modifiedAt), createdSec: toSec(sum?.createdSec, sum?.createdTime, sum?.createdAt), stepCount: +(sum?.stepCount ?? sum?.steps ?? 0) || 0 };
+      return { workspace, u: wsUrisOf(sum), parentId, subagent: !!(sum?.subagent || parentId || usageCore?.isSubagentSummary?.(sum)), lastModifiedSec: toSec(sum?.lastModifiedSec, sum?.lastModifiedTime, sum?.modifiedAt), createdSec: toSec(sum?.createdSec, sum?.createdTime, sum?.createdAt), stepCount: Number(sum?.stepCount ?? sum?.steps ?? 0) || 0 };
     };
 
     const advanceCachedCursor = (prev, id, sum, defer) => {
