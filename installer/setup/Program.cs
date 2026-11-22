@@ -1494,11 +1494,12 @@ namespace AgyClaudeStyle.Installer
             _activeInstallDir = InstallerCore.NormalizeDirPath(string.IsNullOrEmpty(opts.InstallDir) ? InstallerCore.GetDefaultInstallDir() : opts.InstallDir);
             _activePluginDir = InstallerCore.ResolveNativePluginDir(opts, _activeInstallDir);
 
+            SuspendLayout();
+
             Text = "Obsidian Prism · 黑曜棱镜 安装与修补工具";
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
-            AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Regular);
             ClientSize = new Size(588, 464);
             BackColor = Color.FromArgb(244, 247, 251);
@@ -1555,6 +1556,7 @@ namespace AgyClaudeStyle.Installer
             _metaLabel.Font = new Font("Microsoft YaHei UI", 8.2f, FontStyle.Regular);
             _metaLabel.Location = new Point(14, 88);
             _metaLabel.Size = new Size(520, 20);
+            _metaLabel.AutoEllipsis = true;
 
             card.Controls.Add(_statusHeadline);
             card.Controls.Add(_statusDetail);
@@ -1653,6 +1655,13 @@ namespace AgyClaudeStyle.Installer
             Controls.Add(_closeBtn);
             CancelButton = _closeBtn;
             UpdateInstallButtonStyle();
+
+            // Coordinates above are designed at 96 DPI; set AutoScaleDimensions + Dpi mode
+            // so PerMonitorV2 scales the form and child controls proportionally on high-DPI displays.
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            ResumeLayout(false);
+            PerformLayout();
 
             Shown += async (s, e) => await StartInitialActionAsync();
             FormClosing += (s, e) =>

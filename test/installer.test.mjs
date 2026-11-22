@@ -1132,6 +1132,21 @@ test('interactive GUI installers require explicit user confirmation before insta
   assert.match(macSrc, /closeBtn\s*=\s*NSButton\(title:\s*"取消"/);
 });
 
+test('Windows InstallerForm configures 96-DPI AutoScaleDimensions with AutoScaleMode.Dpi (#28)', () => {
+  const winSrc = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'setup', 'Program.cs'), 'utf8');
+  const ctorMatch = winSrc.match(/public\s+InstallerForm\s*\(InstallerOptions\s+opts\)[\s\S]*?\n\s{8}\}/);
+  assert.ok(ctorMatch, 'InstallerForm constructor must exist');
+  const ctor = ctorMatch[0];
+  const suspendIdx = ctor.indexOf('SuspendLayout();');
+  const dimsIdx = ctor.indexOf('AutoScaleDimensions = new SizeF(96F, 96F);');
+  const modeIdx = ctor.indexOf('AutoScaleMode = AutoScaleMode.Dpi;');
+  const resumeIdx = ctor.indexOf('ResumeLayout(false);');
+  assert.ok(suspendIdx >= 0, 'InstallerForm must call SuspendLayout() before adding controls');
+  assert.ok(dimsIdx > suspendIdx, 'InstallerForm must set AutoScaleDimensions to 96 DPI base');
+  assert.ok(modeIdx > dimsIdx, 'InstallerForm must set AutoScaleMode.Dpi after AutoScaleDimensions');
+  assert.ok(resumeIdx > modeIdx, 'InstallerForm must call ResumeLayout(false) after setting AutoScaleMode');
+});
+
 test('Windows C# installer & Watcher Channel 5 contracts and cdp.js REMOVE_EXPRESSION data-ces-model-selected cleanup', () => {
   const cdpCs = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'common', 'CdpClient.cs'), 'utf8');
   const watcherCs = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'watcher', 'Program.cs'), 'utf8');
