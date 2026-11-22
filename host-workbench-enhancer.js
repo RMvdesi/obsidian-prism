@@ -1425,11 +1425,35 @@
         const rail = rails[i];
         if (boundNavRails.has(rail) || typeof rail.addEventListener !== 'function') continue;
         boundNavRails.add(rail);
+        let trigBtn = qs(rail, '.ag-cs-nav-outline-trigger') || null;
+        if (!trigBtn && doc.createElement && rail.appendChild) {
+          trigBtn = markNoTr(mk('button', 'ag-cs-nav-outline-trigger', '☰'));
+          trigBtn.type = 'button';
+          sa(trigBtn, 'data-ag-owned', '1');
+          sa(trigBtn, 'aria-label', 'Outline');
+          sa(trigBtn, 'data-no-press-spring', '1');
+          trigBtn.addEventListener('pointerenter', () => openNavOutline(rail), PASSIVE_OPT);
+          trigBtn.addEventListener('click', (ev) => {
+            ev?.stopPropagation?.();
+            outlineOpen ? closeNavOutline() : openNavOutline(rail);
+          });
+          mut(() => rail.appendChild(trigBtn));
+        }
         let lastHoverTarget = null;
         let lastHoverAt = 0;
         const onPointerHover = (ev) => {
           const tgt = ev?.target || null;
-          if (cl(tgt, '[data-testid="conversation-navigator-group"]')) {
+          const onTrig = Boolean(cl(tgt, '.ag-cs-nav-outline-trigger'));
+          if (
+            !onTrig &&
+            (Boolean(
+              qs(
+                rail,
+                '[data-testid="conversation-navigator-turn"][data-base-ui-tooltip-trigger], [data-testid="conversation-navigator-turn"][data-trigger-disabled], [data-testid="conversation-navigator-turn"][data-turn-index]'
+              )
+            ) ||
+              cl(tgt, '[data-testid="conversation-navigator-group"]'))
+          ) {
             lastHoverTarget = tgt;
             if (outlineOpen && doc.activeElement !== outlineSearchInput) closeNavOutline();
             return;
@@ -1460,6 +1484,7 @@
               rail.removeEventListener('pointerenter', onPointerHover, PASSIVE_OPT);
               rail.removeEventListener('pointerover', onPointerHover, PASSIVE_OPT);
               rail.removeEventListener('pointerleave', onLeave, PASSIVE_OPT);
+              trigBtn?.remove?.();
             } catch {}
           },
         });
@@ -2024,7 +2049,7 @@
 
       if (doc && typeof doc.querySelectorAll === 'function') {
         mut(() => {
-          for (const sel of ['.ag-cs-code-fold-btn', '.ag-cs-nav-outline-popover', '.ag-cs-sb-more-wrap']) {
+          for (const sel of ['.ag-cs-code-fold-btn', '.ag-cs-nav-outline-popover', '.ag-cs-nav-outline-trigger', '.ag-cs-sb-more-wrap']) {
             qa(doc, sel).forEach((n) => n.remove());
           }
           for (const k of 'cs-code-folded|cs-code-sticky|perm-selected|perm-sandbox-sep|sub-running|sub-sec-running|overview-running|sb-more-hidden|sb-more-item|scrolling|ov-sec-anim|cs-settings-dlg|cs-settings-nav|cs-nav-active'.split(

@@ -2079,3 +2079,80 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
   assert.equal(takeoverZ, 12, 'interaction-takeover-card must sit at z-index: 12');
   assert.ok(pulseZ > takeoverZ, '#ag-prism-pulse-bar must layer strictly above interaction-takeover-card so context preview is never occluded');
 });
+
+test('Navigator outline mounts dedicated trigger, yields to Base UI turn tooltips without overlap, keeps legacy turn compat, and cleans up', () => {
+  const cdp = require(path.join(__dirname, '..', 'cdp.js'));
+  const env = createMockEnv();
+  const conv = env.createElement('div', { 'data-testid': 'conversation-view' });
+  const vp = env.createElement('div', { 'data-testid': 'autoscroll-viewport' });
+  vp._rect = { left: 0, top: 0, width: 600, height: 600, right: 600, bottom: 600 };
+  const turn1 = env.createElement('div', { 'data-testid': 'user-input-step' });
+  turn1._rect = { left: 0, top: 40, width: 600, height: 40, right: 600, bottom: 80 };
+  turn1.textContent = 'First turn prompt';
+  const turn2 = env.createElement('div', { 'data-testid': 'user-input-step' });
+  turn2._rect = { left: 0, top: 200, width: 600, height: 40, right: 600, bottom: 240 };
+  turn2.textContent = 'Second turn prompt';
+  vp.appendChild(turn1);
+  vp.appendChild(turn2);
+
+  const rail = env.createElement('div', { 'data-testid': 'conversation-navigator' });
+  const gapWrap = env.createElement('div', { class: 'flex shrink-0 items-center' });
+  const baseUiDot = env.createElement('button', {
+    'data-testid': 'conversation-navigator-turn',
+    'data-base-ui-tooltip-trigger': '',
+    'aria-label': 'Turn 1 of 2',
+  });
+  gapWrap.appendChild(baseUiDot);
+  rail.appendChild(gapWrap);
+  conv.appendChild(rail);
+  conv.appendChild(vp);
+  env.body.appendChild(conv);
+
+  const ctl = enhancerMod.createHostEnhancerController({ doc: env.doc, win: env.win, getLang: () => 'zh-CN' });
+  try {
+    ctl.sync();
+    const trig = rail.querySelector('.ag-cs-nav-outline-trigger');
+    assert.ok(trig, 'nav rail must mount dedicated .ag-cs-nav-outline-trigger button');
+    assert.equal(trig.getAttribute('data-ag-owned'), '1');
+
+    // On Base UI rails, hovering turn dot, gap wrapper, OR rail padding must NEVER flash/open outline
+    rail.dispatchEvent({ type: 'pointerenter', target: rail });
+    rail.dispatchEvent({ type: 'pointerover', target: gapWrap });
+    rail.dispatchEvent({ type: 'pointerover', target: baseUiDot });
+    assert.equal(env.doc.querySelector('.ag-cs-nav-outline-popover'), null, 'Base UI rail padding/gap/dot hover must never spawn outline');
+
+    // Entering trigger button opens outline cleanly
+    trig.dispatchEvent({ type: 'pointerenter', target: trig });
+    const pop = env.doc.querySelector('.ag-cs-nav-outline-popover');
+    assert.ok(pop && !pop.hidden && pop.getAttribute('data-open') === '1', 'Trigger hover must open outline');
+
+    // Moving onto Base UI turn dot OR rail gap closes outline immediately to prevent overlap/flicker
+    rail.dispatchEvent({ type: 'pointerover', target: gapWrap });
+    assert.equal(pop.hidden, true, 'Moving from trigger onto Base UI rail gap must close outline immediately');
+
+    // Trigger click toggles closed -> open -> closed
+    trig.dispatchEvent({ type: 'click', target: trig });
+    assert.equal(pop.hidden, false, 'Trigger click must reopen closed outline');
+    trig.dispatchEvent({ type: 'click', target: trig });
+    assert.equal(pop.hidden, true, 'Trigger click must toggle open outline closed');
+
+    // Base UI toggled into data-trigger-disabled + data-turn-index state (e.g. during blur/scroll) must STILL suppress rail hover!
+    baseUiDot.removeAttribute('data-base-ui-tooltip-trigger');
+    baseUiDot.setAttribute('data-trigger-disabled', '');
+    baseUiDot.setAttribute('data-turn-index', '0');
+    rail.dispatchEvent({ type: 'pointerenter', target: rail });
+    rail.dispatchEvent({ type: 'pointerover', target: baseUiDot });
+    assert.equal(pop.hidden, true, 'Base UI rail in data-trigger-disabled/data-turn-index state must still suppress rail hover');
+
+    // Legacy rail (without Base UI tooltip / turn-index attrs) keeps backwards-compatible hover open
+    baseUiDot.removeAttribute('data-trigger-disabled');
+    baseUiDot.removeAttribute('data-turn-index');
+    rail.dispatchEvent({ type: 'pointerenter', target: baseUiDot });
+    assert.equal(pop.hidden, false, 'Legacy rail without Base UI tooltips keeps hover open');
+
+    assert.ok(cdp.REMOVE_EXPRESSION.includes('.ag-cs-nav-outline-trigger'), 'REMOVE_EXPRESSION must clean up .ag-cs-nav-outline-trigger');
+  } finally {
+    ctl.destroy();
+    assert.equal(rail.querySelector('.ag-cs-nav-outline-trigger'), null, 'destroy() must remove .ag-cs-nav-outline-trigger');
+  }
+});
