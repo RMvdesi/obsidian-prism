@@ -315,14 +315,14 @@
       if (isDestroyed() || usageLoading || getHomeLayout() !== 'studio') return;
       if (!usageHasData && !canMountRealCanvas(document.body)) { void refreshUsageRollup(false); return; }
       if (deferredUsageTimer) return;
-      const wait = usageHasData ? Math.max(400, delayMs) : Math.min(600, Math.max(120, delayMs));
+      const onHome = () => !isDestroyed() && document.querySelector('.agy-home') && getHomeLayout() === 'studio';
       deferredUsageTimer = setTimeout(() => {
         deferredUsageTimer = 0;
-        if (isDestroyed() || !document.querySelector('.agy-home') || getHomeLayout() !== 'studio') return;
-        const run = () => { if (!isDestroyed() && document.querySelector('.agy-home') && getHomeLayout() === 'studio') void refreshUsageRollup(false); };
-        if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2200 });
+        if (!onHome()) return;
+        const run = () => { if (onHome()) void refreshUsageRollup(false); };
+        if (usageHasData && typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2200 });
         else run();
-      }, wait);
+      }, usageHasData ? Math.max(400, delayMs) : 80);
     }
 
     async function refreshUsageRollup(force = false) {
@@ -335,12 +335,29 @@
 
       const win = typeof window !== 'undefined' ? window : G;
       const usageBridge = win?.__agPrismUsageBridge || null;
+      if (canMountRealCanvas(document.body) && usageBridge && !usageBridge.isOnline?.()) {
+        usageLoading = true;
+        if (!usageHasData) renderHomePanel();
+        for (let w = 0; w < 35 && !isDestroyed() && !usageBridge.isOnline?.(); w++) await new Promise((r) => setTimeout(r, 120));
+        usageLoading = false;
+        if (isDestroyed()) return;
+        if (!hasUsableQuotas(liveQuotaSnap)) void refreshLiveTelemetrySnapshot(true, { ignoreFailCooldown: true });
+      }
       const sumsMap = new Map();
       for (const [id, s] of Object.entries(h.store.getState().trajectorySummaries?.summaries || {})) if (s) sumsMap.set(id, s);
 
+      let seededCache = false;
       if (usageBridge?.isOnline?.() && typeof usageBridge.listSummaries === 'function') {
         try {
           const sumRes = await usageBridge.listSummaries(8000);
+          if (Array.isArray(sumRes?.records)) {
+            for (const hit of sumRes.records) {
+              if (hit?.id && hit.record?.days && !usageRecords.has(hit.id)) {
+                usageRecords.set(hit.id, hit.record);
+                seededCache = true;
+              }
+            }
+          }
           const bList = Array.isArray(sumRes?.summaries)
             ? sumRes.summaries
             : sumRes?.summaries && typeof sumRes.summaries === 'object'
@@ -371,12 +388,12 @@
           }
         }
       }
-      const entries = Array.from(sumsMap.entries());
+      const entries = Array.from(sumsMap.entries()), canPrune = !usageBridge || Boolean(usageBridge.isOnline?.());
       detectedCurrentWorkspace = detectCurrentWorkspaceName(entries) || detectedCurrentWorkspace;
-      if (entries.length === 0) { usageHasData = true; renderHomePanel(); return; }
+      if (entries.length === 0) { if (canPrune) usageHasData = true; renderHomePanel(); return; }
 
       const staleIds = [], presentIds = new Set();
-      let patchedMeta = false;
+      let patchedMeta = seededCache;
       for (const [id, sum] of entries) {
         presentIds.add(id);
         const m = extractMeta(sum), cached = usageRecords.get(id);
@@ -391,16 +408,18 @@
       staleIds.sort((a, b) => extractMeta(b[1]).lastModifiedSec - extractMeta(a[1]).lastModifiedSec);
 
       let deletedAny = false;
-      for (const oldId of Array.from(usageRecords.keys())) {
-        if (!presentIds.has(oldId)) {
-          const oldRec = usageRecords.get(oldId);
-          if (oldRec?.subagent && oldRec?.parentId && presentIds.has(oldRec.parentId)) continue;
-          usageRecords.delete(oldId);
-          deletedAny = true;
+      if (canPrune) {
+        for (const oldId of Array.from(usageRecords.keys())) {
+          if (!presentIds.has(oldId)) {
+            const oldRec = usageRecords.get(oldId);
+            if (oldRec?.subagent && oldRec?.parentId && presentIds.has(oldRec.parentId)) continue;
+            usageRecords.delete(oldId);
+            deletedAny = true;
+          }
         }
       }
       if (deletedAny) usageDataEpoch += 1;
-      if (staleIds.length === 0) { usageHasData = true; lastUsageFetchAt = now; if (patchedMeta) saveUsageCache(); renderHomePanel(); return; }
+      if (staleIds.length === 0) { usageHasData = true; if (canPrune) lastUsageFetchAt = now; if (patchedMeta) saveUsageCache(); renderHomePanel(); return; }
 
       usageLoading = true;
       if (!usageHasData) renderHomePanel();
@@ -655,7 +674,7 @@
       if (!usageCore) return;
       const panel = ensurePanelSeat();
       if (!panel) return;
-      const lang = getLang(), ui = uiText(lang), skeleton = !usageHasData && usageLoading;
+      const lang = getLang(), ui = uiText(lang), skeleton = !usageHasData;
       const aggKey = `${usageDataEpoch}|${usageRecords.size}|${activeRange}|${activeWorkspace}|${lang}|${bookPick}`;
       let data = cachedAggData;
       if (!data || cachedAggKey !== aggKey) {

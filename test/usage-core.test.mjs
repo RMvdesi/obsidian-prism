@@ -952,5 +952,170 @@ test('#209 inline-fallback.js: telemetryModule="on" overrides external Pulse & "
   assert.equal(win.__agPrismMetricsBridge, undefined, 'destroy() must clean up __agPrismMetricsBridge');
 });
 
+test('Cross-port usage rollup disk cache persists safely across PrismDaemon restarts & home-studio-panel avoids cold-start 0-KPI flash', async () => {
+  const fsMod = await import('node:fs');
+  const osMod = await import('node:os');
+  const pathMod = await import('node:path');
+  const { PrismDaemon } = await import('../sidecars/daemon/main.mjs');
+  const homePanelMod = (await import('../home-studio-panel.js')).default || globalThis.__agPrismHomeStudioPanel;
+
+  const tmpRoot = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'ag-prism-usage-cache-'));
+  try {
+    const repoRoot = pathMod.resolve(pathMod.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+    fsMod.copyFileSync(pathMod.join(repoRoot, 'cdp.js'), pathMod.join(tmpRoot, 'cdp.js'));
+    fsMod.copyFileSync(pathMod.join(repoRoot, 'usage-core.js'), pathMod.join(tmpRoot, 'usage-core.js'));
+
+    const cid = '11111111-2222-3333-4444-555555555555';
+    const sampleRec = {
+      cascadeId: cid,
+      stepCount: 12,
+      lastModifiedSec: 1763400100,
+      gmCount: 4,
+      subagent: false,
+      workspace: 'obsidian-prism',
+      parentId: '',
+      calls: 4,
+      days: { '2026-11-21': { calls: 4, tokens: 15000, cachedTokens: 12000, subagentTokens: 0 } },
+      hours: { 10: 15000 },
+      models: { 'Gemini 4 Neon': 15000 },
+    };
+
+    // 1) Daemon #1 writes disk cache atomically
+    const d1 = new PrismDaemon({ rootDir: tmpRoot, silent: true, enableAutoUpdateTimer: false });
+    d1._putUsageDiskCache(cid, 12, 1763400100, sampleRec);
+    d1._flushUsageDiskCache();
+    const cachePath = pathMod.join(tmpRoot, '.usage-rollup-cache.json');
+    assert.equal(fsMod.existsSync(cachePath), true, 'Disk usage cache must be persisted');
+
+    // 2) Daemon #2 (simulating cold restart on rotated port) serves cached record on list-summaries & fetch-batch with 0 trajectory RPC calls
+    const d2 = new PrismDaemon({ rootDir: tmpRoot, silent: true, enableAutoUpdateTimer: false });
+    let trajectoryCalls = 0;
+    d2.ensureLsClient = async () => ({
+      server: { mode: 'renderer-proxy' },
+      async trajectory() { trajectoryCalls += 1; throw new Error('Should hit disk cache'); },
+    });
+    d2._fetchBackendTrajectorySummaries = async () => ({
+      list: [{ id: cid, stepCount: 0, lastModifiedSec: 1763400080, workspace: 'obsidian-prism' }],
+      byId: new Map([[cid, { id: cid, stepCount: 0, lastModifiedSec: 1763400080, workspace: 'obsidian-prism' }]]),
+    });
+
+    const listRes = await d2.fetchUsageRollupBatch([], { action: 'list-summaries' });
+    assert.equal(listRes.ok, true);
+    assert.equal(listRes.records.length, 1, 'list-summaries must return cached disk records for matching summary IDs');
+    assert.equal(listRes.records[0].id, cid);
+    assert.equal(listRes.records[0].record.calls, 4);
+
+    const batchRes = await d2.fetchUsageRollupBatch([{ id: cid, stepCount: 12, lastModifiedSec: 1763400100 }], { action: 'fetch-batch' });
+    assert.equal(batchRes.ok, true);
+    assert.equal(batchRes.records.length, 1);
+    assert.equal(trajectoryCalls, 0, 'Exact (stepCount, lastModifiedSec) disk hit must skip trajectory RPC');
+
+    // 3) home-studio-panel stays in skeleton before usageHasData (no fake 0-KPI flash) & hydrates immediately from listSummaries().records
+    const prevWin = globalThis.window;
+    const prevDoc = globalThis.document;
+    const prevStorage = globalThis.localStorage;
+    try {
+      const makeNode = (tag) => {
+        const n = {
+          tagName: String(tag).toUpperCase(),
+          className: '',
+          textContent: '',
+          children: [],
+          attrs: new Map(),
+          style: {},
+          setAttribute(k, v) { this.attrs.set(k, String(v)); },
+          getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; },
+          hasAttribute(k) { return this.attrs.has(k); },
+          removeAttribute(k) { this.attrs.delete(k); },
+          appendChild(c) { c.parentElement = this; c.isConnected = true; this.children.push(c); return c; },
+          insertBefore(c) { c.parentElement = this; c.isConnected = true; this.children.push(c); return c; },
+          removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parentElement = null; c.isConnected = false; },
+          addEventListener() {},
+          remove() {},
+          get childElementCount() { return this.children.length; },
+          set innerHTML(_v) { this.children = []; },
+          querySelectorAll(sel) {
+            const out = [];
+            const walk = (x) => {
+              for (const ch of x.children || []) {
+                if (sel === '[data-skeleton]' && ch.hasAttribute('data-skeleton')) out.push(ch);
+                else if (sel === '.ag-cs-home-stat-value' && ch.className.includes('ag-cs-home-stat-value')) out.push(ch);
+                else if (sel.includes('home-greeting') && ch.getAttribute('data-testid') === 'home-greeting') out.push(ch);
+                walk(ch);
+              }
+            };
+            walk(this);
+            return out;
+          },
+          querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+        };
+        return n;
+      };
+      const homeEl = makeNode('div');
+      homeEl.className = 'agy-home';
+      const greetingEl = makeNode('div');
+      greetingEl.setAttribute('data-testid', 'home-greeting');
+      const doc = {
+        head: makeNode('head'),
+        body: makeNode('body'),
+        documentElement: makeNode('html'),
+        createElement: makeNode,
+        getElementById: () => null,
+        querySelector: (s) => (s === '.agy-home' ? homeEl : s.includes('home-greeting') ? greetingEl : null),
+      };
+      doc.body.appendChild(homeEl);
+      homeEl.appendChild(greetingEl);
+      greetingEl.insertAdjacentElement = (_pos, el) => homeEl.appendChild(el);
+      globalThis.document = doc;
+      globalThis.localStorage = { getItem: () => null, setItem() {} };
+      globalThis.window = {
+        document: doc,
+        __agPrismUsageBridge: {
+          isOnline: () => true,
+          listSummaries: async () => listRes,
+          fetchBatch: async () => ({ ok: true, records: [] }),
+        },
+      };
+
+      const ctl = homePanelMod.createHomeStudioPanelController({
+        usageCore,
+        isDestroyed: () => false,
+        getHomeLayout: () => 'studio',
+        getLang: () => 'zh-CN',
+        uiText: () => ({
+          homeTabOverview: '概览', homeTabModels: '模型', homeTabQuotas: '模型配额',
+          homeRangeAll: '全部', homeRange30d: '30天', homeRange7d: '7天',
+          homeAllWorkspaces: '全部项目', homeSessions: '会话数', homeMessages: '消息数',
+          homeTokens: 'Token 总量', homeActiveDays: '活跃天数', homeCacheHit: '缓存命中率', homeTopModel: '最常用模型',
+        }),
+        getDisplayName: () => 'User',
+        ensureHooks: () => ({ store: { getState: () => ({ trajectorySummaries: { summaries: { [cid]: { stepCount: 12, lastModifiedTime: { seconds: 1763400100 } } } } }) } }),
+        canMountRealCanvas: () => false,
+        setAttrIfChanged: (el, k, v) => el.setAttribute(k, v),
+        runGuardedMut: (fn) => fn(),
+      });
+
+      // Before refreshUsageRollup completes, renderHomePanel must show skeleton (0 fake "0" KPI values)
+      ctl.renderHomePanel(true);
+      const skelCells = homeEl.querySelectorAll('[data-skeleton]');
+      assert.ok(skelCells.length >= 6, `Cold-start before data must render skeleton cells instead of 0, got ${skelCells.length}`);
+      const preVals = homeEl.querySelectorAll('.ag-cs-home-stat-value').map((n) => n.textContent);
+      assert.equal(preVals.includes('0'), false, 'Cold-start must never flash fake "0" KPI before data arrives');
+
+      // After refreshUsageRollup, listSummaries().records seeds usageRecords directly without fetchBatch
+      await ctl.refreshUsageRollup(true);
+      assert.equal(homeEl.querySelectorAll('[data-skeleton]').length, 0, 'Skeleton must clear once disk-cached records hydrate');
+      assert.equal(ctl.getUsageRecordsCount(), 1);
+      ctl.unmountPanelSeat();
+    } finally {
+      if (prevWin === undefined) delete globalThis.window; else globalThis.window = prevWin;
+      if (prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+      if (prevStorage === undefined) delete globalThis.localStorage; else globalThis.localStorage = prevStorage;
+    }
+  } finally {
+    fsMod.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 
 

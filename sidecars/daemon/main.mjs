@@ -1885,6 +1885,10 @@ export class PrismDaemon {
     this._lazyLsClient = null;
     this._backendSummariesCache = null;
     this._backendSummariesAt = 0;
+    this._usageCacheFile = path.join(this.rootDir, '.usage-rollup-cache.json');
+    this._usageDiskCache = null;
+    this._usageCacheDirty = false;
+    this._usageCacheTimer = null;
     this._storageHealthCache = null;
     this._storageHealthAt = 0;
     this._lastTelemetryActivityAt = 0;
@@ -3179,6 +3183,8 @@ export class PrismDaemon {
     this._lazyLsClient = null;
     this._backendSummariesCache = null;
     this._backendSummariesAt = 0;
+    this._flushUsageDiskCache();
+    this._usageDiskCache = null;
     for (const svc of targets) {
       if (!svc) continue;
       try {
@@ -3792,15 +3798,81 @@ export class PrismDaemon {
     }
   }
 
+  _loadUsageDiskCache() {
+    if (this._usageDiskCache) return this._usageDiskCache;
+    const map = new Map();
+    try {
+      if (fs.existsSync(this._usageCacheFile)) {
+        const lst = fs.lstatSync(this._usageCacheFile);
+        if (!lst.isSymbolicLink() && lst.isFile() && lst.size > 0 && lst.size <= 4 * 1024 * 1024) {
+          const raw = JSON.parse(fs.readFileSync(this._usageCacheFile, 'utf8'));
+          if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            for (const [k, v] of Object.entries(raw)) {
+              if (GUID_RE.test(k) && v && v.record?.days && Number(v.stepCount) > 0 && Number(v.lastModifiedSec) > 0) {
+                map.set(k.toLowerCase(), { stepCount: Number(v.stepCount), lastModifiedSec: Number(v.lastModifiedSec), record: v.record });
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+    this._usageDiskCache = map;
+    return map;
+  }
+
+  _putUsageDiskCache(id, stepCount, lastModifiedSec, record) {
+    if (!id || !GUID_RE.test(id) || !record?.days) return;
+    const sc = Math.max(0, Number(stepCount || record.stepCount || 0));
+    const lm = Math.max(0, Number(lastModifiedSec || record.lastModifiedSec || 0));
+    if (sc <= 0 || lm <= 0) return;
+    const map = this._loadUsageDiskCache();
+    map.set(id.toLowerCase(), { stepCount: sc, lastModifiedSec: lm, record });
+    this._usageCacheDirty = true;
+    if (!this._usageCacheTimer) {
+      this._usageCacheTimer = setTimeout(() => {
+        this._usageCacheTimer = null;
+        this._flushUsageDiskCache();
+      }, 1500);
+      this._usageCacheTimer.unref?.();
+    }
+  }
+
+  _flushUsageDiskCache() {
+    if (this._usageCacheTimer) { clearTimeout(this._usageCacheTimer); this._usageCacheTimer = null; }
+    if (!this._usageCacheDirty || !this._usageDiskCache) return;
+    this._usageCacheDirty = false;
+    try {
+      let entries = Array.from(this._usageDiskCache.entries());
+      if (entries.length > 1200) {
+        entries.sort((a, b) => (b[1].lastModifiedSec || 0) - (a[1].lastModifiedSec || 0));
+        entries = entries.slice(0, 1200);
+        this._usageDiskCache = new Map(entries);
+      }
+      const obj = {};
+      for (const [k, v] of entries) obj[k] = v;
+      writeFileAtomicSync(this._usageCacheFile, JSON.stringify(obj), { mode: 0o600 });
+    } catch {}
+  }
+
   async fetchUsageRollupBatch(rawItems, opts = {}) {
     const usageCore = require(path.join(this.rootDir, 'usage-core.js'));
     const client = await this.ensureLsClient();
     const action = opts?.action || 'fetch-batch';
     const wantSummaries = action === 'list-summaries' || Boolean(opts?.includeSummaries);
     const backendPack = await this._fetchBackendTrajectorySummaries(client, usageCore, action === 'list-summaries');
+    const diskCache = this._loadUsageDiskCache();
 
     if (action === 'list-summaries') {
-      return { ok: true, records: [], summaries: backendPack.list };
+      const cachedRecords = [];
+      for (const s of backendPack.list) {
+        const sid = String(s?.id || '').trim();
+        if (!sid) continue;
+        const hit = diskCache.get(sid.toLowerCase());
+        if (hit?.record?.days) {
+          cachedRecords.push({ id: sid, mode: 'full', record: hit.record });
+        }
+      }
+      return { ok: true, records: cachedRecords, summaries: backendPack.list };
     }
 
     const list = Array.isArray(rawItems) ? rawItems.slice(0, 16) : [];
@@ -3824,6 +3896,20 @@ export class PrismDaemon {
         ? item.workspaces
         : backendSum?.workspaces || [];
       const gmOffset = Math.max(0, Math.floor(Number(item.gmOffset || 0)));
+      if (!opts?.force && stepCount > 0 && lastModifiedSec > 0) {
+        const hit = diskCache.get(id.toLowerCase());
+        if (hit && hit.stepCount === stepCount && hit.lastModifiedSec === lastModifiedSec && hit.record?.days) {
+          records.push({
+            id,
+            mode: 'full',
+            subagent: Boolean(hit.record.subagent || subagent),
+            ...(parentId ? { parentId } : {}),
+            ...(workspace ? { workspace } : {}),
+            record: hit.record,
+          });
+          continue;
+        }
+      }
       const wsMeta = workspaces.map((uri) => ({ workspaceFolderAbsoluteUri: uri }));
       const summaryStub = {
         stepCount,
@@ -3888,6 +3974,7 @@ export class PrismDaemon {
             const fullRec = usageCore.analyzeTrajectoryForUsage(fullTraj, enrichedStub, id);
             if (workspace && fullRec && typeof fullRec === 'object' && !fullRec.workspace) fullRec.workspace = workspace;
             if (parentId && fullRec && typeof fullRec === 'object' && !fullRec.parentId) fullRec.parentId = parentId;
+            this._putUsageDiskCache(id, Number(item.stepCount || realStepCount), Number(item.lastModifiedSec || realLastModSec), fullRec);
             records.push({
               id,
               mode: 'full',
@@ -3922,6 +4009,7 @@ export class PrismDaemon {
             const fullRec = usageCore.analyzeTrajectoryForUsage(fullMeta, summaryStub, id);
             if (workspace && fullRec && typeof fullRec === 'object' && !fullRec.workspace) fullRec.workspace = workspace;
             if (parentId && fullRec && typeof fullRec === 'object' && !fullRec.parentId) fullRec.parentId = parentId;
+            this._putUsageDiskCache(id, stepCount, lastModifiedSec, fullRec);
             records.push({
               id,
               mode: 'full',
@@ -3970,6 +4058,7 @@ export class PrismDaemon {
           const fullRec = usageCore.analyzeTrajectoryForUsage(fullMeta, summaryStub, id);
           if (workspace && fullRec && typeof fullRec === 'object' && !fullRec.workspace) fullRec.workspace = workspace;
           if (parentId && fullRec && typeof fullRec === 'object' && !fullRec.parentId) fullRec.parentId = parentId;
+          this._putUsageDiskCache(id, stepCount, lastModifiedSec, fullRec);
           records.push({
             id,
             mode: 'full',
@@ -6783,6 +6872,7 @@ export class PrismDaemon {
   }
 
   async stop(cleanPageDom = false) {
+    this._flushUsageDiskCache();
     this._sidebarStopped = true;
     this.running = false;
     if (this._updateInitialTimer) {
@@ -6842,6 +6932,7 @@ export class PrismDaemon {
     this._lazyLsClient = null;
     this._backendSummariesCache = null;
     this._backendSummariesAt = 0;
+    this._usageDiskCache = null;
     this._lazyThoughtService = null;
     if (this.omniServer) {
       const srv = this.omniServer;
