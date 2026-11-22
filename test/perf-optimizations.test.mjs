@@ -1967,3 +1967,113 @@ test('perf guard 21: Issues #2/#3/#5/#7/#8 + PR #6 + #35 queued-message 3-gears 
   const finalBytes = Buffer.byteLength(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), 'utf8');
   assert.ok(finalBytes <= 704000, `Expected buildInjectExpression <= 704,000 B, got ${finalBytes} B`);
 });
+
+test('perf guard 22: home-ripple-host coalesces burst ResizeObserver ticks via rAF (canceling on unmount) & ui-runtime WeakMap caches icon target scans', () => {
+  // 1) home-ripple-host ResizeObserver coalescing
+  const rippleHostSrc = fs.readFileSync(path.join(ROOT, 'home-ripple-host.js'), 'utf8');
+  let roCb = null;
+  let rafIdSeq = 0;
+  const rafs = new Map();
+  let fieldResizes = 0;
+  const homeEl = {
+    isConnected: true,
+    clientWidth: 800,
+    clientHeight: 500,
+    children: [],
+    appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
+    insertBefore(c) { c.parentElement = this; this.children.push(c); return c; },
+    removeChild(c) { this.children = this.children.filter((x) => x !== c); },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: homeEl.clientWidth, height: homeEl.clientHeight }),
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+  const makeEl = (tag) => ({
+    tagName: String(tag).toUpperCase(),
+    className: '',
+    width: 0,
+    height: 0,
+    style: { setProperty() {} },
+    children: [],
+    setAttribute() {},
+    getAttribute: () => null,
+    hasAttribute: () => false,
+    removeAttribute() {},
+    appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
+    removeChild(c) { this.children = this.children.filter((x) => x !== c); },
+    remove() {},
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  const doc = {
+    hidden: false,
+    documentElement: { getAttribute: () => 'ultra', hasAttribute: () => false },
+    body: makeEl('body'),
+    createElement: makeEl,
+    querySelector: (s) => (s === '.agy-home' ? homeEl : null),
+    querySelectorAll: () => [],
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const sb = {
+    document: doc,
+    window: { devicePixelRatio: 1, addEventListener() {}, removeEventListener() {}, getComputedStyle: () => ({ getPropertyValue: () => '' }) },
+    performance: { now: () => 1000 },
+    requestAnimationFrame: (fn) => { const id = ++rafIdSeq; rafs.set(id, fn); return id; },
+    cancelAnimationFrame: (id) => { rafs.delete(id); },
+    setTimeout,
+    clearTimeout,
+    ResizeObserver: class {
+      constructor(cb) { roCb = cb; }
+      observe() {}
+      disconnect() {}
+    },
+    Map, Set, WeakMap, Math, Number, String, Boolean, Array, Object,
+  };
+  sb.globalThis = sb;
+  vm.runInNewContext(rippleHostSrc, sb);
+
+  const ctl = sb.__agPrismHomeRippleHost.createHomeRippleController({
+    rippleCore: {
+      RIPPLE: { cellWidth: 11, cellHeight: 17, gridMinCols: 8, gridMinRows: 6 },
+      createWaveField: () => ({ advance() {}, step() {}, excite() {}, skimmer() {}, clear() {}, resize() {}, load: () => 0, maxAmp: () => 0, busy: () => false }),
+      createGlyphField: () => { fieldResizes += 1; return { draw() {}, invalidate() {}, clear() {}, dispose() {}, busy: () => false }; },
+      mountBrandHorizonGlow: () => ({ mode: '2d', resize() {}, draw() {}, drawStaticSnapshot() {}, invalidate() {}, clear() {}, dispose() {} }),
+      resolveHorizonDpr: (d, s) => d * s,
+    },
+    isDestroyed: () => false,
+    isAllowed: () => true,
+    isDarkTheme: () => true,
+    motionReduced: () => false,
+    getMinFrameGapMs: () => 0,
+    setAttrIfChanged() {},
+  });
+
+  ctl.sync();
+  assert.equal(typeof roCb, 'function', 'home-ripple-host must register ResizeObserver');
+  const resizesBefore = fieldResizes;
+  homeEl.clientWidth = 920;
+  // Fire 5 burst ResizeObserver notifications within the same frame -> must coalesce to 1 resize on next rAF
+  for (let i = 0; i < 5; i++) roCb([]);
+  assert.equal(fieldResizes, resizesBefore, 'ResizeObserver burst must defer layout to rAF instead of synchronous layout storms');
+  for (const [id, fn] of Array.from(rafs.entries())) { rafs.delete(id); fn(1016); }
+  assert.equal(fieldResizes, resizesBefore + 1, '5 burst ResizeObserver callbacks must coalesce into exactly 1 field resize');
+
+  // Unmount must cancel any pending ResizeObserver rAF cleanly
+  homeEl.clientWidth = 1040;
+  roCb([]);
+  ctl.unmount();
+  assert.equal(rafs.size, 0, 'unmount() must cancel pending ResizeObserver rAF');
+
+  // 2) ui-runtime iconSigMap WeakMap fast-path presence & thought-isolation ordering guard
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
+  const fnIdx = uiSrc.indexOf('function syncHostAnimatedIcons(');
+  assert.ok(fnIdx > 0);
+  const fnSlice = uiSrc.slice(fnIdx - 60, fnIdx + 1600);
+  assert.ok(fnSlice.includes('const iconSigMap = new WeakMap();'), 'ui-runtime must hold WeakMap iconSigMap for syncHostAnimatedIcons');
+  assert.ok(
+    fnSlice.indexOf('if (isThoughtIsolatedNode(btn)) continue;') < fnSlice.indexOf('iconSigMap.get(btn)'),
+    'isThoughtIsolatedNode(btn) must run before iconSigMap lookup so thought overlays are never cached as host targets'
+  );
+});

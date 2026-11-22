@@ -561,7 +561,9 @@
           bMo.observe(getRootHtml(), { attributes: true, attributeFilter: [WB] });
         } catch {}
       }
+      let rRaf = 0;
       state.uW = () => {
+        if (rRaf && typeof cancelAnimationFrame === 'function') { cancelAnimationFrame(rRaf); rRaf = 0; }
         document.removeEventListener('visibilitychange', onVis);
         wRef?.removeEventListener?.('blur', onBlur);
         wRef?.removeEventListener?.('focus', onFocus);
@@ -569,9 +571,10 @@
       };
 
       if (typeof ResizeObserver === 'function') {
+        const doLay = () => { rRaf = 0; if (!isDestroyed() && !state.parked) { layout(); wake(); } };
         state.ro = new ResizeObserver(() => {
-          layout();
-          wake();
+          if (typeof requestAnimationFrame !== 'function') doLay();
+          else if (!rRaf) rRaf = requestAnimationFrame(doLay);
         });
         state.ro.observe(home);
       }
