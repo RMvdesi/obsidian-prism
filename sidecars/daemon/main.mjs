@@ -6879,7 +6879,32 @@ function parseArgs(argv) {
   return { once, port, rootDir, gitRepoDir, outFile };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+/**
+ * Check whether this module was invoked as the CLI entry point, resolving
+ * symlinks/junctions (e.g. ~/.gemini -> another drive) and normalizing
+ * Windows drive-letter casing.
+ */
+function isMainEntry(argv1, moduleFilename) {
+  if (!argv1) return false;
+  let resolvedArgv;
+  let resolvedSelf;
+  try {
+    resolvedArgv = fs.realpathSync(argv1);
+  } catch {
+    resolvedArgv = path.resolve(argv1);
+  }
+  try {
+    resolvedSelf = fs.realpathSync(moduleFilename);
+  } catch {
+    resolvedSelf = path.resolve(moduleFilename);
+  }
+  if (process.platform === 'win32') {
+    return resolvedArgv.toLowerCase() === resolvedSelf.toLowerCase();
+  }
+  return resolvedArgv === resolvedSelf;
+}
+
+if (isMainEntry(process.argv[1], __filename)) {
   const cli = parseArgs(process.argv);
   const daemon = new PrismDaemon({
     rootDir: cli.rootDir,

@@ -1436,9 +1436,32 @@ async function runCli() {
   }
 }
 
-const isEntry =
-  process.argv[1] &&
-  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+/**
+ * Check whether this module was invoked as the CLI entry point, resolving
+ * symlinks/junctions and normalizing Windows drive-letter casing.
+ */
+function isMainEntry(argv1, moduleUrl) {
+  if (!argv1) return false;
+  let resolvedArgv;
+  let resolvedSelf;
+  try {
+    resolvedArgv = fs.realpathSync(argv1);
+  } catch {
+    resolvedArgv = path.resolve(argv1);
+  }
+  const modulePath = fileURLToPath(moduleUrl);
+  try {
+    resolvedSelf = fs.realpathSync(modulePath);
+  } catch {
+    resolvedSelf = path.resolve(modulePath);
+  }
+  if (process.platform === 'win32') {
+    return resolvedArgv.toLowerCase() === resolvedSelf.toLowerCase();
+  }
+  return resolvedArgv === resolvedSelf;
+}
+
+const isEntry = isMainEntry(process.argv[1], import.meta.url);
 
 if (isEntry) {
   runCli().catch((err) => {
