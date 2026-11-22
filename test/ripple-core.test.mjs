@@ -1732,3 +1732,102 @@ test('Wave 3: createGlyphField & home-ripple-host honor accentTone (mono/iris/am
     globalThis.cancelAnimationFrame = prevCaf;
   }
 });
+
+test('Conv-aura wave smoothness & 450ms semantic blend: non-negative running surge, continuous flowSec across sleep/wake, clamped dtSec, and fractional uSemantic crossfade', () => {
+  require(path.join(__dirname, '..', 'conv-aura.js'));
+  const convAuraMod = globalThis.__agPrismConvAura;
+
+  // 1) Running surge must stay >= 0 across full cycle (no sign-flipping between vertical surgeArc and horizontal chimeWave)
+  for (let ms = 0; ms <= 5000; ms += 100) {
+    const opt = convAuraMod.computeConvAuraOptics('running', 0, ms, false, true);
+    assert.ok(opt.surge >= 0, `running surge must remain >= 0 at ms=${ms}, got ${opt.surge}`);
+  }
+  // focus-fade delegates color decay to ripple-core's ~450ms semMix instead of hard-snapping at p=0.7
+  for (const frac of [0.1, 0.5, 0.9]) {
+    const ff = convAuraMod.computeConvAuraOptics('focus-fade', 1000, 1000 + frac * 600, false, false);
+    assert.equal(ff.semantic, 'none');
+  }
+
+  // 2) WebGL2 mountBrandHorizonGlow phase continuity + dtSec clamp + fractional uSemantic crossfade
+  const prevForce = globalThis.__agRippleForce2D;
+  delete globalThis.__agRippleForce2D;
+  try {
+    const uniformValues = new Map();
+    const gl = {
+      VERTEX_SHADER: 35633,
+      FRAGMENT_SHADER: 35632,
+      COMPILE_STATUS: 35713,
+      LINK_STATUS: 35714,
+      TRIANGLES: 4,
+      COLOR_BUFFER_BIT: 16384,
+      createShader: () => ({}),
+      shaderSource() {},
+      compileShader() {},
+      getShaderParameter: () => true,
+      createProgram: () => ({}),
+      attachShader() {},
+      linkProgram() {},
+      getProgramParameter: () => true,
+      deleteShader() {},
+      deleteProgram() {},
+      createVertexArray: () => ({}),
+      deleteVertexArray() {},
+      bindVertexArray() {},
+      getUniformLocation: (_p, name) => ({ name }),
+      useProgram() {},
+      viewport() {},
+      clearColor() {},
+      clear() {},
+      uniform2f() {},
+      uniform1f(loc, v) { if (loc?.name) uniformValues.set(loc.name, v); },
+      drawArrays() {},
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: (t) => (t === 'webgl2' ? gl : null),
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    const glow = rippleCore.mountBrandHorizonGlow(canvas);
+    assert.equal(glow.mode, 'webgl2');
+    glow.resize(320, 120, 1);
+
+    // Advance running phase so uTime > 12.5
+    glow.draw(1000, true, 0.4, { reach: 0.22, prism: 0.7, surge: 0.03, speed: 1.45, semantic: 'none' });
+    glow.draw(1200, true, 0.4, { reach: 0.22, prism: 0.7, surge: 0.03, speed: 1.45, semantic: 'none' });
+    glow.draw(1400, true, 0.4, { reach: 0.22, prism: 0.7, surge: 0.03, speed: 1.45, semantic: 'none' });
+    const tBeforeSleep = uniformValues.get('uTime');
+    assert.ok(tBeforeSleep > 12.5, `Expected uTime > 12.5 before sleep, got ${tBeforeSleep}`);
+
+    // Enter still sleep -> flowSec MUST NOT reset backward to 0 (uTime stays continuous!)
+    glow.draw(1600, true, 0.25, { reach: 0.16, prism: 0.2, surge: 0, speed: 0.72, still: true, semantic: 'none' });
+    const tDuringSleep = uniformValues.get('uTime');
+    assert.ok(Math.abs(tDuringSleep - tBeforeSleep) < 1e-6, `still sleep must preserve flowSec, got ${tDuringSleep} vs ${tBeforeSleep}`);
+
+    // Wake after 10 seconds -> dtSec must be clamped <= 0.35s (no multi-second wave teleport)
+    glow.draw(11600, true, 0.4, { reach: 0.22, prism: 0.7, surge: 0.03, speed: 1.0, semantic: 'long-task-complete' });
+    const tAfterWake = uniformValues.get('uTime');
+    assert.ok(tAfterWake > tDuringSleep && tAfterWake - tDuringSleep <= 0.36, `Wake dtSec must clamp <= 0.35s, got delta=${tAfterWake - tDuringSleep}`);
+
+    // First active frame entering long-task-complete must blend smoothly (3 < uSemantic < 3.98), not 1-frame snap to 3.0
+    const semEnter = uniformValues.get('uSemantic');
+    assert.ok(semEnter > 3.01 && semEnter < 3.98, `Expected smooth fractional uSemantic crossfade on enter, got ${semEnter}`);
+
+    // Advance several 60fps frames -> converges toward 3.0 (full jade), then switch back to 'none' -> blends smoothly back down
+    let t = 11600;
+    for (let i = 0; i < 60; i++) {
+      t += 32;
+      glow.draw(t, true, 0.4, { reach: 0.22, prism: 0.7, surge: 0, speed: 1.0, semantic: 'long-task-complete' });
+    }
+    assert.ok(Math.abs(uniformValues.get('uSemantic') - 3) < 0.05, `Expected uSemantic convergence near 3, got ${uniformValues.get('uSemantic')}`);
+
+    glow.draw(t + 32, true, 0.3, { reach: 0.18, prism: 0.4, surge: 0, speed: 0.8, semantic: 'none' });
+    const semExit = uniformValues.get('uSemantic');
+    assert.ok(semExit > 3.01 && semExit < 3.98, `Expected smooth fractional uSemantic crossfade on exit, got ${semExit}`);
+
+    glow.dispose();
+  } finally {
+    if (prevForce !== undefined) globalThis.__agRippleForce2D = prevForce;
+  }
+});

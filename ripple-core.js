@@ -1770,6 +1770,7 @@ return dark > 0.5
   ? mix(SEM_JADE_D, SKY_BLUE, 0.38 * w)
   : mix(SEM_JADE_L, DAY_CERULEAN, 0.42 * w);
 }
+vec3 sm(vec3 a,float d,float p,float i,float w){return w>.001?mix(a,semanticColor(i,d,p),w):a;}
 void main() {
 vec2 uv = gl_FragCoord.xy / max(uRes, vec2(1.0));
 float reach = max(uReach, 0.01);
@@ -1794,7 +1795,9 @@ float jut = (fbm(vec2(px.x / 220.0 + t * 0.18, t * 0.11)) - 0.5) * 0.68 + (waveA
 float h = y + stretch * (0.36 * jut + 0.11 * (fbm(vec2(px.x / 90.0 - t * 0.21, t * 0.14 + 3.0)) - 0.5));
 float glow = exp(-max(h, 0.0) * max(h, 0.0) * 4.0) * (0.76 + 0.42 * curtain) * mix(0.35, 1.0, smoothstep(0.0, 0.3, uv.x) * (1.0 - smoothstep(0.7, 1.0, uv.x)));
 float basePhase = px.x / max(res.x, 1.0) * 0.9 + t * 0.15 + 0.22 * fbm(q * 1.5);
-vec3 base = uSemantic > 0.5 ? semanticColor(uSemantic, 1.0, basePhase) : spectrumBaseDark(uSpectrum, basePhase);
+float semId = floor(uSemantic + 0.001);
+float semW = semId > 0.5 ? clamp(1.0 - (uSemantic - semId) / 0.98, 0.0, 1.0) : 0.0;
+vec3 base = sm(spectrumBaseDark(uSpectrum, basePhase), 1.0, basePhase, semId, semW);
 float n = fbm(q * 3.0 + t * 0.16);
 float field = (1.0 - exp(-1.8 * glow * (0.75 + 0.45 * n))) / (1.0 - exp(-1.8 * 1.2));
 float pPhase = uv.x * 1.18 - t * 0.18 + 0.28 * fbm(q * 2.1 + vec2(0.0, t * 0.12)) + 0.14 * y;
@@ -1807,7 +1810,7 @@ float chimeWave = 0.0;
 float chimePhase = 0.0;
 float effPrism = uSpectrum > 4.5 ? uPrism * 0.28 : uPrism;
 if (effPrism > 0.0001 || abs(uSurge) > 0.0001) {
-vec3 pCol = uSemantic > 0.5 ? semanticColor(uSemantic, 1.0, pPhase) : spectrumPrismDark(uSpectrum, pPhase);
+vec3 pCol = sm(spectrumPrismDark(uSpectrum, pPhase), 1.0, pPhase, semId, semW);
 if (effPrism > 0.0001) {
 float wing = smoothstep(0.06, 0.42, field) * (1.0 - 0.52 * smoothstep(0.72, 0.98, field));
 float caustics = 0.52 + 0.48 * smoothstep(-0.24, 0.26, jut);
@@ -1825,8 +1828,8 @@ float dy = y - frontY;
 float arc = (dy >= 0.0 ? exp(-dy * dy * 24.0) : exp(-dy * dy * 5.2)) * sEnv * xSpan;
 surgeArc = arc;
 surgeDy = dy - sp * 0.35;
-vec3 surgeLead = uSemantic > 0.5 ? semanticColor(uSemantic, 1.0, pPhase + 0.2) : (uSpectrum > 4.5 ? MONO_DARK_HI : (uSpectrum > 0.5 && uSpectrum < 1.5 ? WARM_DARK_C : SKY_BLUE));
-vec3 surgeTrail = uSemantic > 0.5 ? semanticColor(uSemantic, 1.0, pPhase + surgeDy * 1.3) : spectrumPrismDark(uSpectrum, pPhase + surgeDy * 1.3);
+vec3 surgeLead = sm(uSpectrum > 4.5 ? MONO_DARK_HI : (uSpectrum > 0.5 && uSpectrum < 1.5 ? WARM_DARK_C : SKY_BLUE), 1.0, pPhase + 0.2, semId, semW);
+vec3 surgeTrail = sm(spectrumPrismDark(uSpectrum, pPhase + surgeDy * 1.3), 1.0, pPhase + surgeDy * 1.3, semId, semW);
 vec3 surgeCol = mix(surgeLead, surgeTrail, 0.62);
 field = clamp(field + arc * 0.52, 0.0, 1.0);
 base = mix(base, surgeCol, clamp(arc * 0.78, 0.0, 0.85));
@@ -1846,8 +1849,8 @@ float vSet = exp(-dsy * dsy * 13.5) * (1.0 - smoothstep(1.05, 1.35, y));
 float chime = hRip * vSet * cEnv;
 chimeWave = chime;
 chimePhase = uv.x * 1.5 + rx * 2.0 - cp * 0.35;
-vec3 chimeLead = uSemantic > 0.5 ? semanticColor(uSemantic, 1.0, chimePhase) : (uSpectrum > 4.5 ? MONO_DARK_HI : (uSpectrum > 0.5 && uSpectrum < 1.5 ? WARM_DARK_C : ICE_MIST));
-vec3 chimeCol = uSemantic > 0.5 ? chimeLead : mix(chimeLead, spectrumPrismDark(uSpectrum, chimePhase), 0.22);
+vec3 chimeLead = sm(uSpectrum > 4.5 ? MONO_DARK_HI : (uSpectrum > 0.5 && uSpectrum < 1.5 ? WARM_DARK_C : ICE_MIST), 1.0, chimePhase, semId, semW);
+vec3 chimeCol = mix(mix(chimeLead, spectrumPrismDark(uSpectrum, chimePhase), 0.22), chimeLead, semW);
 field = clamp(field + chime * 0.46, 0.0, 1.0);
 base = mix(base, chimeCol, clamp(chime * 0.82, 0.0, 0.88));
 dotBoost += chime * 0.42;
@@ -1879,25 +1882,19 @@ da = clamp(dA * sqrt(a) * 0.78, 0.0, 1.0);
 } else {
 // Daylight Dichroic Ink Wash (pure high-chroma jewel pigments without white fog dilution)
 float washPh = uv.x * 3.1 + t * 0.48 + 1.3 * n;
-vec3 prismInk = uSemantic > 0.5 ? semanticColor(uSemantic, 0.0, pPhase) : spectrumInkLight(uSpectrum, pPhase, washPh);
-vec3 washBase = uSemantic > 0.5
-  ? semanticColor(uSemantic, 0.0, basePhase)
-  : (uSpectrum > 0.5 ? spectrumInkLight(uSpectrum, basePhase, washPh) : mix(DAY_COBALT, DAY_CERULEAN, 0.5 + 0.5 * sin(washPh)));
+vec3 prismInk = sm(spectrumInkLight(uSpectrum, pPhase, washPh), 0.0, pPhase, semId, semW);
+vec3 washBase = sm(uSpectrum > 0.5 ? spectrumInkLight(uSpectrum, basePhase, washPh) : mix(DAY_COBALT, DAY_CERULEAN, 0.5 + 0.5 * sin(washPh)), 0.0, basePhase, semId, semW);
 float causticsL = 0.48 + 0.52 * smoothstep(-0.24, 0.26, jut);
 float dichroicW = clamp((0.48 + 0.46 * effPrism) * (0.58 + 0.42 * causticsL), 0.0, 0.94);
 vec3 inkRgb = mix(washBase, prismInk, dichroicW);
 if (surgeArc > 0.0001) {
-vec3 surgeInk = uSemantic > 0.5
-  ? semanticColor(uSemantic, 0.0, pPhase + surgeDy * 1.3)
-  : mix(washBase, spectrumInkLight(uSpectrum, pPhase + surgeDy * 1.3, washPh), 0.68);
+vec3 surgeInk = sm(mix(washBase, spectrumInkLight(uSpectrum, pPhase + surgeDy * 1.3, washPh), 0.68), 0.0, pPhase + surgeDy * 1.3, semId, semW);
 inkRgb = mix(inkRgb, surgeInk, clamp(surgeArc * 0.85, 0.0, 0.90));
 } else if (chimeWave > 0.0001) {
-vec3 chimeInk = uSemantic > 0.5
-  ? semanticColor(uSemantic, 0.0, chimePhase)
-  : mix(washBase, spectrumInkLight(uSpectrum, chimePhase, washPh), 0.45);
+vec3 chimeInk = sm(mix(washBase, spectrumInkLight(uSpectrum, chimePhase, washPh), 0.45), 0.0, chimePhase, semId, semW);
 inkRgb = mix(inkRgb, chimeInk, clamp(chimeWave * 0.86, 0.0, 0.90));
 }
-vec3 hotAnchor = uSemantic > 0.5 ? washBase * 0.88 : (uSpectrum > 4.5 ? MONO_LIGHT_LO : (uSpectrum > 0.5 && uSpectrum < 1.5 ? DAY_SIENNA : DAY_COBALT * 0.84 + DAY_IRIS * 0.16));
+vec3 hotAnchor = mix(uSpectrum > 4.5 ? MONO_LIGHT_LO : (uSpectrum > 0.5 && uSpectrum < 1.5 ? DAY_SIENNA : DAY_COBALT * 0.84 + DAY_IRIS * 0.16), washBase * 0.88, semW);
 inkRgb = mix(inkRgb, hotAnchor, hot * 0.24);
 c = clamp(inkRgb + grain * 0.022, 0.0, 1.0);
 dc = clamp(mix(washBase * 0.86, prismInk * 0.92, clamp(0.26 + dotPrismMix * 0.68, 0.0, 0.90)), 0.0, 1.0);
@@ -2324,6 +2321,8 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
     let lastSpeed = -1;
     let lastSpectrum = -1;
     let lastSemantic = -1;
+    let semMix = 0;
+    let holdSem = 0;
     let clearedZero = false;
     let stale = true;
     let sleeping = false;
@@ -2493,25 +2492,35 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
         if (forceStatic) sleeping = true;
         return false;
       }
+      let dtSec = 0;
       if (forceStatic) {
         if (flowSec === 0) flowSec = 2.4;
         lastClockMs = nowMs;
         sleeping = true;
       } else if (still) {
-        flowSec = 0;
         lastClockMs = nowMs;
         sleeping = true;
       } else {
         sleeping = false;
         if (lastClockMs === null || nowMs < lastClockMs) {
-          if (lastClockMs === null) flowSec = realSec * speed;
+          if (lastClockMs === null) flowSec = Math.min(2.4, realSec * speed);
           lastClockMs = nowMs;
         } else {
-          const dtSec = Math.max(0, (nowMs - lastClockMs) / 1000);
+          dtSec = Math.min(0.35, Math.max(0, (nowMs - lastClockMs) / 1000));
           lastClockMs = nowMs;
           flowSec += dtSec * speed;
         }
       }
+      if (semanticCode > 0) holdSem = semanticCode;
+      if (forceStatic || still) {
+        semMix = semanticCode > 0 ? 1 : 0;
+      } else {
+        const tgt = semanticCode > 0 ? 1 : 0;
+        const step = Math.min(1, Math.max(0.04, dtSec / 0.45));
+        semMix += (tgt - semMix) * step;
+        if (Math.abs(tgt - semMix) < 0.01) semMix = tgt;
+      }
+      const effSem = holdSem > 0 && semMix > 0.005 ? holdSem + (1 - semMix) * 0.98 : 0;
       const breath = forceStatic
         ? 0.64
         : (still ? 0.58 : 0.46 + 0.24 * Math.sin(flowSec * 1.15) + 0.06 * Math.sin(flowSec * 2.05 + 0.9));
@@ -2519,7 +2528,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
       const intensity = isDefaultHome ? breath * (0.2 + 0.8 * strength) : breath * (0.55 + 0.45 * strength);
       const strengthGain = strength <= 0 ? 0 : (strength >= 0.999 ? 1 : Math.pow(strength, 0.78));
       const presence = basePresence * strengthGain;
-      renderer.draw(canvas.width, canvas.height, dpr, 12 + flowSec, dark, intensity, presence, reach, prism, surge, speed, spectrumCode, semanticCode);
+      renderer.draw(canvas.width, canvas.height, dpr, 12 + flowSec, dark, intensity, presence, reach, prism, surge, speed, spectrumCode, effSem);
       clearedZero = false;
       lastDrawMs = nowMs;
       lastDark = dark;
