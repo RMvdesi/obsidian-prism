@@ -1,20 +1,6 @@
 "use strict";
 /**
 * Antigravity Codex 风格推理等级滑条 (antigravity-codex-effort-slider)
-*
-* 设计目标与核心约束：
-* 1. 深度适配 Google Antigravity 原生架构（基于 @exa/agent-ui-toolkit 与 React Fiber 状态树），
-*    而非盲目照搬 DeepSeek Harness 的 DOM 假设。
-* 2. 在原生模型菜单 ([data-testid="model-selector-panel"]) 底部（模型列表与 View Usage 之间）
-*    挂载专属「推理等级」滑条行；屏蔽模型行冗余的右侧悬停档位子菜单，保留模型行右侧档位文字并随档位着色。
-* 3. 在菜单内点击上方模型行切换模型时不自动关闭菜单，下方滑条即时联动该模型的可用档位
-*    （单档位模型如 GPT-OSS 120B 自动置灰锁定）。
-* 4. 拖动滑条过程中，圆钮连续跟随指针；一旦滑过档位边界（无需等松手），立即通过 React Fiber
-*    调用官方 setModelConfigByLabelForConversation 切换真实档位，菜单保持常开。
-* 5. 针对 Antigravity 的三档模型 (Low / Medium / High) 采用 0 -> 0.5 -> 1.0 满配能量映射：
-*    - Low (0%)    : 纯蓝 (#4d93f8) 轨道 + 0 能量 + 0 星尘 + 蓝色文字
-*    - Medium (50%): 蓝紫过渡 (#9333ea) + 0.5 能量 + 11 颗星尘 (1x 闪烁速度) + 蓝紫文字
-*    - High (100%) : 深紫星云 (#4c1d95) + 流光扫掠 + 22 颗星尘全开 (2x 速度) + 紫色边框光晕 + 亮紫文字
 */
 (function (root, factory) {
 try {
@@ -2154,18 +2140,21 @@ if (t.closest('[aria-disabled="true"],[disabled]')) return true;
 var d = t.closest("[data-disabled]");
 return Boolean((d && d.getAttribute("data-disabled") !== "false") || (it && it.disabled));
 }
+function _isBox(e) {
+return !e || /^(?:menu|listbox|presentation|group|dialog|status)$/.test((e.getAttribute && e.getAttribute("role")) || "") || !!(e.classList && e.classList.contains("agy-overlay"));
+}
 function _mPlan(it, c) {
 if (!it || !_hasOrch(c)) return null;
 var g = it.querySelector && it.querySelector('[data-testid="model-selector-effort-group"]');
 var raw = (g && (g.getAttribute("data-model-base") || g.textContent)) || it.getAttribute("data-model-label") || it.getAttribute("data-model-base") || it.textContent || "";
 var cl = String(raw).replace(/\b(?:new|notice|beta|preview|recommended|default)\b|默认|自动/gi, " ").replace(/\s+/g, " ").trim();
-if (_isOrch(cl)) return null;
+if (_isOrch(cl) || cl.length > 80) return null;
 if (!cl) {
 if (!/^(?:default|auto|默认|自动)\b/i.test(String(raw).trim())) return null;
 var d = c.orchDef || c.orchPlanners[0];
 return _okOpt(d) ? { opt: d, base: (parseModelLabel(d.label) || {}).base || d.label, fam: true } : null;
 }
-var ps = c.orchPlanners, es = _slug(cl), bp = parseModelLabel(cl), bc = bp ? bp.base : cl.replace(/\s+(?:off|minimal|low|medium|high|xhigh|extra|max)\s*$/i, "").trim(), bs = _slug(bc);
+var ps = c.orchPlanners, es = _slug(cl), bp = parseModelLabel(cl), bc = bp ? bp.base : cl.replace(/(?:\s+(?:off|minimal|low|medium|high|xhigh|extra|max))+\s*$/i, "").trim(), bs = _slug(bc);
 var mb = "", bl = 0, fb = null, i, p, ep;
 for (i = 0; i < ps.length; i += 1) {
 p = ps[i];
@@ -2174,7 +2163,7 @@ ep = parseModelLabel(p.label);
 var ob = ep ? ep.base : p.label;
 if (p.label === cl || _slug(p.label) === es) return { opt: p, base: ob, fam: false };
 var os = _slug(ob);
-if (os && (os === bs || (os.length > bl && (es === os || es.indexOf(os) !== -1)))) { bl = os === bs ? 999 : os.length; mb = ob; fb = p; }
+if (os && (os === bs || (os.length > bl && (es === os || es.indexOf(os) === 0)))) { bl = os === bs ? 999 : os.length; mb = ob; fb = p; }
 }
 if (!mb) return null;
 var by = _luEff(c.orchIdx instanceof Map && c.orchIdx.size ? c.orchIdx : c.effortIndex, mb);
@@ -2200,14 +2189,14 @@ if (!raw.length) raw = m.querySelectorAll("button,[tabindex]");
 var out = [], i, j, el;
 for (i = 0; i < raw.length; i += 1) {
 el = raw[i];
-if (!el || (el.closest && el.closest(".ces-ag-section")) || !String(el.textContent || "").trim()) continue;
+if (!el || _isBox(el) || (el.closest && el.closest(".ces-ag-section")) || !String(el.textContent || "").trim()) continue;
 for (j = 0; j < out.length; j += 1) if (out[j].contains && out[j].contains(el)) { el = null; break; }
 if (el) out.push(el);
 }
 return out;
 }
 function _badBox(m) {
-return !m || !activePanel || m === activePanel || Boolean(m.contains && m.contains(activePanel)) || Boolean(m.querySelector && m.querySelector('[data-testid="model-selector-panel"],[data-testid="model-selector-orchestrator"],.ces-ag-section'));
+return !m || !activePanel || m === activePanel || Boolean(m.contains && m.contains(activePanel)) || Boolean(m.querySelector && m.querySelector('[data-testid="model-selector-panel"],[data-testid="model-selector-orchestrator"],[data-testid="quota-progress-circle"],.ces-ag-section'));
 }
 function _isSub(m, c) {
 if (_badBox(m) || !_hasOrch(c)) return false;
@@ -2262,7 +2251,7 @@ function rAct(t) {
 if (!t || typeof t.closest !== "function" || t.closest('button[aria-label="Edit Model"],a[href]')) return null;
 var it = t.closest(_SUB_IT);
 if (!it || !m.contains(it)) it = t.closest("button,[tabindex]");
-if (!it || !m.contains(it) || _isDis(t, it)) return null;
+if (!it || it === m || _isBox(it) || !m.contains(it) || _isDis(t, it)) return null;
 var c = getLiveContext() || _rdAgFiber(m), h = _mPlan(it, c);
 if (!h || !h.opt) return null;
 var cur = getActiveProfile(c), need = !cur || !cur.isOrchestrator, oo = need ? _fOrch(c) : (_actOptOvr || c.selectedModel || _fOrch(c));
@@ -2326,7 +2315,7 @@ _hiddenL3.set(m3, ov3);
 function _bindPnl(panel) {
 if (!panel || panel.__cesAgBound) return;
 panel.__cesAgBound = true;
-function resolveKeepOpenAction(target) {
+function rKeep(target) {
 if (!target || typeof target.closest !== "function" || target.closest('.ces-ag-section,.ces-set,button[aria-label="Edit Model"]')) return null;
 var menuItem = target.closest('[role^="menuitem"]');
 if (_isDis(target, menuItem)) return null;
@@ -2355,11 +2344,11 @@ var cur = getActiveProfile(ctx);
 if (cur && !cur.isOrchestrator && cur.baseName === prof.baseName) return null;
 return { ctx: ctx, base: prof.baseName || base, targetOption: opt, isOrch: false };
 }
-function onPointerOrMouseUpCapture(ev) {
-if (resolveKeepOpenAction(ev.target)) _stp(ev);
+function onUpC(ev) {
+if (rKeep(ev.target)) _stp(ev);
 }
-function onClickCapture(ev) {
-var act = resolveKeepOpenAction(ev.target);
+function onCkC(ev) {
+var act = rKeep(ev.target);
 if (!act || !_commitAgOpt(act.ctx, act.targetOption)) return;
 ev.preventDefault();
 _stp(ev);
@@ -2374,12 +2363,8 @@ _sySubs(panel, act.ctx, nextProf);
 notifySeatListeners();
 });
 }
-// 拦截 View Usage 触发项的划过展开，增加 0.3s (300ms) 停留防误触展开延迟
-var usageHoverTimer = null;
-var usageTriggerEl = null;
-var usageHoverAllowed = false;
-var isDispatchingSynthetic = false;
-function findViewUsageTrigger(target) {
+var uTm = null, uEl = null, uOk = false, uSyn = false;
+function fUsg(target) {
 if (!target || typeof target.closest !== "function") return null;
 var item = target.closest('[role="menuitem"],.agy-overlay-item,button'), uRe = /View Usage|查看用量|\bUsage\b/;
 if (!item) {
@@ -2388,32 +2373,27 @@ if (dt && /^(?:View Usage|Usage$|查看用量)/.test(dt) && !/Claude|Gemini|GPT/
 }
 return item && item !== panel && panel.contains(item) && uRe.test((item.textContent || "").trim()) ? item : null;
 }
-function resetUsageHover() {
-if (usageHoverTimer) {
-clearTimeout(usageHoverTimer);
-usageHoverTimer = null;
+function rstUsg() {
+if (uTm) { clearTimeout(uTm); uTm = null; }
+uOk = false; uEl = null;
 }
-usageHoverAllowed = false;
-usageTriggerEl = null;
-}
-function onPointerEnterCapture(ev) {
-if (isDispatchingSynthetic) return;
-var trigger = findViewUsageTrigger(ev.target);
-if (!trigger) { resetUsageHover(); return; }
-if (usageHoverAllowed && usageTriggerEl === trigger) return;
+function onPeC(ev) {
+if (uSyn) return;
+var trigger = fUsg(ev.target);
+if (!trigger) { rstUsg(); return; }
+if (uOk && uEl === trigger) return;
 _stp(ev);
-resetUsageHover();
-usageTriggerEl = trigger;
+rstUsg();
+uEl = trigger;
 try {
-trigger.addEventListener("pointerleave", resetUsageHover, { once: true });
-trigger.addEventListener("mouseleave", resetUsageHover, { once: true });
+trigger.addEventListener("pointerleave", rstUsg, { once: true });
+trigger.addEventListener("mouseleave", rstUsg, { once: true });
 } catch (e) {}
 var cx = ev.clientX, cy = ev.clientY, pid = ev.pointerId || 1, pt = ev.pointerType || "mouse";
-usageHoverTimer = setTimeout(function () {
-usageHoverTimer = null;
+uTm = setTimeout(function () {
+uTm = null;
 if (trigger && panel.contains(trigger)) {
-usageHoverAllowed = true;
-isDispatchingSynthetic = true;
+uOk = true; uSyn = true;
 try {
 var PE = (win && win.PointerEvent) || (typeof PointerEvent !== "undefined" ? PointerEvent : null);
 var ME = (win && win.MouseEvent) || (typeof MouseEvent !== "undefined" ? MouseEvent : null);
@@ -2424,40 +2404,40 @@ trigger.dispatchEvent(new PE(it[0], { bubbles: it[1], cancelable: true, pointerI
 });
 } else if (typeof ME === "function") trigger.dispatchEvent(new ME("mouseenter", { bubbles: false, cancelable: true, clientX: cx, clientY: cy }));
 else if (typeof EV === "function") trigger.dispatchEvent(new EV("pointerenter", { bubbles: false, cancelable: true }));
-} catch (err) {} finally { isDispatchingSynthetic = false; }
+} catch (err) {} finally { uSyn = false; }
 }
 }, 300);
 }
-function onPointerOverCapture(ev) {
-if (isDispatchingSynthetic) return;
-var trigger = findViewUsageTrigger(ev.target);
-if (!trigger) { if (usageHoverAllowed || usageHoverTimer) resetUsageHover(); return; }
-if (!usageHoverAllowed) _stp(ev);
+function onPoC(ev) {
+if (uSyn) return;
+var trigger = fUsg(ev.target);
+if (!trigger) { if (uOk || uTm) rstUsg(); return; }
+if (!uOk) _stp(ev);
 }
-function onPointerOutCapture(ev) {
-if (isDispatchingSynthetic) return;
-var trigger = findViewUsageTrigger(ev.target);
-if (trigger && (!ev.relatedTarget || !trigger.contains(ev.relatedTarget))) resetUsageHover();
+function onPouC(ev) {
+if (uSyn) return;
+var trigger = fUsg(ev.target);
+if (trigger && (!ev.relatedTarget || !trigger.contains(ev.relatedTarget))) rstUsg();
 }
-function onPointerMoveCapture(ev) {
-if (isDispatchingSynthetic) return;
-if (findViewUsageTrigger(ev.target) && !usageHoverAllowed) _stp(ev);
+function onPmC(ev) {
+if (uSyn) return;
+if (fUsg(ev.target) && !uOk) _stp(ev);
 }
-function onPointerLeaveCapture(ev) {
-if (!ev.relatedTarget || !panel.contains(ev.relatedTarget)) resetUsageHover();
+function onPlC(ev) {
+if (!ev.relatedTarget || !panel.contains(ev.relatedTarget)) rstUsg();
 }
 var evPairs = [
-["pointerenter", onPointerEnterCapture],
-["pointerover", onPointerOverCapture],
-["pointerout", onPointerOutCapture],
-["pointerleave", onPointerLeaveCapture],
-["pointermove", onPointerMoveCapture],
-["pointerup", onPointerOrMouseUpCapture],
-["mouseup", onPointerOrMouseUpCapture],
-["click", onClickCapture]
+["pointerenter", onPeC],
+["pointerover", onPoC],
+["pointerout", onPouC],
+["pointerleave", onPlC],
+["pointermove", onPmC],
+["pointerup", onUpC],
+["mouseup", onUpC],
+["click", onCkC]
 ];
 for (var ei = 0; ei < evPairs.length; ei++) panel.addEventListener(evPairs[ei][0], evPairs[ei][1], true);
-panel.__cesAgResetUsageHover = resetUsageHover;
+panel.__cesAgResetUsageHover = rstUsg;
 panel.__cesAgUnbindPanel = function () {
 for (var ui = 0; ui < evPairs.length; ui++) panel.removeEventListener(evPairs[ui][0], evPairs[ui][1], true);
 delete panel.__cesAgResetUsageHover;
