@@ -3209,7 +3209,7 @@ export class PrismDaemon {
   _getHostI18nCfgSig(cfgOverride = null) {
     try {
       const cfg = cfgOverride || this.cdp?.readConfig?.() || {};
-      return `${cfg.hostLocalization || 'auto'}:${cfg.language || cfg.lang || 'zh-CN'}`;
+      return `${cfg.hostLocalization || 'auto'}:${cfg.language || cfg.lang || 'auto'}`;
     } catch {
       return '';
     }
@@ -5073,14 +5073,20 @@ export class PrismDaemon {
               if (hostI18nEnabled && hostI18nSnap) {
                 if (!skippedStale && !entry.session.closed && (!refreshedFast || hostI18nChanged)) {
                   const evalRes = await entry.session.evaluate(hostI18nSnap).catch(() => null);
-                  if (evalRes && evalRes.ok) {
+                  if (evalRes?.skippedByLiveCfg) {
+                    entry.hostI18nMounted = false;
+                    entry.hostI18nSkippedByLiveCfg = true;
+                    entry.lastHostI18nSig = hostI18nSig;
+                  } else if (evalRes && evalRes.ok) {
                     entry.hostI18nMounted = true;
+                    entry.hostI18nSkippedByLiveCfg = false;
                     entry.lastHostI18nSig = hostI18nSig;
                   }
                 }
               } else if (hadHostI18n && !skippedStale && !entry.session.closed) {
                 await entry.session.evaluate(this._getHostI18nCleanupExpression()).catch(() => {});
                 entry.hostI18nMounted = false;
+                entry.hostI18nSkippedByLiveCfg = false;
                 entry.lastHostI18nSig = '';
               }
               if (abortIfStale()) return;
@@ -5475,6 +5481,7 @@ export class PrismDaemon {
         await this._removeWallpaperBinding(entry);
         entry.sidebarMounted = false;
         entry.hostI18nMounted = false;
+        entry.hostI18nSkippedByLiveCfg = false;
         entry.lastHostI18nSig = '';
         entry.lastHostI18nScriptSig = '';
         entry.thoughtMounted = false;
@@ -5573,8 +5580,13 @@ export class PrismDaemon {
           }
           const evalRes = await entry.session.evaluate(this.hostI18nExpr).catch(() => null);
           const hiSig = this._getHostI18nCfgSig(cfgNow);
-          if (evalRes && evalRes.ok) {
+          if (evalRes?.skippedByLiveCfg) {
+            entry.hostI18nMounted = false;
+            entry.hostI18nSkippedByLiveCfg = true;
+            entry.lastHostI18nSig = hiSig;
+          } else if (evalRes && evalRes.ok) {
             entry.hostI18nMounted = true;
+            entry.hostI18nSkippedByLiveCfg = false;
             entry.lastHostI18nSig = hiSig;
           }
           if (hiAdd && hiAdd.identifier) {
@@ -5586,6 +5598,7 @@ export class PrismDaemon {
           await entry.session.evaluate(this._getHostI18nCleanupExpression()).catch(() => null);
         }
         entry.hostI18nMounted = false;
+        entry.hostI18nSkippedByLiveCfg = false;
         entry.lastHostI18nSig = '';
         entry.lastHostI18nScriptSig = '';
       }
@@ -6343,6 +6356,7 @@ export class PrismDaemon {
       sidebarMounted: false,
       hostI18nScriptId: null,
       hostI18nMounted: false,
+      hostI18nSkippedByLiveCfg: false,
       lastHostI18nSig: '',
       lastHostI18nScriptSig: '',
       thoughtScriptId: null,
@@ -6701,7 +6715,9 @@ export class PrismDaemon {
       const needsSidebarCleanup =
         !sidebarEnabled && Boolean(probe.hasSidebar || entry.sidebarScriptId || entry.sidebarMounted || entry.sidebarBindingAdded);
       const hostI18nEnabled = this._isHostI18nEnabled(cfg);
-      const needsHostI18nHeal = hostI18nEnabled && (!probe.hasHostI18n || !entry.hostI18nScriptId);
+      const hostI18nSig = hostI18nEnabled ? this._getHostI18nCfgSig(cfg) : '';
+      const hostI18nSkippedSameSig = Boolean(entry.hostI18nSkippedByLiveCfg && entry.lastHostI18nSig === hostI18nSig);
+      const needsHostI18nHeal = hostI18nEnabled && !hostI18nSkippedSameSig && (!probe.hasHostI18n || !entry.hostI18nScriptId);
       const needsHostI18nCleanup =
         !hostI18nEnabled && Boolean(probe.hasHostI18n || entry.hostI18nScriptId || entry.hostI18nMounted);
       const needsThoughtHeal =
@@ -6789,6 +6805,7 @@ export class PrismDaemon {
           await this._removeWallpaperBinding(entry);
           entry.sidebarMounted = false;
           entry.hostI18nMounted = false;
+          entry.hostI18nSkippedByLiveCfg = false;
           entry.lastHostI18nSig = '';
           entry.lastHostI18nScriptSig = '';
           entry.thoughtMounted = false;
@@ -6853,7 +6870,7 @@ export class PrismDaemon {
           await entry.session.evaluate(this._buildSidebarCleanupExpression(true), false, 3500).catch(() => {});
           entry.sidebarMounted = false;
         }
-        if (hostI18nEnabled) {
+        if (hostI18nEnabled && !hostI18nSkippedSameSig) {
           if (!probe.hasHostI18n || !entry.hostI18nScriptId) {
             if (!this.hostI18nExpr && typeof this.cdp.buildHostI18nExpression === 'function') {
               const chOpts = this._getChannelCacheOpts(true);
@@ -6875,8 +6892,13 @@ export class PrismDaemon {
               }
               if (!probe.hasHostI18n) {
                 const evalRes = await entry.session.evaluate(this.hostI18nExpr, false, 4500).catch(() => null);
-                if (evalRes && evalRes.ok) {
+                if (evalRes?.skippedByLiveCfg) {
+                  entry.hostI18nMounted = false;
+                  entry.hostI18nSkippedByLiveCfg = true;
+                  entry.lastHostI18nSig = hiSig;
+                } else if (evalRes && evalRes.ok) {
                   entry.hostI18nMounted = true;
+                  entry.hostI18nSkippedByLiveCfg = false;
                   entry.lastHostI18nSig = hiSig;
                 }
               }
@@ -6889,6 +6911,7 @@ export class PrismDaemon {
           }
           await entry.session.evaluate(this._getHostI18nCleanupExpression(), false, 3500).catch(() => {});
           entry.hostI18nMounted = false;
+          entry.hostI18nSkippedByLiveCfg = false;
           entry.lastHostI18nSig = '';
           entry.lastHostI18nScriptSig = '';
         }
@@ -7063,8 +7086,13 @@ export class PrismDaemon {
             }
             if (!probe.hasHostI18n) {
               const evalRes = await entry.session.evaluate(this.hostI18nExpr, false, 4500).catch(() => null);
-              if (evalRes && evalRes.ok) {
+              if (evalRes?.skippedByLiveCfg) {
+                entry.hostI18nMounted = false;
+                entry.hostI18nSkippedByLiveCfg = true;
+                entry.lastHostI18nSig = hiSig;
+              } else if (evalRes && evalRes.ok) {
                 entry.hostI18nMounted = true;
+                entry.hostI18nSkippedByLiveCfg = false;
                 entry.lastHostI18nSig = hiSig;
               }
             }
@@ -7077,6 +7105,7 @@ export class PrismDaemon {
           }
           await entry.session.evaluate(this._getHostI18nCleanupExpression(), false, 3500).catch(() => {});
           entry.hostI18nMounted = false;
+          entry.hostI18nSkippedByLiveCfg = false;
           entry.lastHostI18nSig = '';
           entry.lastHostI18nScriptSig = '';
         }
@@ -7524,7 +7553,7 @@ export class PrismDaemon {
         this.cdp.recordRelaunchPromptState(this.rootDir, host.pid, host.startMs, 'prompted', extraDirs);
       }
       this.log(`[relaunch-guard] Host pid=${host.pid} running without CDP port; prompting user once`);
-      const lang = rawCfg.language || rawCfg.lang || 'zh-CN';
+      const lang = rawCfg.language || rawCfg.lang || 'auto';
       const promptFn =
         typeof this._relaunchHooks?.promptUser === 'function'
           ? this._relaunchHooks.promptUser

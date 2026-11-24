@@ -326,16 +326,14 @@
   const saveSettingsBatch = (patchObj) => { if (patchObj && typeof patchObj === 'object') persistAndApplyConfigPatch(patchObj, null); };
 
   const getLang = () => {
-    const raw =
-      cfg.language ||
-      (cfg.lang && cfg.lang !== 'auto' ? cfg.lang : '') ||
-      currentBaseConfig?.language ||
-      (currentBaseConfig?.lang && currentBaseConfig.lang !== 'auto' ? currentBaseConfig.lang : '') ||
-      (typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'zh-CN');
-    if (isFn(i18nCore?.normalizeLanguage)) return i18nCore.normalizeLanguage(raw);
+    const pick = (v) => (v && v !== 'auto' ? v : '');
+    const exp = pick(cfg.language) || pick(cfg.lang) || pick(currentBaseConfig?.language) || pick(currentBaseConfig?.lang);
+    const raw = exp || (typeof navigator !== 'undefined' && (navigator.language || navigator.languages?.[0])) || ga(de(), 'lang') || '';
+    const fb = exp ? 'zh-CN' : 'en';
+    if (isFn(i18nCore?.normalizeLanguage)) return i18nCore.normalizeLanguage(raw, fb);
     if (raw === 'zh-TW' || raw === 'yue' || raw === 'en' || raw === 'ja') return raw;
     const low = String(raw || '').toLowerCase();
-    return low.startsWith('zh-tw') || low.startsWith('zh-hk') ? 'zh-TW' : low.startsWith('yue') ? 'yue' : low.startsWith('ja') ? 'ja' : low.startsWith('en') ? 'en' : 'zh-CN';
+    return low.startsWith('zh-hk') || low.startsWith('zh-mo') || low.startsWith('yue') ? 'yue' : low.startsWith('zh-tw') || low.startsWith('zh-hant') ? 'zh-TW' : low.startsWith('zh') ? 'zh-CN' : low.startsWith('ja') ? 'ja' : low.startsWith('en') ? 'en' : fb;
   };
 
   const uiText = (lang = getLang()) => (isFn(i18nLocales?.getUiStrings) ? i18nLocales.getUiStrings(lang) : {});

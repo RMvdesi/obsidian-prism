@@ -2039,7 +2039,7 @@ namespace AgyClaudeStyle.Installer
                 result.ConfigSummary = InstallerI18n.TrFormat(
                     "语言={0} | 配色={1} | 动效={2} | Omni={3}",
                     "Lang={0} | Palette={1} | Motion={2} | Omni={3}",
-                    activeCfg.ContainsKey("language") ? activeCfg["language"] : "zh-CN",
+                    activeCfg.ContainsKey("language") ? activeCfg["language"] : "auto",
                     activeCfg.ContainsKey("palette") ? activeCfg["palette"] : "obsidian",
                     activeCfg.ContainsKey("motionLevel") ? activeCfg["motionLevel"] : "standard",
                     activeCfg.ContainsKey("omniModule") ? activeCfg["omniModule"] : "on"

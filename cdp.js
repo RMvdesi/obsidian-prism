@@ -29,8 +29,8 @@ const PID_FILE = path.join(__dirname, '.watch.pid');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 const DEFAULT_CONFIG = {
-  language: 'zh-CN',
-  lang: 'zh-CN',
+  language: 'auto',
+  lang: 'auto',
   palette: 'obsidian',
   lightPreset: 'crystal',
   motionLevel: 'ultra',
@@ -1319,8 +1319,9 @@ const MAC_DIALOG_APPLESCRIPT = [
   'end run',
 ].join('\n');
 
-function buildRelaunchDialogCopy(lang = 'zh-CN') {
-  const low = String(lang || 'zh-CN').toLowerCase();
+function buildRelaunchDialogCopy(lang = 'auto') {
+  const rawLang = !lang || String(lang).trim().toLowerCase() === 'auto' ? detectSystemUiLocale() : lang;
+  const low = String(rawLang || 'en').toLowerCase();
   const isZh = low.startsWith('zh') || low === 'yue';
   if (isZh) {
     return {
@@ -1345,7 +1346,7 @@ function buildRelaunchDialogCopy(lang = 'zh-CN') {
 }
 
 function promptUserForHostRelaunch(opts = {}) {
-  const copy = buildRelaunchDialogCopy(opts.lang || 'zh-CN');
+  const copy = buildRelaunchDialogCopy(opts.lang || 'auto');
   if (typeof opts.dialogHook === 'function') {
     return Promise.resolve(opts.dialogHook(copy)).then((ans) => Boolean(ans));
   }
@@ -5743,8 +5744,8 @@ function buildConfigRefreshExpression(customConfig, extraMeta = null) {
       try {
         const hiMode = effectiveCfg?.hostLocalization;
         const hiLang = effectiveCfg?.language;
-        const navL = String((typeof navigator !== 'undefined' && navigator.language) || '').trim();
-        if (hiMode === 'off' || (hiMode !== 'on' && ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'auto') || (hiLang === 'auto' && navL && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(navL))))) {
+        const navL = String((typeof navigator !== 'undefined' && (navigator.language || (navigator.languages && navigator.languages[0]))) || '').trim();
+        if (hiMode === 'off' || (hiMode !== 'on' && ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(navL))))) {
           window.__agPrismHostI18n?.destroy?.();
         }
       } catch {}
@@ -7618,33 +7619,95 @@ function buildSidebarStudioExpression(serverMeta = null, customClientSource = nu
 }
 
 let _hostI18nCache = { sig: '', sourceHash: '', minRuntime: '', dictRaw: '', codeHash: '', cachedPaths: new Set() };
+let _cachedWinUiLocale = undefined;
+let _winUiLocaleReaderOverride = null;
+
+function _setWindowsUiLocaleReaderForTest(fn) {
+  _winUiLocaleReaderOverride = typeof fn === 'function' ? fn : null;
+  _cachedWinUiLocale = undefined;
+}
+
+function parseRegMultiSzFirstLocale(output) {
+  const lines = String(output || '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = /\bREG_(?:MULTI_)?SZ\s+(.+)$/i.exec(lines[i]);
+    if (!m) continue;
+    const parts = m[1].split(/\\0|\s+/).map((s) => s.trim()).filter(Boolean);
+    for (let j = 0; j < parts.length; j++) {
+      if (/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(parts[j])) {
+        return parts[j];
+      }
+    }
+  }
+  return '';
+}
+
+function readWindowsPreferredUiLanguage() {
+  if (_winUiLocaleReaderOverride) {
+    try {
+      return String(_winUiLocaleReaderOverride() || '').trim();
+    } catch {
+      return '';
+    }
+  }
+  if (!IS_WIN) return '';
+  if (_cachedWinUiLocale !== undefined) return _cachedWinUiLocale;
+  const keys = [
+    ['HKCU\\Control Panel\\Desktop', 'PreferredUILanguages'],
+    ['HKCU\\Control Panel\\Desktop\\MuiCached', 'MachinePreferredUILanguages'],
+  ];
+  let found = '';
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      const out = execFileSync('reg.exe', ['query', keys[i][0], '/v', keys[i][1]], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 1500,
+      });
+      const parsed = parseRegMultiSzFirstLocale(out);
+      if (parsed) {
+        found = parsed;
+        break;
+      }
+    } catch {}
+  }
+  _cachedWinUiLocale = found;
+  return found;
+}
+
+function detectSystemUiLocale(opts = null) {
+  try {
+    const candidates = [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG];
+    for (let i = 0; i < candidates.length; i++) {
+      const val = String(candidates[i] || '').trim();
+      if (val && !/^(?:c|posix)(?:[.@]|$)/i.test(val)) {
+        return val;
+      }
+    }
+    if (!opts?.bypassWinUiLocale) {
+      if (typeof opts?.winUiLocaleReader === 'function') {
+        const custom = String(opts.winUiLocaleReader() || '').trim();
+        if (custom) return custom;
+      } else {
+        const winUi = readWindowsPreferredUiLanguage();
+        if (winUi) return winUi;
+      }
+    }
+    return Intl.DateTimeFormat().resolvedOptions().locale || '';
+  } catch {
+    return '';
+  }
+}
 
 function shouldEnableHostI18n(config, hostLocaleHint = null) {
   const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
   const mode = cfg.hostLocalization || 'auto';
   if (mode === 'off') return false;
   if (mode === 'on') return true;
-  const lang = cfg.language || cfg.lang || 'zh-CN';
+  const lang = cfg.language || cfg.lang || 'auto';
   if (lang === 'zh-CN') return true;
   if (lang === 'auto') {
-    let sysLocale = hostLocaleHint;
-    if (!sysLocale) {
-      try {
-        const candidates = [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG];
-        for (let i = 0; i < candidates.length; i++) {
-          const val = String(candidates[i] || '').trim();
-          if (val && !/^(?:c|posix)(?:[.@]|$)/i.test(val)) {
-            sysLocale = val;
-            break;
-          }
-        }
-        if (!sysLocale) {
-          sysLocale = Intl.DateTimeFormat().resolvedOptions().locale || '';
-        }
-      } catch {
-        sysLocale = '';
-      }
-    }
+    const sysLocale = hostLocaleHint || detectSystemUiLocale();
     const stripped = String(sysLocale || '').trim().split(/[.@]/)[0];
     const norm = stripped.toLowerCase().replace(/_/g, '-');
     return norm === 'zh' || /^zh-(?:cn|hans|sg)(?:-|$)/.test(norm);
@@ -9068,7 +9131,10 @@ module.exports = {
   buildOmniClientExpression,
   buildSidebarStudioExpression,
   shouldEnableHostI18n,
+  detectSystemUiLocale,
+  _setWindowsUiLocaleReaderForTest,
   buildHostI18nExpression,
+  buildRelaunchDialogCopy,
   HOST_I18N_REMOVE_EXPRESSION,
   shouldEnableThought,
   buildThoughtExpression,

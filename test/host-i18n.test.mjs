@@ -964,6 +964,7 @@ test('[P0-1] shouldEnableHostI18n resolves LANG=zh_CN.UTF-8 and skips LC_ALL=C.U
     Intl.DateTimeFormat = function () {
       return { resolvedOptions: () => ({ locale: 'zh-CN' }) };
     };
+    cdp._setWindowsUiLocaleReaderForTest(() => '');
     try {
       process.env.LC_ALL = 'C.UTF-8';
       process.env.LC_MESSAGES = 'POSIX';
@@ -971,11 +972,52 @@ test('[P0-1] shouldEnableHostI18n resolves LANG=zh_CN.UTF-8 and skips LC_ALL=C.U
       assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }), true);
     } finally {
       Intl.DateTimeFormat = origIntl;
+      cdp._setWindowsUiLocaleReaderForTest(null);
     }
 
     assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }, 'zh_CN.UTF-8'), true);
     assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }, 'C.UTF-8'), false);
   } finally {
+    if (prevLcAll === undefined) delete process.env.LC_ALL; else process.env.LC_ALL = prevLcAll;
+    if (prevLcMsg === undefined) delete process.env.LC_MESSAGES; else process.env.LC_MESSAGES = prevLcMsg;
+    if (prevLang === undefined) delete process.env.LANG; else process.env.LANG = prevLang;
+  }
+});
+
+test('Windows UI Display Language (PreferredUILanguages) overrides Intl regional format for host-i18n and relaunch dialog', () => {
+  const prevLcAll = process.env.LC_ALL;
+  const prevLcMsg = process.env.LC_MESSAGES;
+  const prevLang = process.env.LANG;
+  const origIntl = Intl.DateTimeFormat;
+  try {
+    process.env.LC_ALL = '';
+    process.env.LC_MESSAGES = '';
+    process.env.LANG = '';
+
+    // Case 1: Windows Display Language is en-US while Regional Format (Intl) is zh-CN -> must NOT enable zh-CN host-i18n
+    Intl.DateTimeFormat = function () {
+      return { resolvedOptions: () => ({ locale: 'zh-CN' }) };
+    };
+    cdp._setWindowsUiLocaleReaderForTest(() => 'en-US');
+    assert.equal(cdp.detectSystemUiLocale(), 'en-US');
+    assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }), false);
+    assert.equal(cdp.shouldEnableHostI18n({}), false);
+    const copyEn = cdp.buildRelaunchDialogCopy('auto');
+    assert.equal(copyEn.relaunchBtn, 'Relaunch Now');
+    assert.equal(/[\u4e00-\u9fa5]/.test(copyEn.body), false);
+
+    // Case 2: Windows Display Language is zh-Hans-CN while Intl is en-US -> enables zh-CN host-i18n and Chinese relaunch prompt
+    Intl.DateTimeFormat = function () {
+      return { resolvedOptions: () => ({ locale: 'en-US' }) };
+    };
+    cdp._setWindowsUiLocaleReaderForTest(() => 'zh-Hans-CN');
+    assert.equal(cdp.detectSystemUiLocale(), 'zh-Hans-CN');
+    assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }), true);
+    const copyZh = cdp.buildRelaunchDialogCopy('auto');
+    assert.equal(copyZh.relaunchBtn, '立即重开');
+  } finally {
+    Intl.DateTimeFormat = origIntl;
+    cdp._setWindowsUiLocaleReaderForTest(null);
     if (prevLcAll === undefined) delete process.env.LC_ALL; else process.env.LC_ALL = prevLcAll;
     if (prevLcMsg === undefined) delete process.env.LC_MESSAGES; else process.env.LC_MESSAGES = prevLcMsg;
     if (prevLang === undefined) delete process.env.LANG; else process.env.LANG = prevLang;

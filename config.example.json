@@ -1,6 +1,6 @@
 {
-  "language": "zh-CN",
-  "lang": "zh-CN",
+  "language": "auto",
+  "lang": "auto",
   "palette": "obsidian",
   "lightPreset": "crystal",
   "motionLevel": "ultra",

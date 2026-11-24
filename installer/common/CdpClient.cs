@@ -3412,7 +3412,7 @@ namespace AgyClaudeStyle
             sb.Append("    } else {\n");
             sb.Append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n");
             sb.Append("    }\n");
-            sb.Append("    try { if (effectiveCfg.hostLocalization === 'off' || (effectiveCfg.hostLocalization !== 'on' && effectiveCfg.language && effectiveCfg.language !== 'zh-CN' && effectiveCfg.language !== 'auto')) window.__agPrismHostI18n?.destroy?.(); } catch {}\n");
+            sb.Append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && (navigator.language || (navigator.languages && navigator.languages[0]))) || '').trim(); if (hiMode === 'off' || (hiMode !== 'on' && ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(navL))))) window.__agPrismHostI18n?.destroy?.(); } catch {}\n");
             sb.Append("    if (document.documentElement) {\n");
             sb.Append("      if (effectiveCfg && effectiveCfg.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n");
             sb.Append("      else document.documentElement.removeAttribute('data-ag-prism-thought-view');\n");

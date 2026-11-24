@@ -126,7 +126,7 @@ function parseReplicaPrismConfig(searchParams) {
     homeLayout: ['studio', 'classic', 'off'],
     telemetryModule: ['auto', 'on', 'off'],
     effortSliderModule: ['auto', 'on', 'off'],
-    language: ['zh-CN', 'zh-TW', 'yue', 'en', 'ja'],
+    language: ['auto', 'zh-CN', 'zh-TW', 'yue', 'en', 'ja'],
     codeFont: ['default', 'jetbrains', 'cascadia', 'sfmono'],
   };
   for (const [k, vals] of Object.entries(allow)) {

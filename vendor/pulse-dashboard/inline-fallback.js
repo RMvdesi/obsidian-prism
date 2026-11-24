@@ -840,7 +840,7 @@
     };
 
     function sync(cfg) {
-      if (cfg && typeof cfg.language === 'string' && cfg.language) expLang = cfg.language;
+      if (cfg && typeof cfg.language === 'string' && cfg.language && cfg.language !== 'auto') expLang = cfg.language;
       const raw = cfg && cfg.telemetryModule;
       mode = raw === 'on' || raw === 'off' ? raw : 'auto';
       if (srEl && mode !== 'off') {

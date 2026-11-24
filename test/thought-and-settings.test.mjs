@@ -323,25 +323,26 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     },
   };
 
+  const resolveTestLang = () => (state.language === 'auto' ? 'zh-CN' : state.language);
   const remountOrSync = () => {
     settingsPanel.mountOrSyncSettingsSection({
       version: '1.0.1',
-      getLang: () => state.language,
+      getLang: resolveTestLang,
       uiText: (l) => i18nLocales.getUiStrings(l),
-      isZh: () => state.language !== 'en' && state.language !== 'ja',
+      isZh: () => { const l = resolveTestLang(); return l !== 'en' && l !== 'ja'; },
       i18nCore,
       formatSettingsSummary: (l, u) => `${l}:${state.palette}:${u.optLinkBuiltin}`,
-      resolveSettingRowActiveValue: (k) => state[k],
+      resolveSettingRowActiveValue: (k) => (k === 'language' ? resolveTestLang() : state[k]),
       isSettingButtonMatch: (k, valJson, cur) => JSON.parse(valJson) === cur,
       saveSetting: (k, v) => {
-        const prevLang = state.language;
+        const prevLang = resolveTestLang();
         state[k] = v;
-        if (k === 'language' && v !== prevLang) remountOrSync();
+        if (k === 'language' && resolveTestLang() !== prevLang) remountOrSync();
       },
       saveSettingsBatch: (patch) => {
-        const prevLang = state.language;
+        const prevLang = resolveTestLang();
         Object.assign(state, patch);
-        if (patch.language && patch.language !== prevLang) remountOrSync();
+        if (patch.language && resolveTestLang() !== prevLang) remountOrSync();
       },
       getThoughtTranslateMode: () => state.thoughtTranslate,
       handledGroupClicks: new WeakSet(),

@@ -454,7 +454,7 @@
       homeLayout: 'studio',
       telemetryModule: 'on',
       effortSliderModule: 'on',
-      language: 'zh-CN',
+      language: urlParams.get('language') || 'auto',
     },
     injectBusy: false,
   };
@@ -527,7 +527,7 @@
     window.agPulseHost = {
       getMetrics: async () => buildMetricsSnapshot(),
       getLatestSnapshot: () => buildMetricsSnapshot(),
-      getPreferences: async () => ({ language: sim.prismCfg.language || 'zh-CN' }),
+      getPreferences: async () => ({ language: sim.prismCfg.language && sim.prismCfg.language !== 'auto' ? sim.prismCfg.language : (document.documentElement.getAttribute('data-ag-cs-lang') || 'en') }),
       setPreferences: async (v) => v || {},
       report: () => {},
     };

@@ -105,9 +105,9 @@
     const spec = PRISM_SETTINGS_SCHEMA[key];
     let val = typeof rawVal === 'string' && spec.aliases && hasOwn(spec.aliases, rawVal) ? spec.aliases[rawVal] : rawVal;
     if (key === 'language' && val === 'auto') {
-      const nav = typeof navigator !== 'undefined' && navigator?.language ? navigator.language : '';
-      const normFn = G.__agCsI18n?.normalizeLanguage;
-      val = typeof normFn === 'function' && nav ? normFn(nav) : /^ja\b/i.test(nav) ? 'ja' : /^en\b/i.test(nav) ? 'en' : /^zh[-_](?:HK|MO)/i.test(nav) ? 'yue' : /^zh[-_](?:TW|Hant)/i.test(nav) ? 'zh-TW' : 'zh-CN';
+      const nav = typeof navigator !== 'undefined' && (navigator?.language || navigator?.languages?.[0]) ? navigator.language || navigator.languages[0] : '';
+      const normFn = G.__agCsI18nCore?.normalizeLanguage || G.__agCsI18n?.normalizeLanguage;
+      val = typeof normFn === 'function' && nav ? normFn(nav, 'en') : /^ja\b/i.test(nav) ? 'ja' : /^zh[-_](?:HK|MO)/i.test(nav) ? 'yue' : /^zh[-_](?:TW|Hant)/i.test(nav) ? 'zh-TW' : /^zh\b/i.test(nav) ? 'zh-CN' : 'en';
     }
     if ((key === 'omniModule' || key === 'sidebarStudio' || key === 'autoUpdate' || key === 'sidebarNavFold') && typeof val === 'boolean') val = val ? 'on' : 'off';
     if (typeof spec.default === 'string' && typeof val === 'number' && Number.isFinite(val)) val = String(val);
@@ -1277,6 +1277,7 @@
           const resetBtn = mkB('ag-cs-cfg-btn', U('cfgResetBtn', 'Reset Defaults'), 'data-ag-cs-cfg-action', 'reset');
           onClk(resetBtn, () => {
             const defs = getDefaultSettingsPatch();
+            defs.language = 'auto';
             pendingCfgToast = { key: 'cfgResetOk', fallback: 'OK', tone: 'ok', exp: Date.now() + 2500 };
             applyBatch(defs);
             const curTh = getThoughtUiHandle();

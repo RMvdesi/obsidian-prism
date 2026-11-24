@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const ROOT = path.resolve(import.meta.dirname, '..');
+const cdp = require(path.join(ROOT, 'cdp.js'));
 const i18nCore = require('../i18n-core.js');
 const i18nLocales = require('../i18n-locales.js');
 const settingsPanel = require('../settings-panel.js');
@@ -533,5 +538,244 @@ test('UX-1 / OP-5 / UX-4 / UX-9 regressions: async thought config export, tech->
     assert.equal(ui.optFontSfmono, 'SF Mono / Consolas');
     assert.equal(typeof ui.swarmSplitSub, 'function');
     assert.ok(ui.swarmSplitSub(62, 38).includes('62%') && ui.swarmSplitSub(62, 38).includes('38%'));
+  }
+});
+
+test('DEFAULT_CONFIG and config.example.json default to auto, and ui-runtime resolves auto via navigator.language with en fallback', () => {
+  assert.equal(cdp.DEFAULT_CONFIG.language, 'auto');
+  assert.equal(cdp.DEFAULT_CONFIG.lang, 'auto');
+  const exCfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.example.json'), 'utf8'));
+  assert.equal(exCfg.language, 'auto');
+  assert.equal(exCfg.lang, 'auto');
+
+  const ch1Expr = cdp.buildInjectExpression(cdp.DEFAULT_CONFIG);
+  assert.ok(Buffer.byteLength(ch1Expr, 'utf8') < 685000, 'Channel 1 bundle must stay < 685,000 B');
+
+  const runRuntimeWithNav = (cfgOverride, navObj) => {
+    const createDom = () => {
+      const attrs = new WeakMap();
+      const matchSimple = (el, s) => {
+        if (!el || el.nodeType !== 1) return false;
+        let rest = s.trim();
+        const tm = /^[a-zA-Z0-9-]+/.exec(rest);
+        if (tm) {
+          if (el.tagName !== tm[0].toUpperCase()) return false;
+          rest = rest.slice(tm[0].length);
+        }
+        while (rest) {
+          if (rest[0] === '.') {
+            const m = /^\.([a-zA-Z0-9_-]+)/.exec(rest);
+            if (!m || !el.classList.contains(m[1])) return false;
+            rest = rest.slice(m[0].length);
+          } else if (rest[0] === '#') {
+            const m = /^#([a-zA-Z0-9_-]+)/.exec(rest);
+            if (!m || el.id !== m[1]) return false;
+            rest = rest.slice(m[0].length);
+          } else if (rest[0] === '[') {
+            const m = /^\[([a-zA-Z0-9_-]+)(?:=["']?([^\]"']*)["']?)?\]/.exec(rest);
+            if (!m) return false;
+            const cur = el.getAttribute(m[1]);
+            if (m[2] === undefined ? !el.hasAttribute(m[1]) : cur !== m[2]) return false;
+            rest = rest.slice(m[0].length);
+          } else return false;
+        }
+        return true;
+      };
+      const matchSel = (el, sel) =>
+        String(sel || '').split(',').some((part) => {
+          const tokens = part.trim().split(/\s+/).filter(Boolean);
+          if (!tokens.length || !matchSimple(el, tokens[tokens.length - 1])) return false;
+          let cur = el.parentElement;
+          for (let i = tokens.length - 2; i >= 0; i--) {
+            while (cur && !matchSimple(cur, tokens[i])) cur = cur.parentElement;
+            if (!cur) return false;
+            cur = cur.parentElement;
+          }
+          return true;
+        });
+      class N {
+        constructor(t, tag = '') {
+          this.nodeType = t;
+          this.tagName = tag.toUpperCase();
+          this.childNodes = [];
+          this.parentNode = null;
+          this.dataset = {};
+          this.clientWidth = 900;
+          this.clientHeight = 700;
+          this.width = 0;
+          this.height = 0;
+          this.style = { _m: new Map(), setProperty: (k, v) => this.style._m.set(k, String(v)), getPropertyValue: (k) => this.style._m.get(k) || '', removeProperty: (k) => this.style._m.delete(k) };
+          const cs = new Set();
+          this.classList = {
+            add: (...a) => a.forEach((c) => { if (c) cs.add(c); attrs.get(this).set('class', [...cs].join(' ')); }),
+            remove: (...a) => a.forEach((c) => { cs.delete(c); attrs.get(this).set('class', [...cs].join(' ')); }),
+            contains: (c) => cs.has(c),
+            toggle: (c, f) => { const on = f === undefined ? !cs.has(c) : Boolean(f); if (on) cs.add(c); else cs.delete(c); attrs.get(this).set('class', [...cs].join(' ')); return on; },
+          };
+          this._cs = cs;
+          attrs.set(this, new Map());
+        }
+        get parentElement() { return this.parentNode && this.parentNode.nodeType === 1 ? this.parentNode : null; }
+        get children() { return this.childNodes.filter((c) => c.nodeType === 1); }
+        get firstChild() { return this.childNodes[0] || null; }
+        get firstElementChild() { return this.children[0] || null; }
+        get isConnected() { let c = this; while (c) { if (c === doc.documentElement) return true; c = c.parentNode; } return false; }
+        get className() { return this.getAttribute('class') || ''; }
+        set className(v) { this._cs.clear(); String(v || '').split(/\s+/).filter(Boolean).forEach((c) => this._cs.add(c)); attrs.get(this).set('class', [...this._cs].join(' ')); }
+        get id() { return this.getAttribute('id') || ''; }
+        set id(v) { this.setAttribute('id', v); }
+        get textContent() { return this.nodeType === 3 ? this.nodeValue || '' : this.childNodes.map((c) => c.textContent).join(''); }
+        set textContent(v) { if (this.nodeType === 3) { this.nodeValue = String(v ?? ''); return; } this.childNodes = []; if (v) this.appendChild(doc.createTextNode(v)); }
+        setAttribute(k, v) { attrs.get(this).set(k, String(v)); if (k === 'class') this.className = v; }
+        getAttribute(k) { return attrs.get(this).has(k) ? attrs.get(this).get(k) : null; }
+        hasAttribute(k) { return attrs.get(this).has(k); }
+        removeAttribute(k) { attrs.get(this).delete(k); }
+        appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.childNodes.push(c); return c; }
+        insertBefore(c, r) { if (!r) return this.appendChild(c); if (c.parentNode) c.parentNode.removeChild(c); const i = this.childNodes.indexOf(r); c.parentNode = this; if (i < 0) this.childNodes.push(c); else this.childNodes.splice(i, 0, c); return c; }
+        removeChild(c) { const i = this.childNodes.indexOf(c); if (i >= 0) { this.childNodes.splice(i, 1); c.parentNode = null; } return c; }
+        remove() { if (this.parentNode) this.parentNode.removeChild(this); }
+        contains(o) { let c = o; while (c) { if (c === this) return true; c = c.parentNode; } return false; }
+        addEventListener() {}
+        removeEventListener() {}
+        matches(s) { return matchSel(this, s); }
+        closest(s) { let c = this; while (c && c.nodeType === 1) { if (matchSel(c, s)) return c; c = c.parentElement; } return null; }
+        querySelectorAll(s) { const out = []; const w = (n) => { for (const c of n.childNodes) if (c.nodeType === 1) { if (matchSel(c, s)) out.push(c); w(c); } }; w(this); return out; }
+        querySelector(s) { return this.querySelectorAll(s)[0] || null; }
+        getBoundingClientRect() { return { left: 0, top: 0, width: 400, height: 80, right: 400, bottom: 80 }; }
+        getContext() { return null; }
+      }
+      const doc = {
+        nodeType: 9,
+        readyState: 'complete',
+        hidden: false,
+        createElement: (t) => new N(1, t),
+        createTextNode: (t) => { const n = new N(3); n.nodeValue = String(t ?? ''); return n; },
+        getElementById: (id) => doc.documentElement.querySelector('#' + id),
+        querySelector: (s) => doc.documentElement.querySelector(s),
+        querySelectorAll: (s) => doc.documentElement.querySelectorAll(s),
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      doc.documentElement = doc.createElement('html');
+      doc.head = doc.createElement('head');
+      doc.body = doc.createElement('body');
+      doc.documentElement.appendChild(doc.head);
+      doc.documentElement.appendChild(doc.body);
+      return doc;
+    };
+
+    const doc = createDom();
+    const html = doc.documentElement;
+    const home = doc.createElement('div');
+    home.className = 'agy-home';
+    const greeting = doc.createElement('div');
+    greeting.setAttribute('data-testid', 'home-greeting');
+    const h1 = doc.createElement('h1');
+    h1.textContent = 'Welcome back';
+    greeting.appendChild(h1);
+    home.appendChild(greeting);
+    const dlg = doc.createElement('div');
+    dlg.setAttribute('role', 'dialog');
+    const pane = doc.createElement('div');
+    pane.className = 'p-6';
+    const h2 = doc.createElement('h2');
+    h2.textContent = 'Appearance';
+    const anchor = doc.createElement('div');
+    anchor.className = 'space-y-2';
+    pane.appendChild(h2);
+    pane.appendChild(anchor);
+    dlg.appendChild(pane);
+    doc.body.appendChild(home);
+    doc.body.appendChild(dlg);
+
+    const timers = new Set();
+    const store = new Map();
+    const sandbox = {
+      window: null,
+      globalThis: null,
+      document: doc,
+      navigator: navObj,
+      location: { pathname: '/' },
+      innerWidth: 1200,
+      innerHeight: 800,
+      devicePixelRatio: 1,
+      addEventListener() {},
+      removeEventListener() {},
+      localStorage: {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k),
+      },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1', getPropertyValue: () => '' }),
+      matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+      MutationObserver: class { observe() {} disconnect() {} takeRecords() { return []; } },
+      ResizeObserver: class { observe() {} disconnect() {} },
+      HTMLElement: Object,
+      Element: Object,
+      Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 },
+      requestAnimationFrame: (fn) => { const id = setTimeout(() => fn(Date.now()), 4); timers.add(id); return id; },
+      cancelAnimationFrame: (id) => { timers.delete(id); clearTimeout(id); },
+      setTimeout: (fn, ms) => { const id = setTimeout(fn, ms); timers.add(id); return id; },
+      clearTimeout: (id) => { timers.delete(id); clearTimeout(id); },
+      setInterval: () => 1,
+      clearInterval: () => {},
+      performance: { now: () => Date.now() },
+      Math, Date, JSON, Map, Set, Array, Object, String, Number, Boolean, Promise, Uint8Array, Float32Array, Intl,
+    };
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    doc.defaultView = sandbox;
+
+    const expr = cdp.buildInjectExpression({ ...cdp.DEFAULT_CONFIG, ...(cfgOverride || {}) });
+    const res = vm.runInNewContext(expr, sandbox);
+    assert.equal(res.status, 'ok');
+    const sec = doc.getElementById('ag-cs-settings-sec');
+    sec?.__ensureFoldBody?.();
+    const langAttr = html.getAttribute('data-ag-cs-lang');
+    const hasCjkAttr = html.hasAttribute('data-ag-cs-cjk');
+    const langTitle = sec?.querySelector('[data-ag-cs-row="language"] [data-k="t"]')?.textContent || '';
+    const overviewTab = home.querySelector('.ag-cs-home-tab[data-tab="overview"]')?.textContent || '';
+    const greetingText = h1.textContent;
+    const secText = sec?.textContent || '';
+    sandbox.__agPrism?.destroy?.();
+    for (const id of timers) clearTimeout(id);
+    return { langAttr, hasCjkAttr, langTitle, overviewTab, greetingText, secText };
+  };
+
+  // English Windows (en-US primary, zh-Hans-CN secondary) -> English UI
+  const enRes = runRuntimeWithNav(null, { language: 'en-US', languages: ['en-US', 'zh-Hans-CN'] });
+  assert.equal(enRes.langAttr, 'en');
+  assert.equal(enRes.hasCjkAttr, false);
+  assert.equal(enRes.langTitle, 'UI Language');
+  assert.equal(enRes.overviewTab, 'Overview');
+  assert.equal(enRes.greetingText, "What's up next?");
+
+  // Non-CJK unsupported locale (fr-FR) -> falls back to English, NOT zh-CN
+  const frRes = runRuntimeWithNav(null, { language: 'fr-FR' });
+  assert.equal(frRes.langAttr, 'en');
+  assert.equal(frRes.hasCjkAttr, false);
+  assert.equal(frRes.langTitle, 'UI Language');
+
+  // zh-CN, ja-JP, zh-HK
+  assert.equal(runRuntimeWithNav(null, { language: 'zh-CN' }).langAttr, 'zh-CN');
+  assert.equal(runRuntimeWithNav(null, { language: 'ja-JP' }).langAttr, 'ja');
+  assert.equal(runRuntimeWithNav(null, { language: 'zh-HK' }).langAttr, 'yue');
+
+  // Explicit user overrides ignore navigator.language
+  assert.equal(runRuntimeWithNav({ language: 'zh-CN', lang: 'zh-CN' }, { language: 'en-US' }).langAttr, 'zh-CN');
+  assert.equal(runRuntimeWithNav({ language: 'en', lang: 'en' }, { language: 'zh-CN' }).langAttr, 'en');
+
+  // settingsPanel.validateImportedConfigJson({ language: 'auto' }) honors navigator.language and falls back to 'en'
+  const origNavDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'en-US' } });
+    assert.equal(settingsPanel.validateImportedConfigJson('{"language":"auto"}').settings.language, 'en');
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'fr-FR' } });
+    assert.equal(settingsPanel.validateImportedConfigJson('{"language":"auto"}').settings.language, 'en');
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'zh-CN' } });
+    assert.equal(settingsPanel.validateImportedConfigJson('{"language":"auto"}').settings.language, 'zh-CN');
+  } finally {
+    if (origNavDesc) Object.defineProperty(globalThis, 'navigator', origNavDesc);
+    else delete globalThis.navigator;
   }
 });

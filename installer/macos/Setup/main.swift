@@ -1540,7 +1540,7 @@ enum InstallerCore {
             currentTargetPath = (installDir as NSString).appendingPathComponent("manifest.json")
             let manifest = try PluginManifest.load(baseDir: installDir)
             let activeCfg = CdpHelper.readConfig(baseDir: installDir, manifest: manifest)
-            let lang = activeCfg["language"]?.stringValue ?? "zh-CN"
+            let lang = activeCfg["language"]?.stringValue ?? "auto"
             let palette = activeCfg["palette"]?.stringValue ?? "obsidian"
             let motion = activeCfg["motionLevel"]?.stringValue ?? "standard"
             let omni = activeCfg["omniModule"]?.stringValue ?? "on"
