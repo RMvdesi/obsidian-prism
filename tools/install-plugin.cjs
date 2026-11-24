@@ -1579,6 +1579,7 @@ async function uninstallPlugin(opts = {}) {
           "obsidian-prism-sidebar.json",
           "obsidian-prism-sidebar.json.lock",
           "obsidian-prism-wallpaper.json",
+          "obsidian-prism-suggester.json",
         ];
         for (const name of exactFiles) {
           const fp = path.join(hostConfigDir, name);

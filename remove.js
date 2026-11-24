@@ -27,6 +27,7 @@ const PURGE_EXACT_FILES = [
   'obsidian-prism-sidebar.json',
   'obsidian-prism-sidebar.json.lock',
   'obsidian-prism-wallpaper.json',
+  'obsidian-prism-suggester.json',
 ];
 
 function parseCliArgs(argv = process.argv.slice(2)) {

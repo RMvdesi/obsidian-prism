@@ -38,6 +38,7 @@ export const USAGE_BINDING = '__agPrismUsageCall';
 export const INLINE_DIFF_BINDING = '__agPrismInlineDiffCall';
 export const SIDEBAR_BINDING = '__agPrismSidebarCall';
 export const WALLPAPER_BINDING = '__agPrismWallpaperCall';
+export const SUGGESTER_BINDING = '__agPrismSuggestCall';
 export { OmniServer, OMNI_BINDING };
 const WALLPAPER_MAX_PAYLOAD_BYTES = 131072;
 const WALLPAPER_ALLOWED_ACTIONS = new Set([
@@ -47,6 +48,16 @@ const WALLPAPER_ALLOWED_ACTIONS = new Set([
   'clear-media',
   'get-media-blob',
   'status',
+]);
+const SUGGESTER_MAX_PAYLOAD_BYTES = 131072;
+const SUGGESTER_ALLOWED_ACTIONS = new Set([
+  'get-config',
+  'save-config',
+  'fetch-models',
+  'test-connection',
+  'suggest',
+  'cancel',
+  'clear-cache',
 ]);
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RPC_ROUTE_STORAGE = new AsyncLocalStorage();
@@ -2007,6 +2018,7 @@ export class PrismDaemon {
     metricsProvider = null,
     thoughtService = null,
     wallpaperService = null,
+    suggesterService = null,
     omniExecHooks = null,
     sidebarService = null,
     relaunchHooks = null,
@@ -2069,6 +2081,9 @@ export class PrismDaemon {
     this.wallpaperExpr = '';
     this.wallpaperCodeHash = '';
     this._wallpaperHashSource = '';
+    this.suggesterExpr = '';
+    this.suggesterCodeHash = '';
+    this._suggesterHashSource = '';
     this.codeHash = '';
     this.ownerToken = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     this.pidFile = path.join(this.rootDir, '.daemon.pid');
@@ -2095,6 +2110,9 @@ export class PrismDaemon {
     this._lazyWallpaperService = wallpaperService;
     this._wallpaperServicePromise = null;
     this._wallpaperStopped = false;
+    this._lazySuggesterService = suggesterService;
+    this._suggesterServicePromise = null;
+    this._suggesterStopped = false;
     this.omniServer = null;
     this._omniServerPromise = null;
     this._omniExecHooks = omniExecHooks;
@@ -3119,6 +3137,7 @@ export class PrismDaemon {
     this._buildThoughtExprForConfig(cfg, cacheOpts);
     this._buildInlineDiffExprForConfig(cfg, cacheOpts);
     this._buildWallpaperExprForConfig(cfg, cacheOpts);
+    this._buildSuggesterExprForConfig(cfg);
 
     if (bundleCachePath) {
       if (deferDiskCacheWrite) {
@@ -3418,6 +3437,60 @@ export class PrismDaemon {
     );
   }
 
+  _hasSuggesterClientFile() {
+    try {
+      return fs.existsSync(path.join(this.rootDir, 'vendor', 'prompt-suggester', 'suggester-client.js'));
+    } catch {
+      return false;
+    }
+  }
+
+  _extractSuggesterCodeHash(expr) {
+    const str = typeof expr === 'string' ? expr : '';
+    if (!str) return '';
+    const m = /const targetHash = "([^"]+)"/.exec(str);
+    if (m && m[1]) return m[1];
+    return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
+  }
+
+  _setSuggesterExpr(expr) {
+    const next = typeof expr === 'string' ? expr : '';
+    this.suggesterExpr = next;
+    this._suggesterHashSource = next;
+    this.suggesterCodeHash = this._extractSuggesterCodeHash(next);
+    return next;
+  }
+
+  _buildSuggesterExprForConfig(cfgOverride = null) {
+    const cfg = cfgOverride || (typeof this.cdp?.readConfig === 'function' ? this.cdp.readConfig() : null);
+    if (typeof this.cdp?.buildSuggesterExpression !== 'function') {
+      return this._setSuggesterExpr('');
+    }
+    const expr = this.cdp.buildSuggesterExpression(cfg);
+    return this._setSuggesterExpr(expr);
+  }
+
+  _getSuggesterExprHash(expr = this.suggesterExpr) {
+    const str = typeof expr === 'string' ? expr : '';
+    if (!str) return '';
+    if (str === this._suggesterHashSource && this.suggesterCodeHash) {
+      return this.suggesterCodeHash;
+    }
+    const hash = this._extractSuggesterCodeHash(str);
+    if (str === this.suggesterExpr) {
+      this._suggesterHashSource = str;
+      this.suggesterCodeHash = hash;
+    }
+    return hash;
+  }
+
+  _getSuggesterCleanupExpression() {
+    return (
+      this.cdp?.SUGGESTER_REMOVE_EXPRESSION ||
+      "(() => { try { window.__agPrismSuggester?.destroy?.(); } catch {} try { document.getElementById('ag-prism-suggester-css')?.remove(); } catch {} try { document.querySelectorAll('[data-testid=\"prism-suggest-trigger\"], [data-testid=\"prism-ghost-overlay\"]').forEach((n) => n.remove()); } catch {} try { document.documentElement?.removeAttribute?.('data-ag-prism-suggester'); } catch {} try { delete window.__agPrismSuggester; } catch {} try { delete globalThis.__agPrismSuggester; } catch {} try { delete window.__prismMountSuggesterUi; } catch {} try { delete globalThis.__prismMountSuggesterUi; } catch {} try { delete window.__agPrismSuggesterResolve; } catch {} return { ok: true, status: 'off' }; })()"
+    );
+  }
+
   _isTelemetryDisabled(cfgOverride = null) {
     try {
       const cfg = cfgOverride || this.cdp?.readConfig?.();
@@ -3690,6 +3763,80 @@ export class PrismDaemon {
       return await this._wallpaperServicePromise;
     } finally {
       this._wallpaperServicePromise = null;
+    }
+  }
+
+  async _ensureSuggesterBinding(entry, timeoutMs = 2600, force = false) {
+    if (!entry || entry.session.closed) return false;
+    if (!force && entry.suggesterBindingAdded) return true;
+    const bindingName = this.cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING;
+    const ok = await entry.session
+      .send('Runtime.addBinding', { name: bindingName }, timeoutMs)
+      .then(() => true)
+      .catch(() => false);
+    if (ok) entry.suggesterBindingAdded = true;
+    return ok;
+  }
+
+  async _removeSuggesterBinding(entry, timeoutMs = 2000) {
+    if (!entry || entry.session.closed) return;
+    const bindingName = this.cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING;
+    await entry.session
+      .send('Runtime.removeBinding', { name: bindingName }, timeoutMs)
+      .catch(() => {});
+    entry.suggesterBindingAdded = false;
+  }
+
+  async _recordSuggesterEvalOutcome(entry, evalRes, suggesterHash) {
+    const isSkipped = Boolean(
+      evalRes && typeof evalRes.status === 'string' && evalRes.status.startsWith('skipped-')
+    );
+    if (evalRes && evalRes.ok) {
+      entry.suggesterMounted = true;
+      entry.suggesterSkipped = false;
+      entry.lastSuggesterHash = suggesterHash;
+    } else if (isSkipped) {
+      entry.suggesterMounted = false;
+      entry.suggesterSkipped = true;
+      entry.lastSuggesterHash = suggesterHash;
+      if (evalRes.status === 'skipped-non-host') {
+        await this._removeSuggesterBinding(entry);
+      }
+    } else {
+      entry.suggesterMounted = false;
+      entry.suggesterSkipped = false;
+      entry.lastSuggesterHash = '';
+    }
+  }
+
+  async ensureSuggesterService() {
+    if (this._suggesterStopped) return null;
+    if (this._lazySuggesterService) return this._lazySuggesterService;
+    if (this._suggesterServicePromise) return this._suggesterServicePromise;
+    this._suggesterServicePromise = (async () => {
+      const svcPath = path.join(this.rootDir, 'vendor', 'prompt-suggester', 'suggester-service.mjs');
+      if (!fs.existsSync(svcPath)) {
+        return null;
+      }
+      const mod = await import(pathToFileURL(svcPath).href);
+      const factory = mod?.createPromptSuggesterService || mod?.default;
+      if (this._suggesterStopped || typeof factory !== 'function') return null;
+      const svc = factory({
+        getTranslatorService: () => this.ensureThoughtService(),
+      });
+      if (this._suggesterStopped) {
+        try {
+          if (typeof svc?.dispose === 'function') await svc.dispose();
+        } catch {}
+        return null;
+      }
+      this._lazySuggesterService = svc;
+      return svc;
+    })();
+    try {
+      return await this._suggesterServicePromise;
+    } finally {
+      this._suggesterServicePromise = null;
     }
   }
 
@@ -4968,6 +5115,7 @@ export class PrismDaemon {
         let thoughtSnap = this.thoughtExpr;
         let inlineDiffSnap = this.inlineDiffExpr;
         let wallpaperSnap = this.wallpaperExpr;
+        let suggesterSnap = this.suggesterExpr;
         const currentCfg = typeof this.cdp.readConfig === 'function' ? this.cdp.readConfig() : {};
         if (currentCfg?.telemetryModule === 'off') {
           this._releaseIdleTelemetry(true);
@@ -4993,6 +5141,10 @@ export class PrismDaemon {
           wallpaperSnap = this._buildWallpaperExprForConfig(currentCfg);
         }
         const wallpaperHash = wallpaperSnap ? this._getWallpaperExprHash(wallpaperSnap) : '';
+        if (!suggesterSnap && typeof this.cdp.buildSuggesterExpression === 'function') {
+          suggesterSnap = this._buildSuggesterExprForConfig(currentCfg);
+        }
+        const suggesterHash = suggesterSnap ? this._getSuggesterExprHash(suggesterSnap) : '';
         const canFastRefresh = typeof this.cdp.buildConfigRefreshExpression === 'function';
         const baseRefreshExpr = canFastRefresh ? this.cdp.buildConfigRefreshExpression() : null;
         if (activeItems.length === 0) continue;
@@ -5143,6 +5295,26 @@ export class PrismDaemon {
                 entry.wallpaperSkipped = false;
                 entry.lastWallpaperHash = '';
               }
+              if (abortIfStale()) return;
+              const hadSuggester = Boolean(entry.suggesterScriptId || entry.suggesterMounted);
+              const suggesterChanged = Boolean(
+                suggesterSnap &&
+                  !entry.suggesterSkipped &&
+                  (entry.lastSuggesterHash !== suggesterHash || !entry.suggesterScriptId || !entry.suggesterMounted)
+              );
+              if (suggesterSnap) {
+                if (!skippedStale && !entry.session.closed && !entry.suggesterSkipped && (!refreshedFast || suggesterChanged)) {
+                  await this._ensureSuggesterBinding(entry);
+                  const evalRes = await entry.session.evaluate(suggesterSnap).catch(() => null);
+                  await this._recordSuggesterEvalOutcome(entry, evalRes, suggesterHash);
+                }
+              } else if (hadSuggester && !skippedStale && !entry.session.closed) {
+                await this._removeSuggesterBinding(entry);
+                await entry.session.evaluate(this._getSuggesterCleanupExpression()).catch(() => {});
+                entry.suggesterMounted = false;
+                entry.suggesterSkipped = false;
+                entry.lastSuggesterHash = '';
+              }
 
               // Coalesce persistent NewDocument script replacement if a newer mutation is already queued!
               if (this._broadcastPending || this._configSeq !== snapSeq || entry.session.closed) {
@@ -5289,6 +5461,29 @@ export class PrismDaemon {
                   entry.lastWallpaperScriptHash = wallpaperHash;
                 }
               }
+              if (!suggesterSnap) {
+                if (entry.suggesterScriptId) {
+                  await entry.session
+                    .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId })
+                    .catch(() => {});
+                  entry.suggesterScriptId = null;
+                }
+                entry.lastSuggesterScriptHash = '';
+              } else if ((entry.lastSuggesterScriptHash !== suggesterHash || !entry.suggesterScriptId) && !entry.session.closed) {
+                if (entry.suggesterScriptId) {
+                  await entry.session
+                    .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId })
+                    .catch(() => {});
+                  entry.suggesterScriptId = null;
+                }
+                const suggesterAdd = await entry.session
+                  .send('Page.addScriptToEvaluateOnNewDocument', { source: suggesterSnap })
+                  .catch(() => null);
+                if (suggesterAdd && suggesterAdd.identifier) {
+                  entry.suggesterScriptId = suggesterAdd.identifier;
+                  entry.lastSuggesterScriptHash = suggesterHash;
+                }
+              }
             })
           )
         );
@@ -5407,6 +5602,9 @@ export class PrismDaemon {
           this._buildWallpaperExprForConfig(curCfg, chOpts);
           if (chOpts && this.wallpaperExpr) usedChCache = true;
         }
+        if (!this.suggesterExpr && typeof this.cdp.buildSuggesterExpression === 'function') {
+          this._buildSuggesterExprForConfig(curCfg);
+        }
         if (usedChCache && this.running) {
           this._scheduleBundleCacheFlush();
         }
@@ -5470,9 +5668,16 @@ export class PrismDaemon {
             .catch(() => {});
           entry.wallpaperScriptId = null;
         }
+        if (entry.suggesterScriptId) {
+          await entry.session
+            .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId })
+            .catch(() => {});
+          entry.suggesterScriptId = null;
+        }
         await this._removeSidebarBinding(entry);
         await this._removeInlineDiffBinding(entry);
         await this._removeWallpaperBinding(entry);
+        await this._removeSuggesterBinding(entry);
         entry.sidebarMounted = false;
         entry.hostI18nMounted = false;
         entry.lastHostI18nSig = '';
@@ -5488,6 +5693,10 @@ export class PrismDaemon {
         entry.wallpaperSkipped = true;
         entry.lastWallpaperHash = '';
         entry.lastWallpaperScriptHash = '';
+        entry.suggesterMounted = false;
+        entry.suggesterSkipped = true;
+        entry.lastSuggesterHash = '';
+        entry.lastSuggesterScriptHash = '';
         return mainRes;
       }
 
@@ -5705,6 +5914,43 @@ export class PrismDaemon {
         entry.wallpaperSkipped = false;
         entry.lastWallpaperHash = '';
         entry.lastWallpaperScriptHash = '';
+      }
+      const hadSuggesterBefore = Boolean(entry.suggesterScriptId || entry.suggesterMounted);
+      if (entry.suggesterScriptId) {
+        await entry.session
+          .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId })
+          .catch(() => {});
+        entry.suggesterScriptId = null;
+      }
+      const suggesterCfgNow = getCurrentCfg();
+      if (!this.suggesterExpr && typeof this.cdp.buildSuggesterExpression === 'function') {
+        this._buildSuggesterExprForConfig(suggesterCfgNow);
+      }
+      if (this.suggesterExpr) {
+        await this._ensureSuggesterBinding(entry);
+        const suggesterAdd = await entry.session
+          .send('Page.addScriptToEvaluateOnNewDocument', { source: this.suggesterExpr })
+          .catch(() => null);
+        if (suggesterAdd && suggesterAdd.identifier) {
+          entry.suggesterScriptId = suggesterAdd.identifier;
+        }
+        const evalRes = await entry.session.evaluate(this.suggesterExpr).catch(() => null);
+        const suggesterHash = this._getSuggesterExprHash(this.suggesterExpr);
+        await this._recordSuggesterEvalOutcome(entry, evalRes, suggesterHash);
+        if (suggesterAdd && suggesterAdd.identifier) {
+          entry.lastSuggesterScriptHash = suggesterHash;
+        } else {
+          entry.lastSuggesterScriptHash = '';
+        }
+      } else {
+        if (hadSuggesterBefore) {
+          await this._removeSuggesterBinding(entry);
+          await entry.session.evaluate(this._getSuggesterCleanupExpression()).catch(() => null);
+        }
+        entry.suggesterMounted = false;
+        entry.suggesterSkipped = false;
+        entry.lastSuggesterHash = '';
+        entry.lastSuggesterScriptHash = '';
       }
       entry.lastVerifyAt = Date.now();
       entry.healthyStreak = 1;
@@ -6320,6 +6566,119 @@ export class PrismDaemon {
       }
       return result;
     }
+
+    const activeSuggesterBinding = this.cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING;
+    if (name === SUGGESTER_BINDING || name === activeSuggesterBinding) {
+      const context = typeof executionContextId === 'number' ? entry.contextFrames?.get(executionContextId) : undefined;
+      const expectedDocGen = typeof entry.sidebarDocument === 'number' ? entry.sidebarDocument : null;
+      const hasTrackedFrames = Boolean(
+        entry.hasFrameTree || entry.mainFrameId || (entry.contextFrames instanceof Map && entry.contextFrames.size > 0)
+      );
+      const isCurrentContext = () => {
+        if (this._suggesterStopped || !entry || entry.session?.closed) return false;
+        if (entry.sidebarHostVerified !== true) return false;
+        if (!this._isTrustedMainFrameBindingCall(entry, executionContextId)) return false;
+        if (hasTrackedFrames) {
+          if (typeof executionContextId !== 'number' || !context) return false;
+          if (context.isDefault !== true || (context.type && context.type !== 'default')) return false;
+          if (!entry.mainFrameId || context.frameId !== entry.mainFrameId) return false;
+          if (!(entry.contextFrames instanceof Map) || entry.contextFrames.get(executionContextId) !== context) {
+            return false;
+          }
+          if (typeof entry.sidebarDocument === 'number') {
+            if (typeof entry.sidebarVerifiedDocument === 'number' && entry.sidebarVerifiedDocument !== entry.sidebarDocument) {
+              return false;
+            }
+            if (expectedDocGen !== null && entry.sidebarDocument !== expectedDocGen) {
+              return false;
+            }
+            if (typeof context.docGen === 'number' && context.docGen !== entry.sidebarDocument) {
+              return false;
+            }
+          }
+          if (typeof entry.sidebarHostContextId === 'number' && entry.sidebarHostContextId !== executionContextId) {
+            return false;
+          }
+        } else {
+          if (!isAutomatedTestRuntime()) return false;
+        }
+        return true;
+      };
+      if (!isCurrentContext()) return;
+      if (typeof payload !== 'string') return;
+      if (payload.length > SUGGESTER_MAX_PAYLOAD_BYTES) return;
+      if (Buffer.byteLength(payload, 'utf8') > SUGGESTER_MAX_PAYLOAD_BYTES) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+      const reqId = Number.isSafeInteger(parsed.id) && parsed.id >= 0 ? parsed.id : null;
+      if (reqId === null) return;
+      const action = typeof parsed.action === 'string' ? parsed.action.trim() : '';
+      if (!SUGGESTER_ALLOWED_ACTIONS.has(action)) {
+        const errRes = { ok: false, error: `Unknown suggester action: ${action || 'empty'}` };
+        if (isCurrentContext()) {
+          const safeId = Number(reqId) | 0;
+          const resolveExpr = `(() => { const r = ${serializeJsonForEval(errRes)}; if (typeof window.__agPrismSuggesterResolve === 'function') window.__agPrismSuggesterResolve(${safeId}, r); else if (window.__agPrismSuggesterBridge && typeof window.__agPrismSuggesterBridge.resolve === 'function') window.__agPrismSuggesterBridge.resolve(${safeId}, r); })()`;
+          const evalParams = { expression: resolveExpr, returnByValue: true };
+          if (typeof executionContextId === 'number') evalParams.contextId = executionContextId;
+          await entry.session.send('Runtime.evaluate', evalParams).catch(() => {});
+        }
+        return errRes;
+      }
+      const actionPayload =
+        parsed.payload && typeof parsed.payload === 'object' && !Array.isArray(parsed.payload)
+          ? parsed.payload
+          : parsed.input && typeof parsed.input === 'object' && !Array.isArray(parsed.input)
+          ? parsed.input
+          : {};
+
+      let result;
+      try {
+        const svc = await this.ensureSuggesterService();
+        if (!svc || typeof svc.handleAction !== 'function') {
+          result = { ok: false, error: 'suggester_service_unavailable' };
+        } else {
+          result = await svc.handleAction(action, actionPayload);
+        }
+      } catch (err) {
+        result = { ok: false, error: sanitizeSecretText(err?.message || err) };
+      }
+
+      if (isCurrentContext()) {
+        const safeId = Number(reqId) | 0;
+        const safeJson = serializeJsonForEval(result);
+        const payloadExpr = safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+        const resolveExpr = `(() => { const r = ${payloadExpr}; if (typeof window.__agPrismSuggesterResolve === 'function') window.__agPrismSuggesterResolve(${safeId}, r); else if (window.__agPrismSuggesterBridge && typeof window.__agPrismSuggesterBridge.resolve === 'function') window.__agPrismSuggesterBridge.resolve(${safeId}, r); })()`;
+        const evalParams = { expression: resolveExpr, returnByValue: true };
+        if (typeof executionContextId === 'number') evalParams.contextId = executionContextId;
+        await entry.session.send('Runtime.evaluate', evalParams).catch(() => {});
+      }
+
+      if (result && result.ok && action === 'save-config' && result.config && typeof result.config === 'object') {
+        const syncExpr = `window.__agPrismSuggester?.applyConfig?.(${serializeJsonForEval(result.config)}, ${serializeJsonForEval(result.backend || null)})`;
+        for (const other of this.sessions.values()) {
+          if (!other || other === entry || other.session?.closed || other.suggesterSkipped) continue;
+          if (other.sidebarHostVerified !== true || typeof other.sidebarHostContextId !== 'number') continue;
+          void other.session
+            .send(
+              'Runtime.evaluate',
+              {
+                expression: syncExpr,
+                contextId: other.sidebarHostContextId,
+                returnByValue: true,
+                awaitPromise: false,
+              },
+              2000
+            )
+            .catch(() => {});
+        }
+      }
+      return result;
+    }
   }
 
   async attachTarget(target) {
@@ -6361,6 +6720,12 @@ export class PrismDaemon {
       wallpaperSkipped: false,
       lastWallpaperHash: '',
       lastWallpaperScriptHash: '',
+      suggesterScriptId: null,
+      suggesterBindingAdded: false,
+      suggesterMounted: false,
+      suggesterSkipped: false,
+      lastSuggesterHash: '',
+      lastSuggesterScriptHash: '',
       sidebarHostVerified: false,
       sidebarVerifiedDocument: -1,
       sidebarHostContextId: null,
@@ -6584,6 +6949,10 @@ export class PrismDaemon {
     const wallpaperNeedsSync = wallpaperAvailable
       ? !entry.wallpaperSkipped && (!entry.wallpaperScriptId || !entry.wallpaperMounted)
       : Boolean(entry.wallpaperScriptId || entry.wallpaperMounted);
+    const suggesterAvailable = Boolean(this.suggesterExpr || this._hasSuggesterClientFile());
+    const suggesterNeedsSync = suggesterAvailable
+      ? !entry.suggesterSkipped && (!entry.suggesterScriptId || !entry.suggesterMounted)
+      : Boolean(entry.suggesterScriptId || entry.suggesterMounted);
     const now = Date.now();
     const hashMatches = !this.codeHash || entry.lastVerifiedCodeHash === this.codeHash;
     if (
@@ -6592,6 +6961,7 @@ export class PrismDaemon {
       !thoughtNeedsSync &&
       !inlineDiffNeedsSync &&
       !wallpaperNeedsSync &&
+      !suggesterNeedsSync &&
       !entry.verifyDirty &&
       hashMatches &&
       entry.lastVerifyAt > 0 &&
@@ -6670,6 +7040,8 @@ export class PrismDaemon {
           hasInlineDiff: Boolean(window.__agPrismInlineDiff && !window.__agPrismInlineDiff.getDebugState?.()?.destroyed),
           hasWallpaper: Boolean(window.__agPrismWallpaper && !window.__agPrismWallpaper.getDebugState?.()?.destroyed),
           hasWallpaperUi: Boolean(typeof window.__prismMountWallpaperUi === 'function'),
+          hasSuggester: Boolean(window.__agPrismSuggester && !window.__agPrismSuggester.getDebugState?.()?.destroyed),
+          hasSuggesterUi: Boolean(typeof window.__prismMountSuggesterUi === 'function'),
           codeHash: (api && api.codeHash) || '',
           hasLegacyCss: Boolean(document.getElementById('ag-claude-style-css')),
           needsDashboardSync: Boolean(api && telMode !== 'off' && !isHome && hasModelBtn && !hasPulseBar),
@@ -6722,6 +7094,12 @@ export class PrismDaemon {
         (!probe.hasWallpaper || !probe.hasWallpaperUi || !entry.wallpaperScriptId || !entry.wallpaperMounted);
       const needsWallpaperCleanup =
         !wallpaperAvailable && Boolean(probe.hasWallpaper || probe.hasWallpaperUi || entry.wallpaperScriptId || entry.wallpaperMounted);
+      const needsSuggesterHeal =
+        suggesterAvailable &&
+        !entry.suggesterSkipped &&
+        (probe.hasSuggester === false || probe.hasSuggesterUi === false || !entry.suggesterScriptId || !entry.suggesterMounted);
+      const needsSuggesterCleanup =
+        !suggesterAvailable && Boolean(probe.hasSuggester || probe.hasSuggesterUi || entry.suggesterScriptId || entry.suggesterMounted);
       let healed = false;
       if (
         (entry.sidebarHostVerified === false && probe.isHostDom) ||
@@ -6784,9 +7162,14 @@ export class PrismDaemon {
             await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.wallpaperScriptId }).catch(() => {});
             entry.wallpaperScriptId = null;
           }
+          if (entry.suggesterScriptId) {
+            await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId }).catch(() => {});
+            entry.suggesterScriptId = null;
+          }
           await this._removeSidebarBinding(entry);
           await this._removeInlineDiffBinding(entry);
           await this._removeWallpaperBinding(entry);
+          await this._removeSuggesterBinding(entry);
           entry.sidebarMounted = false;
           entry.hostI18nMounted = false;
           entry.lastHostI18nSig = '';
@@ -6802,6 +7185,10 @@ export class PrismDaemon {
           entry.wallpaperSkipped = true;
           entry.lastWallpaperHash = '';
           entry.lastWallpaperScriptHash = '';
+          entry.suggesterMounted = false;
+          entry.suggesterSkipped = true;
+          entry.lastSuggesterHash = '';
+          entry.lastSuggesterScriptHash = '';
           this._markTargetIgnored({ id: entry.pageId, webSocketDebuggerUrl: entry.wsUrl }, probe.href || entry.url);
           entry.session.close();
           this.sessions.delete(entry.wsUrl);
@@ -6985,6 +7372,37 @@ export class PrismDaemon {
           entry.wallpaperSkipped = false;
           entry.lastWallpaperHash = '';
           entry.lastWallpaperScriptHash = '';
+        }
+        if (suggesterAvailable) {
+          await this._ensureSuggesterBinding(entry, 2600, true);
+          if (!this.suggesterExpr && typeof this.cdp.buildSuggesterExpression === 'function') {
+            this._buildSuggesterExprForConfig(cfg);
+          }
+          if (this.suggesterExpr) {
+            const suggesterHash = this._getSuggesterExprHash(this.suggesterExpr);
+            if (!entry.suggesterScriptId) {
+              const suggesterAdd = await entry.session
+                .send('Page.addScriptToEvaluateOnNewDocument', { source: this.suggesterExpr })
+                .catch(() => null);
+              if (suggesterAdd && suggesterAdd.identifier) {
+                entry.suggesterScriptId = suggesterAdd.identifier;
+                entry.lastSuggesterScriptHash = suggesterHash;
+              }
+            }
+            const evalRes = await entry.session.evaluate(this.suggesterExpr, false, 4500).catch(() => null);
+            await this._recordSuggesterEvalOutcome(entry, evalRes, suggesterHash);
+          }
+        } else if (needsSuggesterCleanup) {
+          if (entry.suggesterScriptId) {
+            await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId }).catch(() => {});
+            entry.suggesterScriptId = null;
+          }
+          await this._removeSuggesterBinding(entry);
+          await entry.session.evaluate(this._getSuggesterCleanupExpression(), false, 3500).catch(() => {});
+          entry.suggesterMounted = false;
+          entry.suggesterSkipped = false;
+          entry.lastSuggesterHash = '';
+          entry.lastSuggesterScriptHash = '';
         }
         this.log(`[↻] Hot-healed window to Obsidian Prism v${this.cdp.PLUGIN_VERSION}: ${entry.title}`);
       } else {
@@ -7185,6 +7603,41 @@ export class PrismDaemon {
           entry.lastWallpaperHash = '';
           entry.lastWallpaperScriptHash = '';
         }
+        if (needsSuggesterHeal) {
+          healed = true;
+          await this._ensureSuggesterBinding(entry, 2600, true);
+          if (!this.suggesterExpr && typeof this.cdp.buildSuggesterExpression === 'function') {
+            this._buildSuggesterExprForConfig(cfg);
+          }
+          if (this.suggesterExpr) {
+            const suggesterHash = this._getSuggesterExprHash(this.suggesterExpr);
+            if (!entry.suggesterScriptId) {
+              const suggesterAdd = await entry.session
+                .send('Page.addScriptToEvaluateOnNewDocument', { source: this.suggesterExpr })
+                .catch(() => null);
+              if (suggesterAdd && suggesterAdd.identifier) {
+                entry.suggesterScriptId = suggesterAdd.identifier;
+                entry.lastSuggesterScriptHash = suggesterHash;
+              }
+            }
+            if (probe.hasSuggester === false || probe.hasSuggesterUi === false || !entry.suggesterMounted) {
+              const evalRes = await entry.session.evaluate(this.suggesterExpr, false, 4500).catch(() => null);
+              await this._recordSuggesterEvalOutcome(entry, evalRes, suggesterHash);
+            }
+          }
+        } else if (needsSuggesterCleanup) {
+          healed = true;
+          if (entry.suggesterScriptId) {
+            await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId }).catch(() => {});
+            entry.suggesterScriptId = null;
+          }
+          await this._removeSuggesterBinding(entry);
+          await entry.session.evaluate(this._getSuggesterCleanupExpression(), false, 3500).catch(() => {});
+          entry.suggesterMounted = false;
+          entry.suggesterSkipped = false;
+          entry.lastSuggesterHash = '';
+          entry.lastSuggesterScriptHash = '';
+        }
         if (probe.needsDashboardSync) {
           healed = true;
           await entry.session
@@ -7352,6 +7805,15 @@ export class PrismDaemon {
           entry.wallpaperMounted = false;
           entry.lastWallpaperHash = '';
           entry.lastWallpaperScriptHash = '';
+          if (entry.suggesterScriptId && !entry.session.closed) {
+            await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId }).catch(() => {});
+          }
+          await this._removeSuggesterBinding(entry);
+          entry.suggesterBindingAdded = false;
+          entry.suggesterScriptId = null;
+          entry.suggesterMounted = false;
+          entry.lastSuggesterHash = '';
+          entry.lastSuggesterScriptHash = '';
           if (cleanPageDom && !entry.session.closed) {
             await entry.session.evaluate(this.cdp.REMOVE_EXPRESSION).catch(() => {});
           }
@@ -7744,6 +8206,15 @@ export class PrismDaemon {
             entry.wallpaperMounted = false;
             entry.lastWallpaperHash = '';
             entry.lastWallpaperScriptHash = '';
+            if (entry.suggesterScriptId) {
+              await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.suggesterScriptId }).catch(() => {});
+              entry.suggesterScriptId = null;
+            }
+            await this._removeSuggesterBinding(entry);
+            entry.suggesterBindingAdded = false;
+            entry.suggesterMounted = false;
+            entry.lastSuggesterHash = '';
+            entry.lastSuggesterScriptHash = '';
             await entry.session.evaluate(this.cdp.REMOVE_EXPRESSION).catch(() => {});
           }
           entry.session.close();
@@ -7952,6 +8423,7 @@ export class PrismDaemon {
     if (this.running) return;
     this._sidebarStopped = false;
     this._wallpaperStopped = false;
+    this._suggesterStopped = false;
     this.running = true;
     if (claimPid) this.claimOwnership();
     const initialPort = discoverActivePort(this.overridePort, this.portFile);
@@ -8054,6 +8526,7 @@ export class PrismDaemon {
     this._flushUsageDiskCache();
     this._sidebarStopped = true;
     this._wallpaperStopped = true;
+    this._suggesterStopped = true;
     this.running = false;
     if (this._updateInitialTimer) {
       clearTimeout(this._updateInitialTimer);
@@ -8134,6 +8607,14 @@ export class PrismDaemon {
       this._lazyWallpaperService = null;
       try {
         if (typeof wp.dispose === 'function') await wp.dispose();
+      } catch {}
+    }
+    await this._suggesterServicePromise?.catch(() => null);
+    if (this._lazySuggesterService) {
+      const sg = this._lazySuggesterService;
+      this._lazySuggesterService = null;
+      try {
+        if (typeof sg.dispose === 'function') await sg.dispose();
       } catch {}
     }
     this.releaseOwnership();

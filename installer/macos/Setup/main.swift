@@ -2038,6 +2038,7 @@ enum InstallerCore {
                 "obsidian-prism-sidebar.json",
                 "obsidian-prism-sidebar.json.lock",
                 "obsidian-prism-wallpaper.json",
+                "obsidian-prism-suggester.json",
             ]
             for name in exactFiles {
                 let fp = (cfgDir as NSString).appendingPathComponent(name)

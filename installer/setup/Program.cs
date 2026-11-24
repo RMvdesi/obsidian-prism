@@ -658,6 +658,7 @@ namespace AgyClaudeStyle.Installer
                     "obsidian-prism-sidebar.json",
                     "obsidian-prism-sidebar.json.lock",
                     "obsidian-prism-wallpaper.json",
+                    "obsidian-prism-suggester.json",
                 };
                 for (int i = 0; i < exactFiles.Length; i++)
                 {
