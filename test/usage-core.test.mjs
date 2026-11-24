@@ -3262,3 +3262,180 @@ test('Redteam #256 P1 #6: renderer-rpc-adapter merges before 1024 cap, supports 
   assert.equal(normTraj.trajectory.steps[0].metadata.createdAt, new Date((baseSec + 50000) * 1000).toISOString());
 });
 
+test('Home Studio dashboard clarifies local-sessions-only scope for tokens, cache hit rate, and heatmap across all 5 languages', async () => {
+  const i18nLocales = require('../i18n-locales.js');
+  const homeStudioPanel = require('../home-studio-panel.js');
+  const prevWin = globalThis.window;
+  const prevDoc = globalThis.document;
+  const prevStorage = globalThis.localStorage;
+
+  const langs = ['zh-CN', 'zh-TW', 'yue', 'en', 'ja'];
+  for (const lang of langs) {
+    const ui = i18nLocales.getUiStrings(lang);
+    assert.ok(typeof ui.homeLocalOnlyTag === 'string' && ui.homeLocalOnlyTag.trim().length > 0, `Missing homeLocalOnlyTag for ${lang}`);
+    assert.ok(typeof ui.homeLocalScopeNote === 'string' && ui.homeLocalScopeNote.trim().length > 0, `Missing homeLocalScopeNote for ${lang}`);
+  }
+
+  const sec = 1763400900;
+  const dKey = usageCore.homeDayKey(new Date(sec * 1000));
+  const storeMem = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (storeMem.has(k) ? storeMem.get(k) : null),
+    setItem: (k, v) => { storeMem.set(k, String(v)); },
+    removeItem: (k) => { storeMem.delete(k); },
+  };
+
+  try {
+    const runScenario = async (lang, withSubagent) => {
+      const ui = i18nLocales.getUiStrings(lang);
+      const dom = createMockStudioDom('obsidian-prism — Antigravity');
+      globalThis.document = dom.doc;
+      globalThis.window = {
+        document: dom.doc,
+        location: { href: 'vscode-file://vscode-app/workbench.html' },
+        __agPrismUsageBridge: {
+          isOnline: () => true,
+          listSummaries: async () => ({
+            ok: true,
+            scopeKey: 'local',
+            summaries: withSubagent
+              ? [
+                  { id: 'main-1', stepCount: 4, lastModifiedSec: sec, workspace: 'proj' },
+                  { id: 'sub-1', stepCount: 2, lastModifiedSec: sec, subagent: true, parentId: 'main-1', workspace: 'proj' },
+                ]
+              : [{ id: 'main-1', stepCount: 4, lastModifiedSec: sec, workspace: 'proj' }],
+            records: [],
+          }),
+          fetchBatch: async (items) => ({
+            ok: true,
+            scopeKey: 'local',
+            records: items.map((it) => ({
+              id: it.id,
+              mode: 'full',
+              record: {
+                cascadeId: it.id,
+                stepCount: it.stepCount,
+                lastModifiedSec: it.lastModifiedSec,
+                gmCount: 1,
+                subagent: !!it.subagent,
+                workspace: 'proj',
+                parentId: it.parentId || '',
+                calls: 2,
+                days: {
+                  [dKey]: {
+                    calls: 2,
+                    input: 4000,
+                    output: 1000,
+                    cacheRead: 5000,
+                    cacheWrite: 0,
+                    total: 10000,
+                    hours: new Array(24).fill(0),
+                    models: { 'Gemini 4 Carbon': { input: 4000, output: 1000, cacheRead: 5000, cacheWrite: 0, total: 10000, calls: 2 } },
+                  },
+                },
+              },
+            })),
+          }),
+        },
+      };
+
+      const ctl = homeStudioPanel.createHomeStudioPanelController({
+        usageCore,
+        storageUsageCacheKey: `test:local-note:${lang}:${withSubagent ? 'sub' : 'main'}`,
+        isDestroyed: () => false,
+        getHomeLayout: () => 'studio',
+        getLang: () => lang,
+        uiText: (l) => i18nLocales.getUiStrings(l),
+        getDisplayName: () => 'Dev',
+        ensureHooks: () => ({ store: { getState: () => ({ trajectorySummaries: { summaries: {} } }) }, svc: {} }),
+        canMountRealCanvas: () => true,
+        setAttrIfChanged: (el, k, v) => el?.setAttribute?.(k, v),
+        runGuardedMut: (fn) => fn(),
+      });
+
+      await ctl.refreshUsageRollup(true);
+      assert.equal(dom.doc.querySelector('.ag-cs-home-scope-badge'), null, 'Local window must not render remote scope badge');
+
+      const tokSub = dom.doc.querySelector('[data-stat="tokens"] .ag-cs-home-stat-sub');
+      const tokVal = dom.doc.querySelector('[data-stat="tokens"] .ag-cs-home-stat-value');
+      assert.ok(tokSub && tokVal, 'Tokens stat subtext and value must render');
+      assert.ok(tokVal.title.includes(ui.homeLocalScopeNote), 'Tokens tooltip must include localized local-scope note');
+      if (withSubagent) {
+        assert.equal(tokSub.textContent, ui.swarmSplitSub(50, 50), 'Tokens subtext should preserve swarm split when subagent tokens exist');
+      } else {
+        assert.equal(tokSub.textContent, ui.homeLocalOnlyTag, 'Tokens subtext should show local-only tag when no subagent tokens exist');
+      }
+
+      const cacheSub = dom.doc.querySelector('[data-stat="cache"] .ag-cs-home-stat-sub');
+      const cacheVal = dom.doc.querySelector('[data-stat="cache"] .ag-cs-home-stat-value');
+      assert.ok(cacheSub && cacheVal, 'Cache hit stat subtext and value must render');
+      assert.equal(cacheSub.textContent, ui.homeLocalOnlyTag);
+      assert.ok(cacheVal.title.includes(ui.homeLocalScopeNote), 'Cache tooltip must include localized local-scope note');
+
+      const heatEl = dom.doc.querySelector('.ag-cs-home-heat');
+      assert.ok(heatEl, 'Heatmap must render');
+      assert.equal(heatEl.getAttribute('data-local-only'), '1');
+      assert.equal(heatEl.getAttribute('aria-label'), ui.homeLocalScopeNote);
+      assert.equal(heatEl.title, '', 'Heatmap must not set native title to avoid overlapping cell hover tooltips');
+
+      const noteOverview = dom.doc.querySelector('.ag-cs-home-local-note');
+      assert.ok(noteOverview, 'Overview tab must render local-scope note');
+      assert.equal(noteOverview.getAttribute('data-local-scope-note'), '1');
+      assert.equal(noteOverview.textContent, ui.homeLocalScopeNote);
+
+      const clickTab = (tabId) => {
+        const btn = dom.doc.querySelectorAll('.ag-cs-home-tab').find((b) => b.getAttribute('data-tab') === tabId);
+        assert.ok(btn, `Expected ${tabId} tab button`);
+        btn.listeners.get('click')();
+      };
+
+      clickTab('models');
+      const noteModels = dom.doc.querySelector('.ag-cs-home-local-note');
+      assert.ok(noteModels, 'Models tab with data must render local-scope note');
+      assert.equal(noteModels.textContent, ui.homeLocalScopeNote);
+
+      clickTab('quotas');
+      assert.equal(dom.doc.querySelector('.ag-cs-home-local-note'), null, 'Quotas tab must not render local-scope note');
+    };
+
+    for (const lang of langs) {
+      await runScenario(lang, false);
+    }
+    await runScenario('en', true);
+
+    // Empty Models tab also displays local-scope note
+    const enUi = i18nLocales.getUiStrings('en');
+    const emptyDom = createMockStudioDom('obsidian-prism — Antigravity');
+    globalThis.document = emptyDom.doc;
+    globalThis.window = { document: emptyDom.doc, location: { href: 'vscode-file://vscode-app/workbench.html' } };
+    const emptyCtl = homeStudioPanel.createHomeStudioPanelController({
+      usageCore,
+      storageUsageCacheKey: 'test:local-note:empty',
+      isDestroyed: () => false,
+      getHomeLayout: () => 'studio',
+      getLang: () => 'en',
+      uiText: (l) => i18nLocales.getUiStrings(l),
+      getDisplayName: () => 'Dev',
+      ensureHooks: () => null,
+      canMountRealCanvas: () => false,
+      setAttrIfChanged: (el, k, v) => el?.setAttribute?.(k, v),
+      runGuardedMut: (fn) => fn(),
+    });
+    emptyCtl.renderHomePanel(true);
+    const modelsTab = emptyDom.doc.querySelectorAll('.ag-cs-home-tab').find((b) => b.getAttribute('data-tab') === 'models');
+    modelsTab.listeners.get('click')();
+    assert.ok(emptyDom.doc.querySelector('.ag-cs-home-models-empty'));
+    const emptyNote = emptyDom.doc.querySelector('.ag-cs-home-local-note');
+    assert.ok(emptyNote, 'Empty Models tab must still render local-scope note');
+    assert.equal(emptyNote.textContent, enUi.homeLocalScopeNote);
+  } finally {
+    if (prevWin === undefined) delete globalThis.window;
+    else globalThis.window = prevWin;
+    if (prevDoc === undefined) delete globalThis.document;
+    else globalThis.document = prevDoc;
+    if (prevStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = prevStorage;
+  }
+});
+
+

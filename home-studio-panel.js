@@ -14,7 +14,7 @@
   }
 
   const STUDIO_HEAD_CSS = '.ag-cs-home-panel-head{flex-wrap:wrap;row-gap:8px}';
-  const STUDIO_EXTRA_CSS = STUDIO_HEAD_CSS + '.agy-home{--_a:var(--ag-cs-accent,var(--primary,#2563eb));--_m:var(--muted-foreground);--_b:var(--ag-cs-border-1,rgba(148,163,184,.2));--_p:var(--ag-cs-pill-bg,rgba(128,138,158,.08))}.ag-cs-home-tab,.ag-cs-home-range{white-space:nowrap}.ag-cs-home-head-left,.ag-cs-home-head-right{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}.ag-cs-home-head-left{min-width:0}.ag-cs-home-scope-badge,.ag-cs-home-stat-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-cs-home-scope-badge,.ag-cs-quota-pace,.ag-cs-quota-bar,.ag-cs-qbar-solid{border-radius:999px}.ag-cs-home-ws-select,.ag-cs-quota-refresh,.ag-cs-quota-card{border:1px solid var(--_b);background:var(--_p)}.ag-cs-home-ws-select,.ag-cs-quota-refresh{border-radius:var(--ag-cs-r-sm,6px);cursor:pointer}.ag-cs-home-ws-select,.ag-cs-quota-toolbar,.ag-cs-quota-refresh,.ag-cs-quota-win-row,.ag-cs-quota-win-val{font-size:11px}.ag-cs-home-ws-select,.ag-cs-quota-refresh,.ag-cs-quota-name,.ag-cs-quota-win-val{color:var(--foreground)}.ag-cs-home-scope-badge,.ag-cs-quota-name,.ag-cs-quota-pace,.ag-cs-quota-win-val{font-weight:600}.ag-cs-quota-wrap,.ag-cs-quota-card,.ag-cs-quota-win{display:flex;flex-direction:column}.ag-cs-home-stat-sub,.ag-cs-quota-card,.ag-cs-quota-win-val{font-variant-numeric:tabular-nums}.ag-cs-home-stat-sub,.ag-cs-quota-foot{font-size:10px;color:var(--_m);opacity:.82}.ag-cs-home-scope-badge{display:inline-flex;align-items:center;height:20px;max-width:168px;padding:0 7px;font-size:10.5px;color:var(--_a);border:1px solid color-mix(in srgb,currentColor 32%,transparent);background:color-mix(in srgb,currentColor 11%,transparent)}.ag-cs-home-ws-select{height:24px;max-width:156px;padding:0 20px 0 8px;color-scheme:inherit;font-weight:500;outline:none;text-overflow:ellipsis}.ag-cs-home-ws-select option{background:var(--card,#141418);color:var(--foreground,#F2F2F5);}.ag-cs-home-stat-sub{display:block;margin-top:2px;line-height:1.25}.ag-cs-quota-wrap{gap:10px;margin-top:4px;position:relative;z-index:1}.ag-cs-quota-toolbar,.ag-cs-quota-card-head,.ag-cs-quota-win-row{display:flex;align-items:center;justify-content:space-between;gap:6px}.ag-cs-quota-toolbar{color:var(--_m)}.ag-cs-quota-refresh{height:23px;padding:0 9px}.ag-cs-quota-refresh:hover{background:rgba(128,138,158,.16)}.ag-cs-quota-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.ag-cs-quota-card{padding:11px 12px;border-radius:var(--ag-cs-r-md,10px);gap:8px}.ag-cs-quota-name{font-size:12px}.ag-cs-quota-pace{padding:1.5px 6.5px;font-size:10px;border:1px solid rgba(148,163,184,.24);color:var(--_m)}.ag-cs-quota-pace[data-pace="ok"]{color:var(--_a);border-color:color-mix(in srgb,currentColor 30%,transparent);background:color-mix(in srgb,currentColor 10%,transparent)}.ag-cs-quota-pace[data-pace="tight"]{color:#d97706;border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.12)}.dark .ag-cs-quota-pace[data-pace="tight"]{color:#fbbf24}.ag-cs-quota-pace[data-pace="low"]{color:#dc2626;border-color:rgba(239,68,68,.38);background:rgba(239,68,68,.12)}.dark .ag-cs-quota-pace[data-pace="low"]{color:#f87171}.ag-cs-quota-win{gap:4px}.ag-cs-quota-win-row{align-items:baseline}.ag-cs-quota-win-lbl{color:var(--_m);font-size:10.5px}.ag-cs-quota-bar{position:relative;height:6px;background:rgba(148,163,184,.18);overflow:hidden}.ag-cs-qbar-solid{position:absolute;inset:0 auto 0 0;color:var(--_a);background:linear-gradient(90deg,currentColor,color-mix(in srgb,currentColor 68%,#fff))}.ag-cs-quota-win[data-warn="1"] .ag-cs-qbar-solid{background:linear-gradient(90deg,#d97706,#fbbf24)}.ag-cs-quota-win[data-warn="2"] .ag-cs-qbar-solid{background:linear-gradient(90deg,#dc2626,#f87171)}';
+  const STUDIO_EXTRA_CSS = STUDIO_HEAD_CSS + '.agy-home{--_a:var(--ag-cs-accent,var(--primary,#2563eb));--_m:var(--muted-foreground);--_b:var(--ag-cs-border-1,rgba(148,163,184,.2));--_p:var(--ag-cs-pill-bg,rgba(128,138,158,.08))}.ag-cs-home-tab,.ag-cs-home-range{white-space:nowrap}.ag-cs-home-head-left,.ag-cs-home-head-right{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}.ag-cs-home-head-left{min-width:0}.ag-cs-home-scope-badge,.ag-cs-home-stat-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-cs-home-scope-badge,.ag-cs-quota-pace,.ag-cs-quota-bar,.ag-cs-qbar-solid{border-radius:999px}.ag-cs-home-ws-select,.ag-cs-quota-refresh,.ag-cs-quota-card{border:1px solid var(--_b);background:var(--_p)}.ag-cs-home-ws-select,.ag-cs-quota-refresh{border-radius:var(--ag-cs-r-sm,6px);cursor:pointer}.ag-cs-home-ws-select,.ag-cs-quota-toolbar,.ag-cs-quota-refresh,.ag-cs-quota-win-row,.ag-cs-quota-win-val{font-size:11px}.ag-cs-home-ws-select,.ag-cs-quota-refresh,.ag-cs-quota-name,.ag-cs-quota-win-val{color:var(--foreground)}.ag-cs-home-scope-badge,.ag-cs-quota-name,.ag-cs-quota-pace,.ag-cs-quota-win-val{font-weight:600}.ag-cs-quota-wrap,.ag-cs-quota-card,.ag-cs-quota-win{display:flex;flex-direction:column}.ag-cs-home-stat-sub,.ag-cs-quota-card,.ag-cs-quota-win-val{font-variant-numeric:tabular-nums}.ag-cs-home-stat-sub,.ag-cs-quota-foot{font-size:10px;color:var(--_m);opacity:.82}.ag-cs-home-scope-badge{display:inline-flex;align-items:center;height:20px;max-width:168px;padding:0 7px;font-size:10.5px;color:var(--_a);border:1px solid color-mix(in srgb,currentColor 32%,transparent);background:color-mix(in srgb,currentColor 11%,transparent)}.ag-cs-home-ws-select{height:24px;max-width:156px;padding:0 20px 0 8px;color-scheme:inherit;font-weight:500;outline:none;text-overflow:ellipsis}.ag-cs-home-ws-select option{background:var(--card,#141418);color:var(--foreground,#F2F2F5);}.ag-cs-home-stat-sub{display:block;margin-top:2px;line-height:1.25}.ag-cs-quota-wrap{gap:10px;margin-top:4px;position:relative;z-index:1}.ag-cs-quota-toolbar,.ag-cs-quota-card-head,.ag-cs-quota-win-row{display:flex;align-items:center;justify-content:space-between;gap:6px}.ag-cs-quota-toolbar{color:var(--_m)}.ag-cs-quota-refresh{height:23px;padding:0 9px}.ag-cs-quota-refresh:hover{background:rgba(128,138,158,.16)}.ag-cs-quota-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.ag-cs-quota-card{padding:11px 12px;border-radius:var(--ag-cs-r-md,10px);gap:8px}.ag-cs-quota-name{font-size:12px}.ag-cs-quota-pace{padding:1.5px 6.5px;font-size:10px;border:1px solid rgba(148,163,184,.24);color:var(--_m)}.ag-cs-quota-pace[data-pace="ok"]{color:var(--_a);border-color:color-mix(in srgb,currentColor 30%,transparent);background:color-mix(in srgb,currentColor 10%,transparent)}.ag-cs-quota-pace[data-pace="tight"]{color:#d97706;border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.12)}.dark .ag-cs-quota-pace[data-pace="tight"]{color:#fbbf24}.ag-cs-quota-pace[data-pace="low"]{color:#dc2626;border-color:rgba(239,68,68,.38);background:rgba(239,68,68,.12)}.dark .ag-cs-quota-pace[data-pace="low"]{color:#f87171}.ag-cs-quota-win{gap:4px}.ag-cs-quota-win-row{align-items:baseline}.ag-cs-quota-win-lbl{color:var(--_m);font-size:10.5px}.ag-cs-quota-bar{position:relative;height:6px;background:rgba(148,163,184,.18);overflow:hidden}.ag-cs-qbar-solid{position:absolute;inset:0 auto 0 0;color:var(--_a);background:linear-gradient(90deg,currentColor,color-mix(in srgb,currentColor 68%,#fff))}.ag-cs-quota-win[data-warn="1"] .ag-cs-qbar-solid{background:linear-gradient(90deg,#d97706,#fbbf24)}.ag-cs-quota-win[data-warn="2"] .ag-cs-qbar-solid{background:linear-gradient(90deg,#dc2626,#f87171)}.ag-cs-home-local-note{font-size:11px;line-height:1.4;color:var(--_m);opacity:.86;padding-top:8px;border-top:1px solid var(--_b)}';
 
   const REMOTE_TITLE_RE = /\[(SSH|WSL|Dev Container|Codespaces|Tunnel|Remote):\s*([^\]]+)\]/i;
   const decUri = (v) => { const s = String(v || '').trim(); if (!s) return ''; try { return decodeURIComponent(s); } catch { return s; } };
@@ -728,6 +728,10 @@
 
         if (isQuotasTab) { renderQuotasView(panel, lang, ui); return; }
 
+        const localTag = ui.homeLocalOnlyTag || 'Local sessions only';
+        const localNote = ui.homeLocalScopeNote || 'Note: Token usage, cache hit rate, and heatmap count local sessions only (cloud sessions excluded).';
+        const makeLocalNote = () => dv('ag-cs-home-local-note', localNote, { 'data-local-scope-note': '1' });
+
         if (activeTab === 'overview') {
           const stats = dv('ag-cs-home-stats');
           const cacheVal = isFin(data.cacheHitRate) ? usageCore.fmtPct(data.cacheHitRate * 100, 1) : '—';
@@ -740,9 +744,9 @@
           for (const [k, lb, vt, tt, stx] of [
             ['sessions', ui.kpiSessions || 'Sessions', fmtCnt(data.sessions), subSes > 0 ? `${data.sessions} + ${subSes} subagents` : String(data.sessions)],
             ['calls', ui.kpiCalls || 'Messages', fmtCnt(data.calls), String(data.calls)],
-            ['tokens', ui.kpiTokens || 'Total tokens', fmtTok(data.tokens), `${fmtCnt(data.tokens)} tokens${swarmSub ? ` (${swarmSub})` : ''}`, swarmSub],
+            ['tokens', ui.kpiTokens || 'Total tokens', fmtTok(data.tokens), `${fmtCnt(data.tokens)} tokens${swarmSub ? ` (${swarmSub})` : ''} · ${localNote}`, swarmSub || localTag],
             ['days', ui.kpiDays || 'Active days', fmtCnt(data.activeDays), String(data.activeDays)],
-            ['cache', ui.kpiCacheHit || 'Cache Hit Rate', cacheVal, cacheTitle],
+            ['cache', ui.kpiCacheHit || 'Cache Hit Rate', cacheVal, cacheTitle !== '—' ? `${cacheTitle} · ${localNote}` : localNote, localTag],
             ['model', ui.kpiFavModel || 'Favorite model', data.model || '—', data.model || '—'],
           ]) {
             const cell = dv('ag-cs-home-stat', skeleton ? { 'data-stat': k, 'data-skeleton': '' } : { 'data-stat': k });
@@ -754,7 +758,7 @@
           }
           ap(panel, stats);
 
-          const heat = dv('ag-cs-home-heat', skeleton ? { 'data-skeleton': '' } : null);
+          const heat = dv('ag-cs-home-heat', skeleton ? { 'data-skeleton': '', 'data-local-only': '1', 'aria-label': localNote } : { 'data-local-only': '1', 'aria-label': localNote });
           const fmt = usageCore.homeShortDateFormat(lang);
           const d = getDoc();
           const heatFrag = isFn(d?.createDocumentFragment) ? d.createDocumentFragment() : heat;
@@ -768,10 +772,10 @@
           ap(heat, heatTipEl);
           heat.addEventListener('mouseover', (ev) => { const t = ev.target?.closest?.('.ag-cs-home-heat-cell'); if (t) showHeatTip(t, heat); });
           heat.addEventListener('mouseleave', hideHeatTip);
-          ap(panel, heat, data.funBook ? sp('ag-cs-home-fun', data.funBook) : null);
+          ap(panel, heat, data.funBook ? sp('ag-cs-home-fun', data.funBook) : null, makeLocalNote());
         } else {
           const models = data.models || [];
-          if (models.length === 0) { ap(panel, dv('ag-cs-home-models-empty', ui.noModelUsage || 'No model usage data yet')); return; }
+          if (models.length === 0) { ap(panel, dv('ag-cs-home-models-empty', ui.noModelUsage || 'No model usage data yet'), makeLocalNote()); return; }
           const ids = models.map((m) => m.id);
           const columns = data.modelDays || [];
           const fmt = usageCore.homeShortDateFormat(lang);
@@ -834,7 +838,7 @@
             const hc = models.length - shown.length;
             ap(listEl, bt('ag-cs-home-models-more', modelsExpanded ? ui.showLess || 'Show less' : isFn(ui.showMoreN) ? ui.showMoreN(hc) : `Show ${hc} more`, () => { modelsExpanded = !modelsExpanded; renderHomePanel(); }));
           }
-          ap(panel, listEl);
+          ap(panel, listEl, makeLocalNote());
         }
       });
     };
