@@ -2633,9 +2633,57 @@ test('Isolated external ACP agy.exe processes (e.g. T3 Code --app-data-dir antig
     'T3 Code ACP agy.exe with isolated --gemini-dir and --app-data-dir must be exempted'
   );
   assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('"C:\\Program Files\\T3 Code\\agy.exe" acp --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    true,
+    'Quoted agy.exe path with acp subcommand and isolated --app-data-dir must be exempted'
+  );
+  assert.equal(
     arch.isIsolatedExternalAgyCommandLine('C:\\Program Files\\agy\\agy.exe chat', { platform: 'win32', defaultGeminiDir: defaultGem }),
     false,
     'Standard agy CLI using default ~/.gemini/antigravity must still block archiving'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe chat --app-data-dir custom-profile', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Non-ACP subcommands (e.g. agy chat --app-data-dir custom-profile) must NOT be exempted'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine(`agy.exe acp --gemini-dir "${defaultGem}" --app-data-dir antigravity-acp`, {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Explicit default --gemini-dir must fail-closed even when --app-data-dir is custom'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --gemini-dir "C:/Users/Alice/.gemini/antigravity/" --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Explicit ~/.gemini/antigravity in --gemini-dir must fail-closed even with forward slashes'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --app-data-dir "C:\\Users\\Alice\\AppData\\Roaming\\Antigravity"', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Full path --app-data-dir pointing to default AppData\\Roaming\\Antigravity must fail-closed'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --app-data-dir "C:\\Users\\Alice\\.t3\\custom-appdata"', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    true,
+    'Full path --app-data-dir pointing to an isolated external directory must be exempted'
   );
   assert.equal(
     arch.isIsolatedExternalAgyCommandLine(`agy.exe --gemini-dir "${defaultGem}" --app-data-dir antigravity`, {
@@ -2646,7 +2694,7 @@ test('Isolated external ACP agy.exe processes (e.g. T3 Code --app-data-dir antig
     'agy.exe pointing at default ~/.gemini and antigravity app-data-dir must still block archiving'
   );
   assert.equal(
-    arch.isIsolatedExternalAgyCommandLine('language_server.exe --app-data-dir antigravity-acp', {
+    arch.isIsolatedExternalAgyCommandLine('language_server.exe acp --app-data-dir antigravity-acp', {
       platform: 'win32',
       defaultGeminiDir: defaultGem,
     }),

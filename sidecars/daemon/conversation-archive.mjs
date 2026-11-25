@@ -306,8 +306,16 @@ const WIN_AGY_ONLY_PROCESS_RE = /^agy\.exe$/i;
 const ARCHIVE_TRACE_FILENAME = 'archive-trace.log';
 const MAX_ARCHIVE_TRACE_BYTES = 512 * 1024;
 
+function getPlatformPathModule(platform = process.platform) {
+  return platform === 'win32' ? path.win32 : path.posix;
+}
+
 function normalizePathForCompare(p, platform = process.platform) {
-  const resolved = path.resolve(String(p || ''));
+  const raw = String(p || '').trim();
+  if (!raw) return '';
+  const pathMod = getPlatformPathModule(platform);
+  const preNormalized = platform === 'win32' ? raw.replace(/\//g, '\\') : raw;
+  const resolved = pathMod.resolve(preNormalized);
   return platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
@@ -323,42 +331,97 @@ function extractCliFlagValue(cmdLine, flagName) {
   return '';
 }
 
+const AGY_ACP_SUBCOMMAND_RE = /(?:^|[\\/\s"'])agy(?:\.exe)?["']?\s+acp(?:\s|$)/i;
+
 /**
  * 判断命令行是否为第三方工具（如 T3 Code）派生的独立隔离存储区 `agy acp` 进程。
  * 严格 fail-closed：
- *   - 绝不豁免 language_server 或 Antigravity 桌面主程序；
- *   - 命令行缺失、为空或未显式指向独立非默认 `--app-data-dir` / `--gemini-dir` 时一律返回 false（按活跃宿主拦截）。
+ *   - 绝不豁免 language_server、Antigravity 桌面主程序或非 `acp` 子命令（如 `agy chat`）；
+ *   - 显式传入默认 `--gemini-dir`（`~/.gemini` 或 `~/.gemini/antigravity`）或默认 `--app-data-dir`
+ *     （含完整路径如 `%APPDATA%\Antigravity`）时立即返回 false；
+ *   - 命令行缺失、为空或未显式指向独立非默认隔离目录时一律返回 false（按活跃宿主拦截）。
  */
 export function isIsolatedExternalAgyCommandLine(
   cmdLine,
   {
     platform = process.platform,
     defaultGeminiDir = path.join(os.homedir(), '.gemini'),
+    defaultAppDataDir = '',
   } = {}
 ) {
   const s = String(cmdLine || '').trim();
   if (!s) return false;
   if (/language_server/i.test(s)) return false;
-  if (!/(?:^|[\\/\s"'])agy(?:\.exe)?(?:["'\s]|$)/i.test(s)) return false;
+  if (!AGY_ACP_SUBCOMMAND_RE.test(s)) return false;
 
-  const appDataDir = extractCliFlagValue(s, '--app-data-dir');
-  if (appDataDir && appDataDir.toLowerCase() !== 'antigravity') {
-    return true;
+  const pathMod = getPlatformPathModule(platform);
+  let defaultGem = '';
+  let defaultGemAntigravity = '';
+  let inferredHome = '';
+  try {
+    const baseGem = String(defaultGeminiDir || '').trim();
+    defaultGem = normalizePathForCompare(baseGem, platform);
+    defaultGemAntigravity = baseGem ? normalizePathForCompare(pathMod.join(baseGem, 'antigravity'), platform) : '';
+    inferredHome = baseGem ? pathMod.dirname(pathMod.resolve(platform === 'win32' ? baseGem.replace(/\//g, '\\') : baseGem)) : '';
+  } catch {
+    return false;
   }
 
+  let hasIsolatedGeminiDir = false;
   const geminiDir = extractCliFlagValue(s, '--gemini-dir');
   if (geminiDir) {
     try {
       const targetGem = normalizePathForCompare(geminiDir, platform);
-      const defaultGem = normalizePathForCompare(defaultGeminiDir, platform);
-      if (targetGem && targetGem !== defaultGem) {
-        return true;
+      if (!targetGem || targetGem === defaultGem || targetGem === defaultGemAntigravity) {
+        return false;
       }
+      hasIsolatedGeminiDir = true;
     } catch {
       return false;
     }
   }
-  return false;
+
+  let hasIsolatedAppDataDir = false;
+  const appDataDir = extractCliFlagValue(s, '--app-data-dir');
+  if (appDataDir) {
+    if (/[\\/]/.test(appDataDir)) {
+      try {
+        const targetAppData = normalizePathForCompare(appDataDir, platform);
+        if (!targetAppData) return false;
+        const defaultAppDataCandidates = new Set();
+        if (defaultGemAntigravity) defaultAppDataCandidates.add(defaultGemAntigravity);
+        if (defaultAppDataDir) {
+          defaultAppDataCandidates.add(normalizePathForCompare(defaultAppDataDir, platform));
+        }
+        if (platform === 'win32') {
+          if (inferredHome) {
+            defaultAppDataCandidates.add(normalizePathForCompare(path.win32.join(inferredHome, 'AppData', 'Roaming', 'Antigravity'), 'win32'));
+            defaultAppDataCandidates.add(normalizePathForCompare(path.win32.join(inferredHome, 'AppData', 'Local', 'Antigravity'), 'win32'));
+          }
+          if (process.platform === 'win32') {
+            defaultAppDataCandidates.add(normalizePathForCompare(path.win32.dirname(getDefaultWindowsAppStoragePath()), 'win32'));
+          }
+        } else if (platform === 'darwin' && inferredHome) {
+          defaultAppDataCandidates.add(normalizePathForCompare(path.posix.join(inferredHome, 'Library', 'Application Support', 'Antigravity'), 'darwin'));
+        } else if (inferredHome) {
+          defaultAppDataCandidates.add(normalizePathForCompare(path.posix.join(inferredHome, '.config', 'Antigravity'), platform));
+        }
+        if (defaultAppDataCandidates.has(targetAppData)) {
+          return false;
+        }
+        hasIsolatedAppDataDir = true;
+      } catch {
+        return false;
+      }
+    } else {
+      if (appDataDir.toLowerCase() === 'antigravity') {
+        return false;
+      }
+      hasIsolatedAppDataDir = true;
+    }
+  }
+
+  return hasIsolatedGeminiDir || hasIsolatedAppDataDir;
 }
 
 const WIN_AGY_CMD_CACHE_TTL_MS = 120_000;
