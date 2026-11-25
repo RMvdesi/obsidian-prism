@@ -2505,3 +2505,32 @@ test('Issue #64 WebGL2 white-screen hardening: Chromium canvas-lock true-2D fall
     if (prevPerf === undefined) delete globalThis.performance; else globalThis.performance = prevPerf;
   }
 });
+
+test('conv-aura darkAura tiers (subtle / balanced / vivid) scale dark chat optics monotonically while leaving light mode untouched', () => {
+  require('../conv-aura.js');
+  const { computeConvAuraOptics } = globalThis.__agPrismConvAura;
+  const dSubtleIdle = computeConvAuraOptics('idle', 0, 1000, true, false, {}, 'subtle');
+  const dBalIdle = computeConvAuraOptics('idle', 0, 1000, true, false, {}, 'balanced');
+  const dVividIdle = computeConvAuraOptics('idle', 0, 1000, true, false, {}, 'vivid');
+  assert.ok(dSubtleIdle.strength < dBalIdle.strength && dBalIdle.strength < dVividIdle.strength, 'dark idle strength must scale subtle < balanced < vivid');
+  assert.ok(dSubtleIdle.prism < dBalIdle.prism && dBalIdle.prism < dVividIdle.prism, 'dark idle prism must scale subtle < balanced < vivid');
+
+  const dSubtleRun = computeConvAuraOptics('running', 0, 1000, true, true, {}, 'subtle');
+  const dBalRun = computeConvAuraOptics('running', 0, 1000, true, true, {}, 'balanced');
+  const dVividRun = computeConvAuraOptics('running', 0, 1000, true, true, {}, 'vivid');
+  assert.ok(dSubtleRun.strength < dBalRun.strength && dBalRun.strength < dVividRun.strength, 'dark running strength must scale subtle < balanced < vivid');
+
+  const lSubtle = computeConvAuraOptics('idle', 0, 1000, false, false, {}, 'subtle');
+  const lVivid = computeConvAuraOptics('idle', 0, 1000, false, false, {}, 'vivid');
+  assert.equal(lSubtle.strength, lVivid.strength, 'light mode must be unaffected by darkAura');
+  assert.equal(lSubtle.prism, lVivid.prism, 'light mode prism must be unaffected by darkAura');
+});
+
+test('HORIZON_FRAGMENT_SHADER eliminates direct AMBER->SKY_BLUE mixing, decouples blueLoop/prismLoop cross-mix, and supports neonLoop', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'ripple-core.js'), 'utf8');
+  assert.equal(src.includes('mix(PRISM_AMBER, SKY_BLUE'), false, 'prismLoop must fold through coral/iris instead of mixing amber directly into sky blue');
+  assert.ok(src.includes('vec3 neonLoop('), 'shader must define neonLoop for Abyssal Glow style');
+  assert.ok(src.includes('base = mix(base, pCol, clamp(effPrism * 1.45'), 'shader must decouple hue purity from caustic luminance');
+  assert.equal(rippleCore.resolveHorizonSpectrumCode(6), 6);
+  assert.equal(rippleCore.resolveHorizonSpectrumCode('neon'), 6);
+});

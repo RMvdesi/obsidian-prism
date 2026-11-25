@@ -181,37 +181,45 @@
     return out;
   }
 
-  function computeConvAuraOptics(phase, phaseAt, now, dark, wasRunning, out = {}) {
-    const idleStr = dark ? 0.21 : 0.52;
-    const runBase = dark ? 0.31 : 0.64;
-    const idlePrism = dark ? 0.14 : 0.26;
+  const gDa = (d, a) => (d ? (a === 'vivid' ? [0.62, 0.76, 0.88, 0.68, 0.9, 0.24, 0.28] : a === 'balanced' ? [0.46, 0.6, 0.74, 0.5, 0.8, 0.2, 0.25] : 0) : 0);
+
+  function computeConvAuraOptics(phase, phaseAt, now, dark, wasRunning, out = {}, da = 'subtle') {
+    const dt = gDa(dark, da);
+    const idleStr = dt ? dt[0] : dark ? 0.21 : 0.52;
+    const runBase = dt ? dt[1] : dark ? 0.31 : 0.64;
+    const peakStr = dt ? dt[2] : dark ? 0.46 : 0.78;
+    const idlePrism = dt ? dt[3] : dark ? 0.14 : 0.26;
+    const runPrism = dt ? dt[4] : 0.7;
+    const idleReach = dt ? dt[5] : 0.16;
+    const runReach = dt ? dt[6] : 0.22;
+    const prog = (ms) => { const v = (now - phaseAt) / ms; return v < 0 ? 0 : v > 1 ? 1 : v; };
+    const ep = (ms, pw) => 1 - Math.pow(1 - prog(ms), pw);
+    const fx = (n) => Number(n.toFixed(4));
+    const f = (s, r, p, u, v, m, ms) => fillOptics(out, s, scaleConvReach(r), p, u, v, m, ms);
     if (phase === 'start') {
-      const p = Math.max(0, Math.min(1, (now - phaseAt) / CONV_AURA_START_MS));
+      const p = prog(CONV_AURA_START_MS);
       const s = Math.sin(p * Math.PI);
-      const peakStr = dark ? 0.46 : 0.78;
       const endStr = wasRunning ? runBase : idleStr;
-      const endFullReach = wasRunning ? 0.22 : 0.16;
-      const rawReach = p <= 0.5 ? 0.16 + (0.26 - 0.16) * s : endFullReach + (0.26 - endFullReach) * s;
-      const endPrism = wasRunning ? 0.70 : idlePrism;
+      const endFullReach = wasRunning ? runReach : idleReach;
+      const rawReach = p <= 0.5 ? idleReach + (0.26 - idleReach) * s : endFullReach + (0.26 - endFullReach) * s;
+      const endPrism = wasRunning ? runPrism : idlePrism;
       const settleEase = Math.pow(p, 2.4);
       const endSpeed = wasRunning ? 1.45 : 0.72;
-      return fillOptics(
-        out,
+      return f(
         p <= 0.5 ? idleStr + (peakStr - idleStr) * s : endStr + (peakStr - endStr) * s,
-        scaleConvReach(rawReach),
+        rawReach,
         p <= 0.5 ? idlePrism + (0.74 - idlePrism) * s : endPrism + (0.74 - endPrism) * s,
-        Number((0.50 * (1 - 0.32 * settleEase)).toFixed(4)),
-        Number((1.95 - (1.95 - endSpeed) * settleEase).toFixed(4)),
+        fx(0.50 * (1 - 0.32 * settleEase)),
+        fx(1.95 - (1.95 - endSpeed) * settleEase),
         'none',
         22
       );
     }
     if (phase === 'running') {
-      return fillOptics(
-        out,
+      return f(
         runBase + (dark ? 0.035 : 0.045) * Math.sin(now * 0.0021),
-        scaleConvReach(0.22),
-        0.70,
+        runReach,
+        runPrism,
         0.025 * (1 + Math.sin(now * 0.0016)),
         1.45,
         'none',
@@ -219,29 +227,25 @@
       );
     }
     if (phase === 'awaiting-decision') {
-      const elapsed = Math.max(0, now - phaseAt);
-      const p = Math.min(1, elapsed / CONV_AURA_DECISION_BREATH_MS);
+      const p = prog(CONV_AURA_DECISION_BREATH_MS);
       const wave = p < 1 ? Math.sin(p * Math.PI * 2) * (1 - 0.35 * p) : 0;
       const baseHold = dark ? 0.22 : 0.42;
-      return fillOptics(
-        out,
+      return f(
         Math.max(0.08, baseHold + (dark ? 0.045 : 0.065) * wave),
-        scaleConvReach(0.18 + 0.025 * Math.max(0, wave)),
+        0.18 + 0.025 * Math.max(0, wave),
         0.32,
-        p < 1 ? Number((0.12 * wave).toFixed(4)) : 0,
+        p < 1 ? fx(0.12 * wave) : 0,
         p < 1 ? 0.85 : 0,
         'awaiting-decision',
         36
       );
     }
     if (phase === 'decision-clear') {
-      const p = Math.max(0, Math.min(1, (now - phaseAt) / CONV_AURA_DECISION_CLEAR_MS));
-      const ease = 1 - Math.pow(1 - p, 2);
+      const ease = ep(CONV_AURA_DECISION_CLEAR_MS, 2);
       const startHold = dark ? 0.22 : 0.42;
-      return fillOptics(
-        out,
+      return f(
         startHold * (1 - ease),
-        scaleConvReach(0.18 - 0.04 * ease),
+        0.18 - 0.04 * ease,
         0.24 * (1 - ease),
         -0.14 * (1 - ease),
         0.65 * (1 - ease),
@@ -250,44 +254,38 @@
       );
     }
     if (phase === 'error-halted') {
-      const p = Math.max(0, Math.min(1, (now - phaseAt) / CONV_AURA_ERROR_MS));
-      const ease = 1 - Math.pow(1 - p, 2.2);
+      const ease = ep(CONV_AURA_ERROR_MS, 2.2);
       const peakErr = dark ? 0.26 : 0.46;
-      return fillOptics(
-        out,
+      return f(
         peakErr * (1 - ease),
-        scaleConvReach(0.21 - 0.09 * ease),
+        0.21 - 0.09 * ease,
         0.36 * (1 - ease),
-        Number((-0.44 * (1 - ease)).toFixed(4)),
+        fx(-0.44 * (1 - ease)),
         0.9 * (1 - 0.6 * ease),
         'error-halted',
         28
       );
     }
     if (phase === 'long-task-complete') {
-      const p = Math.max(0, Math.min(1, (now - phaseAt) / CONV_AURA_LONG_COMPLETE_MS));
-      const ease = 1 - Math.pow(1 - p, 2.05);
+      const ease = ep(CONV_AURA_LONG_COMPLETE_MS, 2.05);
       const startStr = dark ? 0.36 : 0.62;
       const holdStr = dark ? 0.16 : 0.30;
-      return fillOptics(
-        out,
+      return f(
         startStr + (holdStr - startStr) * ease,
-        scaleConvReach(0.24 + (0.17 - 0.24) * ease),
+        0.24 + (0.17 - 0.24) * ease,
         0.52 + (0.24 - 0.52) * ease,
-        Number((-0.48 * (1 - ease * 0.92)).toFixed(4)),
+        fx(-0.48 * (1 - ease * 0.92)),
         1.25 + (0.55 - 1.25) * ease,
         'long-task-complete',
         28
       );
     }
     if (phase === 'focus-fade') {
-      const p = Math.max(0, Math.min(1, (now - phaseAt) / CONV_AURA_FOCUS_FADE_MS));
-      const ease = 1 - Math.pow(1 - p, 2);
+      const ease = ep(CONV_AURA_FOCUS_FADE_MS, 2);
       const holdStr = dark ? 0.16 : 0.30;
-      return fillOptics(
-        out,
+      return f(
         holdStr + (idleStr - holdStr) * ease,
-        scaleConvReach(0.17 + (0.16 - 0.17) * ease),
+        0.17 + (0.16 - 0.17) * ease,
         0.24 + (idlePrism - 0.24) * ease,
         0,
         0.55 + (0.72 - 0.55) * ease,
@@ -296,14 +294,11 @@
       );
     }
     if (phase === 'complete') {
-      const p = Math.max(0, Math.min(1, (now - phaseAt) / CONV_AURA_COMPLETE_MS));
-      const ease = 1 - Math.pow(1 - p, 2.1);
+      const ease = ep(CONV_AURA_COMPLETE_MS, 2.1);
       const startStr = dark ? 0.38 : 0.70;
-      const rawReach = 0.24 + (0.16 - 0.24) * ease;
-      return fillOptics(
-        out,
+      return f(
         startStr + (idleStr - startStr) * ease,
-        scaleConvReach(rawReach),
+        0.24 + (0.16 - 0.24) * ease,
         0.76 + (idlePrism - 0.76) * ease,
         -0.36 * (1 - ease * 0.85),
         1.45 + (0.72 - 1.45) * ease,
@@ -311,10 +306,9 @@
         28
       );
     }
-    return fillOptics(
-      out,
+    return f(
       idleStr + (dark ? 0.024 : 0.038) * Math.sin(now * 0.0018),
-      scaleConvReach(0.16),
+      idleReach,
       idlePrism,
       0,
       0.72,
@@ -368,44 +362,35 @@
     let wb = false;
     const WB = 'data-ag-cs-win-blur';
     const PP_OPEN = 'data-ag-pp-open';
-    const isAB = () => typeof document !== 'undefined' && document.documentElement?.getAttribute?.(WB) === '1';
-    const isPpOpen = () => typeof document !== 'undefined' && document.documentElement?.getAttribute?.(PP_OPEN) === '1';
+    const getHtml = () => (typeof document !== 'undefined' ? document.documentElement : null);
+    const isAB = () => getHtml()?.getAttribute?.(WB) === '1';
+    const isPpOpen = () => getHtml()?.getAttribute?.(PP_OPEN) === '1';
     const isH = () => Boolean(typeof document !== 'undefined' && document.hidden);
     const isP = () => Boolean(isH() || isAB() || wb || isPpOpen());
 
     function normAmbientVal(v) {
-      if (v === null || v === undefined || v === '') return 1;
-      const n = Number(v);
-      if (!Number.isFinite(n)) return 1;
-      return n <= 0 ? 0 : n > 1 ? Math.min(1, n / 100) : n;
+      const n = v == null || v === '' ? 1 : Number(v);
+      return !Number.isFinite(n) ? 1 : n <= 0 ? 0 : n > 1 ? Math.min(1, n / 100) : n;
     }
 
     function resolveAmbient() {
       if (overrideAmbient !== null) return normAmbientVal(overrideAmbient);
       if (typeof getAmbientIntensity === 'function') return normAmbientVal(getAmbientIntensity());
       try {
-        if (typeof document !== 'undefined' && document.documentElement?.getAttribute) {
-          const raw = document.documentElement.getAttribute('data-ag-cs-ambient');
-          if (raw !== null && raw !== '') return normAmbientVal(raw);
-        }
+        const raw = getHtml()?.getAttribute?.('data-ag-cs-ambient');
+        if (raw !== null && raw !== '') return normAmbientVal(raw);
       } catch {}
       return 1;
     }
 
     function resolveSpectrum() {
-      if (overrideSpectrum !== null) return overrideSpectrum;
-      if (typeof getSpectrumMode === 'function') return getSpectrumMode();
-      return undefined;
+      const sp = overrideSpectrum ?? getSpectrumMode?.();
+      return (!sp || sp === 'follow' || sp === 'default') && isDarkTheme() && getHtml()?.getAttribute?.('data-ag-cs-dark-aura-style') === 'neon' ? 'neon' : sp;
     }
 
     function checkWindowFocused() {
       if (typeof isWindowFocused === 'function') return Boolean(isWindowFocused());
-      try {
-        if (typeof document !== 'undefined' && typeof document.hasFocus === 'function') {
-          return Boolean(document.hasFocus());
-        }
-      } catch {}
-      return true;
+      try { return typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? Boolean(document.hasFocus()) : true; } catch { return true; }
     }
 
     function isValidConvView(cv) {
@@ -881,16 +866,17 @@
         const dark = isDarkTheme();
         const spectrum = resolveSpectrum();
 
-        let opt = computeConvAuraOptics(phase, state.phaseAt, now, dark, state.wasRunning, OPTICS_BUF);
+        const da = getHtml()?.getAttribute?.('data-ag-cs-dark-aura') || 'balanced';
+        let opt = computeConvAuraOptics(phase, state.phaseAt, now, dark, state.wasRunning, OPTICS_BUF, da);
         if (inLiftoffEbb) {
           const p = Math.max(0, Math.min(1, liftElapsed / 520));
           const ease = 1 - Math.pow(1 - p, 2.25);
-          const endStr = dark ? 0.31 : 0.64;
+          const dt = gDa(dark, da) || [0, dark ? 0.31 : 0.64, 0, 0, 0.7, 0, 0.22];
           opt = fillOptics(
             OPTICS_BUF,
-            0.92 + (endStr - 0.92) * ease,
-            scaleConvReach(0.31 + (0.22 - 0.31) * ease),
-            0.78 + (0.70 - 0.78) * ease,
+            0.92 + (dt[1] - 0.92) * ease,
+            scaleConvReach(0.31 + (dt[6] - 0.31) * ease),
+            0.78 + (dt[4] - 0.78) * ease,
             0.38 * (1 - ease),
             1.65 + (1.45 - 1.65) * ease,
             'none',
@@ -980,7 +966,7 @@
           state.phase = 'idle';
           state.phaseAt = now - CONV_AURA_IDLE_SLEEP_MS;
           setAttrIfChanged(host, 'data-aura-phase', 'idle');
-          const idleSnapOpt = computeConvAuraOptics('idle', state.phaseAt, now, dark, false, OPTICS_BUF);
+          const idleSnapOpt = computeConvAuraOptics('idle', state.phaseAt, now, dark, false, OPTICS_BUF, da);
           state.lastOptics = idleSnapOpt;
           paint(idleSnapOpt, true);
           return enterAuraSleep();

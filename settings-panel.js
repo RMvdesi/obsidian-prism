@@ -47,9 +47,11 @@
   const PRISM_SETTINGS_SCHEMA = O.freeze({
     palette: mkSp(['obsidian', 'host', 'warm'], null, { claude: 'warm' }),
     lightPreset: mkSp(['crystal', 'alabaster']),
+    darkAuraStyle: mkSp(['prism', 'neon'], 'prism'),
     accentTone: mkSp(['follow', 'cobalt', 'iris', 'amber', 'mono']),
     cornerStyle: mkSp(['sharp', 'balanced', 'soft'], 'balanced'),
     ambientIntensity: mkSp(['0', '35', '70', '100'], '100'),
+    darkAura: mkSp(['subtle', 'balanced', 'vivid'], 'balanced'),
     motionLevel: mkSp(['off', 'subtle', 'standard', 'ultra'], 'ultra'),
     targetFps: mkSp(['60', '120', '180', 'native'], '180'),
     homeLayout: mkSp(['studio', 'classic', 'off']),
@@ -1946,6 +1948,8 @@
         ['homeRipple', isMotionOff || effVal('homeLayout', l) === 'off'],
         ['convRipple', isMotionOff],
         ['linkTarget', effVal('omniModule', l) === 'off'],
+        ['darkAura', effVal('ambientIntensity', l) === '0'],
+        ['darkAuraStyle', effVal('ambientIntensity', l) === '0'],
       ]) {
         const dr = qs(rootEl, `[data-ag-cs-row="${dk}"]`);
         if (!dr) continue;
@@ -1960,6 +1964,16 @@
         else if (isLightTheme && curPal === 'warm' && u.lightPresetHintWarm) lpText = u.lightPresetHintWarm;
         else if (isLightTheme && curPal === 'host' && u.lightPresetHintHost) lpText = u.lightPresetHintHost;
         if (lpDescEl[K_TC] !== lpText) lpDescEl[K_TC] = lpText;
+      }
+      const daDescEl = qs(rootEl, '[data-ag-cs-row="darkAura"] [data-k="d"]');
+      if (daDescEl) {
+        const daText = (isLightTheme && u.darkAuraHintLight) ? u.darkAuraHintLight : (u.setDarkAuraDesc || '');
+        if (daDescEl[K_TC] !== daText) daDescEl[K_TC] = daText;
+      }
+      const dasDescEl = qs(rootEl, '[data-ag-cs-row="darkAuraStyle"] [data-k="d"]');
+      if (dasDescEl) {
+        const dasText = (isLightTheme && u.darkAuraHintLight) ? u.darkAuraHintLight : (u.setDarkAuraStyleDesc || '');
+        if (dasDescEl[K_TC] !== dasText) dasDescEl[K_TC] = dasText;
       }
       const mRosterEl = qs(rootEl, '[data-ag-mascot-roster="1"]');
       if (mRosterEl) {
@@ -2407,10 +2421,19 @@
             RS('sidebarStudio', onOffStr),
             RS('autoUpdate', onOffStr),
             RS('updateChannel', [['stable', U('optChannelStable', 'Stable')], ['beta', U('optChannelBeta', 'Beta')]]),
+            R('darkAuraStyle', 'setDarkAuraStyleLabel', 'setDarkAuraStyleDesc', [
+              ['prism', U('optDarkAuraPrism', 'Stardust Prism')],
+              ['neon', U('optDarkAuraNeon', 'Midnight Neon')],
+            ]),
+            R('darkAura', 'setDarkAuraLabel', 'setDarkAuraDesc', [
+              ['subtle', U('optDarkAuraSubtle', 'Subtle')],
+              ['balanced', U('optDarkAuraBalanced', 'Balanced')],
+              ['vivid', U('optDarkAuraVivid', 'Vivid')],
+            ]),
           ]) rowDefs[r.key] = r;
 
           const groups = [
-            { id: 'appearance', title: U('grpAppearance'), keys: ['palette', 'lightPreset', 'accentTone', 'cornerStyle', 'ambientIntensity', 'motionLevel', 'targetFps', 'homeLayout', 'homeRipple', 'convRipple', 'logoInk', 'language', 'hostLocalization'] },
+            { id: 'appearance', title: U('grpAppearance'), keys: ['palette', 'lightPreset', 'darkAuraStyle', 'accentTone', 'cornerStyle', 'ambientIntensity', 'darkAura', 'motionLevel', 'targetFps', 'homeLayout', 'homeRipple', 'convRipple', 'logoInk', 'language', 'hostLocalization'] },
             { id: 'interaction', title: U('grpInteraction'), keys: ['composerRestyle', 'placeholderStyle', 'smoothCaret', 'scrollBottomMotion', 'contextMenu', 'codeFont', 'codeLigatures', 'mascot', 'sidebarRestyle', 'sidebarCompact', 'sidebarNavFold'] },
             { id: 'thought', title: U('grpThought'), keys: ['thoughtTranslate', 'thoughtTrigger', 'thoughtView'] },
             { id: 'modules', title: U('groupModules'), keys: ['telemetryModule', 'effortSliderModule', 'effortMemory', 'periodicModelPicker', 'omniModule', 'linkTarget'] },

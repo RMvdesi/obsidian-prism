@@ -408,11 +408,15 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   // Verify all 37 global config keys (including convRipple, effortMemory, periodicModelPicker, contextMenu, sidebarNavFold, scrollBottomMotion, hostLocalization, omniModule, linkTarget, sidebarStudio, autoUpdate, updateChannel & autoArchiveOnExit) match exact contract
   const { PRISM_SETTINGS_SCHEMA, SCENE_PRESETS, buildSanitizedConfigExport, validateImportedConfigJson, getDefaultSettingsPatch } =
     settingsPanel;
-  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 37);
+  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 39);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.homeRipple.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.homeRipple.default, true);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.convRipple.allowed, ['off', 'subtle', 'medium', 'full']);
   assert.equal(PRISM_SETTINGS_SCHEMA.convRipple.default, 'off');
+  assert.deepEqual(PRISM_SETTINGS_SCHEMA.darkAura.allowed, ['subtle', 'balanced', 'vivid']);
+  assert.equal(PRISM_SETTINGS_SCHEMA.darkAura.default, 'balanced');
+  assert.deepEqual(PRISM_SETTINGS_SCHEMA.darkAuraStyle.allowed, ['prism', 'neon']);
+  assert.equal(PRISM_SETTINGS_SCHEMA.darkAuraStyle.default, 'prism');
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.autoArchiveOnExit.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.autoArchiveOnExit.default, false);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.effortMemory.allowed, ['on', 'off']);
@@ -526,9 +530,11 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   assert.equal(validateImportedConfigJson('not-json').ok, false);
   assert.equal(validateImportedConfigJson('{"unknownOnly": 1}').ok, false);
   const defaultPatch = getDefaultSettingsPatch();
-  assert.equal(Object.keys(defaultPatch).length, 37);
+  assert.equal(Object.keys(defaultPatch).length, 39);
   assert.equal(defaultPatch.homeRipple, true);
   assert.equal(defaultPatch.convRipple, 'off');
+  assert.equal(defaultPatch.darkAura, 'balanced');
+  assert.equal(defaultPatch.darkAuraStyle, 'prism');
   assert.equal(defaultPatch.autoArchiveOnExit, false);
   assert.equal(defaultPatch.effortMemory, 'on');
   assert.equal(defaultPatch.periodicModelPicker, 'on');

@@ -135,12 +135,10 @@
   const normalizeConfigShape = (rawCfg) => {
     const out = { ...(rawCfg || {}) };
     out.palette = pickOf(out.palette === 'claude' ? 'warm' : out.palette, 'host|obsidian|warm', 'obsidian');
-    out.lightPreset = out.lightPreset === 'alabaster' ? 'alabaster' : 'crystal';
     out.motionLevel = pickOf(out.motionLevel, 'off|subtle|standard|ultra', 'ultra');
     out.targetFps = pickOf(out.targetFps, '60|120|180|native', '180');
     for (const k of ['telemetryModule', 'effortSliderModule', 'hostLocalization']) out[k] = pickOf(out[k], 'on|off', 'auto');
     out.thoughtTranslate = pickOf(out.thoughtTranslate, 'machine|ai', 'off');
-    out.thoughtTrigger = out.thoughtTrigger === 'expand' ? 'expand' : 'preload';
     out.homeLayout = out.homeMode = pickOf(out.homeLayout ?? out.homeMode, 'classic|off', 'studio');
     for (const [bKey, sKey] of BOOL_ALIAS_PAIRS) {
       const v = out[bKey] !== undefined ? out[bKey] : out[sKey];
@@ -156,13 +154,11 @@
     for (const k of ['smoothCaret', 'contextMenu']) out[k] = out[k] === undefined ? true : out[k] !== false && out[k] !== 'off';
     out.accentTone = pickOf(out.accentTone, 'follow|cobalt|iris|amber|mono', 'follow');
     out.cornerStyle = pickOf(out.cornerStyle, 'sharp|balanced|soft', 'balanced');
-    out.scrollBottomMotion = out.scrollBottomMotion === 'instant' ? 'instant' : 'smooth';
     out.codeFont = pickOf(out.codeFont, 'default|jetbrains|cascadia|sfmono', 'default');
     out.ambientIntensity = pickOf(String(out.ambientIntensity ?? '100'), '0|35|70|100', '100');
-    out.thoughtView = out.thoughtView === 'bilingual' ? 'bilingual' : 'immersive';
+    out.darkAura = pickOf(out.darkAura, 'subtle|balanced|vivid', 'balanced');
     for (const k of ['omniModule', 'effortMemory', 'periodicModelPicker']) out[k] = out[k] === 'off' || out[k] === false ? 'off' : 'on';
-    out.linkTarget = out.linkTarget === 'external' ? 'external' : 'builtin';
-    out.updateChannel = out.updateChannel === 'beta' ? 'beta' : 'stable';
+    for (const [k, a, b] of [['lightPreset','alabaster','crystal'],['darkAuraStyle','neon','prism'],['thoughtTrigger','expand','preload'],['scrollBottomMotion','instant','smooth'],['thoughtView','bilingual','immersive'],['linkTarget','external','builtin'],['updateChannel','beta','stable']]) out[k] = out[k] === a ? a : b;
     const migrateLegacyLang = (v) => {
       if (typeof v !== 'string') return '';
       const t = v.trim();
@@ -288,7 +284,7 @@
   const routeConfigDirtyFlags = (prevCfg, nextCfg, patch) => {
     dirtyFlags.g = true;
     const any = (s) => s.split('|').some((k) => prevCfg[k] !== nextCfg[k] || O.hasOwn(patch, k));
-    if (any('palette|lightPreset|accentTone|ambientIntensity|cornerStyle|codeFont|codeLigatures')) dirtyFlags.t = true;
+    if (any('palette|lightPreset|accentTone|ambientIntensity|darkAura|darkAuraStyle|cornerStyle|codeFont|codeLigatures')) dirtyFlags.t = true;
     if (any('accentTone|composerRestyle|placeholderStyle|mascot|smoothCaret|telemetryModule|motionLevel|language')) dirtyFlags.c = true;
     if (any('homeLayout|homeRipple|convRipple|motionLevel|language')) dirtyFlags.r = true;
     if (any('sidebarRestyle|sidebarCompact|sidebarNavFold')) dirtyFlags.s = true;
@@ -1086,15 +1082,17 @@
         style: '1', theme: dark ? 'dark' : 'light', palette, 'light-preset': lightPreset, motion: motionLv,
         'target-fps': targetFps, telemetry: telemetryMod, 'effort-slider': effortSliderMod,
         'thought-translate': getThoughtTranslateMode(), accent: getAccentTone(), corners: getCornerStyle(),
-        'scroll-bottom': cfg.scrollBottomMotion === 'instant' ? 'instant' : 'smooth', 'code-font': getCodeFont(),
+        'scroll-bottom': cfg.scrollBottomMotion, 'code-font': getCodeFont(),
         ligatures: isCodeLigaturesEnabled() ? '1' : '0', ambient: getAmbientCssValue(),
-        home: cfg.homeLayout === 'classic' ? 'classic' : cfg.homeLayout === 'off' ? 'off' : 'studio',
-        composer: cfg.composerRestyle === false ? 'off' : 'on', 'logo-ink': cfg.logoInk === 'foreground' ? 'foreground' : 'accent',
-        sidebar: cfg.sidebarRestyle === false ? 'off' : 'on', 'sidebar-compact': cfg.sidebarCompact === true ? 'on' : 'off',
-        'sb-fold': cfg.sidebarNavFold === 'on' ? 'on' : 'off', lang,
+        'dark-aura': cfg.darkAura,
+        'dark-aura-style': cfg.darkAuraStyle,
+        home: cfg.homeLayout,
+        composer: cfg.composer, 'logo-ink': cfg.logoInk === 'foreground' ? 'foreground' : 'accent',
+        sidebar: cfg.sidebar, 'sidebar-compact': cfg.sidebarCompact ? 'on' : 'off',
+        'sb-fold': cfg.sidebarNavFold, lang,
       };
       for (const [k, v] of O.entries(csA)) setAttrIfChanged(html, 'data-ag-cs-' + k, v);
-      for (const [k, v] of [['', VERSION], ['-omni', getOmniMode()], ['-link-target', getLinkTarget()], ['-sidebar-studio', cfg.sidebarStudio === 'on' ? 'on' : 'off']]) {
+      for (const [k, v] of [['', VERSION], ['-omni', getOmniMode()], ['-link-target', getLinkTarget()], ['-sidebar-studio', cfg.sidebarStudio]]) {
         setAttrIfChanged(html, 'data-ag-prism' + k, v);
       }
       if (cfg.sidebarRestyle === false) {
@@ -1133,7 +1131,7 @@
         lastAppliedLang = lang;
         if (prevLang) refreshOpenUiForLanguage();
       }
-      const themeKey = `${palette}|${lightPreset}|${dark ? 'd' : 'l'}|${getAccentTone()}|${getAmbientIntensitySetting()}|${getCornerStyle()}`;
+      const themeKey = `${palette}|${lightPreset}|${dark ? 'd' : 'l'}|${getAccentTone()}|${getAmbientIntensitySetting()}|${cfg.darkAura}|${cfg.darkAuraStyle}|${getCornerStyle()}`;
       if (themeKey !== lastThemeKey) {
         lastThemeKey = themeKey;
         refreshOptics();
