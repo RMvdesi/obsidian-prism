@@ -1906,7 +1906,7 @@
       const langChanged = Boolean(lastSyncedLang && curLang !== lastSyncedLang);
       lastSyncedLang = curLang;
       if (isFull || flags.c || flags.l || flags.r || flags.s) syncCascadeChange(true);
-      if (isFull || flags.t || flags.r) syncSidecarThemeBridge(false);
+      if (isFull || flags.t || flags.r || flags.l) syncSidecarThemeBridge(false);
       if (isFull || flags.c || flags.l || flags.b || flags.r || flags.t || langChanged) {
         syncCodeBlocks();
         syncNavRails();
