@@ -226,7 +226,7 @@
   let pendingCfgToast = null;
 
   const invokePrismRepoAction = (action, ver, extra) => {
-    const act = ['pull', 'storage-health', 'prepare-archive', 'uninstall', 'update-status', 'check-update', 'apply-update'].includes(action) ? action : 'status';
+    const act = ['pull', 'storage-health', 'storage-detail', 'prepare-archive', 'prepare-restore', 'uninstall', 'update-status', 'check-update', 'apply-update'].includes(action) ? action : 'status';
     const vObj = isObj(ver);
     const ext = vObj ? { ...ver, ...(isObj(extra) ? extra : null) } : isObj(extra) ? extra : null;
     try {
@@ -1047,55 +1047,56 @@
               });
           });
 
-          const storageChip = mkChip(U('storageHealthIdle', 'DB'), 'data-ag-cs-storage-status');
-          const archiveBtn = mkB('ag-cs-repo-sync-btn', U('storageArchiveBtn', 'Archive'), 'data-ag-cs-storage-archive');
+          const SP = 'data-ag-cs-storage-', RB = 'ag-cs-repo-sync-btn', TB = 'ag-cs-thought-btn-group';
+          const storageChip = mkChip(U('storageHealthIdle', 'DB'), SP + 'status');
+          const mkSb = (t, k) => mkB(RB, t, SP + k);
+          const archiveBtn = mkSb(U('storageArchiveBtn', 'Archive'), 'archive');
+          const stWb = mkEl('details', 'ag-cs-thought-cfg-box'), stSum = mkEl('summary', '', U('storageHealthTitle', 'DB')), stPre = mkEl('pre', 'ag-cs-license-pre', '');
+          sa(stWb, SP + 'wb', '1');
+          sa(stPre, SP + 'detail', '1');
+          const stOld = mkSb('>14d', 'old'), stRef = mkSb('↻', 'ref'), stRes = mkSb('Restore', 'res'), stSel = mkEl('select', RB);
+          sa(stSel, SP + 'sel', '1');
+          const stBR = ap(mkEl('div', TB), stSel, stRes), stBs = [archiveBtn, stOld, stRes, stRef];
+          setVis(stBR, false);
+          ap(stWb, stSum, stPre, ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', TB), stOld, stRef), stBR));
           let storageBusy = false;
-          const applyStorageView = (st, prepared) => {
+          const applyStorageView = (st, kind) => {
             if (!storageChip[K_IC] || !st || st.offline || st.timeout) return;
             const u = uiText(getLang()) || ui;
             runGuardedMut(() => {
-              if (st.ok === false && st.error) {
-                setChip(storageChip, 'error', st.error);
-                return;
+              if (isArr(st.wbL)) [stSum, stOld, stRes, stRef].forEach((e, i) => { if (st.wbL[i]) e[K_TC] = st.wbL[i]; });
+              if (typeof st.detailText === 'string') stPre[K_TC] = st.detailText;
+              if (isArr(st.wbB)) {
+                stSel[K_TC] = '';
+                for (const [v, t] of st.wbB) { const o = mkEl('option', '', t); o.value = v; ap(stSel, o); }
+                setVis(stBR, st.wbB.length > 0);
               }
+              if (st.ok === false && st.error) return setChip(storageChip, 'error', st.error);
               const fmtMb = (v) => (Number(v) >= 1024 ? `${(Number(v) / 1024).toFixed(2)} GB` : `${Math.round(Number(v) || 0)} MB`);
-              if (prepared && st.archiveScriptPath) {
-                setChip(storageChip, 'updated', fmtTpl(u.storageReadyTpl || '{0}/{1}:{2}', [st.archivableSubagentCount || 0, fmtMb(st.archivableSubagentMb), st.archiveScriptPath]));
-                try { navigator?.clipboard?.writeText?.(st.archiveScriptPath)?.catch?.(() => {}); } catch {}
-              } else {
-                setChip(
-                  storageChip,
-                  st.warn ? 'warn' : 'ok',
-                  fmtTpl(u.storageSummaryTpl || '{0}({1}/{2}/{3}){4}', [
-                    fmtMb(st.totalMb),
-                    st.mainCount || 0,
-                    st.subagentCount || 0,
-                    fmtMb(st.subagentMb),
-                    st.warn ? u.storageWarn || '!' : u.storageOk || 'OK',
-                  ])
-                );
-              };
+              const p = st.clipPath || st.archiveScriptPath;
+              if (st.chipText || (kind === 1 && p)) {
+                setChip(storageChip, 'updated', st.chipText || fmtTpl(u.storageReadyTpl || '{0}/{1}:{2}', [st.archivableSubagentCount || 0, fmtMb(st.archivableSubagentMb), p]));
+                try { p && navigator?.clipboard?.writeText?.(p)?.catch?.(() => {}); } catch {}
+              } else if (kind < 2) {
+                setChip(storageChip, st.warn ? 'warn' : 'ok', fmtTpl(u.storageSummaryTpl || '{0}({1}/{2}/{3}){4}', [fmtMb(st.totalMb), st.mainCount || 0, st.subagentCount || 0, fmtMb(st.subagentMb), st.warn ? u.storageWarn || '!' : u.storageOk || 'OK']));
+              }
             });
           };
-          const probeStorageSilently = () => {
+          const runSt = (act, kind, ex) => {
             if (storageBusy) return;
-            void invokePrismRepoAction('storage-health', version)
-              .then((st) => st && applyStorageView(st, false))
-              .catch((err) => applyStorageView({ ok: false, error: String(err?.message || err) }, false));
+            if (kind) { storageBusy = true; runGuardedMut(() => stBs.forEach((b) => { b.disabled = true; })); }
+            void invokePrismRepoAction(act, version, kind ? { lang: getLang(), ...(ex || null) } : undefined)
+              .then((st) => st && applyStorageView(st, kind))
+              .catch((e) => applyStorageView({ ok: false, error: String(e?.message || e) }, kind))
+              .finally(() => { if (kind) { storageBusy = false; runGuardedMut(() => stBs.forEach((b) => { if (b[K_IC]) b.disabled = false; })); } });
           };
-          onClk(archiveBtn, () => {
-            if (storageBusy) return;
-            storageBusy = true;
-            runGuardedMut(() => { archiveBtn.disabled = true; });
-            void invokePrismRepoAction('prepare-archive', version)
-              .then((st) => st && applyStorageView(st, true))
-              .catch((err) => applyStorageView({ ok: false, error: String(err?.message || err) }, false))
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (archiveBtn[K_IC]) archiveBtn.disabled = false; });
-              });
-          });
-          ap(aboutBox, ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', 'ag-cs-about-repo-info'), mkEl('span', 'font-medium text-foreground', U('storageHealthTitle', 'DB')), storageChip), archiveBtn));
+          const probeStorageSilently = () => runSt('storage-health', 0);
+          onClk(archiveBtn, () => runSt('prepare-archive', 1));
+          onClk(stOld, () => runSt('prepare-archive', 1, { oldMain: true }));
+          onClk(stRes, () => runSt('prepare-restore', 1, { batchName: stSel.value || 'latest' }));
+          onClk(stRef, () => runSt('storage-detail', 2));
+          on(stWb, 'toggle', () => { if (stWb.open && !stPre[K_TC]) runSt('storage-detail', 2); });
+          ap(aboutBox, ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', 'ag-cs-about-repo-info'), mkEl('span', 'font-medium text-foreground', U('storageHealthTitle', 'DB')), storageChip), archiveBtn), stWb);
 
           const creditsGrid = mkEl('div', 'ag-cs-about-credits');
           for (const item of UPSTREAM_CREDITS) {

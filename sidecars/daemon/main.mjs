@@ -2191,22 +2191,67 @@ export class PrismDaemon {
     return null;
   }
 
-  async _handleStorageAction(action, _testOverrides = null) {
+  async _handleStorageAction(action, _testOverrides = null, rpcOpts = null) {
     try {
       const modUrl = new URL('./conversation-archive.mjs', import.meta.url);
       const arch = await import(modUrl.href);
       const now = Number.isFinite(_testOverrides?.now) ? _testOverrides.now : Date.now();
+      const reqOpts = rpcOpts && typeof rpcOpts === 'object' ? rpcOpts : _testOverrides && typeof _testOverrides === 'object' ? _testOverrides : {};
+      const lang = typeof reqOpts.lang === 'string' && reqOpts.lang ? reqOpts.lang : 'zh-CN';
+      const labels = typeof arch.getStorageWorkbenchLabels === 'function' ? arch.getStorageWorkbenchLabels(lang) : null;
+
       if (action === 'storage-health' && this._storageHealthCache && now - this._storageHealthAt < 300000) {
         return this._storageHealthCache;
       }
       const convDir = _testOverrides?.convDir || arch.getDefaultConversationsDir();
       const archiveDir = _testOverrides?.archiveDir || arch.getDefaultArchiveDir();
+
+      if (action === 'prepare-restore') {
+        const batches = arch.listArchiveBatches(archiveDir).slice(0, 12);
+        const rawBatch = typeof reqOpts.batchName === 'string' ? reqOpts.batchName.trim() : 'latest';
+        let validatedBatch = 'latest';
+        try {
+          validatedBatch = arch.validateBatchSelector(rawBatch || 'latest');
+        } catch (err) {
+          return { ok: false, action, error: sanitizeSecretText(err?.message || 'invalid_batch') };
+        }
+        const matched =
+          validatedBatch === 'latest'
+            ? batches[0] || null
+            : batches.find((b) => b.batchName === validatedBatch) || null;
+        if (!matched) {
+          return { ok: false, action, error: 'batch_not_found', batches, ...(labels ? { labels } : {}) };
+        }
+        const scriptPath = path.join(this.rootDir, 'sidecars', 'daemon', 'conversation-archive.mjs');
+        const helpers = arch.writeHelperScripts({
+          scriptPath,
+          archiveDir,
+          restoreBatch: matched.batchName,
+        });
+        const chipText = labels?.restoreReadyTpl
+          ? labels.restoreReadyTpl.replace('{0}', matched.batchName).replace('{1}', helpers.restoreScriptPath)
+          : `${matched.batchName}: ${helpers.restoreScriptPath}`;
+        const wbB = batches.map((b) => [b.batchName, `${b.batchName} (${b.movedCount || 0}/${Number(b.movedMb) >= 1024 ? `${(Number(b.movedMb) / 1024).toFixed(2)} GB` : `${Math.round(Number(b.movedMb) || 0)} MB`})`]);
+        return {
+          ok: true,
+          action,
+          batchName: matched.batchName,
+          batches,
+          wbB,
+          ...helpers,
+          chipText,
+          clipPath: helpers.restoreScriptPath,
+          ...(labels ? { labels, wbL: [labels.summary, labels.archiveOldMain, labels.restoreBtn, labels.refreshBtn] } : {}),
+        };
+      }
+
       let liveSummaries = null;
       const existingIdx = arch.loadCatalogIndex(archiveDir);
       const parsedUpdatedAt = existingIdx?.updatedAt ? Date.parse(existingIdx.updatedAt) : NaN;
       const idxAgeMs = Number.isFinite(parsedUpdatedAt) ? Math.max(0, now - parsedUpdatedAt) : Infinity;
+      const needsFreshIndex = action === 'prepare-archive' || action === 'storage-detail';
 
-      if (action === 'prepare-archive' || !existingIdx || idxAgeMs > 1800000) {
+      if (needsFreshIndex || !existingIdx || idxAgeMs > 1800000) {
         // Reuse already-warm in-memory summaries first to avoid extra RPC traffic
         const warmReaderSums = this._lazyStore?.client?.reader?.summaries;
         if (action !== 'prepare-archive' && warmReaderSums && Object.keys(warmReaderSums).length > 0) {
@@ -2231,43 +2276,76 @@ export class PrismDaemon {
         }
       }
 
+      const scanOpts = {
+        convDir,
+        archiveDir,
+        summaries: liveSummaries,
+        subagentMaxAgeHours: needsFreshIndex ? 1 : 6,
+        now,
+      };
       const scan =
         typeof arch.scanConversationStorageAsync === 'function'
-          ? await arch.scanConversationStorageAsync({
-              convDir,
-              archiveDir,
-              summaries: liveSummaries,
-              subagentMaxAgeHours: action === 'prepare-archive' ? 1 : 6,
-              now,
-            })
-          : arch.scanConversationStorage({
-              convDir,
-              archiveDir,
-              summaries: liveSummaries,
-              subagentMaxAgeHours: action === 'prepare-archive' ? 1 : 6,
-              now,
-            });
+          ? await arch.scanConversationStorageAsync(scanOpts)
+          : arch.scanConversationStorage(scanOpts);
       const base = {
         ok: true,
         action,
         totalMb: scan.totalMb,
+        walMb: scan.walMb,
         conversationCount: scan.conversationCount,
         mainCount: scan.mainCount,
         mainMb: scan.mainMb,
         subagentCount: scan.subagentCount,
         subagentMb: scan.subagentMb,
+        unknownCount: scan.unknownCount,
+        unknownMb: scan.unknownMb,
         archivableSubagentCount: scan.archivableSubagentCount,
         archivableSubagentMb: scan.archivableSubagentMb,
+        archivableOldMainCount: scan.archivableOldMainCount,
+        archivableOldMainMb: scan.archivableOldMainMb,
         warn: scan.warn,
         archiveDir: scan.archiveDir,
       };
+      const fmtBatches = (list) =>
+        list.map((b) => [
+          b.batchName,
+          `${b.batchName} (${b.movedCount || 0}/${Number(b.movedMb) >= 1024 ? `${(Number(b.movedMb) / 1024).toFixed(2)} GB` : `${Math.round(Number(b.movedMb) || 0)} MB`})`,
+        ]);
+      if (action === 'storage-detail') {
+        const batches = arch.listArchiveBatches(archiveDir).slice(0, 12);
+        const topConsumers = Array.isArray(scan.topConsumers) ? scan.topConsumers : [];
+        const detailObj = { ...base, topConsumers, batches };
+        const detailText =
+          typeof arch.formatStorageDetailReport === 'function'
+            ? arch.formatStorageDetailReport(detailObj, lang)
+            : '';
+        return {
+          ...detailObj,
+          detailText,
+          wbB: fmtBatches(batches),
+          ...(labels ? { labels, wbL: [labels.summary, labels.archiveOldMain, labels.restoreBtn, labels.refreshBtn] } : {}),
+        };
+      }
       if (action === 'prepare-archive') {
+        const mode = reqOpts.mode === 'subagents+old-main' || reqOpts.oldMain === true ? 'subagents+old-main' : 'subagents';
         const scriptPath = path.join(this.rootDir, 'sidecars', 'daemon', 'conversation-archive.mjs');
-        const helpers = arch.writeHelperScripts({ scriptPath, archiveDir });
+        const helpers = arch.writeHelperScripts({ scriptPath, archiveDir, mode });
+        const batches = arch.listArchiveBatches(archiveDir).slice(0, 12);
         // Do not overwrite 6h storage-health cache with prepare-archive's 1h threshold view
         this._storageHealthCache = null;
         this._storageHealthAt = 0;
-        return { ...base, ...helpers };
+        const extraChip =
+          mode === 'subagents+old-main'
+            ? `${(base.archivableSubagentCount || 0) + (base.archivableOldMainCount || 0)} (${((Number(base.archivableSubagentMb) || 0) + (Number(base.archivableOldMainMb) || 0)).toFixed(1)} MB) · ${helpers.archiveScriptPath}`
+            : undefined;
+        return {
+          ...base,
+          ...helpers,
+          batches,
+          wbB: fmtBatches(batches),
+          ...(extraChip ? { chipText: extraChip, clipPath: helpers.archiveScriptPath } : {}),
+          ...(labels ? { labels, wbL: [labels.summary, labels.archiveOldMain, labels.restoreBtn, labels.refreshBtn] } : {}),
+        };
       }
       this._storageHealthCache = base;
       this._storageHealthAt = now;
@@ -2742,8 +2820,13 @@ export class PrismDaemon {
             : {};
       rawInput = { ...extra, action: rawInput };
     }
-    if (rawInput?.action === 'storage-health' || rawInput?.action === 'prepare-archive') {
-      return this._handleStorageAction(rawInput.action);
+    if (
+      rawInput?.action === 'storage-health' ||
+      rawInput?.action === 'storage-detail' ||
+      rawInput?.action === 'prepare-archive' ||
+      rawInput?.action === 'prepare-restore'
+    ) {
+      return this._handleStorageAction(rawInput.action, null, rawInput);
     }
     if (rawInput?.action === 'uninstall') {
       return this._handleUninstallAction(rawInput);

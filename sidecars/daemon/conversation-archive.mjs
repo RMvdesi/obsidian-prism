@@ -476,6 +476,17 @@ function normalizeNonNegativeThreshold(value, fallback, { integer = false } = {}
 }
 
 const ASYNC_SCAN_LSTAT_CONCURRENCY = 24;
+const TOP_CONSUMERS_LIMIT = 5;
+
+function sanitizeTitleForReport(raw) {
+  return String(raw || '')
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(/\b(?:sk|rk|pk|ak|AIza)[A-Za-z0-9_\-]{10,}\b/g, '[REDACTED]')
+    .replace(/\bBearer\s+[A-Za-z0-9._\-]{10,}\b/gi, 'Bearer [REDACTED]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 72);
+}
 
 function buildStorageScanReport({
   safeConvDir,
@@ -561,6 +572,18 @@ function buildStorageScanReport({
   archivableSubagents.sort((a, b) => b.bytes - a.bytes);
   archivableOldMain.sort((a, b) => b.bytes - a.bytes);
 
+  const topConsumers = [...items]
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, TOP_CONSUMERS_LIMIT)
+    .map((it) => ({
+      id: it.id,
+      kind: it.kind,
+      mb: it.mb,
+      ageDays: it.ageDays,
+      running: it.running,
+      title: sanitizeTitleForReport(it.title),
+    }));
+
   const totalMb = Number((totalBytes / 1048576).toFixed(1));
   const subagentMb = Number((subagentBytes / 1048576).toFixed(1));
   const mainMb = Number((mainBytes / 1048576).toFixed(1));
@@ -591,6 +614,7 @@ function buildStorageScanReport({
     archivableOldMainMb: Number((archivableOldMainBytes / 1048576).toFixed(1)),
     warn: totalMb >= WARN_TOTAL_MB || subagentMb >= WARN_SUBAGENT_MB,
     warnThresholds: { totalMb: WARN_TOTAL_MB, subagentMb: WARN_SUBAGENT_MB },
+    topConsumers,
     archivableSubagents,
     archivableOldMain,
   };
@@ -1205,15 +1229,35 @@ function escapePosixSingleQuoted(p) {
   return `'${p.replace(/'/g, "'\\''")}'`;
 }
 
+export function validateBatchSelector(batchName = 'latest') {
+  const raw = String(batchName || 'latest').trim();
+  if (raw === 'latest') return 'latest';
+  if (BATCH_NAME_RE.test(raw)) return raw;
+  throw new Error(`Invalid archive batch name: ${raw.slice(0, 64)}`);
+}
+
 export function writeHelperScripts({
   scriptPath,
   archiveDir = getDefaultArchiveDir(),
   nodeExecPath = process.execPath,
+  mode = 'subagents',
+  mainDays = DEFAULT_MAIN_MAX_AGE_DAYS,
+  keepRecentMain = DEFAULT_KEEP_RECENT_MAIN,
+  restoreBatch = 'latest',
 } = {}) {
   const safeArchive = ensureSafeDir(archiveDir);
   const absScript = assertSafeHelperPath(path.resolve(scriptPath), 'scriptPath');
   const isElectronHost = /antigravity(?:\.exe)?$/i.test(path.basename(nodeExecPath || ''));
   const safeNodeExec = isElectronHost ? 'node' : assertSafeHelperPath(path.resolve(nodeExecPath), 'nodeExecPath');
+  const safeMode = mode === 'subagents+old-main' ? 'subagents+old-main' : 'subagents';
+  const safeMainDays = normalizeNonNegativeThreshold(mainDays, DEFAULT_MAIN_MAX_AGE_DAYS, { integer: true });
+  const safeKeepMain = normalizeNonNegativeThreshold(keepRecentMain, DEFAULT_KEEP_RECENT_MAIN, { integer: true });
+  const safeRestoreBatch = validateBatchSelector(restoreBatch);
+  const archiveFlags =
+    safeMode === 'subagents+old-main'
+      ? `--archive --wait-exit --include-old-main --subagent-hours=1 --main-days=${safeMainDays} --keep-main=${safeKeepMain}`
+      : '--archive --wait-exit --subagent-hours=1';
+  const restoreFlags = `--restore ${safeRestoreBatch} --wait-exit`;
 
   if (process.platform === 'win32') {
     const nodeCmd = safeNodeExec === 'node' ? 'node' : escapeBatchArg(safeNodeExec);
@@ -1229,7 +1273,7 @@ export function writeHelperScripts({
       'echo ============================================================',
       'echo  请确认已完全关闭 Antigravity（等待 language_server.exe 退出）',
       'echo.',
-      `${nodeCmd} ${scriptArg} --archive --wait-exit --subagent-hours=1`,
+      `${nodeCmd} ${scriptArg} ${archiveFlags}`,
       'echo.',
       'pause',
       '',
@@ -1239,18 +1283,24 @@ export function writeHelperScripts({
       'setlocal DisableDelayedExpansion',
       'chcp 65001 >nul',
       'echo ============================================================',
-      'echo  Obsidian Prism — 一键无损还原最近一次对话归档',
+      `echo  Obsidian Prism — 一键无损还原对话归档 (${safeRestoreBatch})`,
       'echo ============================================================',
       'echo  请确认已完全关闭 Antigravity',
       'echo.',
-      `${nodeCmd} ${scriptArg} --restore latest`,
+      `${nodeCmd} ${scriptArg} ${restoreFlags}`,
       'echo.',
       'pause',
       '',
     ].join('\r\n');
     atomicWriteTextExclusiveSync(archiveCmdPath, archiveCmd, 0o600);
     atomicWriteTextExclusiveSync(restoreCmdPath, restoreCmd, 0o600);
-    return { archiveScriptPath: archiveCmdPath, restoreScriptPath: restoreCmdPath, archiveDir: safeArchive };
+    return {
+      archiveScriptPath: archiveCmdPath,
+      restoreScriptPath: restoreCmdPath,
+      archiveDir: safeArchive,
+      mode: safeMode,
+      restoreBatch: safeRestoreBatch,
+    };
   }
 
   const ext = process.platform === 'darwin' ? '.command' : '.sh';
@@ -1258,11 +1308,163 @@ export function writeHelperScripts({
   const scriptArg = escapePosixSingleQuoted(absScript);
   const archiveShPath = path.join(safeArchive, `archive-subagents${ext}`);
   const restoreShPath = path.join(safeArchive, `restore-latest-archive${ext}`);
-  const archiveSh = `#!/usr/bin/env bash\nset -euo pipefail\n${nodeCmd} ${scriptArg} --archive --wait-exit --subagent-hours=1\n`;
-  const restoreSh = `#!/usr/bin/env bash\nset -euo pipefail\n${nodeCmd} ${scriptArg} --restore latest\n`;
+  const archiveSh = `#!/usr/bin/env bash\nset -euo pipefail\n${nodeCmd} ${scriptArg} ${archiveFlags}\n`;
+  const restoreSh = `#!/usr/bin/env bash\nset -euo pipefail\n${nodeCmd} ${scriptArg} ${restoreFlags}\n`;
   atomicWriteTextExclusiveSync(archiveShPath, archiveSh, 0o700);
   atomicWriteTextExclusiveSync(restoreShPath, restoreSh, 0o700);
-  return { archiveScriptPath: archiveShPath, restoreScriptPath: restoreShPath, archiveDir: safeArchive };
+  return {
+    archiveScriptPath: archiveShPath,
+    restoreScriptPath: restoreShPath,
+    archiveDir: safeArchive,
+    mode: safeMode,
+    restoreBatch: safeRestoreBatch,
+  };
+}
+
+const STORAGE_WB_I18N = {
+  'zh-CN': {
+    summary: '存储明细与无损归档工作台',
+    archiveOldMain: '含>14天旧主对话',
+    restoreBtn: '生成还原脚本',
+    refreshBtn: '刷新',
+    restoreReadyTpl: '还原脚本就绪 ({0})：{1}（关闭宿主后运行）',
+    breakdown: '空间构成',
+    main: '主对话',
+    subagent: '隐藏子代理',
+    wal: 'WAL日志',
+    unknown: '未索引',
+    archivable: '可安全归档',
+    archSub: '已结束子代理 (>1h)',
+    archOld: '>14天旧主对话 (保留最近20条)',
+    topTitle: '体积 Top 5 会话（只读）',
+    batchTitle: '历史无损归档批次',
+    none: '暂无',
+    hint: '安全红线：只移动不删除，支持按批次一键无损还原；请在关闭 Antigravity 后运行脚本。',
+  },
+  'zh-TW': {
+    summary: '儲存明細與無損歸檔工作台',
+    archiveOldMain: '含>14天舊主對話',
+    restoreBtn: '產生還原腳本',
+    refreshBtn: '重新整理',
+    restoreReadyTpl: '還原腳本就緒 ({0})：{1}（關閉宿主後執行）',
+    breakdown: '空間構成',
+    main: '主對話',
+    subagent: '隱藏子代理',
+    wal: 'WAL日誌',
+    unknown: '未索引',
+    archivable: '可安全歸檔',
+    archSub: '已結束子代理 (>1h)',
+    archOld: '>14天舊主對話 (保留最近20筆)',
+    topTitle: '體積 Top 5 會話（唯讀）',
+    batchTitle: '歷史無損歸檔批次',
+    none: '暫無',
+    hint: '安全紅線：只移動不刪除，支援按批次一鍵無損還原；請先關閉 Antigravity 再執行腳本。',
+  },
+  yue: {
+    summary: '儲存明細同無損歸檔工作台',
+    archiveOldMain: '連>14日舊主對話',
+    restoreBtn: '產生還原腳本',
+    refreshBtn: '重新整理',
+    restoreReadyTpl: '還原腳本就緒 ({0})：{1}（閂咗宿主之後行）',
+    breakdown: '空間構成',
+    main: '主對話',
+    subagent: '隱藏子代理',
+    wal: 'WAL日誌',
+    unknown: '未索引',
+    archivable: '可安全歸檔',
+    archSub: '已結束子代理 (>1h)',
+    archOld: '>14日舊主對話 (留返最近20個)',
+    topTitle: '體積 Top 5 對話（唯讀）',
+    batchTitle: '歷史無損歸檔批次',
+    none: '暫時冇',
+    hint: '安全紅線：只搬移唔刪除，隨時可以按批次無損還原；請先閂晒 Antigravity 再行腳本。',
+  },
+  en: {
+    summary: 'Storage Details & Lossless Archive Workbench',
+    archiveOldMain: 'Include >14d Main',
+    restoreBtn: 'Restore Script',
+    refreshBtn: 'Refresh',
+    restoreReadyTpl: 'Restore script ready ({0}): {1} (quit host first)',
+    breakdown: 'Breakdown',
+    main: 'Main',
+    subagent: 'Subagents',
+    wal: 'WAL',
+    unknown: 'Unindexed',
+    archivable: 'Archivable',
+    archSub: 'Finished subagents (>1h)',
+    archOld: 'Old main >14d (keeps latest 20)',
+    topTitle: 'Top 5 Largest Conversations (Read-only)',
+    batchTitle: 'Lossless Archive Batches',
+    none: 'None',
+    hint: 'Zero-loss policy: move-only with manifest.json; quit Antigravity before running helper scripts.',
+  },
+  ja: {
+    summary: 'ストレージ詳細・無損失アーカイブ管理',
+    archiveOldMain: '>14日前の主会話も含む',
+    restoreBtn: '復元スクリプト生成',
+    refreshBtn: '更新',
+    restoreReadyTpl: '復元スクリプト準備完了 ({0}): {1}（終了後に実行）',
+    breakdown: '容量内訳',
+    main: '主会話',
+    subagent: 'サブエージェント',
+    wal: 'WAL',
+    unknown: '未分類',
+    archivable: '安全にアーカイブ可能',
+    archSub: '終了済サブエージェント (>1h)',
+    archOld: '>14日前の主会話 (最新20件保持)',
+    topTitle: '容量 Top 5 会話（参照のみ）',
+    batchTitle: '過去の無損失アーカイブバッチ',
+    none: 'なし',
+    hint: '安全方針：削除せず移動のみ（manifest.json付）。スクリプト実行前に Antigravity を終了してください。',
+  },
+};
+
+export function getStorageWorkbenchLabels(lang = 'zh-CN') {
+  return STORAGE_WB_I18N[lang] || STORAGE_WB_I18N['zh-CN'];
+}
+
+function fmtSizeMb(mb) {
+  const n = Number(mb) || 0;
+  return n >= 1024 ? `${(n / 1024).toFixed(2)} GB` : `${n.toFixed(1)} MB`;
+}
+
+export function formatStorageDetailReport(detail = {}, lang = 'zh-CN') {
+  const L = getStorageWorkbenchLabels(lang);
+  const lines = [];
+  const unkPart = Number(detail.unknownCount) > 0 ? ` · ${L.unknown} ${detail.unknownCount} (${fmtSizeMb(detail.unknownMb)})` : '';
+  lines.push(
+    `${L.breakdown}: ${fmtSizeMb(detail.totalMb)} (${detail.conversationCount || 0}) | ${L.main} ${detail.mainCount || 0} (${fmtSizeMb(detail.mainMb)}) · ${L.subagent} ${detail.subagentCount || 0} (${fmtSizeMb(detail.subagentMb)}) · ${L.wal} ${fmtSizeMb(detail.walMb)}${unkPart}`
+  );
+  lines.push(
+    `${L.archivable}: ${L.archSub} ${detail.archivableSubagentCount || 0} (${fmtSizeMb(detail.archivableSubagentMb)}) | ${L.archOld} ${detail.archivableOldMainCount || 0} (${fmtSizeMb(detail.archivableOldMainMb)})`
+  );
+  lines.push('');
+  lines.push(`${L.topTitle}:`);
+  const top = Array.isArray(detail.topConsumers) ? detail.topConsumers : [];
+  if (top.length === 0) {
+    lines.push(`  - ${L.none}`);
+  } else {
+    top.forEach((it, idx) => {
+      const tag = it.kind === 'subagent' ? L.subagent : it.kind === 'main' ? L.main : L.unknown;
+      const titlePart = it.title ? ` · ${it.title}` : ` · ${String(it.id || '').slice(0, 8)}`;
+      const agePart = Number.isFinite(it.ageDays) ? ` · ${Math.round(it.ageDays)}d` : '';
+      lines.push(`  ${idx + 1}. [${tag}] ${fmtSizeMb(it.mb)}${agePart}${titlePart}`);
+    });
+  }
+  lines.push('');
+  lines.push(`${L.batchTitle}:`);
+  const batches = Array.isArray(detail.batches) ? detail.batches : [];
+  if (batches.length === 0) {
+    lines.push(`  - ${L.none}`);
+  } else {
+    batches.forEach((b) => {
+      const ts = b.createdAt ? ` · ${String(b.createdAt).slice(0, 16).replace('T', ' ')}` : '';
+      lines.push(`  - ${b.batchName} (${b.movedCount || 0} / ${fmtSizeMb(b.movedMb)} · ${b.status || 'completed'}${ts})`);
+    });
+  }
+  lines.push('');
+  lines.push(L.hint);
+  return lines.join('\n');
 }
 
 async function fetchLiveSummariesViaClient() {
@@ -1425,6 +1627,14 @@ async function runCli() {
   }
 
   if (opts.action === 'restore') {
+    if (opts.waitExit && isLanguageServerRunning()) {
+      const exited = await waitForLanguageServerExit(120000);
+      if (!exited) {
+        console.error('[中止] 等待超时，language_server 仍在运行。请完全退出 Antigravity 后重试。');
+        process.exitCode = 1;
+        return;
+      }
+    }
     const res = restoreArchiveBatch({ convDir, archiveDir, batchName: opts.restoreBatch });
     if (opts.json) console.log(JSON.stringify(res, null, 2));
     else if (!res.ok) {
