@@ -2420,3 +2420,396 @@ test('Adversarial follow-up fixes: langProbe auto/html[lang] precedence, collaps
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('Windows WMI detached archive command avoids nested powershell -EncodedCommand for both node.exe and Electron fallback', () => {
+  const directCmd = arch.buildWinWmiArchiveCommand({
+    nodeExec: 'C:\\Program Files\\nodejs\\node.exe',
+    scriptPath: 'C:\\Users\\Demo User\\.gemini\\config\\plugins\\obsidian-prism\\sidecars\\daemon\\conversation-archive.mjs',
+    taskFile: 'C:\\Users\\Demo User\\.gemini\\antigravity\\conversations_archive\\.archive-task-abc123.json',
+    useElectronAsNode: false,
+  });
+  assert.ok(!/powershell/i.test(directCmd), 'Standalone node.exe WMI command must launch node.exe directly without PowerShell wrapper');
+  assert.ok(!/-EncodedCommand/i.test(directCmd), 'WMI command must never nest -EncodedCommand under WmiPrvSE');
+  assert.equal(
+    directCmd,
+    '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\Demo User\\.gemini\\config\\plugins\\obsidian-prism\\sidecars\\daemon\\conversation-archive.mjs" "--run-task=C:\\Users\\Demo User\\.gemini\\antigravity\\conversations_archive\\.archive-task-abc123.json"'
+  );
+
+  const noSpacesCmd = arch.buildWinWmiArchiveCommand({
+    nodeExec: 'D:\\Scoop\\apps\\nodejs\\current\\node.exe',
+    scriptPath: 'C:\\Users\\Alice\\.gemini\\config\\plugins\\obsidian-prism\\sidecars\\daemon\\conversation-archive.mjs',
+    taskFile: 'C:\\Users\\Alice\\.gemini\\antigravity\\conversations_archive\\.archive-task-123456.json',
+    useElectronAsNode: false,
+  });
+  assert.equal(
+    noSpacesCmd,
+    'D:\\Scoop\\apps\\nodejs\\current\\node.exe C:\\Users\\Alice\\.gemini\\config\\plugins\\obsidian-prism\\sidecars\\daemon\\conversation-archive.mjs --run-task=C:\\Users\\Alice\\.gemini\\antigravity\\conversations_archive\\.archive-task-123456.json'
+  );
+
+  const electronFallbackCmd = arch.buildWinWmiArchiveCommand({
+    nodeExec: "C:\\Users\\O'Brien\\AppData\\Local\\Programs\\antigravity\\Antigravity.exe",
+    scriptPath: "C:\\Users\\O'Brien\\.gemini\\config\\plugins\\obsidian-prism\\sidecars\\daemon\\conversation-archive.mjs",
+    taskFile: "C:\\Users\\O'Brien\\.gemini\\antigravity\\conversations_archive\\.archive-task-abc123.json",
+    useElectronAsNode: true,
+  });
+  assert.ok(!/-EncodedCommand/i.test(electronFallbackCmd), 'Electron fallback WMI command must NOT use -EncodedCommand');
+  assert.ok(electronFallbackCmd.includes("$env:ELECTRON_RUN_AS_NODE='1'"));
+  assert.ok(electronFallbackCmd.includes("O''Brien"), 'Single quotes inside paths must be PowerShell-escaped');
+  assert.ok(electronFallbackCmd.includes('-Command "'));
+
+  for (const bad of ['C:\\a;calc.exe', 'C:\\a$(whoami)\\node.exe', 'C:\\a"b\\node.exe', 'C:\\a`b\\node.exe', 'C:\\a&b\\node.exe']) {
+    assert.throws(
+      () =>
+        arch.buildWinWmiArchiveCommand({
+          nodeExec: bad,
+          scriptPath: 'C:\\ok\\conversation-archive.mjs',
+          taskFile: 'C:\\ok\\.archive-task-1.json',
+          useElectronAsNode: true,
+        }),
+      /Unsafe characters/i
+    );
+  }
+
+  if (process.platform === 'win32') {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-wmi-unit-'));
+    try {
+      const convDir = path.join(tmpRoot, 'conversations');
+      const archiveDir = path.join(tmpRoot, 'conversations_archive');
+      fs.mkdirSync(convDir, { recursive: true });
+      fs.mkdirSync(archiveDir, { recursive: true });
+      let capturedEnv = null;
+      const res = arch.spawnDetachedArchiveTask(
+        {
+          action: 'archive-and-restart',
+          convDir,
+          archiveDir,
+          gracefulQuit: false,
+          relaunch: false,
+        },
+        {
+          nodeExecPath: process.execPath,
+          wmiExecSync: (_bin, _args, execOpts) => {
+            capturedEnv = execOpts?.env || null;
+            return '42424\n';
+          },
+        }
+      );
+      assert.equal(res.spawned, true);
+      assert.equal(res.method, 'wmi-breakaway');
+      assert.equal(res.pid, 42424);
+      assert.ok(capturedEnv && typeof capturedEnv.AG_PRISM_WMI_CMD === 'string');
+      assert.ok(!/-EncodedCommand/i.test(capturedEnv.AG_PRISM_WMI_CMD));
+      assert.ok(!/powershell/i.test(capturedEnv.AG_PRISM_WMI_CMD));
+      assert.ok(capturedEnv.AG_PRISM_WMI_CWD && path.isAbsolute(capturedEnv.AG_PRISM_WMI_CWD));
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test('Windows runInBackground=true in app_storage.json is temporarily suspended during graceful quit and losslessly restored before relaunch or on timeout', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-run-in-bg-'));
+  try {
+    const convDir = path.join(tmpRoot, 'conversations');
+    const archiveDir = path.join(tmpRoot, 'conversations_archive');
+    const appStoragePath = path.join(tmpRoot, 'Antigravity', 'app_storage.json');
+    fs.mkdirSync(convDir, { recursive: true });
+    fs.mkdirSync(archiveDir, { recursive: true });
+    fs.mkdirSync(path.dirname(appStoragePath), { recursive: true });
+
+    const subId = '00000000-0000-4000-8000-000000000901';
+    const oldMs = Date.now() - 5 * 3600 * 1000;
+    fs.writeFileSync(path.join(convDir, `${subId}.db`), Buffer.alloc(2048, 0x41));
+    fs.utimesSync(path.join(convDir, `${subId}.db`), oldMs / 1000, oldMs / 1000);
+    arch.saveCatalogIndex(archiveDir, {
+      [subId]: {
+        title: 'Old subagent',
+        status: 'CASCADE_RUN_STATUS_IDLE',
+        rootConversationId: '00000000-0000-4000-8000-000000000900',
+        lastModifiedTime: new Date(oldMs).toISOString(),
+      },
+    });
+
+    fs.writeFileSync(
+      appStoragePath,
+      JSON.stringify({ runInBackground: 'true', hubSurfaceBackgroundColor: '#F6F4EE', keepKey: '1' }, null, 2),
+      'utf8'
+    );
+
+    let running = true;
+    let seenDuringQuit = null;
+    let seenDuringRelaunch = null;
+    const happyRes = await arch.executeArchiveTaskSequence(
+      {
+        action: 'archive-and-restart',
+        convDir,
+        archiveDir,
+        appStoragePath,
+        gracefulQuit: true,
+        relaunch: true,
+        waitExitTimeoutMs: 1000,
+        pollMs: 20,
+        settleMs: 0,
+        recheckGapMs: 0,
+        relaunchDelayMs: 0,
+      },
+      {
+        platform: 'win32',
+        sleep: async () => {},
+        checkRunning: () => running,
+        requestGracefulQuit: async () => {
+          const onDisk = JSON.parse(fs.readFileSync(appStoragePath, 'utf8'));
+          seenDuringQuit = onDisk.runInBackground;
+          // Simulate host updating session layout while closing its window
+          fs.writeFileSync(
+            appStoragePath,
+            JSON.stringify({ ...onDisk, 'aux-pane-v2-session': '{"fresh":true}' }, null, 2),
+            'utf8'
+          );
+          if (onDisk.runInBackground === 'false') {
+            running = false;
+          }
+          return true;
+        },
+        launchHost: async () => {
+          seenDuringRelaunch = JSON.parse(fs.readFileSync(appStoragePath, 'utf8'));
+          return true;
+        },
+      }
+    );
+
+    assert.equal(seenDuringQuit, 'false', 'runInBackground must be "false" when CloseMainWindow fires so window-all-closed triggers app.quit()');
+    assert.equal(happyRes.ok, true);
+    assert.equal(happyRes.movedCount, 1);
+    assert.equal(happyRes.relaunched, true);
+    assert.equal(seenDuringRelaunch?.runInBackground, 'true', 'runInBackground must ALREADY be restored to "true" before Antigravity relaunches');
+    assert.equal(seenDuringRelaunch?.['aux-pane-v2-session'], '{"fresh":true}', 'Concurrent host storage updates during shutdown must be preserved');
+    assert.equal(seenDuringRelaunch?.keepKey, '1');
+
+    // Even if host exit times out, runInBackground="true" must still be restored in finally
+    const timeoutRes = await arch.executeArchiveTaskSequence(
+      {
+        action: 'archive-and-restart',
+        convDir,
+        archiveDir,
+        appStoragePath,
+        gracefulQuit: true,
+        relaunch: true,
+        waitExitTimeoutMs: 500,
+        pollMs: 50,
+        settleMs: 0,
+        recheckGapMs: 0,
+      },
+      {
+        platform: 'win32',
+        sleep: async () => {},
+        checkRunning: () => true,
+        requestGracefulQuit: async () => true,
+        launchHost: async () => {
+          throw new Error('must not relaunch on timeout');
+        },
+      }
+    );
+    assert.equal(timeoutRes.code, 'HOST_EXIT_TIMEOUT');
+    const afterTimeout = JSON.parse(fs.readFileSync(appStoragePath, 'utf8'));
+    assert.equal(afterTimeout.runInBackground, 'true', 'runInBackground must be restored even on HOST_EXIT_TIMEOUT');
+
+    const traceContent = fs.readFileSync(path.join(archiveDir, 'archive-trace.log'), 'utf8');
+    assert.ok(traceContent.includes('"TASK_START"'), 'archive-trace.log must record TASK_START');
+    assert.ok(traceContent.includes('"ARCHIVE_OP_FINISHED"'), 'archive-trace.log must record ARCHIVE_OP_FINISHED');
+    assert.ok(traceContent.includes('"HOST_EXIT_TIMEOUT"'), 'archive-trace.log must record HOST_EXIT_TIMEOUT');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Isolated external ACP agy.exe processes (e.g. T3 Code --app-data-dir antigravity-acp) do not false-positive block offline archiving', () => {
+  const defaultGem = 'C:\\Users\\Alice\\.gemini';
+  const t3Cmd =
+    'C:\\Users\\Alice\\.t3\\tools\\antigravity-acp\\win32-x64\\versions\\6b80\\agy.exe acp --gemini-dir C:\\Users\\Alice\\.t3\\userdata\\providers\\antigravity\\ac0a3dfd --app-data-dir antigravity-acp';
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine(t3Cmd, { platform: 'win32', defaultGeminiDir: defaultGem }),
+    true,
+    'T3 Code ACP agy.exe with isolated --gemini-dir and --app-data-dir must be exempted'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('C:\\Program Files\\agy\\agy.exe chat', { platform: 'win32', defaultGeminiDir: defaultGem }),
+    false,
+    'Standard agy CLI using default ~/.gemini/antigravity must still block archiving'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine(`agy.exe --gemini-dir "${defaultGem}" --app-data-dir antigravity`, {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'agy.exe pointing at default ~/.gemini and antigravity app-data-dir must still block archiving'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('language_server.exe --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'language_server.exe must NEVER be exempted'
+  );
+
+  const csvOnlyT3Agy = [
+    '"T3 Code (Beta).exe","36012","Console","1","45,764 K"',
+    '"agy.exe","49084","Console","1","12,544 K"',
+    '"agy.exe","56244","Console","1","18,684 K"',
+  ].join('\r\n');
+
+  const detailExempt = arch.parseWindowsTasklistCsvDetailed(csvOnlyT3Agy, {
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    resolveAgyCommandLines: () =>
+      new Map([
+        [49084, t3Cmd],
+        [56244, t3Cmd],
+      ]),
+  });
+  assert.equal(detailExempt.running, false, 'When Antigravity & language_server exited and only T3 Code ACP agy.exe remains, running must be false');
+  assert.equal(detailExempt.ignoredAcp.length, 2);
+
+  // Fail-closed if command line cannot be read for any agy.exe PID
+  const detailMissingCmd = arch.parseWindowsTasklistCsvDetailed(csvOnlyT3Agy, {
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    resolveAgyCommandLines: () => new Map([[49084, t3Cmd]]),
+  });
+  assert.equal(detailMissingCmd.running, true, 'Missing CommandLine for any agy.exe PID must fail-closed');
+  assert.deepEqual(detailMissingCmd.blockers, [{ imageName: 'agy.exe', pid: 56244 }]);
+
+  // Verify PID CommandLine caching & PID-disappearance eviction in inspectLanguageServerProcesses
+  let tasklistCalls = 0;
+  let psCimCalls = 0;
+  let currentCsv = csvOnlyT3Agy;
+  let currentCmdFor56244 = t3Cmd;
+  const mockExec = (bin) => {
+    if (/tasklist/i.test(bin)) {
+      tasklistCalls += 1;
+      return currentCsv;
+    }
+    if (/powershell/i.test(bin)) {
+      psCimCalls += 1;
+      return JSON.stringify([
+        { ProcessId: 49084, CommandLine: t3Cmd },
+        { ProcessId: 56244, CommandLine: currentCmdFor56244 },
+      ]);
+    }
+    throw new Error(`Unexpected binary: ${bin}`);
+  };
+
+  for (let i = 0; i < 50; i++) {
+    const r = arch.inspectLanguageServerProcesses({
+      platform: 'win32',
+      selfPid: 99999,
+      defaultGeminiDir: defaultGem,
+      exec: mockExec,
+    });
+    assert.equal(r.running, false);
+  }
+  assert.equal(tasklistCalls, 50);
+  assert.equal(psCimCalls, 1, '50 consecutive polls of unchanged T3 Code agy.exe PIDs must invoke PowerShell CIM only ONCE');
+
+  // If PID 56244 disappears from tasklist (even while Antigravity.exe is running) and later reappears as non-isolated agy.exe, cache must evict & re-query
+  currentCsv = '"Antigravity.exe","12345","Console","1","120,000 K"';
+  assert.equal(
+    arch.inspectLanguageServerProcesses({ platform: 'win32', selfPid: 99999, defaultGeminiDir: defaultGem, exec: mockExec }).running,
+    true
+  );
+  currentCsv = csvOnlyT3Agy;
+  currentCmdFor56244 = 'C:\\Program Files\\agy\\agy.exe chat';
+  const afterReuse = arch.inspectLanguageServerProcesses({
+    platform: 'win32',
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    exec: mockExec,
+  });
+  assert.equal(psCimCalls, 2, 'Reused PID after disappearing from tasklist must be re-queried via CIM');
+  assert.equal(afterReuse.running, true, 'Reused PID running standard agy CLI must block archiving');
+  assert.deepEqual(afterReuse.blockers, [{ imageName: 'agy.exe', pid: 56244 }]);
+});
+
+test('archiveConversations throttles real loop process probes so 60 subagents archive without N*2 spawn storms', () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-loop-throttle-'));
+  try {
+    const convDir = path.join(tmpRoot, 'conversations');
+    const archiveDir = path.join(tmpRoot, 'archive');
+    fs.mkdirSync(convDir, { recursive: true });
+    fs.mkdirSync(archiveDir, { recursive: true });
+
+    const now = Date.now();
+    const mainId = '00000000-0000-4000-8000-000000000001';
+    fs.writeFileSync(path.join(convDir, `${mainId}.db`), 'main-db');
+    const summaries = {
+      [mainId]: { status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: new Date(now - 3600_000).toISOString() },
+    };
+    const oldMtime = new Date(now - 5 * 3600_000);
+    for (let i = 1; i <= 60; i++) {
+      const subId = `00000000-0000-4000-8000-${String(1000 + i).padStart(12, '0')}`;
+      for (const ext of ['.db', '.db-wal', '.db-shm']) {
+        const fp = path.join(convDir, `${subId}${ext}`);
+        fs.writeFileSync(fp, `sub-${i}${ext}`);
+        fs.utimesSync(fp, oldMtime, oldMtime);
+      }
+      summaries[subId] = {
+        status: 'CASCADE_RUN_STATUS_IDLE',
+        lastModifiedTime: oldMtime.toISOString(),
+        trajectoryMetadata: { parentConversationId: mainId },
+      };
+    }
+    arch.saveCatalogIndex(archiveDir, summaries);
+
+    // Deterministic fake-clock verification of createLoopRunningChecker + latch-on-running
+    let fakeNow = 1000;
+    let rawCalls = 0;
+    let fakeRunning = false;
+    const markedProbe = () => {
+      rawCalls += 1;
+      return fakeRunning;
+    };
+    markedProbe.__allowLoopThrottle = true;
+    const loopChecker = arch.createLoopRunningChecker(markedProbe, markedProbe, 500, () => fakeNow);
+    for (let step = 0; step < 100; step++) {
+      fakeNow += 20; // 100 * 20ms = 2000ms -> 4 intervals of 500ms
+      assert.equal(loopChecker(), false);
+    }
+    assert.equal(rawCalls, 4, '100 loop iterations over 2000ms must invoke underlying probe only 4 times');
+    fakeRunning = true;
+    fakeNow += 600;
+    assert.equal(loopChecker(), true, 'Must detect host startup at next window');
+    const callsAtLatch = rawCalls;
+    fakeNow += 5000;
+    assert.equal(loopChecker(), true, 'Once latched true, must stay true without re-probing');
+    assert.equal(rawCalls, callsAtLatch);
+
+    let probeCount = 0;
+    const throttledProbe = () => {
+      probeCount += 1;
+      return false;
+    };
+    throttledProbe.__allowLoopThrottle = true;
+
+    const t0 = Date.now();
+    const res = arch.archiveConversations({
+      convDir,
+      archiveDir,
+      mode: 'subagents',
+      subagentMaxAgeHours: 2,
+      now,
+      checkRunning: throttledProbe,
+    });
+    const elapsedMs = Math.max(0, Date.now() - t0);
+    const maxExpectedProbes = 2 + Math.ceil(elapsedMs / 450);
+    assert.equal(res.ok, true);
+    assert.equal(res.movedCount, 60);
+    assert.ok(
+      probeCount <= maxExpectedProbes && probeCount < 60,
+      `Expected <= ${maxExpectedProbes} throttled probes over ${elapsedMs}ms (vs 120 unthrottled), got ${probeCount}`
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
