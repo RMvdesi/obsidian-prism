@@ -8,7 +8,7 @@
  *   4. 0fps visibility/blur/win-blur hibernation + time-sliced rAF scheduling (<= 80 nodes & < 5ms/frame)
  *
  * Upstream Credit:
- *   Dictionary & DOM localization approach inspired by yiheng8023/antigravity-chinese (v3.3.19)
+ *   Dictionary & DOM localization approach inspired by yiheng8023/antigravity-chinese (v3.3.63)
  *   (MIT License, Copyright (c) 2026 Antigravity Chinese Localization Contributors,
  *    https://github.com/yiheng8023/antigravity-chinese).
  *   Re-architected for Obsidian Prism (GPL-3.0-only) as a Zero-ASAR pure CDP on-demand channel.

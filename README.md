@@ -248,7 +248,7 @@ obsidian-prism/
 1. **[0DNANCY/agy-claude-style](https://github.com/0DNANCY/agy-claude-style)** — `MIT License`, `Copyright (c) 2026 0DNANCY`（基础配色框架、弹簧动画底座、WebGL2 地平线/字符波纹矩阵、像素宠物底座与打包器雏形）。
 2. **[ATtacK030130/antigrative-dashboard](https://github.com/ATtacK030130/antigrative-dashboard)** (`v0.9.1`) — `MIT License`, `Copyright (c) 2026 AG Pulse contributors`（吸收适配于 `vendor/pulse-dashboard/`，用于实时吞吐速率、Cache 命中率、5h/周双窗口模型配额预测、主/子代理消耗拆分与多实例进程血缘归属）。
 3. **[LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider](https://github.com/LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider)** — `MIT License`, `Copyright (c) 2026 月上寒 (LLYSH-HANNARI)`（吸收适配于 `vendor/effort-slider/`，用于模型菜单推理等级滑块与智能共存让位）。
-4. **[yiheng8023/antigravity-chinese](https://github.com/yiheng8023/antigravity-chinese)** (`v3.3.19`) — `MIT License`, `Copyright (c) 2026 Antigravity Chinese Localization Contributors`（参考其 `zh-CN` 词库与前端 DOM 翻译匹配思路；本项目已在 `vendor/host-i18n/` 重构为 Zero-ASAR 纯 CDP Channel 4 按需通道，并新增四层未知插件通用自动礼让、防死循环熔断与 `WeakMap` 100% 无损还原）。
+4. **[yiheng8023/antigravity-chinese](https://github.com/yiheng8023/antigravity-chinese)** (`v3.3.63`) — `MIT License`, `Copyright (c) 2026 Antigravity Chinese Localization Contributors`（参考其 `zh-CN` 词库与前端 DOM 翻译匹配思路；本项目已在 `vendor/host-i18n/` 重构为 Zero-ASAR 纯 CDP Channel 4 按需通道，并新增四层未知插件通用自动礼让、防死循环熔断与 `WeakMap` 100% 无损还原）。
 5. **[Nwflower/dsh-claude-style](https://github.com/Nwflower/dsh-claude-style)** — Studio 极简排版、输入框边框结构与暖白浅色配色参考致谢。
 6. **[Microqian2th/dsh-codex-effort-slider](https://github.com/Microqian2th/dsh-codex-effort-slider)** — 轨道刻度分档、迟滞吸附与阻尼运动曲线参考致谢。
 7. **[mobius/dsh-performance-slider](https://github.com/mobius/dsh-performance-slider)** — 性能档位滑块交互与实时反馈设计参考致谢。

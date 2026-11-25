@@ -399,20 +399,37 @@ function createTestEnv(initialTime = 1000) {
   };
 }
 
-test('dictionary hygiene: vendor/host-i18n/zh-CN.json has 3367 exact + 327 patterns, zero private terms, compact JSON, and safe regexes', () => {
+test('dictionary hygiene: vendor/host-i18n/zh-CN.json has 4763 exact + 405 patterns, zero private terms, compact JSON, and safe regexes', () => {
   const dictPath = path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json');
   const raw = fs.readFileSync(dictPath, 'utf8');
   assert.equal(raw.includes('\n  '), false, 'zh-CN.json must be compact JSON without pretty-print indentation');
 
   const dict = JSON.parse(raw);
   const exactKeys = Object.keys(dict.exact || {});
-  assert.equal(exactKeys.length, 3367);
-  assert.equal((dict.patterns || []).length, 327);
+  assert.equal(exactKeys.length, 4763);
+  assert.equal((dict.patterns || []).length, 405);
   assert.equal(dict.exact['Unlock the power of agent swarms.'], '解锁智能体 Swarm 协作的强大能力。');
   assert.ok(
     dict.exact["Live view of the native swarm board, roster and @mention graph for the current conversation's swarm."]?.includes('Swarm'),
     'Swarm sidecar description must be translated while preserving Swarm'
   );
+  // Antigravity v2.35.0 upstream sync spot-checks (yiheng8023/antigravity-chinese v3.3.63)
+  assert.equal(dict.exact['Switch to RTL text direction'], '切换为从右到左的文字方向');
+  assert.equal(dict.exact['Select Environment'], '选择环境');
+  assert.equal(dict.exact['Clone from Remote'], '从远程克隆');
+  assert.equal(
+    dict.exact['Agent finished. Queued messages send after background work finishes.'],
+    '智能体已完成工作。后台工作结束后将发送排队消息。'
+  );
+  assert.equal(dict.exact['System UI'], '系统界面字体');
+  assert.equal(dict.exact['Prevent sleep'], '阻止系统休眠');
+
+  const eng = runtime.createHostI18nEngine(dict);
+  assert.equal(eng.translate('Select Sidebar Item 3'), '选择侧栏第 3 项');
+  assert.equal(eng.translate('Work locally on main'), '在 main 上本地工作');
+  assert.equal(eng.translate('3 of 8'), '第 3 轮（共 8 轮）');
+  assert.equal(eng.translate('Created worker alpha'), null, 'Negative lookahead must keep Swarm "Created worker ..." untranslated');
+  assert.equal(eng.translate('Created 2026-11-24'), '创建于 2026-11-24');
 
   const privRe = /ema-persona|emoji_emma|C:\\Users\\Administrator|\/Users\/|\/home\/|\.hermes|obsidian-prism/i;
   for (const k of exactKeys) {
@@ -1553,7 +1570,7 @@ function createBruteForceReferenceTranslator(dictData) {
   };
 }
 
-test('[Perf-1] pattern precheck index + bounded LRU unitCache (<= 2048) matches 327 brute-force patterns 100% byte-for-byte across full corpus + 250+ edge strings', () => {
+test('[Perf-1] pattern precheck index + bounded LRU unitCache (<= 2048) matches 405 brute-force patterns 100% byte-for-byte across full corpus + 250+ edge strings', () => {
   const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'));
   const brute = createBruteForceReferenceTranslator(dict);
   const engine = runtime.createHostI18nEngine(dict);
