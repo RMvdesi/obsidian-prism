@@ -626,6 +626,13 @@ if (fb) return fb;
 var q = d.querySelector && (d.querySelector('[data-testid="model-selector-trigger"]') || d.querySelector('button[aria-label^="Select model"]'));
 return q && !_isSubTrigger(q) ? q : null;
 }
+function _isTrigLocked(doc) {
+var tr = findAntigravityTrigger(doc);
+if (!tr) return false;
+if (tr.disabled === true || (tr.hasAttribute && tr.hasAttribute("disabled")) || (tr.getAttribute && tr.getAttribute("aria-disabled") === "true")) return true;
+var dd = tr.getAttribute && tr.getAttribute("data-disabled");
+return dd !== null && dd !== undefined && dd !== "false";
+}
 function findAntigravityPanel(doc) {
 var d = doc || (typeof document !== "undefined" ? document : null);
 return d && d.querySelector ? d.querySelector('[data-testid="model-selector-panel"]') : null;
@@ -1706,14 +1713,15 @@ _mkSel(sItem, !profile.isOrchestrator && (profile.modelOption?.label === sLabel 
 function _curProf() { return getActiveProfile(getLiveContext()); }
 function _syP() { try { win?.__agPrism?.sync?.(); } catch {} }
 var agSeatAdapter = {
-_read: _curProf,
+_read: function () { var p = _curProf(); return p && _isTrigLocked(doc) ? Object.assign({}, p, { locked: true }) : p; },
 get effortLevels() { return _curProf()?.levels || []; },
 get currentEffort() { return _curProf()?.currentEffort || ""; },
-get locked() { return _curProf()?.locked ?? true; },
+get locked() { return _isTrigLocked(doc) || (_curProf()?.locked ?? true); },
 get baseName() { return _curProf()?.baseName || ""; },
 get isClaude() { return Boolean(_curProf()?.isClaude); },
 get theme() { return _curProf()?.theme || "codex"; },
 selectEffort: function (levelItem) {
+if (_isTrigLocked(doc)) return;
 var ctx = getLiveContext(), targetOpt = levelItem && (levelItem.modelOption || levelItem.raw?.modelOption);
 if (!ctx || !targetOpt) return;
 var curProf = getActiveProfile(ctx);
@@ -1876,7 +1884,7 @@ if (ov.getAttribute && ov.getAttribute("data-ag-cs-orch-l3") === "1") ov.removeA
 }
 } catch (e) {}
 function rAct(t) {
-if (!t || typeof t.closest !== "function" || t.closest('button[aria-label="Edit Model"],a[href]')) return null;
+if (_isTrigLocked(doc) || !t || typeof t.closest !== "function" || t.closest('button[aria-label="Edit Model"],a[href]')) return null;
 var it = t.closest(_SUB_IT);
 if (!it || !m.contains(it)) it = t.closest("button,[tabindex]");
 if (!it || it === m || _isBox(it) || !m.contains(it) || _isDis(t, it)) return null;
@@ -1944,7 +1952,7 @@ function _bindPnl(panel) {
 if (!panel || panel.__cesAgBound) return;
 panel.__cesAgBound = true;
 function rKeep(target) {
-if (!target || typeof target.closest !== "function" || target.closest('.ces-ag-section,.ces-set,button[aria-label="Edit Model"]')) return null;
+if (_isTrigLocked(doc) || !target || typeof target.closest !== "function" || target.closest('.ces-ag-section,.ces-set,button[aria-label="Edit Model"]')) return null;
 var menuItem = target.closest('[role^="menuitem"]');
 if (_isDis(target, menuItem)) return null;
 var oe = target.closest('[data-testid="model-selector-orchestrator"]') || (menuItem && menuItem.querySelector && menuItem.querySelector('[data-testid="model-selector-orchestrator"]'));
@@ -2211,11 +2219,12 @@ var onMemCk = null;
 if (memOnly) {
 var qOrch = (c, ob) => {
 var or = ob ? _orchEffMap.get(ob) : "", oi = c ? (c.orchIdx instanceof Map && c.orchIdx.size ? c.orchIdx : c.effortIndex) : null, oby = oi && or ? _luEff(oi, ob) : null, ot = oby?.get(or);
-if (ot && _okOpt(ot) && or !== (oby.has("medium") ? "medium" : "")) { lk = { o: true, b: ob, t: ot, u: Date.now() + 300 }; qM(() => _commitAgOpt(c, ot, true, false)); }
+var dp = c?.orchDef && parseModelLabel(c.orchDef.label), defEff = dp && _slug(dp.base) === _slug(ob) && oby?.has(dp.effort) ? dp.effort : "";
+if (ot && _okOpt(ot) && or !== defEff) { lk = { o: true, b: ob, t: ot, u: Date.now() + 300 }; qM(() => { if (!_isTrigLocked(doc)) _commitAgOpt(c, ot, true, false); }); }
 };
 onMemCk = (ev) => {
 var t = ev?.target;
-if (!t?.closest || _isDis(t)) return;
+if (!t?.closest || _isTrigLocked(doc) || _isDis(t)) return;
 if (t.closest('[data-testid="model-selector-effort-option"],[data-testid="orchestrator-picker-effort"]')) { lk = null; return; }
 if (t.closest('button[aria-label="Edit Model"],a[href]')) return;
 var oRow = t.closest('[data-testid="orchestrator-picker-row"][data-model-base]');
@@ -2245,7 +2254,7 @@ if (!c) return;
 var curP = c.selectedModel && !_isOrch(c.selectedModel) ? parseModelLabel(c.selectedModel.label) : null;
 if (curP?.base === b) return;
 var by = _luEff(c.effortIndex, b), tgt = by?.get(r);
-if (tgt && _okOpt(tgt) && r !== (by.has("medium") ? "medium" : "")) { lk = { o: false, b, t: tgt, u: Date.now() + 300 }; qM(() => _commitAgOpt(c, tgt, false, false)); }
+if (tgt && _okOpt(tgt)) { lk = { o: false, b, t: tgt, u: Date.now() + 300 }; qM(() => { if (_isTrigLocked(doc)) { lk = null; return; } var live = getLiveContext() || c; if (live?.selectedModel?.label === tgt.label) { lk = null; return; } _commitAgOpt(live, tgt, false, false); }); }
 };
 doc.addEventListener?.("click", onMemCk, true);
 }
@@ -2269,7 +2278,7 @@ if (!rel) return;
 }
 scan();
 });
-observer.observe(doc.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-expanded", "data-state", "hidden", "data-selected"] });
+observer.observe(doc.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-expanded", "data-state", "hidden", "data-selected", "disabled", "aria-disabled", "data-disabled"] });
 }
 return {
 stop: () => {

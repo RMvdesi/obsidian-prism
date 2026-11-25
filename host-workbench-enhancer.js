@@ -1839,7 +1839,11 @@
       try {
         const t = ev?.target;
         if (isDead() || !t?.closest) return;
-        if (cl(t, '[data-testid="permissions-selector-trigger"]')) {
+        const permTrig = cl(t, '[data-testid="permissions-selector-trigger"]');
+        if (permTrig) {
+          if (permTrig.disabled || ha(permTrig, 'disabled') || ga(permTrig, 'aria-disabled') === 'true' || (ha(permTrig, 'data-disabled') && ga(permTrig, 'data-disabled') !== 'false')) {
+            return;
+          }
           win?.requestAnimationFrame?.(() => {
             if (!isDead()) syncPermissionsMenuState();
           });
