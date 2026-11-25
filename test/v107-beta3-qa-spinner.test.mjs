@@ -673,19 +673,26 @@ test('Red-Team P0 #1A: display:contents wrappers (0x0 rect & checkVisibility=fal
     const res = vm.runInNewContext(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), sandbox);
     assert.equal(res.status, 'ok');
 
-    // Queued card inside .contents is detected (lower clearance), while display:none .contents stays ignored
-    assert.equal(queuedOuter.getAttribute('data-ag-cs-queued'), '1');
+    // Visible queued-messages-card inside .contents becomes the mascot roof anchor with zero bottom-gap, while hiddenContents stays ignored
+    assert.equal(queuedOuter.hasAttribute('data-ag-cs-queued'), false);
+    assert.equal(queuedOuter.style.getPropertyValue('margin-bottom'), '');
+    assert.equal(queuedCard.getAttribute('data-ag-cs-crab-anchor'), 'queued');
+    assert.ok(queuedCard.querySelector('.ag-cs-crab'), 'Expected mascot stage perched on queued-messages-card');
     assert.equal(hiddenContents.hasAttribute('data-ag-cs-queued'), false);
-    // Takeover card inside .contents is NOT misclassified as hidden -> html[data-ag-cs-takeover-open="1"] is set
+    // Takeover card inside .contents keeps its clearance above queued-messages-card and sets takeover-open
+    assert.equal(takeoverWrap.getAttribute('data-ag-cs-takeover'), '1');
     assert.equal(html.getAttribute('data-ag-cs-takeover-open'), '1');
 
-    // Removing queuedCard hands clearance cleanly to takeoverWrap (not the .contents intermediate node)
+    // Removing queuedCard returns the mascot stage to composer card while preserving takeoverWrap clearance
     const mainMo = observers.find((o) => Array.isArray(o.opts?.attributeFilter) && o.opts.attributeFilter.includes('hidden'));
     assert.ok(mainMo, 'Main MutationObserver must include hidden in attributeFilter');
     queuedCard.remove();
     mainMo.cb([{ type: 'childList', target: queuedContents, addedNodes: [], removedNodes: [queuedCard] }]);
     flushRaf();
     assert.equal(queuedOuter.hasAttribute('data-ag-cs-queued'), false);
+    assert.equal(queuedCard.hasAttribute('data-ag-cs-crab-anchor'), false);
+    assert.equal(card.getAttribute('data-ag-cs-crab-anchor'), 'composer');
+    assert.ok(card.querySelector('.ag-cs-crab'), 'Expected mascot stage returned to composer card');
     assert.equal(tkContents.hasAttribute('data-ag-cs-takeover'), false, 'display:contents wrapper must never receive margin-bottom clearance');
     assert.equal(takeoverWrap.getAttribute('data-ag-cs-takeover'), '1');
     assert.equal(html.getAttribute('data-ag-cs-takeover-open'), '1');
@@ -884,7 +891,7 @@ test('Red-Team P1 #3: syncCrabClearance performs zero layout reads after clearan
       if (tracking) events.push({ op: 'R', kind, el });
     },
     onWrite(kind, el, detail) {
-      if (tracking && (detail === 'data-ag-cs-queued' || detail === 'data-ag-cs-takeover' || detail === 'data-ag-cs-takeover-open' || detail === 'data-ag-cs-menu-open' || detail === 'margin-bottom')) {
+      if (tracking && (detail === 'data-ag-cs-queued' || detail === 'data-ag-cs-takeover' || detail === 'data-ag-cs-takeover-open' || detail === 'data-ag-cs-menu-open' || detail === 'data-ag-cs-crab-anchor' || detail === 'margin-bottom')) {
         events.push({ op: 'W', kind, el, detail });
       }
     },
@@ -948,6 +955,52 @@ test('Red-Team P1 #3: syncCrabClearance performs zero layout reads after clearan
     // checkVisibility()===false node must short-circuit before calling getBoundingClientRect
     const cvFalseRectReads = events.filter((e) => e.op === 'R' && e.el === checkVisFalseNode && e.kind === 'getBoundingClientRect');
     assert.equal(cvFalseRectReads.length, 0, 'checkVisibility()===false must short-circuit before getBoundingClientRect');
+  } finally {
+    cleanupTimers();
+  }
+});
+
+test('queued-messages-card roof-perch: no gap added when queued card is alone, mascots stand interactive on roof and return cleanly on removal', () => {
+  const { makeEl, body, sandbox, observers, flushRaf, cleanupTimers } = createMiniDom({ hasLayout: true });
+
+  const convView = makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const inputBox = makeEl('div', { attrs: { 'data-testid': 'agent-input-box' } });
+  const queuedWrap = makeEl('div', { className: 'relative z-[1] flex flex-col gap-2 w-full hidden-if-empty mb-2' });
+  const queuedCard = makeEl('div', { attrs: { 'data-testid': 'queued-messages-card' }, text: '1 queued message' });
+  queuedWrap.appendChild(queuedCard);
+
+  const composerShell = makeEl('div', { id: 'antigravity.agentSidePanelInputBox', className: 'surface-composer' });
+  const card = makeEl('div', { className: 'surface-composer-card', rect: { height: 96, width: 640 }, offsetHeight: 96 });
+  card.appendChild(makeEl('div', { className: 'agy-composer-footer' }));
+  composerShell.appendChild(card);
+
+  inputBox.appendChild(queuedWrap);
+  inputBox.appendChild(composerShell);
+  convView.appendChild(inputBox);
+  body.appendChild(convView);
+
+  try {
+    const res = vm.runInNewContext(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), sandbox);
+    assert.equal(res.status, 'ok');
+
+    assert.equal(queuedWrap.hasAttribute('data-ag-cs-queued'), false);
+    assert.equal(queuedWrap.style.getPropertyValue('margin-bottom'), '');
+    assert.equal(queuedCard.getAttribute('data-ag-cs-crab-anchor'), 'queued');
+    assert.equal(card.hasAttribute('data-ag-cs-crab-anchor'), false);
+
+    const crab = queuedCard.querySelector('.ag-cs-crab');
+    assert.ok(crab, 'Mascot stage must attach to queued-messages-card');
+    assert.equal(crab.getAttribute('data-ag-mascot-peek'), null, 'Mascots must remain interactive (not peeking) on queued roof');
+
+    const mainMo = observers.find((o) => Array.isArray(o.opts?.attributeFilter) && o.opts.attributeFilter.includes('hidden'));
+    assert.ok(mainMo);
+    queuedCard.remove();
+    mainMo.cb([{ type: 'childList', target: queuedWrap, addedNodes: [], removedNodes: [queuedCard] }]);
+    flushRaf();
+
+    assert.equal(queuedCard.hasAttribute('data-ag-cs-crab-anchor'), false);
+    assert.equal(card.getAttribute('data-ag-cs-crab-anchor'), 'composer');
+    assert.equal(card.querySelector('.ag-cs-crab'), crab);
   } finally {
     cleanupTimers();
   }

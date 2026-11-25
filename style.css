@@ -316,6 +316,7 @@ border-left:1px solid var(--ag-cs-thought-rule) !important;padding:2px 0 2px 11p
 & .ag-cs-nav-outline-text{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 & .ag-cs-nav-outline-empty{padding:10px 4px;font-size:11.5px;color:var(--muted-foreground);text-align:center;}
 & :is([data-ag-cs-caret-host="1"],[data-ag-cs-crab-anchor="composer"]){position:relative !important;}
+& [data-ag-cs-crab-anchor="queued"]{position:relative !important;overflow:visible !important;}
 & [contenteditable="true"][data-ag-cs-smooth-caret="1"]{caret-color:transparent !important;}
 & :is(.ag-cs-home-ws-select,.ag-cs-thought-select){color-scheme:inherit;& :is(option,optgroup){background-color:color-mix(in srgb,var(--background,#141418) 68%,var(--card,#141418));color:var(--foreground,#F2F2F5);}}
 &[data-ag-cs-home="studio"] .agy-home{

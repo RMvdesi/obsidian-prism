@@ -557,7 +557,7 @@
     msLastHostSleep = false;
   };
 
-  const syncCrab = (activeCard, activeInfo, modelInfo, yieldMode = 'none') => {
+  const syncCrab = (activeCard, activeInfo, modelInfo, yieldMode = 'none', anchorKind = 'composer') => {
     if (!isMascotEnabled()) return unmountCrab();
     const html = de();
     if (!activeCard) {
@@ -595,10 +595,12 @@
     let reattached = false;
     if (msRoot[K_PE] !== activeCard) {
       ra(msAnc, 'data-ag-cs-crab-anchor');
-      sa(activeCard, 'data-ag-cs-crab-anchor', 'composer');
+      sa(activeCard, 'data-ag-cs-crab-anchor', anchorKind);
       activeCard.appendChild(msRoot);
       msAnc = activeCard;
       reattached = true;
+    } else if (ga(activeCard, 'data-ag-cs-crab-anchor') !== anchorKind) {
+      sa(activeCard, 'data-ag-cs-crab-anchor', anchorKind);
     }
     if (html) setAttrIfChanged(html, 'data-ag-cs-has-crab', '1');
 
@@ -1186,6 +1188,16 @@
     return AF(el.childNodes || []).some((n) => n?.nodeType === 3 && String(n.nodeValue || '').trim()) || ks.some((k) => hasVisQ(k, lay, d + 1, m));
   };
 
+  const findVisQueuedCard = (el, lay, m) => {
+    if (!el || isHidEl(el, lay, m)) return null;
+    const q = tidOf(el) === 'queued-messages-card' ? el : qs(el, '[data-testid="queued-messages-card"]');
+    if (!q || isHidEl(q, lay, m)) return null;
+    for (let c = q[K_PE]; c && c !== el; c = c[K_PE]) {
+      if (isHidEl(c, lay, m)) return null;
+    }
+    return q;
+  };
+
   const syncModelMenuRootAttrs = (panel) => {
     const h = de();
     if (panel) { h && setAttrIfChanged(h, 'data-ag-cs-model-menu', '1'); const ov = cl(panel, '.agy-overlay'); ov && setAttrIfChanged(ov, 'data-ag-cs-model-overlay', '1'); }
@@ -1196,7 +1208,7 @@
     if (!ib) return null;
     const inSub = !!(cl(ib, S_SUB)), ea = !!(act && !inSub && ga(de(), 'data-ag-prism-mode') !== 'chat'), og = !inSub && !!isPri;
     const mo = !!(ea && qs(ib, '[role="listbox"], [role="option"], [data-testid="slash-command-menu"]'));
-    let _lay, low = false, visTk = false;
+    let _lay, low = false, visTk = false, queuedAnchor = null;
     const getLay = () => (_lay ??= (card?.offsetHeight || rc(card)?.height || 0) > 0), sh = cl(card, '#antigravity\\.agentSidePanelInputBox') || card[K_PE], ops = [];
     const pq = (el, ok) => { const on = ea && ok && !low; ops.push([el, A_Q, on, '46px']); if (on) low = true; };
     if (sh && sh !== ib) for (const ch of sh.children || []) {
@@ -1207,7 +1219,18 @@
     let stop = sh && sh !== ib ? sh : card;
     while (stop?.[K_PE] && stop[K_PE] !== ib) stop = stop[K_PE];
     const ibC = AF(ib.children || []);
-    for (let i = ibC.indexOf(stop) - 1; i >= 0; i--) pq(ibC[i], hasVisQ(ibC[i], getLay(), 0, m));
+    for (let i = ibC.indexOf(stop) - 1; i >= 0; i--) {
+      const ch = ibC[i];
+      if (ea && !low && !queuedAnchor) {
+        const qCard = findVisQueuedCard(ch, getLay(), m);
+        if (qCard) {
+          queuedAnchor = qCard;
+          ops.push([ch, A_Q, false, '46px']);
+          continue;
+        }
+      }
+      pq(ch, hasVisQ(ch, getLay(), 0, m));
+    }
     const slot = clHas(ib[K_PE], 'contents') ? ib[K_PE] : ib, wrap = slot[K_PE], scope = og ? (cl(ib, '[data-testid="conversation-view"]') || D) : wrap;
     if (scope) {
       const seen = new Set(), all = qa(scope, TK_SEL);
@@ -1236,7 +1259,7 @@
       }
       for (const s of qa(scope, '[' + A_TK + ']')) if (!seen.has(s) && (inSub || !cl(s, S_SUB)) && (og || !pTk?.has(s))) ops.push([s, A_TK, false, '46px']);
     }
-    return { ib, mo, ops, og, tko: og && ea && visTk };
+    return { ib, mo, ops, og, tko: og && ea && visTk, queuedAnchor };
   };
 
   const syncCrabClearance = (card, ib, act, isPri = true, pl = null) => {
@@ -1335,7 +1358,9 @@
       qs(D, MODEL_PANEL_SEL)
     );
     const activeInfoForCrab = getLightweightActiveInfo(primaryCard);
-    syncCrab(primaryCard, activeInfoForCrab, primaryModelInfo, mascotShouldPeek ? 'peek' : 'none');
+    const crabAnchor = priPlan?.queuedAnchor || primaryCard;
+    const crabAnchorKind = priPlan?.queuedAnchor ? 'queued' : 'composer';
+    syncCrab(crabAnchor, activeInfoForCrab, primaryModelInfo, mascotShouldPeek ? 'peek' : 'none', crabAnchorKind);
     syncConvAuraSemantics(activeInfoForCrab, cPlan.awaitingDecision);
     if (hs.pendingModelShiftNotify) {
       hs.pendingModelShiftNotify = false;
