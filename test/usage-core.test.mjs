@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const usageCore = require('../usage-core.js');
@@ -3276,7 +3277,7 @@ test('Deleted conversations preserve historical token usage across daemon list-s
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-deleted-usage-'));
   const cachePath = path.join(tmpDir, 'usage-rollup-cache.json');
-  const repoRoot = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+  const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
   const liveId = 'aaaaaaaa-1111-4111-8111-111111111111';
   const deletedId = 'bbbbbbbb-2222-4222-8222-222222222222';
