@@ -299,7 +299,7 @@
         canvas.style.width = `${cols * rippleCore.RIPPLE.cellWidth}px`;
         canvas.style.height = `${rows * rippleCore.RIPPLE.cellHeight}px`;
         syncG(w, h);
-        state.field.dispose();
+        state.field.dispose({ keepContext: true });
         state.waves = rippleCore.createWaveField(cols, rows);
         state.field = rippleCore.createGlyphField(canvas, cols, rows, state.waves);
         cachedThemeTokens = sampleRippleThemeTokens(canvas);

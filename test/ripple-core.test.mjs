@@ -1890,8 +1890,18 @@ test('Conv-aura wave smoothness & 450ms semantic blend: non-negative running sur
     };
     const gField = rippleCore.createGlyphField(glyphCanvas, 16, 8);
     assert.equal(gField.mode, 'webgl2');
-    gField.dispose();
-    assert.equal(glyphLoseCalls, 1, 'createWebGLRenderer.dispose() must invoke WEBGL_lose_context.loseContext()');
+    gField.dispose({ keepContext: true });
+    assert.equal(glyphLoseCalls, 0, 'dispose({ keepContext: true }) must NOT lose WebGL2 context on resize rebuild');
+    const rebuiltField = rippleCore.createGlyphField(glyphCanvas, 18, 9);
+    assert.equal(rebuiltField.mode, 'webgl2', 'rebuilding on same canvas after keepContext dispose must retain webgl2 mode');
+    rebuiltField.dispose();
+    assert.equal(glyphLoseCalls, 1, 'createWebGLRenderer.dispose() without keepContext must invoke WEBGL_lose_context.loseContext()');
+
+    // 4) Verify lost WebGL2 context falls back cleanly instead of binding a broken WebGL2 renderer
+    const lostGlGlyph = { ...glGlyph, isContextLost: () => true };
+    const lostCanvas = { ...glyphCanvas, getContext: (t) => (t === 'webgl2' ? lostGlGlyph : null) };
+    const lostField = rippleCore.createGlyphField(lostCanvas, 16, 8);
+    assert.equal(lostField.mode, 'none', 'createWebGL2Renderer must return null when gl.isContextLost() is true');
   } finally {
     if (prevForce !== undefined) globalThis.__agRippleForce2D = prevForce;
   }
