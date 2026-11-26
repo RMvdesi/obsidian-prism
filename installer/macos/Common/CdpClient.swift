@@ -2,6 +2,9 @@ import Foundation
 #if canImport(Darwin)
 import Darwin
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct CdpPageInfo {
     let id: String
@@ -15,6 +18,63 @@ struct BareHostAppInfo {
     let appPath: String
     let startTimeMs: Int64
     let uptimeMs: Int64
+}
+
+struct BareLaunchRelaunchPolicy {
+    enum Decision: Equatable {
+        case allow
+        case skipUnconfirmedCooldown(elapsed: TimeInterval)
+        case skipBurstLimit(count: Int, windowSeconds: TimeInterval)
+    }
+
+    static let defaultUnconfirmedCooldownSeconds: TimeInterval = 20.0
+    static let defaultBurstWindowSeconds: TimeInterval = 60.0
+    static let defaultMaxRelaunchesPerWindow = 5
+    static let defaultMaxColdStartUptimeMs: Int64 = 5000
+
+    let unconfirmedCooldownSeconds: TimeInterval
+    let burstWindowSeconds: TimeInterval
+    let maxRelaunchesPerWindow: Int
+
+    private var unconfirmedRelaunchAt: Date?
+    private var recentRelaunches: [Date] = []
+
+    init(
+        unconfirmedCooldownSeconds: TimeInterval = BareLaunchRelaunchPolicy.defaultUnconfirmedCooldownSeconds,
+        burstWindowSeconds: TimeInterval = BareLaunchRelaunchPolicy.defaultBurstWindowSeconds,
+        maxRelaunchesPerWindow: Int = BareLaunchRelaunchPolicy.defaultMaxRelaunchesPerWindow
+    ) {
+        self.unconfirmedCooldownSeconds = unconfirmedCooldownSeconds
+        self.burstWindowSeconds = burstWindowSeconds
+        self.maxRelaunchesPerWindow = maxRelaunchesPerWindow
+    }
+
+    mutating func recordCdpConfirmed() -> Bool {
+        guard unconfirmedRelaunchAt != nil else { return false }
+        unconfirmedRelaunchAt = nil
+        return true
+    }
+
+    mutating func evaluateBareLaunch(at now: Date) -> Decision {
+        recentRelaunches = recentRelaunches.filter { now.timeIntervalSince($0) < burstWindowSeconds }
+        if let lastUnconfirmed = unconfirmedRelaunchAt {
+            let elapsed = now.timeIntervalSince(lastUnconfirmed)
+            if elapsed < unconfirmedCooldownSeconds {
+                return .skipUnconfirmedCooldown(elapsed: elapsed)
+            }
+            unconfirmedRelaunchAt = nil
+        }
+        if recentRelaunches.count >= maxRelaunchesPerWindow {
+            return .skipBurstLimit(count: recentRelaunches.count, windowSeconds: burstWindowSeconds)
+        }
+        return .allow
+    }
+
+    mutating func recordRelaunchAttempt(at now: Date) {
+        recentRelaunches = recentRelaunches.filter { now.timeIntervalSince($0) < burstWindowSeconds }
+        recentRelaunches.append(now)
+        unconfirmedRelaunchAt = now
+    }
 }
 
 struct CdpError: Error, LocalizedError {
@@ -1218,6 +1278,91 @@ enum CdpHelper {
     }
 
     static let cdpOptInFlag = "--remote-debugging-port=0"
+    static let antigravityBundleId = "com.google.antigravity"
+
+    static func hasRemoteDebuggingPortFlag(_ cmdline: String) -> Bool {
+        let lower = cmdline.lowercased()
+        return lower.range(of: #"(?:^|\s)--remote-debugging-port(?:=|\s|$)"#, options: .regularExpression) != nil
+    }
+
+    static func commandLineForPid(_ pid: Int32) -> String? {
+        guard pid > 0 else { return nil }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/ps")
+        proc.arguments = ["-p", String(pid), "-o", "args="]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            proc.waitUntilExit()
+            guard proc.terminationStatus == 0 else { return nil }
+            let trimmed = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        } catch {
+            return nil
+        }
+    }
+
+    static func processElapsedMsForPid(_ pid: Int32) -> Int64? {
+        guard pid > 0 else { return nil }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/ps")
+        proc.arguments = ["-p", String(pid), "-o", "etime="]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            proc.waitUntilExit()
+            guard proc.terminationStatus == 0,
+                  let out = String(data: data, encoding: .utf8) else { return nil }
+            let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return max(0, parseBsdElapsedSeconds(trimmed) * 1000)
+        } catch {
+            return nil
+        }
+    }
+
+    static func isHostPluginExplicitlyDisabled(pluginDir: String) -> Bool {
+        guard let cfgDir = resolveHostGeminiConfigDir(pluginDir: pluginDir), !cfgDir.isEmpty else {
+            return false
+        }
+        let cfgPath = (cfgDir as NSString).appendingPathComponent("config.json")
+        guard FileManager.default.fileExists(atPath: cfgPath),
+              !isSymbolicLinkOrUnsafePath(cfgPath),
+              let raw = try? String(contentsOfFile: cfgPath, encoding: .utf8) else {
+            return false
+        }
+        let trimmed = raw.replacingOccurrences(of: "\u{FEFF}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let rootObj = try? MiniJson.parseObject(trimmed),
+              let pluginsObj = rootObj["plugins"]?.objectValue,
+              let entryObj = pluginsObj["obsidian-prism"]?.objectValue,
+              let enabledVal = entryObj["enabled"] else {
+            return false
+        }
+        if let b = enabledVal.boolValue {
+            return !b
+        }
+        if let s = enabledVal.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            return s == "false" || s == "off"
+        }
+        return false
+    }
+
+    static func requestNativeGracefulQuit(pid: Int32) -> Bool {
+        guard pid > 0 else { return false }
+        #if canImport(AppKit)
+        if let runningApp = NSRunningApplication(processIdentifier: pid) {
+            return runningApp.terminate()
+        }
+        #endif
+        return false
+    }
 
     private static func nowEpochMs() -> Int64 {
         return Int64(Date().timeIntervalSince1970 * 1000.0)
@@ -1564,31 +1709,35 @@ enum CdpHelper {
     }
 
     @discardableResult
-    static func relaunchAntigravityWithCdp(host: BareHostAppInfo, waitExitMs: Int = 15000, log: ((String) -> Void)? = nil) -> Bool {
+    static func relaunchAntigravityWithCdp(host: BareHostAppInfo, waitExitMs: Int = 15000, abortIfStillAlive: Bool = false, log: ((String) -> Void)? = nil) -> Bool {
         guard host.pid > 0 else { return false }
         let normalizedAppPath = normalizeAntigravityAppPath(host.appPath)
         let appBaseName = (normalizedAppPath as NSString).lastPathComponent
 
-        let quitScript: String
-        if normalizedAppPath == "/Applications/Antigravity.app" ||
-           appBaseName.caseInsensitiveCompare("Antigravity.app") == .orderedSame {
-            quitScript = "tell application \"Antigravity\" to quit"
-        } else {
-            let escapedPath = escapeAppleScriptString(normalizedAppPath)
-            quitScript = "tell application (POSIX file \"\(escapedPath)\" as text) to quit"
-        }
+        // Prefer native NSRunningApplication.terminate() to avoid macOS AppleEvents TCC prompts;
+        // fall back to AppleScript quit and SIGTERM if unavailable.
+        var quitSent = requestNativeGracefulQuit(pid: host.pid)
+        if !quitSent {
+            let quitScript: String
+            if normalizedAppPath == "/Applications/Antigravity.app" ||
+               appBaseName.caseInsensitiveCompare("Antigravity.app") == .orderedSame {
+                quitScript = "tell application \"Antigravity\" to quit"
+            } else {
+                let escapedPath = escapeAppleScriptString(normalizedAppPath)
+                quitScript = "tell application (POSIX file \"\(escapedPath)\" as text) to quit"
+            }
 
-        let quitProc = Process()
-        quitProc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        quitProc.arguments = ["-e", quitScript]
-        quitProc.standardOutput = FileHandle.nullDevice
-        quitProc.standardError = FileHandle.nullDevice
-        var quitSent = false
-        do {
-            try quitProc.run()
-            quitProc.waitUntilExit()
-            quitSent = (quitProc.terminationStatus == 0)
-        } catch {}
+            let quitProc = Process()
+            quitProc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            quitProc.arguments = ["-e", quitScript]
+            quitProc.standardOutput = FileHandle.nullDevice
+            quitProc.standardError = FileHandle.nullDevice
+            do {
+                try quitProc.run()
+                quitProc.waitUntilExit()
+                quitSent = (quitProc.terminationStatus == 0)
+            } catch {}
+        }
         if !quitSent && kill(host.pid, 0) == 0 {
             _ = kill(host.pid, SIGTERM)
         }
@@ -1627,6 +1776,13 @@ enum CdpHelper {
         }
 
         if !aliveFamilyPids.isEmpty || lockHeld {
+            if abortIfStillAlive {
+                log?(InstallerI18n.tr(
+                    "等待 Antigravity 退净超时（残留进程数=\(aliveFamilyPids.count)，SingletonLock占用=\(lockHeld)），已安全中止自动重开",
+                    "Timed out waiting for Antigravity to exit (remaining=\(aliveFamilyPids.count), SingletonLockHeld=\(lockHeld)); aborting auto-relaunch safely"
+                ))
+                return false
+            }
             log?(InstallerI18n.tr(
                 "等待 Antigravity 退净超时（残留进程数=\(aliveFamilyPids.count)，SingletonLock占用=\(lockHeld)），仍将尝试以新实例拉起",
                 "Timed out waiting for Antigravity to fully exit (remaining=\(aliveFamilyPids.count), SingletonLockHeld=\(lockHeld)); proceeding with new instance launch"

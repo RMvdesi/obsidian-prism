@@ -568,6 +568,13 @@ test(
 
       execFileSync('codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'inherit' });
 
+      // Verify compiled universal watcher launch-guard policy state machine (--self-test-launch-guard)
+      const guardSelfTestOut = execFileSync(watcherBundleBin, ['--self-test-launch-guard'], {
+        encoding: 'utf8',
+        timeout: 10000,
+      }).trim();
+      assert.equal(guardSelfTestOut, 'LAUNCH_GUARD_SELF_TEST_OK');
+
       const port = await mockCdp.start();
 
       // 1. Check --status CLI
@@ -1139,4 +1146,45 @@ test('macOS Swift Setup lossless launcher & Issue #37 100% bilingual i18n contra
     }
     assert.deepEqual(unwrapped, [], `Found unwrapped Chinese strings in ${name}: ${unwrapped.join('; ')}`);
   }
+});
+
+test('macOS Opt-in event-driven Launch Guard: NSWorkspace observer, double-layer circuit breaker, native quit, and config validation contracts', () => {
+  const cdpSwift = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'macos', 'Common', 'CdpClient.swift'), 'utf8');
+  const setupSwift = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'macos', 'Setup', 'main.swift'), 'utf8');
+  const watcherSwift = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'macos', 'Watcher', 'main.swift'), 'utf8');
+  const buildMacosSrc = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'build-macos.mjs'), 'utf8');
+
+  // 1) cdp.js config schema validation (opt-in boolean)
+  assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', true), true);
+  assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', false), true);
+  assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', 'always'), false);
+  assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', 1), false);
+
+  // 2) CdpClient.swift policy & native quit contracts
+  assert.ok(cdpSwift.includes('struct BareLaunchRelaunchPolicy'), 'CdpClient.swift defines BareLaunchRelaunchPolicy');
+  assert.ok(cdpSwift.includes('mutating func recordCdpConfirmed() -> Bool'), 'Policy clears unconfirmed cooldown on confirmed CDP launch');
+  assert.ok(cdpSwift.includes('case skipUnconfirmedCooldown'), 'Policy exposes unconfirmed cooldown decision');
+  assert.ok(cdpSwift.includes('case skipBurstLimit'), 'Policy exposes sliding burst-window circuit breaker');
+  assert.ok(cdpSwift.includes('static func hasRemoteDebuggingPortFlag('), 'CdpClient.swift defines word-boundary CDP flag matcher');
+  assert.ok(cdpSwift.includes('static func isHostPluginExplicitlyDisabled('), 'CdpClient.swift checks host config.json plugin enabled flag');
+  assert.ok(cdpSwift.includes('static func requestNativeGracefulQuit(pid: Int32) -> Bool'), 'CdpClient.swift supports native NSRunningApplication.terminate()');
+  assert.ok(cdpSwift.includes('abortIfStillAlive: Bool = false'), 'relaunchAntigravityWithCdp supports fail-closed abortIfStillAlive for silent relaunch');
+
+  // 3) Watcher/main.swift event-driven observer & opt-in defaults
+  assert.ok(watcherSwift.includes('NSWorkspace.didLaunchApplicationNotification'), 'Watcher listens to NSWorkspace launch notifications');
+  assert.ok(watcherSwift.includes('nsApp.setActivationPolicy(.prohibited)'), 'Watcher keeps zero Dock icon / zero focus steal');
+  assert.ok(watcherSwift.includes('isAutoRelaunchOnBareLaunchEnabled('), 'Watcher gates auto-relaunch behind opt-in check');
+  assert.ok(watcherSwift.includes('autoRelaunchInFlight'), 'Watcher coordinates event guard and polling prompt loop');
+  assert.ok(watcherSwift.includes('defaultMaxColdStartUptimeMs'), 'Watcher enforces cold-start window gate before silent relaunch');
+  assert.ok(watcherSwift.includes('"--auto-relaunch"'), 'Watcher accepts --auto-relaunch flag');
+  assert.ok(watcherSwift.includes('"--self-test-launch-guard"'), 'Watcher exposes --self-test-launch-guard');
+
+  // 4) Setup/main.swift opt-in default false & Aqua/Background LaunchAgent keys
+  assert.ok(setupSwift.includes('var autoRelaunch = false'), 'Setup defaults autoRelaunch to false (opt-in)');
+  assert.ok(setupSwift.includes('"--auto-relaunch"') && setupSwift.includes('"--no-auto-relaunch"'), 'Setup supports --auto-relaunch / --no-auto-relaunch');
+  assert.match(setupSwift, /<key>LimitLoadToSessionType<\/key>\s*<string>Aqua<\/string>/, 'LaunchAgent limits load to Aqua GUI session');
+  assert.match(setupSwift, /<key>ProcessType<\/key>\s*<string>Background<\/string>/, 'LaunchAgent sets ProcessType to Background');
+
+  // 5) build-macos.mjs links AppKit for Universal Watcher binary
+  assert.ok(buildMacosSrc.includes("frameworks: ['AppKit']"), 'build-macos.mjs links AppKit for watcher binary');
 });

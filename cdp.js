@@ -165,6 +165,9 @@ function validateConfigEntry(key, value) {
   if (key === 'autoPromptCdpRelaunch') {
     return typeof value === 'boolean';
   }
+  if (key === 'autoRelaunchOnBareLaunch') {
+    return typeof value === 'boolean';
+  }
   if (key === 'mascot') {
     return normalizeMascotConfigValue(value) !== null;
   }

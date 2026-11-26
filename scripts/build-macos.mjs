@@ -188,6 +188,7 @@ function buildMacosApp({
       lipo,
       sdkPath,
       sources: [commonMiniJson, commonCdpClient, watcherMain],
+      frameworks: ['AppKit'],
       outputPath: watcherOut,
       stageDir,
       name: 'watcher',

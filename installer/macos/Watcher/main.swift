@@ -2,6 +2,9 @@ import Foundation
 #if canImport(Darwin)
 import Darwin
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct FrameContextMeta {
     let frameId: String
@@ -85,11 +88,12 @@ final class WatcherApp {
     private let isWatch: Bool
     private let noNativeDaemon: Bool
     private let noRelaunchPrompt: Bool
+    private let autoRelaunchCliFlag: Bool
     private let logLock = NSLock()
     private let promptedHostsLock = NSLock()
     private var promptedHostKeys: Set<String> = []
 
-    init(baseDir: String, pluginDir: String, isWatch: Bool, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false) {
+    init(baseDir: String, pluginDir: String, isWatch: Bool, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, autoRelaunch: Bool = false) {
         self.baseDir = baseDir
         self.pluginDir = pluginDir
         self.logFile = (baseDir as NSString).appendingPathComponent("watch.log")
@@ -98,6 +102,7 @@ final class WatcherApp {
         self.isWatch = isWatch
         self.noNativeDaemon = noNativeDaemon || (ProcessInfo.processInfo.environment["AG_PRISM_NO_NATIVE_DAEMON"] == "1")
         self.noRelaunchPrompt = noRelaunchPrompt
+        self.autoRelaunchCliFlag = autoRelaunch
     }
 
     func log(_ line: String) {
@@ -829,8 +834,11 @@ final class WatcherApp {
         var yieldingToDaemon = false
         var hadLiveHost = false
         var exitArchiveInFlight = false
+        var autoRelaunchInFlight = false
         var lastDaemonSpawnAttempt = Date.distantPast
-        while !isExiting() {
+
+        let runMainWatchLoop: () -> Void = { [self] in
+            while !isExiting() {
             var nativeAlive = !pluginDir.isEmpty && CdpHelper.isNativeDaemonAlive(pluginDir: pluginDir)
             var rawPort: Int? = nil
             var livePort: Int? = nil
@@ -937,7 +945,11 @@ final class WatcherApp {
                 }
             }
 
-            if livePort == nil && overridePort == nil {
+            stateLock.lock()
+            let relaunchGuardBusy = autoRelaunchInFlight
+            stateLock.unlock()
+
+            if livePort == nil && overridePort == nil && !relaunchGuardBusy {
                 let env = ProcessInfo.processInfo.environment
                 let mockDec = env["AG_PRISM_MOCK_RELAUNCH_DECISION"] ?? ""
                 var allowPrompt = !self.noRelaunchPrompt &&
@@ -1011,7 +1023,149 @@ final class WatcherApp {
             }
 
             _ = exitSem.wait(timeout: .now() + .seconds(2))
+            }
         }
+
+        let envForGuard = ProcessInfo.processInfo.environment
+        let isTestEnv = (envForGuard["NODE_ENV"] ?? "").caseInsensitiveCompare("test") == .orderedSame ||
+            !(envForGuard["NODE_TEST_CONTEXT"] ?? "").isEmpty
+        let shouldAttachWorkspaceObserver = overridePort == nil &&
+            !self.noRelaunchPrompt &&
+            envForGuard["PRISM_NO_RELAUNCH_PROMPT"] != "1" &&
+            envForGuard["AG_PRISM_NO_RELAUNCH_PROMPT"] != "1" &&
+            envForGuard["AG_PRISM_NO_AUTO_RELAUNCH"] != "1" &&
+            envForGuard["AG_PRISM_NO_WORKSPACE_OBSERVER"] != "1" &&
+            !isTestEnv &&
+            (isDefaultDir || !self.isTempSandboxDir(self.baseDir))
+
+        #if canImport(AppKit)
+        if shouldAttachWorkspaceObserver {
+            let launchGuardQueue = DispatchQueue(label: "io.github.rmvdesi.obsidian-prism.launch-guard")
+            var launchGuardPolicy = BareLaunchRelaunchPolicy()
+            let nsApp = NSApplication.shared
+            nsApp.setActivationPolicy(.prohibited)
+
+            let workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didLaunchApplicationNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] notification in
+                guard let self = self else { return }
+                guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      app.bundleIdentifier == CdpHelper.antigravityBundleId else {
+                    return
+                }
+                let pid = app.processIdentifier
+                let bundlePath = app.bundleURL?.path ?? "/Applications/Antigravity.app"
+
+                launchGuardQueue.async {
+                    guard !isExiting() else { return }
+                    guard let cmd = CdpHelper.commandLineForPid(pid) else { return }
+
+                    if CdpHelper.hasRemoteDebuggingPortFlag(cmd) {
+                        if launchGuardPolicy.recordCdpConfirmed() {
+                            self.log(InstallerI18n.tr(
+                                "[✓] 检测到带调试端口的 Antigravity (PID \(pid))，已复位自动重开冷却",
+                                "[✓] Detected CDP-enabled Antigravity (PID \(pid)); cleared auto-relaunch cooldown"
+                            ))
+                        }
+                        return
+                    }
+
+                    guard self.isAutoRelaunchOnBareLaunchEnabled(isDefaultDir: isDefaultDir) else {
+                        return
+                    }
+                    if CdpHelper.isHostPluginExplicitlyDisabled(pluginDir: self.pluginDir) {
+                        self.log(InstallerI18n.tr(
+                            "[~] 宿主配置已禁用 obsidian-prism，跳过裸启自动重开 (PID \(pid))",
+                            "[~] obsidian-prism is disabled in host config; skipping bare-launch auto-relaunch (PID \(pid))"
+                        ))
+                        return
+                    }
+
+                    let uptimeMs = CdpHelper.processElapsedMsForPid(pid) ?? 0
+                    if uptimeMs > BareLaunchRelaunchPolicy.defaultMaxColdStartUptimeMs {
+                        self.log(InstallerI18n.tr(
+                            "[~] Antigravity (PID \(pid)) 运行时长已超出冷启动窗口，跳过静默重开",
+                            "[~] Antigravity (PID \(pid)) exceeded cold-start window; skipping silent auto-relaunch"
+                        ))
+                        return
+                    }
+
+                    let now = Date()
+                    switch launchGuardPolicy.evaluateBareLaunch(at: now) {
+                    case .allow:
+                        break
+                    case .skipUnconfirmedCooldown(let elapsed):
+                        let elapsedStr = String(format: "%.1f", elapsed)
+                        self.log(InstallerI18n.tr(
+                            "[~] 距上次未确认重开仅 \(elapsedStr)s，跳过裸启自动重开以防死循环 (PID \(pid))",
+                            "[~] Bare Antigravity (PID \(pid)) detected \(elapsedStr)s after unconfirmed relaunch; skipping to prevent loop"
+                        ))
+                        return
+                    case .skipBurstLimit(let count, let windowSeconds):
+                        self.log(InstallerI18n.tr(
+                            "[~] \(Int(windowSeconds))s 内已连续重开 \(count) 次，触发限流保护跳过自动重开 (PID \(pid))",
+                            "[~] Hit auto-relaunch burst limit (\(count) within \(Int(windowSeconds))s); skipping (PID \(pid))"
+                        ))
+                        return
+                    }
+
+                    launchGuardPolicy.recordRelaunchAttempt(at: now)
+                    stateLock.lock()
+                    autoRelaunchInFlight = true
+                    stateLock.unlock()
+                    defer {
+                        stateLock.lock()
+                        autoRelaunchInFlight = false
+                        stateLock.unlock()
+                    }
+
+                    self.log(InstallerI18n.tr(
+                        "[↻] 检测到 Antigravity 无参冷启动 (PID \(pid))，正在自动以 --remote-debugging-port=0 温和重开",
+                        "[↻] Detected bare Antigravity cold launch (PID \(pid)); gracefully relaunching with --remote-debugging-port=0"
+                    ))
+                    let nowMs = Int64(Date().timeIntervalSince1970 * 1000.0)
+                    let bareHost = BareHostAppInfo(
+                        pid: pid,
+                        appPath: CdpHelper.normalizeAntigravityAppPath(bundlePath),
+                        startTimeMs: nowMs - uptimeMs,
+                        uptimeMs: uptimeMs
+                    )
+                    _ = CdpHelper.relaunchAntigravityWithCdp(host: bareHost, waitExitMs: 8000, abortIfStillAlive: true) { m in
+                        self.log("[+] \(m)")
+                    }
+                }
+            }
+
+            let watchLoopQueue = DispatchQueue(label: "io.github.rmvdesi.obsidian-prism.watchloop", qos: .utility)
+            watchLoopQueue.async {
+                runMainWatchLoop()
+                DispatchQueue.main.async {
+                    NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+                    nsApp.stop(nil)
+                    if let wakeEvent = NSEvent.otherEvent(
+                        with: .applicationDefined,
+                        location: .zero,
+                        modifierFlags: [],
+                        timestamp: 0,
+                        windowNumber: 0,
+                        context: nil,
+                        subtype: 0,
+                        data1: 0,
+                        data2: 0
+                    ) {
+                        nsApp.postEvent(wakeEvent, atStart: true)
+                    }
+                }
+            }
+            nsApp.run()
+        } else {
+            runMainWatchLoop()
+        }
+        #else
+        runMainWatchLoop()
+        #endif
 
         dirSource?.cancel()
         termSource.cancel()
@@ -1055,6 +1209,43 @@ final class WatcherApp {
             Thread.sleep(forTimeInterval: min(0.25, rem))
         }
         return isExiting()
+    }
+
+    private func isAutoRelaunchOnBareLaunchEnabled(isDefaultDir: Bool) -> Bool {
+        let env = ProcessInfo.processInfo.environment
+        if self.noRelaunchPrompt ||
+            env["PRISM_NO_RELAUNCH_PROMPT"] == "1" ||
+            env["AG_PRISM_NO_RELAUNCH_PROMPT"] == "1" ||
+            env["AG_PRISM_NO_AUTO_RELAUNCH"] == "1" ||
+            (env["NODE_ENV"] ?? "").caseInsensitiveCompare("test") == .orderedSame ||
+            !(env["NODE_TEST_CONTEXT"] ?? "").isEmpty {
+            return false
+        }
+        if !isDefaultDir && self.isTempSandboxDir(self.baseDir) {
+            return false
+        }
+        let fm = FileManager.default
+        var dirs: [String] = []
+        if !self.pluginDir.isEmpty { dirs.append(self.pluginDir) }
+        if !self.baseDir.isEmpty && self.baseDir != self.pluginDir { dirs.append(self.baseDir) }
+        for dir in dirs {
+            let cfgPath = (dir as NSString).appendingPathComponent("config.json")
+            guard fm.fileExists(atPath: cfgPath),
+                  !CdpHelper.isSymbolicLinkOrUnsafePath(cfgPath),
+                  let raw = try? String(contentsOfFile: cfgPath, encoding: .utf8) else {
+                continue
+            }
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, let obj = try? MiniJson.parseObject(trimmed) else { continue }
+            if let val = obj["autoRelaunchOnBareLaunch"] {
+                if let b = val.boolValue { return b }
+                if let s = val.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                    return s == "true" || s == "on"
+                }
+                return false
+            }
+        }
+        return self.autoRelaunchCliFlag
     }
 
     private func isAutoArchiveOnExitAllowed() -> Bool {
@@ -1483,6 +1674,63 @@ final class WatcherApp {
     }
 }
 
+func runLaunchGuardSelfTest() -> Int32 {
+    func verify(_ condition: Bool, _ label: String) -> Bool {
+        if !condition {
+            fputs("FAIL: \(label)\n", stderr)
+            return false
+        }
+        return true
+    }
+
+    let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+
+    // 1. Confirmed CDP launch clears unconfirmed cooldown (allows quick manual reopen e.g. 17.3s later)
+    var p1 = BareLaunchRelaunchPolicy(unconfirmedCooldownSeconds: 20.0, burstWindowSeconds: 60.0, maxRelaunchesPerWindow: 5)
+    guard verify(p1.evaluateBareLaunch(at: t0) == .allow, "initial bare launch allowed") else { return 1 }
+    p1.recordRelaunchAttempt(at: t0)
+    guard verify(p1.recordCdpConfirmed() == true, "CDP confirmation clears pending cooldown") else { return 1 }
+    guard verify(p1.recordCdpConfirmed() == false, "duplicate CDP confirmation is a no-op") else { return 1 }
+    guard verify(p1.evaluateBareLaunch(at: t0.addingTimeInterval(17.3)) == .allow, "reopen after 17.3s allowed after CDP confirmation") else { return 1 }
+
+    // 2. Unconfirmed relaunch keeps 20s loop-prevention cooldown armed
+    var p2 = BareLaunchRelaunchPolicy(unconfirmedCooldownSeconds: 20.0, burstWindowSeconds: 60.0, maxRelaunchesPerWindow: 5)
+    guard verify(p2.evaluateBareLaunch(at: t0) == .allow, "unconfirmed case initial launch allowed") else { return 1 }
+    p2.recordRelaunchAttempt(at: t0)
+    if case .skipUnconfirmedCooldown(let elapsed) = p2.evaluateBareLaunch(at: t0.addingTimeInterval(2.5)) {
+        guard verify(abs(elapsed - 2.5) < 0.001, "cooldown elapsed matches 2.5s") else { return 1 }
+    } else {
+        fputs("FAIL: rapid bare launch after unconfirmed relaunch must be blocked\n", stderr)
+        return 1
+    }
+    guard verify(p2.evaluateBareLaunch(at: t0.addingTimeInterval(20.1)) == .allow, "unconfirmed cooldown expires after 20s") else { return 1 }
+
+    // 3. Secondary burst limit trips after 5 relaunches in 60s and recovers once window slides
+    var p3 = BareLaunchRelaunchPolicy(unconfirmedCooldownSeconds: 20.0, burstWindowSeconds: 60.0, maxRelaunchesPerWindow: 5)
+    for idx in 0..<5 {
+        let ts = t0.addingTimeInterval(Double(idx * 5))
+        guard verify(p3.evaluateBareLaunch(at: ts) == .allow, "burst attempt \(idx + 1) allowed") else { return 1 }
+        p3.recordRelaunchAttempt(at: ts)
+        _ = p3.recordCdpConfirmed()
+    }
+    if case .skipBurstLimit(let count, _) = p3.evaluateBareLaunch(at: t0.addingTimeInterval(30.0)) {
+        guard verify(count == 5, "burst limit reports count 5") else { return 1 }
+    } else {
+        fputs("FAIL: 6th relaunch within 60s must trip burst circuit breaker\n", stderr)
+        return 1
+    }
+    guard verify(p3.evaluateBareLaunch(at: t0.addingTimeInterval(61.0)) == .allow, "burst limit recovers once oldest attempt ages out") else { return 1 }
+
+    // 4. CDP command-line flag matching boundary checks
+    guard verify(CdpHelper.hasRemoteDebuggingPortFlag("/Applications/Antigravity.app/Contents/MacOS/Antigravity --remote-debugging-port=0"), "detects =0") else { return 1 }
+    guard verify(CdpHelper.hasRemoteDebuggingPortFlag("/Applications/Antigravity.app/Contents/MacOS/Antigravity --remote-debugging-port 9222"), "detects space arg") else { return 1 }
+    guard verify(!CdpHelper.hasRemoteDebuggingPortFlag("/Applications/Antigravity.app/Contents/MacOS/Antigravity"), "rejects bare command") else { return 1 }
+    guard verify(!CdpHelper.hasRemoteDebuggingPortFlag("/Applications/Antigravity.app/Contents/MacOS/Antigravity --remote-debugging-port-fake=1"), "rejects partial-prefix flag") else { return 1 }
+
+    print("LAUNCH_GUARD_SELF_TEST_OK")
+    return 0
+}
+
 func runWatcherMain() -> Int32 {
     var mode = "watch"
     var customDir: String?
@@ -1491,6 +1739,7 @@ func runWatcherMain() -> Int32 {
     var outFile: String?
     var noNativeDaemon = false
     var noRelaunchPrompt = false
+    var autoRelaunch = false
 
     let args = CommandLine.arguments
     var i = 1
@@ -1499,8 +1748,11 @@ func runWatcherMain() -> Int32 {
         if a == "--watch" { mode = "watch" }
         else if a == "--once" { mode = "once" }
         else if a == "--remove" { mode = "remove" }
+        else if a == "--self-test-launch-guard" { mode = "self-test-launch-guard" }
         else if a == "--no-native-daemon" { noNativeDaemon = true }
         else if a == "--no-relaunch-prompt" { noRelaunchPrompt = true }
+        else if a == "--auto-relaunch" { autoRelaunch = true }
+        else if a == "--no-auto-relaunch" { autoRelaunch = false }
         else if a == "--dir" && i + 1 < args.count { i += 1; customDir = args[i] }
         else if a == "--plugin-dir" && i + 1 < args.count { i += 1; customPluginDir = args[i] }
         else if a == "--cdp-port" && i + 1 < args.count {
@@ -1541,7 +1793,11 @@ func runWatcherMain() -> Int32 {
         pluginDir = (parentDir as NSString).appendingPathComponent("\(baseName)-native-plugin")
     }
 
-    let app = WatcherApp(baseDir: baseDir, pluginDir: pluginDir, isWatch: mode == "watch", noNativeDaemon: noNativeDaemon, noRelaunchPrompt: noRelaunchPrompt)
+    if mode == "self-test-launch-guard" {
+        return runLaunchGuardSelfTest()
+    }
+
+    let app = WatcherApp(baseDir: baseDir, pluginDir: pluginDir, isWatch: mode == "watch", noNativeDaemon: noNativeDaemon, noRelaunchPrompt: noRelaunchPrompt, autoRelaunch: autoRelaunch)
 
     if mode == "once" {
         return app.runOnce(overridePort: overridePort, outFile: outFile)
