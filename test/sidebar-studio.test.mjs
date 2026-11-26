@@ -3862,3 +3862,29 @@ test('live-host-adapter enforces isScopeIsolated shared-path linkage, UNC/drive-
   assert.equal(afterSync.lastKnownById['chat-to-del'], undefined);
   assert.equal(afterSync.items.some((x) => x.cascadeId === 'code-keep'), true);
 });
+
+test('Issue #78 regression: Chat Mode (Beta) light-mode CSS & minimal pulse helper match data-ag-cs-theme="light", body.theme-light & warm alabaster with 0 :has()', () => {
+  const clientSrc = fs.readFileSync(path.join(ROOT_DIR, 'vendor', 'sidebar-studio', 'sidebar-client.js'), 'utf8');
+  assert.equal(clientSrc.includes(':has('), false, 'sidebar-client.js must contain zero :has() selectors');
+  assert.ok(
+    clientSrc.includes('html.light,html[data-theme="light"],html[data-ag-cs-theme="light"],html>body:is(.theme-light,.light-theme,.light){--ag-sb-bg:#f4f7fc;--ag-sb-canvas:#ffffff;'),
+    'Light-mode CSS custom properties must match html[data-ag-cs-theme="light"] and body.theme-light'
+  );
+  assert.ok(
+    clientSrc.includes(':is(html.light,html[data-theme="light"],html[data-ag-cs-theme="light"]):is([data-ag-cs-palette="warm"],[data-ag-cs-light-preset="alabaster"]),html:is([data-ag-cs-palette="warm"],[data-ag-cs-light-preset="alabaster"])>body:is(.theme-light,.light-theme,.light){--ag-sb-bg:#f3efe8;--ag-sb-canvas:#faf8f5;'),
+    'Warm light / Warm Alabaster palette variables must match data-ag-cs-theme="light", data-ag-cs-light-preset="alabaster", and body.theme-light'
+  );
+  assert.ok(
+    clientSrc.includes("const LIGHT_DESC = ':is(html.light,html[data-theme=\"light\"],html[data-ag-cs-theme=\"light\"],html>body:is(.theme-light,.light-theme,.light))';"),
+    'Descendant light rules (chat aura, danger buttons, checkbox, switch) must share full host light selector'
+  );
+  assert.equal(
+    clientSrc.includes("'html.light "),
+    false,
+    'No residual descendant rule in sidebar-client.js should be restricted to html.light / html[data-theme="light"] alone'
+  );
+  assert.ok(
+    clientSrc.includes("document.body.classList.contains('theme-light')"),
+    'syncChatPulseMinimalStyle must also recognize body.theme-light before ui-runtime stamps data-ag-cs-theme'
+  );
+});
