@@ -1939,7 +1939,7 @@
       if (isFn(saveSettingsBatch)) saveSettingsBatch(patch);
       else if (isFn(saveSetting)) for (const [k, v] of O.entries(patch)) saveSetting(k, v);
     };
-    const K_IC = 'isConnected', K_TC = 'textContent', K_CL = 'classList', K_WP = 'prism-wallpaper-slot', K_SG = 'prism-suggester-slot';
+    const K_IC = 'isConnected', K_TC = 'textContent', K_CL = 'classList', K_WP = 'prism-wallpaper-slot', K_SG = 'prism-suggester-slot', K_PE = 'prism-prompt-enhancer-slot';
     const sa = (e, k, v = '') => e.setAttribute(k, String(v));
     const ga = (e, k) => e.getAttribute(k);
     const ra = (e, k) => e.removeAttribute(k);
@@ -1975,11 +1975,14 @@
       const hasThUi = Boolean(thLive && thLive.box?.[K_IC]);
       const wpSlotEl = qs(rootEl, `[data-testid="${K_WP}"]`);
       const sgSlotEl = qs(rootEl, `[data-testid="${K_SG}"]`);
+      const peSlotEl = qs(rootEl, `[data-testid="${K_PE}"]`);
       const hasWpUi = Boolean(wpSlotEl?.__agPrismWpUiHandle?.root && wpSlotEl.__agPrismWpUiHandle.root.parentNode === wpSlotEl);
       const hasSgUi = Boolean(sgSlotEl?.__agPrismSgUiHandle?.root && sgSlotEl.__agPrismSgUiHandle.root.parentNode === sgSlotEl);
+      const hasPeUi = Boolean(peSlotEl?.__agPrismPromptEnhancerUiHandle?.root && peSlotEl.__agPrismPromptEnhancerUiHandle.root.parentNode === peSlotEl);
       const hasWpFn = isFn(G.__prismMountWallpaperUi);
       const hasSgFn = isFn(G.__prismMountSuggesterUi);
-      const sigParts = [l, isLightTheme ? 1 : 0, hiState, tmMode, hasThUi ? 1 : 0, hasWpFn ? 1 : 0, hasWpUi ? 1 : 0, hasSgFn ? 1 : 0, hasSgUi ? 1 : 0, ns];
+      const hasPeFn = isFn(G.__prismMountPromptEnhancerUi);
+      const sigParts = [l, isLightTheme ? 1 : 0, hiState, tmMode, hasThUi ? 1 : 0, hasWpFn ? 1 : 0, hasWpUi ? 1 : 0, hasSgFn ? 1 : 0, hasSgUi ? 1 : 0, hasPeFn ? 1 : 0, hasPeUi ? 1 : 0, ns];
       for (const k of SCHEMA_KEYS) sigParts.push(effVal(k, l));
       const nextSig = sigParts.join('\x1f');
       if (rootEl.__lastSyncSig === nextSig) return;
@@ -1989,6 +1992,7 @@
       rootEl.__lastBetaLang = l;
       if (!hasWpUi || betaLangChanged) { try { rootEl.__prismMountWp?.(l); } catch {} }
       if (!hasSgUi || betaLangChanged) { try { rootEl.__prismMountSg?.(l); } catch {} }
+      if (!hasPeUi || betaLangChanged) { try { rootEl.__prismMountPe?.(l); } catch {} }
 
       const dirtyBtns = [];
       qa(rootEl, 'button[data-ag-cs-key]').forEach((btn) => {
@@ -2283,6 +2287,7 @@
         }
         try { qs(existing, `[data-testid="${K_WP}"]`)?.__agPrismWpUiHandle?.destroy?.(); } catch {}
         try { qs(existing, `[data-testid="${K_SG}"]`)?.__agPrismSgUiHandle?.destroy?.(); } catch {}
+        try { qs(existing, `[data-testid="${K_PE}"]`)?.__agPrismPromptEnhancerUiHandle?.destroy?.(); } catch {}
         try { existing.__agMascotStageApi?.dispose?.(); } catch {}
         existing.remove();
       }
@@ -2373,6 +2378,7 @@
       let thoughtUiHandle = null;
       let wpSlot = null;
       let sgSlot = null;
+      let peSlot = null;
 
       const getThoughtUiHandle = () => {
         const live = sec.__prismThoughtUiHandle || thoughtUiHandle;
@@ -2445,6 +2451,14 @@
         if (!sgSlot || !f) return;
         setVis(sgSlot, true);
         f(sgSlot, { lang: l || getLang(), getLang, runGuardedMut, btnClass: BTN });
+      };
+      sec.__prismMountPe = (l) => {
+        const f = G.__prismMountPromptEnhancerUi;
+        if (!peSlot || !f) return;
+        setVis(peSlot, true);
+        try { peSlot.__agPrismPromptEnhancerUiHandle?.destroy?.(); } catch {}
+        const handle = f(peSlot, { lang: l || getLang(), getLang, runGuardedMut });
+        if (handle) peSlot.__agPrismPromptEnhancerUiHandle = handle;
       };
 
       const syncFoldBadgeOnly = (st) => {
@@ -2723,7 +2737,7 @@
             writeStore(STORAGE_SETTINGS_SUBTAB_KEY, sid);
             for (const sb of subTabBtns) sa(sb, 'aria-selected', ga(sb, 'data-ag-cs-subtab') === sid);
             for (const [gid, gel] of groupElsById.entries()) setVis(gel, sid === 'all' || sid === gid);
-            if (sid === 'beta' || sid === 'all') try { sec.__prismMountSg?.(); } catch {}
+            if (sid === 'beta' || sid === 'all') { try { sec.__prismMountSg?.(); } catch {} try { sec.__prismMountPe?.(); } catch {} }
           };
           for (const [sid, slbl] of [
             ['appearance', U('subTabAppearance', 'Appearance')],
@@ -2770,6 +2784,10 @@
               sa(sgSlot, 'data-testid', K_SG);
               setVis(sgSlot, false);
               ap(grpEl, sgSlot);
+              peSlot = mkEl('div');
+              sa(peSlot, 'data-testid', K_PE);
+              setVis(peSlot, false);
+              ap(grpEl, peSlot);
               wpSlot = mkEl('div');
               sa(wpSlot, 'data-testid', K_WP);
               setVis(wpSlot, false);
@@ -3450,6 +3468,7 @@
           ap(foldBody, groupsWrap);
           mountThoughtUiIfReady();
           try { sec.__prismMountSg?.(lang); } catch {}
+          try { sec.__prismMountPe?.(lang); } catch {}
 
           let uBusy = false;
           onClk(uBtn, () => runGuardedMut(() => setVis(uBox, !!(uBox.hidden))));
