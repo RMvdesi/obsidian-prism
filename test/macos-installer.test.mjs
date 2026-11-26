@@ -1148,13 +1148,13 @@ test('macOS Swift Setup lossless launcher & Issue #37 100% bilingual i18n contra
   }
 });
 
-test('macOS Opt-in event-driven Launch Guard: NSWorkspace observer, double-layer circuit breaker, native quit, and config validation contracts', () => {
+test('macOS Cold-start event-driven Launch Guard (default-on with opt-out): NSWorkspace observer, double-layer circuit breaker, native quit, healthy-CDP guard, and config contracts', () => {
   const cdpSwift = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'macos', 'Common', 'CdpClient.swift'), 'utf8');
   const setupSwift = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'macos', 'Setup', 'main.swift'), 'utf8');
   const watcherSwift = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'macos', 'Watcher', 'main.swift'), 'utf8');
   const buildMacosSrc = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'build-macos.mjs'), 'utf8');
 
-  // 1) cdp.js config schema validation (opt-in boolean)
+  // 1) cdp.js config schema validation (boolean toggle)
   assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', true), true);
   assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', false), true);
   assert.equal(cdp.validateConfigEntry('autoRelaunchOnBareLaunch', 'always'), false);
@@ -1170,13 +1170,16 @@ test('macOS Opt-in event-driven Launch Guard: NSWorkspace observer, double-layer
   assert.ok(cdpSwift.includes('static func requestNativeGracefulQuit(pid: Int32) -> Bool'), 'CdpClient.swift supports native NSRunningApplication.terminate()');
   assert.ok(cdpSwift.includes('abortIfStillAlive: Bool = false'), 'relaunchAntigravityWithCdp supports fail-closed abortIfStillAlive for silent relaunch');
 
-  // 3) Watcher/main.swift event-driven observer & opt-in defaults
+  // 3) Watcher/main.swift event-driven observer, healthy-CDP protection, SSH guard & opt-out controls
   assert.ok(watcherSwift.includes('NSWorkspace.didLaunchApplicationNotification'), 'Watcher listens to NSWorkspace launch notifications');
   assert.ok(watcherSwift.includes('nsApp.setActivationPolicy(.prohibited)'), 'Watcher keeps zero Dock icon / zero focus steal');
-  assert.ok(watcherSwift.includes('isAutoRelaunchOnBareLaunchEnabled('), 'Watcher gates auto-relaunch behind opt-in check');
+  assert.ok(watcherSwift.includes('isAutoRelaunchOnBareLaunchEnabled('), 'Watcher checks config/CLI/env before silent auto-relaunch');
+  assert.ok(watcherSwift.includes('findRunningAntigravityWithCdp(appPath: bundlePath)'), 'Watcher skips silent relaunch if a healthy CDP Antigravity instance is already running');
+  assert.ok(watcherSwift.includes('promptExplicitlyDisabled'), 'Watcher respects legacy autoPromptCdpRelaunch: false when autoRelaunchOnBareLaunch is unset');
+  assert.ok(watcherSwift.includes('SSH_CONNECTION') && watcherSwift.includes('SSH_TTY'), 'Watcher skips NSApplication/NSWorkspace observer in headless SSH sessions');
   assert.ok(watcherSwift.includes('autoRelaunchInFlight'), 'Watcher coordinates event guard and polling prompt loop');
   assert.ok(watcherSwift.includes('defaultMaxColdStartUptimeMs'), 'Watcher enforces cold-start window gate before silent relaunch');
-  assert.ok(watcherSwift.includes('"--auto-relaunch"'), 'Watcher accepts --auto-relaunch flag');
+  assert.ok(watcherSwift.includes('"--auto-relaunch"') && watcherSwift.includes('"--no-auto-relaunch"'), 'Watcher accepts --auto-relaunch / --no-auto-relaunch');
   assert.ok(watcherSwift.includes('"--self-test-launch-guard"'), 'Watcher exposes --self-test-launch-guard');
 
   // 4) Setup/main.swift default-on cold-start guard with --no-auto-relaunch opt-out & Aqua/Background LaunchAgent keys

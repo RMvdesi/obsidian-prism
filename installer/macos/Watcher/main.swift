@@ -1036,6 +1036,8 @@ final class WatcherApp {
             envForGuard["AG_PRISM_NO_RELAUNCH_PROMPT"] != "1" &&
             envForGuard["AG_PRISM_NO_AUTO_RELAUNCH"] != "1" &&
             envForGuard["AG_PRISM_NO_WORKSPACE_OBSERVER"] != "1" &&
+            (envForGuard["SSH_CONNECTION"] ?? "").isEmpty &&
+            (envForGuard["SSH_TTY"] ?? "").isEmpty &&
             !isTestEnv &&
             (isDefaultDir || !self.isTempSandboxDir(self.baseDir))
 
@@ -1080,6 +1082,15 @@ final class WatcherApp {
                         self.log(InstallerI18n.tr(
                             "[~] 宿主配置已禁用 obsidian-prism，跳过裸启自动重开 (PID \(pid))",
                             "[~] obsidian-prism is disabled in host config; skipping bare-launch auto-relaunch (PID \(pid))"
+                        ))
+                        return
+                    }
+
+                    if let existingCdpPid = CdpHelper.findRunningAntigravityWithCdp(appPath: bundlePath),
+                       existingCdpPid != pid {
+                        self.log(InstallerI18n.tr(
+                            "[~] 检测到已有健康带调试端口的 Antigravity 实例 (PID \(existingCdpPid))，跳过对辅助裸启进程 (PID \(pid)) 的自动重开",
+                            "[~] Healthy CDP-enabled Antigravity instance (PID \(existingCdpPid)) is already running; skipping bare-launch auto-relaunch for PID \(pid)"
                         ))
                         return
                     }
@@ -1230,6 +1241,7 @@ final class WatcherApp {
         var dirs: [String] = []
         if !self.pluginDir.isEmpty { dirs.append(self.pluginDir) }
         if !self.baseDir.isEmpty && self.baseDir != self.pluginDir { dirs.append(self.baseDir) }
+        var promptExplicitlyDisabled = false
         for dir in dirs {
             let cfgPath = (dir as NSString).appendingPathComponent("config.json")
             guard fm.fileExists(atPath: cfgPath),
@@ -1246,6 +1258,17 @@ final class WatcherApp {
                 }
                 return false
             }
+            if let promptVal = obj["autoPromptCdpRelaunch"] {
+                if promptVal.boolValue == false {
+                    promptExplicitlyDisabled = true
+                } else if let ps = promptVal.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                          (ps == "false" || ps == "off") {
+                    promptExplicitlyDisabled = true
+                }
+            }
+        }
+        if promptExplicitlyDisabled {
+            return false
         }
         // Enabled by default for fresh cold launches (gated by <=5s cold-start window); opt out via config.json or --no-auto-relaunch
         return true
