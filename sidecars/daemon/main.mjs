@@ -66,6 +66,14 @@ const SUGGESTER_ALLOWED_ACTIONS = new Set([
   'cancel',
   'clear-cache',
 ]);
+const PROMPT_ENHANCER_ALLOWED_ACTIONS = new Set([
+  'enhancer-get-config',
+  'enhancer-save-config',
+  'enhancer-fetch-models',
+  'enhancer-test-connection',
+  'enhance',
+  'enhancer-cancel',
+]);
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RPC_ROUTE_STORAGE = new AsyncLocalStorage();
 const USAGE_CACHE_MAX_BYTES = 4 * 1024 * 1024;
@@ -2191,6 +2199,8 @@ export class PrismDaemon {
     this._wallpaperStopped = false;
     this._lazySuggesterService = suggesterService;
     this._suggesterServicePromise = null;
+    this._lazyPromptEnhancerService = null;
+    this._promptEnhancerServicePromise = null;
     this._suggesterStopped = false;
     this.omniServer = null;
     this._omniServerPromise = null;
@@ -5128,13 +5138,29 @@ export class PrismDaemon {
       return this._setSuggesterExpr('');
     }
     const rawOpts = cacheOpts !== undefined ? cacheOpts : this._getChannelCacheOpts(true);
-    const expr = rawOpts
+    const suggesterExpr = rawOpts
       ? this.cdp.buildSuggesterExpression(cfg, rawOpts)
       : this.cdp.buildSuggesterExpression(cfg);
+    // Channel 13 is compiled and delivered alongside Channel 11, but its runtime
+    // owns its own config, observer, bridge and teardown. Keeping the two source
+    // expressions separate prevents the Suggester bundle itself from instantiating
+    // Prompt Enhancer during disabled-state tests or when Channel 11 is off.
+    const enhancerExpr = typeof this.cdp?.buildPromptEnhancerExpression === 'function'
+      ? rawOpts
+        ? this.cdp.buildPromptEnhancerExpression(cfg, rawOpts)
+        : this.cdp.buildPromptEnhancerExpression(cfg)
+      : '';
+    const expr = [suggesterExpr, enhancerExpr].filter(Boolean).join('\n;');
     if (cacheOpts === undefined && rawOpts && this.running) {
       this._scheduleBundleCacheFlush();
     }
-    return this._setSuggesterExpr(expr);
+    const next = this._setSuggesterExpr(expr);
+    // The daemon tracks the complete delivered expression so a Prompt Enhancer
+    // source change also replaces its persistent NewDocument script.
+    if (next && enhancerExpr) {
+      this.suggesterCodeHash = crypto.createHash('sha256').update(next).digest('hex').slice(0, 32);
+    }
+    return next;
   }
 
   _getSuggesterExprHash(expr = this.suggesterExpr) {
@@ -5152,10 +5178,12 @@ export class PrismDaemon {
   }
 
   _getSuggesterCleanupExpression() {
-    return (
+    const suggesterCleanup =
       this.cdp?.SUGGESTER_REMOVE_EXPRESSION ||
-      "(() => { try { window.__agPrismSuggester?.destroy?.(); } catch {} try { document.getElementById('ag-prism-suggester-css')?.remove(); } catch {} try { document.getElementById('ag-prism-model-dd-css')?.remove(); } catch {} try { document.querySelectorAll('[data-testid=\"prism-suggest-trigger\"], [data-testid=\"prism-ghost-overlay\"]').forEach((n) => n.remove()); } catch {} try { document.documentElement?.removeAttribute?.('data-ag-prism-suggester'); } catch {} try { delete window.__agPrismSuggester; } catch {} try { delete globalThis.__agPrismSuggester; } catch {} try { delete window.__prismMountSuggesterUi; } catch {} try { delete globalThis.__prismMountSuggesterUi; } catch {} try { delete window.__agPrismSuggesterResolve; } catch {} return { ok: true, status: 'off' }; })()"
-    );
+      "(() => { try { window.__agPrismSuggester?.destroy?.(); } catch {} try { document.getElementById('ag-prism-suggester-css')?.remove(); } catch {} try { document.getElementById('ag-prism-model-dd-css')?.remove(); } catch {} try { document.querySelectorAll('[data-testid=\"prism-suggest-trigger\"], [data-testid=\"prism-ghost-overlay\"]').forEach((n) => n.remove()); } catch {} try { document.documentElement?.removeAttribute?.('data-ag-prism-suggester'); } catch {} try { delete window.__agPrismSuggester; } catch {} try { delete globalThis.__agPrismSuggester; } catch {} try { delete globalThis.__prismMountSuggesterUi; } catch {} try { delete globalThis.__agPrismSuggesterResolve; } catch {} return { ok: true, status: 'off' }; })()";
+    const enhancerCleanup = this.cdp?.PROMPT_ENHANCER_REMOVE_EXPRESSION || '';
+    if (!enhancerCleanup) return suggesterCleanup;
+    return `(() => { try { ${suggesterCleanup}; } catch {} try { ${enhancerCleanup}; } catch {} return { ok: true, status: 'off' }; })()`;
   }
 
   _hasPeriodicPickerFile() {
@@ -6120,6 +6148,22 @@ export class PrismDaemon {
     } finally {
       this._suggesterServicePromise = null;
     }
+  }
+
+  async ensurePromptEnhancerService() {
+    if (this._lazyPromptEnhancerService) return this._lazyPromptEnhancerService;
+    if (this._promptEnhancerServicePromise) return this._promptEnhancerServicePromise;
+    this._promptEnhancerServicePromise = (async () => {
+      const svcPath = path.join(this.rootDir, 'vendor', 'prompt-enhancer', 'prompt-enhancer-service.mjs');
+      if (!fs.existsSync(svcPath)) return null;
+      const mod = await import(pathToFileURL(svcPath).href);
+      const factory = mod?.createPromptEnhancerService || mod?.default;
+      if (typeof factory !== 'function') return null;
+      const svc = factory({ getTranslatorService: () => this.ensureThoughtService() });
+      this._lazyPromptEnhancerService = svc;
+      return svc;
+    })();
+    try { return await this._promptEnhancerServicePromise; } finally { this._promptEnhancerServicePromise = null; }
   }
 
   // 校验目标窗口是否具备受信任的主帧默认上下文，供跨窗口双向同步广播复用
@@ -9404,7 +9448,7 @@ export class PrismDaemon {
       const reqId = Number.isSafeInteger(parsed.id) && parsed.id >= 0 ? parsed.id : null;
       if (reqId === null) return;
       const action = typeof parsed.action === 'string' ? parsed.action.trim() : '';
-      if (!SUGGESTER_ALLOWED_ACTIONS.has(action)) {
+      if (!SUGGESTER_ALLOWED_ACTIONS.has(action) && !PROMPT_ENHANCER_ALLOWED_ACTIONS.has(action)) {
         const errRes = { ok: false, error: `Unknown suggester action: ${action || 'empty'}` };
         if (isCurrentContext()) {
           const safeId = Number(reqId) | 0;
@@ -9425,11 +9469,19 @@ export class PrismDaemon {
       let result;
       let svc = null;
       try {
-        svc = await this.ensureSuggesterService();
-        if (!svc || typeof svc.handleAction !== 'function') {
-          result = { ok: false, error: 'suggester_service_unavailable' };
+        const enhancerAction = action === 'enhance' ? 'enhance' : action.startsWith('enhancer-') ? action.slice('enhancer-'.length) : '';
+        if (enhancerAction) {
+          svc = await this.ensurePromptEnhancerService();
+          result = !svc || typeof svc.handleAction !== 'function'
+            ? { ok: false, error: 'prompt_enhancer_service_unavailable' }
+            : await svc.handleAction(enhancerAction, actionPayload);
         } else {
-          result = await svc.handleAction(action, actionPayload);
+          svc = await this.ensureSuggesterService();
+          if (!svc || typeof svc.handleAction !== 'function') {
+            result = { ok: false, error: 'suggester_service_unavailable' };
+          } else {
+            result = await svc.handleAction(action, actionPayload);
+          }
         }
       } catch (err) {
         result = { ok: false, error: sanitizeSecretText(err?.message || err) };
@@ -9439,7 +9491,10 @@ export class PrismDaemon {
         const safeId = Number(reqId) | 0;
         const safeJson = serializeJsonForEval(result);
         const payloadExpr = safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
-        const resolveExpr = `(() => { const r = ${payloadExpr}; if (typeof window.__agPrismSuggesterResolve === 'function') window.__agPrismSuggesterResolve(${safeId}, r); else if (window.__agPrismSuggesterBridge && typeof window.__agPrismSuggesterBridge.resolve === 'function') window.__agPrismSuggesterBridge.resolve(${safeId}, r); })()`;
+        const isEnhancerCall = PROMPT_ENHANCER_ALLOWED_ACTIONS.has(action);
+        const resolveExpr = isEnhancerCall
+          ? `(() => { const r = ${payloadExpr}; if (typeof window.__agPrismPromptEnhancerResolve === 'function') window.__agPrismPromptEnhancerResolve(${safeId}, r); else if (window.__agPrismPromptEnhancerBridge && typeof window.__agPrismPromptEnhancerBridge.resolve === 'function') window.__agPrismPromptEnhancerBridge.resolve(${safeId}, r); })()`
+          : `(() => { const r = ${payloadExpr}; if (typeof window.__agPrismSuggesterResolve === 'function') window.__agPrismSuggesterResolve(${safeId}, r); else if (window.__agPrismSuggesterBridge && typeof window.__agPrismSuggesterBridge.resolve === 'function') window.__agPrismSuggesterBridge.resolve(${safeId}, r); })()`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (typeof executionContextId === 'number') evalParams.contextId = executionContextId;
         await entry.session.send('Runtime.evaluate', evalParams).catch(() => {});
@@ -9448,6 +9503,7 @@ export class PrismDaemon {
       // P0 跨卡片/跨窗口凭据同步：save-config 成功或 test-connection（内含 saveWorkbenchConfig）完成后，同步全部受信任主窗口并通知思考转译 UI
       const shouldBroadcastSync =
         (action === 'save-config' && Boolean(result && result.ok)) ||
+        (action === 'enhancer-save-config' && Boolean(result && result.ok)) ||
         (action === 'test-connection' && Boolean(Array.isArray(actionPayload?.profiles) || (result && result.ok)));
       if (shouldBroadcastSync) {
         let syncConfig = result?.config && typeof result.config === 'object' ? result.config : null;
@@ -9465,13 +9521,18 @@ export class PrismDaemon {
             }
           } catch {}
         }
+        const isEnhancerSave = action === 'enhancer-save-config';
         const applyStmt = syncConfig
-          ? `try { window.__agPrismSuggester?.applyConfig?.(${serializeJsonForEval(syncConfig)}, ${serializeJsonForEval(syncBackend)}); } catch {}`
+          ? isEnhancerSave
+            ? `try { window.__agPrismPromptEnhancer?.applyConfig?.(${serializeJsonForEval(syncConfig)}); } catch {}`
+            : `try { window.__agPrismSuggester?.applyConfig?.(${serializeJsonForEval(syncConfig)}, ${serializeJsonForEval(syncBackend)}); } catch {}`
           : '';
         const thoughtReloadStmt =
           "try { const sec = document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec'); sec?.__prismThoughtUiHandle?.reloadConfig?.(); } catch {}";
         const selfSyncExpr = `(() => { ${thoughtReloadStmt} ${applyStmt} })()`;
-        const peerSyncExpr = `(() => { ${applyStmt} try { window.__agPrismSuggesterSettingsUi?.reloadProfiles?.(); } catch {} ${thoughtReloadStmt} })()`;
+        const peerSyncExpr = isEnhancerSave
+          ? `(() => { ${applyStmt} try { window.__agPrismPromptEnhancerSettingsUi?.reloadProfiles?.(); } catch {} ${thoughtReloadStmt} })()`
+          : `(() => { ${applyStmt} try { window.__agPrismSuggesterSettingsUi?.reloadProfiles?.(); } catch {} ${thoughtReloadStmt} })()`;
         const broadcastTasks = [];
         if (isCurrentContext()) {
           const selfParams = { expression: selfSyncExpr, returnByValue: true, awaitPromise: false };
@@ -11942,12 +12003,18 @@ export class PrismDaemon {
       } catch {}
     }
     await this._suggesterServicePromise?.catch(() => null);
+    await this._promptEnhancerServicePromise?.catch(() => null);
     if (this._lazySuggesterService) {
       const sg = this._lazySuggesterService;
       this._lazySuggesterService = null;
       try {
         if (typeof sg.dispose === 'function') await sg.dispose();
       } catch {}
+    }
+    if (this._lazyPromptEnhancerService) {
+      const pe = this._lazyPromptEnhancerService;
+      this._lazyPromptEnhancerService = null;
+      try { if (typeof pe.dispose === 'function') await pe.dispose(); } catch {}
     }
     this.releaseOwnership();
   }

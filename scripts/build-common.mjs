@@ -226,6 +226,19 @@ function collectOptionalSuggesterTopEntries() {
   return entries;
 }
 
+function collectOptionalPromptEnhancerTopEntries() {
+  const entries = [];
+  for (const rel of [
+    'vendor/prompt-enhancer/prompt-enhancer-client.js',
+    'vendor/prompt-enhancer/prompt-enhancer-settings-ui.js',
+  ]) {
+    const abs = path.join(ROOT_DIR, ...rel.split('/'));
+    if (!fs.existsSync(abs)) continue;
+    try { entries.push({ name: rel, data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8') }); } catch {}
+  }
+  return entries;
+}
+
 function collectOptionalOmniTopEntries() {
   const entries = [];
   const omniClientRel = 'vendor/omni-viewer/omni-client.js';
@@ -243,6 +256,7 @@ function collectOptionalOmniTopEntries() {
   entries.push(...collectOptionalInlineDiffTopEntries());
   entries.push(...collectOptionalWallpaperTopEntries());
   entries.push(...collectOptionalSuggesterTopEntries());
+  entries.push(...collectOptionalPromptEnhancerTopEntries());
   return entries;
 }
 
@@ -445,6 +459,7 @@ export {
   collectOptionalInlineDiffTopEntries,
   collectOptionalWallpaperTopEntries,
   collectOptionalSuggesterTopEntries,
+  collectOptionalPromptEnhancerTopEntries,
   collectNativePluginEntries,
   renderPrismIconPng,
   buildMultiResIco,

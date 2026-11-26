@@ -16,6 +16,7 @@ const SIDEBAR_BINDING = '__agPrismSidebarCall';
 const INLINE_DIFF_BINDING = '__agPrismInlineDiffCall';
 const WALLPAPER_BINDING = '__agPrismWallpaperCall';
 const SUGGESTER_BINDING = '__agPrismSuggestCall';
+const PROMPT_ENHANCER_BINDING = SUGGESTER_BINDING;
 const IS_MAC = process.platform === 'darwin';
 const IS_WIN = process.platform === 'win32';
 const IS_LINUX = process.platform === 'linux';
@@ -7214,7 +7215,7 @@ const BUNDLE_CACHE_MAX_FILE_BYTES = 6 * 1024 * 1024;
 const BUNDLE_CACHE_MAX_EXPR_BYTES = 2 * 1024 * 1024;
 const BUNDLE_CACHE_MAX_BOOTCFG_BYTES = 64 * 1024;
 const CHANNEL_CACHE_MAX_PAYLOAD_BYTES = 2 * 1024 * 1024;
-const CHANNEL_CACHE_NAMES = ['omni', 'sidebar', 'hostI18n', 'swarmI18n', 'thought', 'inlineDiff', 'wallpaper', 'periodicPicker', 'settings', 'mascot', 'suggester', 'homeStudio'];
+const CHANNEL_CACHE_NAMES = ['omni', 'sidebar', 'hostI18n', 'swarmI18n', 'thought', 'inlineDiff', 'wallpaper', 'periodicPicker', 'settings', 'mascot', 'suggester', 'promptEnhancer', 'homeStudio'];
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 const CODE_HASH_RE = /^[0-9a-z]{1,16}$/;
 
@@ -8857,6 +8858,7 @@ function resetBundleCacheStats() {
   try { _settingsChannelCache.cachedPaths?.clear?.(); } catch {}
   try { _mascotChannelCache.cachedPaths?.clear?.(); } catch {}
   try { _suggesterAssetsCache.cachedPaths?.clear?.(); } catch {}
+  try { _promptEnhancerAssetsCache.cachedPaths?.clear?.(); } catch {}
   try { _homeStudioChannelCache.cachedPaths?.clear?.(); } catch {}
   invalidateBundleCacheRootCache();
 }
@@ -8919,7 +8921,7 @@ function isValidChannelCacheEntry(channelName, entry) {
     if (computeHash(`${entry.minRuntime}:${entry.dictRaw}`) !== entry.codeHash) return false;
     return sha256Text(`${entry.codeHash}\0${entry.minRuntime}\0${entry.dictRaw}`) === entry.payloadSha256;
   }
-  if (channelName === 'thought' || channelName === 'wallpaper' || channelName === 'suggester') {
+  if (channelName === 'thought' || channelName === 'wallpaper' || channelName === 'suggester' || channelName === 'promptEnhancer') {
     if (!hasOwn('minClient') || typeof entry.minClient !== 'string' || entry.minClient.length === 0) return false;
     if (!hasOwn('minSettingsUi') || typeof entry.minSettingsUi !== 'string' || entry.minSettingsUi.length === 0) return false;
     const totalBytes = Buffer.byteLength(entry.minClient, 'utf8') + Buffer.byteLength(entry.minSettingsUi, 'utf8');
@@ -9233,6 +9235,7 @@ function markChannelCachedOnPath(cachePath, chMap) {
     settings: _settingsChannelCache,
     mascot: _mascotChannelCache,
     suggester: _suggesterAssetsCache,
+    promptEnhancer: _promptEnhancerAssetsCache,
     homeStudio: _homeStudioChannelCache,
   };
   for (const name of CHANNEL_CACHE_NAMES) {
@@ -11712,6 +11715,25 @@ const SUGGESTER_REMOVE_EXPRESSION = `(() => {
   return { ok: true, status: 'off' };
 })()`;
 
+function readPromptEnhancerBootstrapConfig() {
+  const fallback = { enabled: false, profileId: '', model: '' };
+  try {
+    const dir = path.join(os.homedir(), '.gemini', 'config');
+    const file = path.join(dir, 'obsidian-prism-prompt-enhancer.json');
+    const dirStat = fs.lstatSync(dir);
+    const fileStat = fs.lstatSync(file);
+    if (dirStat.isSymbolicLink() || !dirStat.isDirectory() || fileStat.isSymbolicLink() || !fileStat.isFile()) return fallback;
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return {
+      enabled: Boolean(parsed?.enabled),
+      profileId: typeof parsed?.profileId === 'string' ? parsed.profileId.trim().slice(0, 80) : '',
+      model: typeof parsed?.model === 'string' ? parsed.model.trim().slice(0, 140) : '',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 // 第十一通道独立注入（对话续写幽灵补全 + 8 语种 Beta 设置卡片）：完全独立于 Channel 1，缺文件时安全返回 ''，接入磁盘缓存并支持 codeHash 幂等复用与零泄漏热卸载
 function buildSuggesterExpression(config = null, opts = null) {
   let resolvedOpts = opts;
@@ -11812,8 +11834,8 @@ function buildSuggesterExpression(config = null, opts = null) {
     const mountSettingsSlot = () => {
       try {
         const sec = document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec');
-        if (sec && typeof sec.__prismMountSg === 'function') {
-          sec.__prismMountSg();
+        if (sec) {
+          try { sec.__prismMountSg?.(); } catch {}
           return;
         }
         const slot = document.querySelector?.('[data-testid="prism-suggester-slot"]');
@@ -11907,6 +11929,101 @@ function buildSuggesterExpression(config = null, opts = null) {
       return { ok: true, status: 'deferred', codeHash: targetHash };
     }
     return mountOrReuse();
+  })()`;
+}
+
+// ── 第十三通道：Prompt Enhancer（主动增强按钮 + 后台自动回填） ──
+let _promptEnhancerAssetsCache = { sig: '', sourceHash: '', minClient: '', minSettingsUi: '', codeHash: '', cachedPaths: new Set() };
+
+function readCompiledPromptEnhancerAssets(opts = null) {
+  const clientPath = path.join(__dirname, 'vendor', 'prompt-enhancer', 'prompt-enhancer-client.js');
+  const settingsPath = path.join(__dirname, 'vendor', 'prompt-enhancer', 'prompt-enhancer-settings-ui.js');
+  if (!fs.existsSync(clientPath) || !fs.existsSync(settingsPath)) return { sig: '', minClient: '', minSettingsUi: '', codeHash: '' };
+  const sig = `${getFileSig(clientPath)}|${getFileSig(settingsPath)}`;
+  const cachePath = resolveBundleCachePathOption(opts);
+  if (!cachePath && _promptEnhancerAssetsCache.sig === sig && _promptEnhancerAssetsCache.codeHash) return _promptEnhancerAssetsCache;
+  const clientBuf = fs.readFileSync(clientPath);
+  const settingsBuf = fs.readFileSync(settingsPath);
+  return resolveChannelAssetsWithDiskCache({
+    channelName: 'promptEnhancer',
+    memCache: _promptEnhancerAssetsCache,
+    setMemCache: (v) => { _promptEnhancerAssetsCache = v; },
+    sig,
+    fileEntries: [
+      { rel: 'vendor/prompt-enhancer/prompt-enhancer-client.js', content: clientBuf },
+      { rel: 'vendor/prompt-enhancer/prompt-enhancer-settings-ui.js', content: settingsBuf },
+    ],
+    opts,
+    compileFn: () => {
+      const minClient = minifySingleSource(clientBuf.toString('utf8'));
+      const minSettingsUi = minifySingleSource(settingsBuf.toString('utf8'));
+      const codeHash = computeHash(`${minClient}\n${minSettingsUi}`);
+      return { minClient, minSettingsUi, codeHash };
+    },
+    toCacheEntry: (assets, sourceHash) => ({ sourceHash, codeHash: assets.codeHash, minClient: assets.minClient, minSettingsUi: assets.minSettingsUi, payloadSha256: sha256Text(`${assets.codeHash}\0${assets.minClient}\0${assets.minSettingsUi}`), updatedAt: Date.now() }),
+    fromCacheEntry: (entry) => ({ minClient: entry.minClient, minSettingsUi: entry.minSettingsUi, codeHash: entry.codeHash }),
+  });
+}
+
+const PROMPT_ENHANCER_REMOVE_EXPRESSION = `(() => {
+  try { (window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer)?.destroy?.(); } catch {}
+  try { (window.__agPrismPromptEnhancerBridge || globalThis.__agPrismPromptEnhancerBridge)?.dispose?.(); } catch {}
+  try { document.querySelectorAll?.('[data-testid="prism-prompt-enhancer-trigger"],[data-testid="prism-prompt-enhancer-panel"]').forEach((n) => n.remove()); } catch {}
+  try { document.getElementById?.('ag-prism-prompt-enhancer-css')?.remove?.(); } catch {}
+  try { document.getElementById?.('ag-prism-prompt-enhancer-settings-css')?.remove?.(); } catch {}
+  try { const slot = document.querySelector?.('[data-testid="prism-prompt-enhancer-slot"]'); slot?.__agPrismPromptEnhancerUiHandle?.destroy?.(); } catch {}
+  try { delete window.__agPrismPromptEnhancer; delete globalThis.__agPrismPromptEnhancer; delete window.__agPrismPromptEnhancerFactory; delete globalThis.__agPrismPromptEnhancerFactory; delete window.__prismMountPromptEnhancerUi; delete globalThis.__prismMountPromptEnhancerUi; delete window.__agPrismPromptEnhancerSettingsUi; delete globalThis.__agPrismPromptEnhancerSettingsUi; delete window.__agPrismPromptEnhancerBridge; delete globalThis.__agPrismPromptEnhancerBridge; delete window.__agPrismPromptEnhancerResolve; delete globalThis.__agPrismPromptEnhancerResolve; } catch {}
+  return { ok: true, status: 'off' };
+})()`;
+
+function buildPromptEnhancerExpression(config = null, opts = null) {
+  let resolvedOpts = opts;
+  if (!resolvedOpts && config && typeof config === 'object' && ('cachePath' in config || 'noDiskCache' in config || 'deferCacheWrite' in config || 'customClientSource' in config)) resolvedOpts = config;
+  let minClient = '', minSettingsUi = '', codeHash = '';
+  if (resolvedOpts && typeof resolvedOpts.customClientSource === 'string' && typeof resolvedOpts.customSettingsUiSource === 'string') {
+    minClient = resolvedOpts.customClientSource ? minifySingleSource(resolvedOpts.customClientSource) : '';
+    minSettingsUi = resolvedOpts.customSettingsUiSource ? minifySingleSource(resolvedOpts.customSettingsUiSource) : '';
+    codeHash = minClient && minSettingsUi ? computeHash(`${minClient}\n${minSettingsUi}`) : '';
+  } else {
+    const assets = readCompiledPromptEnhancerAssets(resolvedOpts);
+    minClient = assets.minClient; minSettingsUi = assets.minSettingsUi; codeHash = assets.codeHash;
+  }
+  if (!minClient || !minSettingsUi || !codeHash) return '';
+  const hashJson = serializeJsonForEval(codeHash);
+  const promptEnhancerBootstrapJson = serializeJsonForEval(readPromptEnhancerBootstrapConfig());
+  return `(() => {
+    try { if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' }; } catch { return { ok: false, status: 'skipped-subframe' }; }
+    const targetHash = ${hashJson};
+    const promptEnhancerBootstrap = ${promptEnhancerBootstrapJson};
+    const mountSettingsSlot = () => {
+      try {
+        const sec = document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec');
+        if (sec) {
+          try { sec.__prismMountPe?.(); } catch {}
+          return;
+        }
+        const slot = document.querySelector?.('[data-testid="prism-prompt-enhancer-slot"]');
+        const fn = window.__prismMountPromptEnhancerUi || globalThis.__prismMountPromptEnhancerUi;
+        if (slot && typeof fn === 'function') {
+          slot.__agPrismPromptEnhancerUiHandle = fn(slot, {});
+        }
+      } catch {}
+    };
+    const old = window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer;
+    if (old && old.__prismCodeHash === targetHash) {
+      try { old.applyConfig?.(promptEnhancerBootstrap); } catch {}
+      mountSettingsSlot();
+      return { ok: true, reused: true, codeHash: targetHash };
+    }
+    try { (${PROMPT_ENHANCER_REMOVE_EXPRESSION}); } catch {}
+    ;${minClient};
+    ;${minSettingsUi};
+    const factory = window.__agPrismPromptEnhancerFactory || globalThis.__agPrismPromptEnhancerFactory;
+    let inst = null;
+    try { if (typeof factory === 'function') inst = factory({ window, document, initialConfig: promptEnhancerBootstrap }); } catch {}
+    if (inst && typeof inst === 'object') { inst.__prismCodeHash = targetHash; window.__agPrismPromptEnhancer = inst; globalThis.__agPrismPromptEnhancer = inst; }
+    mountSettingsSlot();
+    return { ok: Boolean(inst), status: inst ? 'mounted' : 'factory-missing', codeHash: targetHash };
   })()`;
 }
 
@@ -12060,7 +12177,9 @@ const REMOVE_EXPRESSION = `(() => {
   } catch (e) {}
   try { (window.__agPrismWallpaper || globalThis.__agPrismWallpaper)?.destroy?.(); } catch (e) {}
   try { (window.__agPrismSuggester || globalThis.__agPrismSuggester)?.destroy?.(); } catch (e) {}
+  try { (window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer)?.destroy?.(); } catch (e) {}
   try { document.querySelector?.('[data-testid="prism-suggester-slot"]')?.__agPrismSgUiHandle?.destroy?.(); } catch (e) {}
+  try { document.querySelector?.('[data-testid="prism-prompt-enhancer-slot"]')?.__agPrismPromptEnhancerUiHandle?.destroy?.(); } catch (e) {}
   try { window.__agPrismInlineDiff?.destroy?.(); } catch (e) {}
   try {
     if (window.__agPrismTelemetry && typeof window.__agPrismTelemetry.destroy === 'function') {
@@ -12157,6 +12276,7 @@ const REMOVE_EXPRESSION = `(() => {
       window.__agPrismSuggesterBridge.dispose();
     }
   } catch (e) {}
+  try { window.__agPrismPromptEnhancerBridge?.dispose?.(); } catch (e) {}
   delete window.__agPrism;
   delete window.__agClaudeStyle;
   delete window.__agPrismTelemetry;
@@ -12194,6 +12314,12 @@ const REMOVE_EXPRESSION = `(() => {
   try { delete window.__prismMountSuggesterUi; } catch {}
   try { delete window.__agPrismSuggesterBridge; } catch {}
   try { delete window.__agPrismSuggesterResolve; } catch {}
+  try { delete window.__agPrismPromptEnhancer; } catch {}
+  try { delete window.__agPrismPromptEnhancerFactory; } catch {}
+  try { delete window.__agPrismPromptEnhancerSettingsUi; } catch {}
+  try { delete window.__prismMountPromptEnhancerUi; } catch {}
+  try { delete window.__agPrismPromptEnhancerBridge; } catch {}
+  try { delete window.__agPrismPromptEnhancerResolve; } catch {}
   delete window.__agPrismBrandLogoSvg;
   delete window.__agPrismHostI18n;
   delete window.__agPrismHostI18nFactory;
@@ -12240,6 +12366,12 @@ const REMOVE_EXPRESSION = `(() => {
   delete globalThis.__prismMountSuggesterUi;
   delete globalThis.__agPrismSuggesterBridge;
   delete globalThis.__agPrismSuggesterResolve;
+  try { delete globalThis.__agPrismPromptEnhancer; } catch {}
+  try { delete globalThis.__agPrismPromptEnhancerFactory; } catch {}
+  try { delete globalThis.__agPrismPromptEnhancerSettingsUi; } catch {}
+  try { delete globalThis.__prismMountPromptEnhancerUi; } catch {}
+  try { delete globalThis.__agPrismPromptEnhancerBridge; } catch {}
+  try { delete globalThis.__agPrismPromptEnhancerResolve; } catch {}
   delete globalThis.__agPrismOmni;
   delete globalThis.__agPrismSidebar;
   delete globalThis.__agPrismThoughtSettingsUi;
@@ -12512,7 +12644,7 @@ const REMOVE_EXPRESSION = `(() => {
   const nodes = document.querySelectorAll(
     '#' + ${JSON.stringify(STYLE_ID)} +
     ', #' + ${JSON.stringify(LEGACY_STYLE_ID)} +
-    ', #ag-prism-host-alert-css, #ag-prism-settings-v101-css, #ag-prism-studio-v101-css, #ag-prism-omni-css, #ag-prism-sidebar-studio-css, #ag-prism-periodic-picker-css, #ag-prism-periodic-picker-root, .ag-pp-hold-ring, .ag-pp-mini-keycap, #ag-prism-inline-diff-css, #ag-prism-wallpaper-root, #ag-prism-wallpaper-css, #ag-prism-suggester-css, #ag-prism-model-dd-css, [data-testid="prism-suggest-trigger"], [data-testid="prism-ghost-overlay"], #ag-prism-storage-guard, #ag-prism-storage-guard-css, #ag-cs-settings-sec, [data-testid="prism-thought-ai-config"], [data-testid="prism-thought-general-config"], .ag-omni-dock, .ag-omni-menu, .ag-prism-omni-menu, .ag-prism-omni-pane, [data-ag-prism-omni-owned="1"], [data-ag-prism-sidebar-owned="1"], .ag-prism-sidebar-studio, .ag-prism-sidebar-rail, .ag-prism-sidebar-popover, .ag-prism-sidebar-modal, .ag-cs-home-panel, .ag-cs-home-panel-seat, .ag-cs-ripple-layer, .ag-cs-ripple-host, .ag-cs-conv-aura-host, .ag-cs-crab, .ag-cs-dual-stage, .ag-cs-crab-stage, .ag-cs-mascot-stage, .ag-cs-mascot, .ag-v2-mascot-stage, .ag-v2-habitat-prop, .ag-cs-crystal-bar, [data-testid="orchestrator-effort-bar"], .ag-cs-prism-rim-cv, .ag-cs-code-fold-btn, .ag-cs-nav-outline-popover, .ag-cs-nav-outline-trigger, .ag-cs-smooth-caret, .ag-cs-perf-backdrop, .ag-cs-ctx-menu, .ag-cs-ctx-toast'
+    ', #ag-prism-host-alert-css, #ag-prism-settings-v101-css, #ag-prism-studio-v101-css, #ag-prism-omni-css, #ag-prism-sidebar-studio-css, #ag-prism-periodic-picker-css, #ag-prism-periodic-picker-root, .ag-pp-hold-ring, .ag-pp-mini-keycap, #ag-prism-inline-diff-css, #ag-prism-wallpaper-root, #ag-prism-wallpaper-css, #ag-prism-suggester-css, #ag-prism-model-dd-css, #ag-prism-prompt-enhancer-css, #ag-prism-prompt-enhancer-settings-css, [data-testid="prism-suggest-trigger"], [data-testid="prism-ghost-overlay"], [data-testid="prism-prompt-enhancer-trigger"], [data-testid="prism-prompt-enhancer-panel"], #ag-prism-storage-guard, #ag-prism-storage-guard-css, #ag-cs-settings-sec, [data-testid="prism-thought-ai-config"], [data-testid="prism-thought-general-config"], .ag-omni-dock, .ag-omni-menu, .ag-prism-omni-menu, .ag-prism-omni-pane, [data-ag-prism-omni-owned="1"], [data-ag-prism-sidebar-owned="1"], .ag-prism-sidebar-studio, .ag-prism-sidebar-rail, .ag-prism-sidebar-popover, .ag-prism-sidebar-modal, .ag-cs-home-panel, .ag-cs-home-panel-seat, .ag-cs-ripple-layer, .ag-cs-ripple-host, .ag-cs-conv-aura-host, .ag-cs-crab, .ag-cs-dual-stage, .ag-cs-crab-stage, .ag-cs-mascot-stage, .ag-cs-mascot, .ag-v2-mascot-stage, .ag-v2-habitat-prop, .ag-cs-crystal-bar, [data-testid="orchestrator-effort-bar"], .ag-cs-prism-rim-cv, .ag-cs-code-fold-btn, .ag-cs-nav-outline-popover, .ag-cs-nav-outline-trigger, .ag-cs-smooth-caret, .ag-cs-perf-backdrop, .ag-cs-ctx-menu, .ag-cs-ctx-toast'
   );
   nodes.forEach((n) => n.remove());
   return { removed: nodes.length };
@@ -12529,6 +12661,7 @@ module.exports = {
   INLINE_DIFF_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   PORT_FILE,
   PID_FILE,
   CONFIG_FILE,
@@ -12665,6 +12798,9 @@ module.exports = {
   buildMascotChannelExpression,
   MASCOT_REMOVE_EXPRESSION,
   buildSuggesterExpression,
+  buildPromptEnhancerExpression,
+  PROMPT_ENHANCER_BINDING,
+  PROMPT_ENHANCER_REMOVE_EXPRESSION,
   SUGGESTER_REMOVE_EXPRESSION,
   shouldEnableHomeStudio,
   buildHomeStudioChannelExpression,
