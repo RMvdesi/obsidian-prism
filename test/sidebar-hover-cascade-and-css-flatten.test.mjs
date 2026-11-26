@@ -12,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..');
 const cdp = require('../cdp.js');
 const { PrismDaemon } = await import('../sidecars/daemon/main.mjs');
 
-test('ui-runtime isolates sidebar hover mutations (0 sync/icon cascade), detects stop-button SVGs, guards flattenCss on CSS Nesting, throttles wakeWinBlur, and avoids 5s darkAura poll drift', () => {
+test('ui-runtime isolates sidebar hover mutations (0 sync/icon cascade), detects stop-button SVGs, flattens nested CSS text once, throttles wakeWinBlur, and avoids 5s darkAura poll drift', () => {
   const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
   let moCb = null;
   let pollCb = null;
@@ -163,10 +163,12 @@ test('ui-runtime isolates sidebar hover mutations (0 sync/icon cascade), detects
   vm.runInNewContext(uiSrc, sb);
   sb.__agCsUiMain({ motionLevel: 'ultra', sidebarRestyle: true, homeLayout: 'off', homeRipple: false, darkAura: 'vivid', darkAuraStyle: 'neon' });
 
-  // 0) Red-Team Hardening #1: flattenMainStyleSheet() skips BOTH startup and hot-sync flattenCss() when CSS.supports('selector(&)') is true
-  assert.equal(styleRewrites, 0, 'startup must skip flattenMainStyleSheet when CSS Nesting is natively supported');
+  // 0) flattenMainStyleSheet() flattens the nested source text once at startup even with native CSS Nesting
+  //    (native `&` nesting is ~1.4x slower to match in Blink); the hot-sync flattenCss() hook is idempotent.
+  assert.equal(styleRewrites, 1, 'startup must flatten the nested stylesheet text exactly once');
+  assert.equal(rawCss, 'html[data-ag-cs-style] .a{color:red;}');
   sb.__agPrism.flattenCss();
-  assert.equal(styleRewrites, 0, 'hot-sync W.__agPrism.flattenCss() must also early-return when CSS Nesting is natively supported');
+  assert.equal(styleRewrites, 1, 'hot-sync W.__agPrism.flattenCss() must not rewrite already-flattened CSS');
 
   // 0b) Red-Team Hardening #3: 5s poll expectedThemeKey includes darkAura & darkAuraStyle (0 spurious theme refreshes)
   assert.equal(html.getAttribute('data-ag-cs-dark-aura'), 'vivid');

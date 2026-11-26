@@ -923,82 +923,106 @@
   let lastAbsorbedSyncKey = '';
   const MOTION_OFF_STYLE_ID = 'ag-prism-motion-off-css';
 
+  // Text-level CSS Nesting flattener. Native `&` nesting makes Blink match every nested rule
+  // through an implicit :is(parent) list: no rule-set bucketing on the subject compound and no
+  // ancestor Bloom-filter fast reject. Flattening the source text (instead of re-serializing
+  // CSSOM, which drops var() inside shorthands) keeps every declaration byte-for-byte, and the
+  // selector rewrite only expands parent lists and :is() lists when matching and specificity
+  // stay identical; anything else is kept as :is(...).
   function flattenMainStyleSheet() {
-    if (typeof CSS !== 'undefined' && CSS.supports?.('selector(&)')) return;
     const el = document.getElementById?.('ag-prism-css');
-    const rules = el?.sheet?.cssRules;
+    const css = el?.textContent || '';
     const key = el?.getAttribute?.('data-ag-cs-css-hash') || CODE_HASH || '1';
-    if (!rules?.length || el.getAttribute?.('data-ag-cs-flat') === key + ':' + (el.textContent || '').length) return;
-    const splitC = (s) => {
-      const out = [];
-      for (let i = 0, d = 0, q = '', st = 0; i <= s.length; i++) {
-        const c = s[i];
-        if (c === '\\') { i++; continue; }
-        if (q) { if (c === q) q = ''; continue; }
-        if (c === '"' || c === "'") q = c;
-        else if (c === '(' || c === '[') d++;
-        else if (c === ')' || c === ']') d--;
-        else if ((!c || (c === ',' && !d)) && i >= st) { const t = s.slice(st, i).trim(); if (t) out.push(t); st = i + 1; }
-      }
-      return out;
-    };
-    const expIs = (s) => {
-      let q = '', br = 0, nd = 0, idx = -1;
-      const stk = [];
-      for (let i = 0; i < s.length; i++) {
-        const c = s[i];
-        if (c === '\\') { i++; continue; }
-        if (q) { if (c === q) q = ''; continue; }
-        if (c === '"' || c === "'") q = c;
-        else if (c === '[') br++;
-        else if (c === ']') br && br--;
-        else if (!br) {
-          if (c === '(') { const n = s.slice(i - 4, i) === ':not'; if (n) nd++; stk.push(n); }
-          else if (c === ')') { if (stk.pop()) nd--; }
-          else if (!nd && c === ':' && s.slice(i, i + 4) === ':is(') { idx = i; break; }
-        }
-      }
-      if (idx < 0) return [s];
-      let d = 0, end = -1;
-      for (let i = idx + 3; i < s.length; i++) {
-        const c = s[i];
-        if (c === '\\') { i++; continue; }
-        if (q) { if (c === q) q = ''; continue; }
-        if (c === '"' || c === "'") q = c;
-        else if (c === '(') d++;
-        else if (c === ')' && !--d) { end = i; break; }
-      }
-      if (end < 0) return [s];
-      const parts = splitC(s.slice(idx + 4, end));
-      if (!parts.length || parts.length > 40 || (parts.length === 1 && /[\s>+~]/.test(parts[0]))) return [s];
-      const pre = s.slice(0, idx), post = s.slice(end + 1), res = [];
-      for (const p of parts) {
-        for (const sub of expIs(pre + p + post)) if (res.push(sub) > 200) return [s];
-      }
-      return res;
-    };
-    const expSel = (s) => splitC(s).flatMap(expIs).join(',');
-    const walk = (rs, ps) => {
-      const out = [];
-      for (const r of rs) {
-        if (r.type === 1) {
-          let sel = r.selectorText;
-          if (ps) sel = splitC(ps).flatMap((p) => splitC(sel).map((c) => {
-            const fi = c.indexOf('&');
-            return fi < 0 ? p + ' ' + c : fi === 0 && c.indexOf('&', 1) < 0 ? p + c.slice(1) : c.replace(/&/g, ':is(' + p + ')');
-          })).join(',');
-          if (r.style?.cssText) out.push(expSel(sel) + '{' + r.style.cssText + '}');
-          if (r.cssRules?.length) out.push(...walk(r.cssRules, sel));
-        } else if (r.type === 4 || r.type === 12) {
-          const inner = walk(r.cssRules || [], ps);
-          if (inner.length) out.push((r.type === 4 ? '@media ' : '@supports ') + r.conditionText + '{' + inner.join('\n') + '}');
-        } else if (!r.selectorText && r.style?.cssText && ps) out.push(expSel(ps) + '{' + r.style.cssText + '}');
-        else if (r.cssText) out.push(r.cssText);
-      }
-      return out;
+    if (!css || el.getAttribute?.('data-ag-cs-flat') === key + ':' + css.length) return;
+    const okSel = (sel) => {
+      try { return typeof CSS === 'undefined' || !CSS.supports || CSS.supports('selector(' + sel + ')'); } catch { return false; }
     };
     try {
-      const flat = walk(rules, '').join('\n');
+      const skipQ = (s, i) => { const q = s[i]; for (i++; i < s.length && s[i] !== q; i++) if (s[i] === '\\') i++; return i; };
+      // Walks s outside quotes; fn(char, index, bracketDepth) returning false stops the walk.
+      const scan = (s, fn) => {
+        for (let i = 0, d = 0, c; i < s.length; i++) {
+          c = s[i];
+          if (c === '\\') i++;
+          else if (c === '"' || c === "'") i = skipQ(s, i);
+          else if (fn(c, i, (d += c === '(' || c === '[' ? 1 : c === ')' || c === ']' ? -1 : 0)) === false) return false;
+        }
+        return true;
+      };
+      const split = (s) => { const o = []; let st = 0; scan(s + ',', (c, i, d) => { if (c === ',' && !d) { o.push(s.slice(st, i).trim()); st = i + 1; } }); return o.filter(Boolean); };
+      const isCompound = (s) => scan(s, (c, i, d) => d || !/[\s>+~]/.test(c));
+      // Specificity as a*1e6 + b*1e3 + c; NaN for anything this parser does not fully understand.
+      const spec = (s) => {
+        let n = 0;
+        s = s.replace(/\[(?:[^\]"']|"[^"]*"|'[^']*')*\]/g, () => { n += 1e3; return '.'; });
+        if (/["'\\]/.test(s)) return NaN;
+        s = s.replace(/:(is|not|has|where)\(((?:[^()]|\([^()]*\))*)\)/g, (m, f, x) => { if (f !== 'where') n += Math.max(...split(x).map(spec)); return ' '; });
+        if (/[()]/.test(s.replace(/:nth-[\w-]+\(([^()](?! of ))*\)|:(lang|dir)\([\w-]+\)/g, ''))) return NaN;
+        return n + 1e6 * (s.match(/#[\w-]+/g) || []).length + 1e3 * (s.match(/(?<!:)(\.[\w-]+|:(?!(before|after|first-line|first-letter)\b)[\w-]+)/g) || []).length +
+          (s.match(/::?(before|after|first-line|first-letter)\b|::[\w-]+|(?<=^|[\s>+~])[a-z][\w-]*/gi) || []).length;
+      };
+      const same = (l) => { const v = spec(l[0]); return v === v && l.every((x) => spec(x) === v); };
+      const okC = {};
+      const ok = (s) => (okC[s] ??= okSel(s));
+      // Replaces each nesting selector with parent P (or :is(P) where plain text substitution would change matching).
+      const subst = (c, P, plain) => {
+        let o = '', last = 0;
+        scan(c, (ch, i) => {
+          if (ch !== '&') return;
+          const pre = c.slice(0, i).trimEnd(), first = !pre || /[(,]$/.test(pre);
+          o += c.slice(last, i) + (plain && (first || (plain > 1 && /[\s>+~]/.test(c[i - 1]))) ? P : ':is(' + P + ')');
+          last = i + 1;
+        });
+        return o + c.slice(last);
+      };
+      // Expands top-level :is(a,b) into separate selectors when matching and specificity stay identical.
+      const expIs = (s, from = 0) => {
+        let at = -1, end = -1;
+        scan(s, (c, i, d) => !(i >= from && d === 1 && c === '(' && s.slice(i - 3, i) === ':is' && s[i - 4] !== ':' && (at = i - 3) + 1));
+        if (at < 0) return [s];
+        scan(s.slice(at), (c, i, d) => !(c === ')' && !d && (end = at + i) + 1));
+        if (end < 0) return [s];
+        const parts = split(s.slice(at + 4, end)), pre = s.slice(0, at), post = s.slice(end + 1);
+        const fits = (p) => (isCompound(p) ? !pre || /[\s>+~(,]$/.test(pre) || !/^[\w*-]/.test(p) : !pre.trim() && /^([\s>+~.:[#]|$)/.test(post));
+        if (parts.length > 40 || !same(parts) || !parts.every((p) => fits(p) && ok(p))) return expIs(s, end + 1);
+        const res = [];
+        for (const p of parts) for (const x of expIs(pre + p + post, at)) if (res.push(x) > 200) return [s];
+        return res;
+      };
+      const resolve = (p, ps) => {
+        let l = split(p);
+        if (ps) {
+          l = l.map((c) => (scan(c, (ch) => ch !== '&') ? '& ' + c : c));
+          l = ps.length > 1 && (!same(ps) || ps.length * l.length > 200) ? l.map((c) => subst(c, ps.join(','), 0)) : ps.flatMap((P) => l.map((c) => subst(c, P, isCompound(P) ? 2 : 1)));
+        }
+        const o = l.flatMap((c) => expIs(c));
+        return o.length > 800 ? l : o;
+      };
+      // Single pass over the CSS text: block contents are emitted in source order with resolved selectors.
+      const out = [];
+      const walk = (i, sels, sink) => {
+        let st = i, par = 0, decl = '';
+        const flush = () => { if (decl) sink.push(sels.join(',') + '{' + decl + '}'); decl = ''; };
+        for (let c; i < css.length; i++) {
+          c = css[i];
+          if (c === '\\') { i++; continue; }
+          if (c === '"' || c === "'") { i = skipQ(css, i); continue; }
+          if (c === '(' || c === '[') par++;
+          else if ((c === ')' || c === ']') && par) par--;
+          else if (!par && (c === ';' || c === '}' || c === '{')) {
+            const t = css.slice(st, i).trim();
+            if (c !== '{') { if (t) sels ? (decl += t + ';') : sink.push(t + ';'); if (c === '}') break; }
+            else if (t[0] !== '@') { if (sels) flush(); i = walk(i + 1, resolve(t, sels), sink); }
+            else if (/^@(media|supports|container|layer|starting-style)\b/i.test(t)) { if (sels) flush(); const inner = []; i = walk(i + 1, sels, inner); if (inner.length) sink.push(t + '{' + inner.join('\n') + '}'); }
+            else { const b = walk(i + 1, null, []); sink.push(t + '{' + css.slice(i + 1, b) + '}'); i = b; }
+            st = i + 1;
+          }
+        }
+        if (sels) flush();
+        return i;
+      };
+      walk(0, null, out);
+      const flat = out.join('\n');
       if (flat) runGuardedMut(() => { el.textContent = flat; el.setAttribute?.('data-ag-cs-flat', key + ':' + flat.length); });
     } catch {}
   }

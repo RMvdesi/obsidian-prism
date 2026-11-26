@@ -542,45 +542,14 @@ test('Task 2, 3, 4 & Invariants: Q&A selected contrast (.bg-secondary.border-bor
   const fnMatch = ui.match(/function flattenMainStyleSheet\(\)[\s\S]*?\n  \}/);
   assert.ok(fnMatch, 'flattenMainStyleSheet must exist in ui-runtime.js');
   const styleEl = {
-    textContent: '',
+    textContent:
+      'html[data-ag-cs-style]{& :is([data-testid="ask-question-option"],label[for$="-__write_in__"]){position:relative;' +
+      '&:is(.bg-secondary.border-border,[aria-selected="true"]){background:var(--_q5) !important;' +
+      '& [data-testid$="-shortcut-badge"]{background:var(--_q0) !important;}}}}' +
+      'html[data-ag-cs-style] :is([data-testid="subagent-node"],[data-ag-sub-running="1"]) [data-testid="status-loading-spinner"] [data-agent-state-dot]:first-child{width:7px !important;height:2px !important;}',
     attrs: new Map([['data-ag-cs-css-hash', 'qa-test']]),
     getAttribute(k) { return this.attrs.get(k) || null; },
     setAttribute(k, v) { this.attrs.set(k, String(v)); },
-    sheet: {
-      cssRules: [
-        {
-          type: 1,
-          selectorText: 'html[data-ag-cs-style]',
-          style: { cssText: '' },
-          cssRules: [
-            {
-              type: 1,
-              selectorText: '& :is([data-testid="ask-question-option"],label[for$="-__write_in__"])',
-              style: { cssText: 'position:relative;' },
-              cssRules: [
-                {
-                  type: 1,
-                  selectorText: '&:is(.bg-secondary.border-border,[aria-selected="true"])',
-                  style: { cssText: 'background:var(--_q5) !important;' },
-                  cssRules: [
-                    {
-                      type: 1,
-                      selectorText: '& [data-testid$="-shortcut-badge"]',
-                      style: { cssText: 'background:var(--_q0) !important;' },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          type: 1,
-          selectorText: 'html[data-ag-cs-style] :is([data-testid="subagent-node"],[data-ag-sub-running="1"]) [data-testid="status-loading-spinner"] [data-agent-state-dot]:first-child',
-          style: { cssText: 'width:7px !important;height:2px !important;' },
-        },
-      ],
-    },
   };
   const sb = {
     CODE_HASH: 'qa-test',
@@ -588,15 +557,16 @@ test('Task 2, 3, 4 & Invariants: Q&A selected contrast (.bg-secondary.border-bor
     document: { getElementById: (id) => (id === 'ag-prism-css' ? styleEl : null) },
   };
   vm.runInNewContext(`${fnMatch[0]}; flattenMainStyleSheet();`, sb);
+  // Both :is() lists mix specificities ([data-testid] (0,1,0) vs label[for$] (0,1,1); .bg-secondary.border-border
+  // (0,2,0) vs [aria-selected] (0,1,0)), so the flattener keeps them as :is() and only resolves the nesting.
+  const qaSel = 'html[data-ag-cs-style] :is([data-testid="ask-question-option"],label[for$="-__write_in__"]):is(.bg-secondary.border-border,[aria-selected="true"])';
   assert.ok(
-    styleEl.textContent.includes('html[data-ag-cs-style] [data-testid="ask-question-option"].bg-secondary.border-border,') &&
-      styleEl.textContent.includes('{background:var(--_q5) !important;}'),
-    'Flattener must expand Q&A .bg-secondary.border-border selected rule'
+    styleEl.textContent.includes(qaSel + '{background:var(--_q5) !important;}'),
+    'Flattener must flatten Q&A .bg-secondary.border-border selected rule without changing specificity'
   );
   assert.ok(
-    styleEl.textContent.includes('html[data-ag-cs-style] label[for$="-__write_in__"].bg-secondary.border-border [data-testid$="-shortcut-badge"],') &&
-      styleEl.textContent.includes('{background:var(--_q0) !important;}'),
-    'Flattener must expand write-in selected shortcut badge rule'
+    styleEl.textContent.includes(qaSel + ' [data-testid$="-shortcut-badge"]{background:var(--_q0) !important;}'),
+    'Flattener must flatten write-in selected shortcut badge rule without changing specificity'
   );
   assert.ok(
     styleEl.textContent.includes('html[data-ag-cs-style] [data-testid="subagent-node"] [data-testid="status-loading-spinner"] [data-agent-state-dot]:first-child,') &&

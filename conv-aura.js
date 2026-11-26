@@ -1,5 +1,5 @@
 // Obsidian Prism — Multi-State Semantic Conversation Horizon Aura Controller (.ag-cs-conv-aura-host)
-// Split-Rate 300Hz VSync (~30fps cap in running, 1200ms idle settle -> 0fps) + Ambient Intensity + 3-State 0fps Semantic Afterglow.
+// Split-Rate 300Hz VSync (~60fps VSync-paced running on WebGL2, ~30fps Canvas2D fallback, 1200ms idle settle -> 0fps) + Ambient Intensity + 3-State 0fps Semantic Afterglow.
 
 (function (root) {
   'use strict';
@@ -873,10 +873,11 @@
           );
         }
 
-        // Split-Rate 300Hz VSync throttle; on real WebGL2 with explicit targetFps (minGap>0), drive smooth VSync 60fps for active phases and ~30fps (33ms) for pre-sleep settling phases
+        // Split-Rate 300Hz VSync throttle; on real WebGL2, every targetFps choice (including 'native', which reports minGap 0)
+        // drives VSync-paced ~60fps (15ms floor) for active phases and ~30fps (33ms) for pre-sleep settling phases.
         const isGpuGlow = !!(state.glow && state.glow.mode === 'webgl2');
-        const minGap = isGpuGlow && typeof getMinFrameGapMs === 'function' ? Number(getMinFrameGapMs() || 0) : 0;
-        const smoothGpu = isGpuGlow && minGap > 0;
+        const smoothGpu = isGpuGlow && typeof getMinFrameGapMs === 'function';
+        const minGap = smoothGpu ? M.max(0, Number(getMinFrameGapMs()) || 0) : 0;
         const isPreSleepPhase = !inLiftoffEbb && (phase === 'idle' || phase === 'awaiting-decision' || phase === 'long-task-complete');
         const smoothActiveGpu = smoothGpu && !isPreSleepPhase;
         const smoothPreSleep = smoothGpu && isPreSleepPhase;

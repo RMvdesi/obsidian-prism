@@ -462,33 +462,16 @@ test('perf guard 11: style.css enables offscreen content-visibility, sidebar con
   assert.equal(css.includes('.ag-cs-crab{opacity:0 !important;pointer-events:none !important;& *{'), false, 'must not use universal * inside .ag-cs-crab');
   assert.equal(css.includes('&>*{display:none !important;}'), false, 'must not use universal >* inside new-conversation svg');
 
-  // Verify flattenMainStyleSheet logic in ui-runtime.js expands nested & and :is(...) idempotently
+  // Verify flattenMainStyleSheet flattens the nested source text, expands & and :is(...) idempotently
   const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
   const fnMatch = uiSrc.match(/function flattenMainStyleSheet\(\)[\s\S]*?\n  \}/);
   assert.ok(fnMatch, 'flattenMainStyleSheet must exist in ui-runtime.js');
   const attrs = new Map([['data-ag-cs-css-hash', 'h1']]);
+  const rawCss = 'html[data-ag-cs-style]{--x: 1;& :is(.a, [data-b="1"]){color: red;}}@keyframes k{to{opacity:1}}';
   const fakeStyle = {
-    textContent: 'orig',
+    textContent: rawCss,
     getAttribute: (k) => attrs.get(k) || null,
     setAttribute: (k, v) => attrs.set(k, String(v)),
-    sheet: {
-      cssRules: [
-        {
-          type: 1,
-          selectorText: 'html[data-ag-cs-style]',
-          style: { cssText: '--x: 1;' },
-          cssRules: [
-            {
-              type: 1,
-              selectorText: '& :is(.a, [data-b="1"])',
-              style: { cssText: 'color: red;' },
-              cssRules: [],
-            },
-          ],
-        },
-        { type: 7, cssText: '@keyframes k{to{opacity:1}}' },
-      ],
-    },
   };
   const sb = {
     CODE_HASH: 'c1',
@@ -497,14 +480,19 @@ test('perf guard 11: style.css enables offscreen content-visibility, sidebar con
   };
   vm.runInNewContext(`${fnMatch[0]}; flattenMainStyleSheet();`, sb);
   assert.equal(attrs.get('data-ag-cs-flat'), `h1:${fakeStyle.textContent.length}`);
+  assert.ok(fakeStyle.textContent.includes('html[data-ag-cs-style]{--x: 1;}'));
   assert.ok(fakeStyle.textContent.includes('html[data-ag-cs-style] .a,html[data-ag-cs-style] [data-b="1"]{color: red;}'));
   assert.ok(fakeStyle.textContent.includes('@keyframes k{to{opacity:1}}'));
   assert.equal(fakeStyle.textContent.includes(':is('), false);
-  // If an older watcher overwrites textContent without clearing data-ag-cs-flat, length mismatch forces immediate re-flatten
-  fakeStyle.textContent = '/* stale unflattened css */';
+  // Already-flattened text is not rewritten again
+  const flatOnce = fakeStyle.textContent;
+  vm.runInNewContext(`${fnMatch[0]}; flattenMainStyleSheet();`, sb);
+  assert.equal(fakeStyle.textContent, flatOnce);
+  // If an older watcher overwrites textContent with the raw nested CSS without clearing data-ag-cs-flat, length mismatch forces immediate re-flatten
+  fakeStyle.textContent = rawCss;
   vm.runInNewContext(`${fnMatch[0]}; flattenMainStyleSheet();`, sb);
   assert.equal(attrs.get('data-ag-cs-flat'), `h1:${fakeStyle.textContent.length}`);
-  assert.ok(fakeStyle.textContent.includes('html[data-ag-cs-style] .a,html[data-ag-cs-style] [data-b="1"]{color: red;}'));
+  assert.equal(fakeStyle.textContent, flatOnce);
 });
 
 test('perf guard 12: prism-rim-canvas skips canvas resize when inactive and stream-choreography avoids hover getBoundingClientRect reflows', () => {
@@ -665,23 +653,9 @@ test('perf guard 14: flattenMainStyleSheet preserves :not(:is(...)), prefix &, a
   assert.ok(fnMatch, 'flattenMainStyleSheet must exist in ui-runtime.js');
   const attrs = new Map([['data-ag-cs-css-hash', 'h2']]);
   const fakeStyle = {
-    textContent: 'orig',
+    textContent: 'html[x] .card{.dark &{opacity: 1;}&:not(:is(.a,.b)){display: block;}& [data-x=":is(p,q)"]{color: blue;}}',
     getAttribute: (k) => attrs.get(k) || null,
     setAttribute: (k, v) => attrs.set(k, String(v)),
-    sheet: {
-      cssRules: [
-        {
-          type: 1,
-          selectorText: 'html[x] .card',
-          style: { cssText: '' },
-          cssRules: [
-            { type: 1, selectorText: '.dark &', style: { cssText: 'opacity: 1;' }, cssRules: [] },
-            { type: 1, selectorText: '&:not(:is(.a,.b))', style: { cssText: 'display: block;' }, cssRules: [] },
-            { type: 1, selectorText: '& [data-x=":is(p,q)"]', style: { cssText: 'color: blue;' }, cssRules: [] },
-          ],
-        },
-      ],
-    },
   };
   const sb = {
     CODE_HASH: 'c2',
@@ -704,6 +678,49 @@ test('perf guard 14: flattenMainStyleSheet preserves :not(:is(...)), prefix &, a
   assert.ok(out.includes('content:"v: 0.5 #aabbcc !important"'), 'must preserve quoted string contents verbatim');
   assert.ok(out.includes('url(/files/0.5.png)'), 'must preserve url() decimals');
   assert.ok(out.includes('color:red!important'), 'must still minify safe colons and !important');
+});
+
+test('perf guard 14b: text-level flattenMainStyleSheet keeps declarations verbatim and preserves specificity, order and forgiving :is()', () => {
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
+  const fnMatch = uiSrc.match(/function flattenMainStyleSheet\(\)[\s\S]*?\n  \}/);
+  assert.ok(fnMatch, 'flattenMainStyleSheet must exist in ui-runtime.js');
+  const flatten = (css, supports = () => true) => {
+    const attrs = new Map([['data-ag-cs-css-hash', 'h3']]);
+    const el = { textContent: css, getAttribute: (k) => attrs.get(k) || null, setAttribute: (k, v) => attrs.set(k, String(v)) };
+    const sb = {
+      CODE_HASH: 'c3',
+      runGuardedMut: (fn) => fn(),
+      CSS: { supports: (q) => supports(String(q).replace(/^selector\((.*)\)$/, '$1')) },
+      document: { getElementById: (id) => (id === 'ag-prism-css' ? el : null) },
+    };
+    vm.runInNewContext(`${fnMatch[0]}; flattenMainStyleSheet();`, sb);
+    assert.equal(attrs.get('data-ag-cs-flat'), `h3:${el.textContent.length}`);
+    return el.textContent.split('\n');
+  };
+
+  // Declarations are copied from the source text, so var() inside shorthands survives (CSSOM cssText drops it)
+  assert.deepEqual(flatten('html[x]{& .a{border:1px solid var(--c);background:var(--bg) center/cover no-repeat;}}'), [
+    'html[x] .a{border:1px solid var(--c);background:var(--bg) center/cover no-repeat;}',
+  ]);
+  // Parent lists split only when every parent has the same specificity, otherwise :is() keeps max specificity
+  assert.deepEqual(flatten('.a,.b{&:hover{color:red}> .k{x:1}.p &{y:2}}'), ['.a:hover,.b:hover{color:red;}', '.a > .k,.b > .k{x:1;}', '.p .a,.p .b{y:2;}']);
+  assert.deepEqual(flatten('.a,#b{& .c{color:red}}'), [':is(.a,#b) .c{color:red;}']);
+  // Explicit :is() lists expand only with equal specificity, supported arguments and a context where inlining is exact
+  assert.deepEqual(flatten('html[x] :is(pre,.code){a:1}'), ['html[x] :is(pre,.code){a:1;}']);
+  assert.deepEqual(flatten('html[x] :is(.a .b,.c) .d{b:2}'), ['html[x] :is(.a .b,.c) .d{b:2;}']);
+  assert.deepEqual(flatten(':is(.a .b,.c) .d{c:3}'), [':is(.a .b,.c) .d{c:3;}']);
+  assert.deepEqual(flatten(':is(.a .b,.c.e) .d{c:3}'), ['.a .b .d,.c.e .d{c:3;}']);
+  assert.deepEqual(flatten('.x:is(div,span){d:4}'), ['.x:is(div,span){d:4;}']);
+  assert.deepEqual(flatten('html[x] :is(.ok,::-moz-bad){e:5}', (s) => !s.includes('-moz-')), ['html[x] :is(.ok,::-moz-bad){e:5;}']);
+  // Interleaved declarations keep CSSNestedDeclarations order; nested @media keeps the resolved selector
+  assert.deepEqual(flatten('.a{color:red;@media (x){&:hover{b:1}c:2}d:3}'), ['.a{color:red;}', '@media (x){.a:hover{b:1;}', '.a{c:2;}}', '.a{d:3;}']);
+  // & in the middle of a compound or after an ancestor uses :is(parent) when the parent is complex
+  assert.deepEqual(flatten('html[x] .q{.y&{a:1}.z &{b:2}&.w{c:3}}'), ['.y:is(html[x] .q){a:1;}', '.z :is(html[x] .q){b:2;}', 'html[x] .q.w{c:3;}']);
+  // Non-group at-rules are copied verbatim
+  assert.deepEqual(flatten('@property --_fa{syntax:"<angle>";inherits:false;initial-value:0deg;}@keyframes k{0%{opacity:0}to{opacity:1}}'), [
+    '@property --_fa{syntax:"<angle>";inherits:false;initial-value:0deg;}',
+    '@keyframes k{0%{opacity:0}to{opacity:1}}',
+  ]);
 });
 
 test('perf guard 15: conv-aura prime+sync(true) avoids post-write checkVisibility thrash, stream-choreography guards convEntrySeq reentrancy, and upstream-client whitelists fallback trigger & attrs', () => {
