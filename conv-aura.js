@@ -761,7 +761,7 @@
         const prevH = state.height;
         if (tw > 0 && th > 0) applySize(tw, th);
         else layout(true);
-        if (state.width !== prevW || state.height !== prevH) wake(false);
+        if (state.width !== prevW || state.height !== prevH) wake(true);
       }
 
       function releaseBacking() {
@@ -1105,7 +1105,7 @@
           } else {
             layout(true);
           }
-          if (state.width !== prevW || state.height !== prevH) wake(false);
+          if (state.width !== prevW || state.height !== prevH) wake(true);
         });
         state.ro.observe(seatParent);
       }

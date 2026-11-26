@@ -762,7 +762,7 @@ color = vec4(rgb * a, a);
     };
   }
   function createWebGL2Renderer(canvas, columns, rows) {
-    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: false });
+    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true });
     if (!gl || gl.isContextLost?.()) return null;
     const atlasCanvas = canvas.ownerDocument.createElement('canvas');
     const atlasContext = atlasCanvas.getContext('2d');
@@ -1881,7 +1881,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
   const GLOW_FRAG_SHADER = HORIZON_FRAGMENT_SHADER;
   function createBrandHorizonGLRenderer(canvas) {
     const gl = canvas && canvas.getContext
-      ? canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: false })
+      ? canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true })
       : null;
     if (!gl || gl.isContextLost?.()) return null;
     let program = null;

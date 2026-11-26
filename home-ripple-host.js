@@ -51,6 +51,7 @@
     let convHost = null;
     let timer = 0;
     let rRaf = 0;
+    let roT = 0;
     let recT = 0;
     let recRaf = 0;
     let mountedAt = 0;
@@ -192,6 +193,7 @@
 
     function stopTimers(m) {
       if (timer) { clearTimeout(timer); timer = 0; }
+      if (roT) { clearTimeout(roT); roT = 0; }
       m.rafId = cAF(m.rafId);
       rRaf = cAF(rRaf);
     }
@@ -677,7 +679,11 @@
           layout();
           if (state.width !== pw0 || state.height !== ph0 || state.mode === 'conv') updateCalm();
           invAll();
-          wake();
+          if (!d.hidden && hasSz(canvas)) {
+            state.rafId = cAF(state.rafId);
+            wanted = false;
+            drawFrame(nowOf());
+          } else wake();
         };
         if (!shrunk && state.width > 0 && state.height > 0 && !d.hidden && typeof requestAnimationFrame === 'function') {
           state.rafId = cAF(state.rafId);
@@ -798,6 +804,7 @@
         }
       }
       unbindWin = () => {
+        if (roT) { clearTimeout(roT); roT = 0; }
         rRaf = cAF(rRaf);
         d.removeEventListener('visibilitychange', onVis);
         wRef?.removeEventListener?.('blur', onBlur);
@@ -806,7 +813,41 @@
       };
 
       if (typeof ResizeObserver === 'function') {
-        const doLay = () => { rRaf = 0; if (!isDestroyed() && !state.parked) { layout(); wake(); } };
+        let lastRoAt = -1;
+        const isResizing = () => ga(getHtml(), 'data-ag-cs-resizing') === '1';
+        const flushLay = () => {
+          roT = 0;
+          if (isDestroyed() || state.parked) return;
+          if (d.hidden) return reclaim();
+          if (isResizing() && typeof setTimeout === 'function') {
+            roT = setTimeout(flushLay, 120);
+            return;
+          }
+          const pw0 = state.width;
+          const ph0 = state.height;
+          const wasShrunk = shrunk;
+          layout();
+          if ((state.width !== pw0 || state.height !== ph0 || wasShrunk) && !d.hidden && hasSz(canvas)) {
+            state.rafId = cAF(state.rafId);
+            wanted = false;
+            drawFrame(nowOf());
+          } else wake();
+        };
+        const doLay = () => {
+          rRaf = 0;
+          if (isDestroyed() || state.parked) return;
+          const now = nowOf();
+          const hasLive = !shrunk && !fLost && !gLost && state.width > 0 && state.height > 0 && hasSz(canvas) && !isLost(canvas, state.field) && !isLost(state.glowCanvas, state.glow);
+          const defer = hasLive && typeof setTimeout === 'function' && (isResizing() || roT || (lastRoAt >= 0 && now - lastRoAt <= 180));
+          lastRoAt = now;
+          if (defer) {
+            if (roT) clearTimeout(roT);
+            roT = setTimeout(flushLay, 120);
+            return;
+          }
+          if (roT) { clearTimeout(roT); roT = 0; }
+          flushLay();
+        };
         ro = new ResizeObserver(() => { typeof requestAnimationFrame !== 'function' ? doLay() : !rRaf && (rRaf = rAF(doLay)); });
       }
       mountToRoot(state, mode, tr);
