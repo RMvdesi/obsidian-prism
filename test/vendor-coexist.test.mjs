@@ -2776,3 +2776,38 @@ test('Smoked Obsidian Wave 1: style.css hygiene (0 :has, ASCII, LF, no BOM, home
     assert.ok(bytes < 549500, `Channel 1 (${lang}) must be strictly < 549,500 B, got ${bytes}`);
   }
 });
+
+test('Issue #81 regression: TIER_CSS uses --pt-c instead of --c so external AG Pulse shadowRoot card background is never overwritten', () => {
+  const fbSrc = fs.readFileSync(path.join(ROOT_DIR, 'vendor', 'pulse-dashboard', 'inline-fallback.js'), 'utf8');
+  const tierMatch = fbSrc.match(/const TIER_CSS = expCss\('([^']+)'\)/);
+  assert.ok(tierMatch, 'TIER_CSS declaration must exist in inline-fallback.js');
+  assert.equal(tierMatch[1].includes('--c:'), false, 'TIER_CSS must not declare --c on :host (collides with pulse-vial-bridge.js card background)');
+  assert.ok(tierMatch[1].includes('--pt-c:var(--pv-tint,var(--pulse-ring,#3186ff))'), 'TIER_CSS must scope tint variable to --pt-c');
+  assert.ok(fbSrc.includes('color-mix(in srgb,var(--pt-c) '), 'expCss must reference var(--pt-c) for tier-5 ring highlight');
+
+  const env = createLightweightDom();
+  const extBar = env.makeEl('div');
+  extBar.id = 'ag-pulse-status-bar';
+  extBar.setAttribute('data-ag-pulse-bar', 'true');
+  const extShadow = env.makeEl('shadow-root');
+  const bridgeStyle = env.makeEl('style');
+  bridgeStyle.setAttribute('data-ag-cs-pulse-style', '1');
+  bridgeStyle.textContent = ':host{--c:linear-gradient(160deg,#12151ff5,#0b0d13fa)}.card{background:var(--c)!important}';
+  extShadow.appendChild(bridgeStyle);
+  extBar.shadowRoot = extShadow;
+  env.composerToolbar.appendChild(extBar);
+  env.composerToolbar.getBoundingClientRect = () => ({ width: 320, height: 32 });
+  env.win.requestAnimationFrame = (cb) => { cb(); return 1; };
+
+  const ctl = telemetryMod.createTelemetryController({ window: env.win, document: env.doc });
+  try {
+    ctl.sync({ telemetryModule: 'auto' });
+    const ptStyle = extShadow.children.find((n) => n.tagName === 'STYLE' && n.getAttribute('data-pt') === '1');
+    assert.ok(ptStyle, 'Coexisting external #ag-pulse-status-bar must receive style[data-pt="1"]');
+    assert.ok(ptStyle.textContent.includes('--pt-c:'), 'Injected style[data-pt="1"] must declare --pt-c');
+    assert.equal(/(?:^|[;{])\s*--c\s*:/.test(ptStyle.textContent), false, 'Injected style[data-pt="1"] must never declare --c');
+    assert.ok(ptStyle.textContent.includes('color-mix(in srgb,var(--pt-c) '), 'Injected tier-5 highlight must use var(--pt-c)');
+  } finally {
+    ctl.destroy();
+  }
+});
