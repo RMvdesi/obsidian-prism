@@ -531,6 +531,10 @@ test('v2.34.0 Orchestrator patch: Claude planner shows Claude icon & tunable Orc
   assert.deepEqual(glmRow, { brand: 'zcode', tier: 'medium', isOrchestrator: false, camp: 'gemini' });
   const zcodeRow = mgc.parseModelLabelInfo('GLM-5.4 · ZCode (高)');
   assert.deepEqual(zcodeRow, { brand: 'zcode', tier: 'high', isOrchestrator: false, camp: 'gemini' });
+  assert.equal(typeof mgc.BRAND_PATHS.deepseek, 'string');
+  assert.ok(mgc.BRAND_PATHS.deepseek.length > 100);
+  const dsRow = mgc.parseModelLabelInfo('DeepSeek V4.1 Flash · routing group Max');
+  assert.deepEqual(dsRow, { brand: 'deepseek', tier: 'high', isOrchestrator: false, camp: 'gemini' });
 });
 
 test('v2.34.0 renderer-proxy perf: WeakRef LS cache, stale fallback rescan, in-flight coalescing & settled/summary TTL avoid redundant full trajectory deserializations', async () => {

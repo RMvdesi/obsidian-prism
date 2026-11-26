@@ -2153,7 +2153,7 @@ test('PR #45 Quad mascot mode: GPT White Dragon & DeepSeek Whale sprites, 4-camp
   const ctrl = mgc.createModelGlyphCrystalController({});
   const mockBtn = { nodeType: 1, textContent: 'DeepSeek R1 (高思考)', getAttribute: () => null };
   const trigInfo = ctrl.parseModelTriggerInfo(mockBtn);
-  assert.equal(trigInfo.brand, 'openai');
+  assert.equal(trigInfo.brand, 'deepseek');
   assert.equal(trigInfo.camp, 'gemini');
   assert.equal(trigInfo.mascotCamp, 'deepseek');
 });
