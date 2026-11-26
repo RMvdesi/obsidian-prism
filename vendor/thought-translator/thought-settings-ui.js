@@ -640,6 +640,7 @@
       translateTitles: false,
       dirtyToolSum: false,
       dirtyTitles: false,
+      dirtyStyle: false,
       diagnosing: false,
       lastDiag: null,
       cacheCount: 0,
@@ -1403,7 +1404,15 @@
       sb.addEventListener('click', (ev) => {
         if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
         state.stylePreset = sid;
+        state.dirtyStyle = true;
         syncStyleUi();
+        // Persist the preset right away like the sibling view / tool-summary / title toggles,
+        // otherwise it is lost when the sheet closes without "Save Config" (#105).
+        // The custom prompt text itself still goes through the Save button.
+        const api = resolveThoughtApi();
+        if (api && typeof api.saveConfig === 'function' && !state.busy) {
+          void api.saveConfig({ stylePreset: sid }).catch(() => {});
+        }
       });
       styleBtns.set(sid, sb);
       styleGrp.appendChild(sb);
@@ -1822,8 +1831,11 @@
       if (!res || !res.ok) return;
       const fromSave = Boolean(opts && opts.fromSave);
       state.loaded = true;
-      const mappedPreset = res.stylePreset === 'tech' ? 'technical' : res.stylePreset;
-      state.stylePreset = ['technical', 'concise', 'custom'].includes(mappedPreset) ? mappedPreset : 'technical';
+      if (fromSave || !state.dirtyStyle) {
+        const mappedPreset = res.stylePreset === 'tech' ? 'technical' : res.stylePreset;
+        state.stylePreset = ['technical', 'concise', 'custom'].includes(mappedPreset) ? mappedPreset : 'technical';
+        if (fromSave) state.dirtyStyle = false;
+      }
       const hostView = resolveHostPrism()?.getState?.()?.cfg?.thoughtView;
       const api = resolveThoughtApi();
       const clientView = api && typeof api.getViewMode === 'function' ? api.getViewMode() : null;
@@ -1932,6 +1944,7 @@
       loadConfigPromise = null;
       state.dirtyToolSum = false;
       state.dirtyTitles = false;
+      state.dirtyStyle = false;
       syncUsageBanner();
       syncActionButtons();
       const hostView = resolveHostPrism()?.getState?.()?.cfg?.thoughtView;

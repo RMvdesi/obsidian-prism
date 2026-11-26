@@ -1374,6 +1374,120 @@ test('UX-5 & UX-8 regression: thought-settings-ui supports 8 locales + yue migra
   assert.equal(promptTa.value, 'Imported custom system prompt');
 });
 
+test('Issue #105: clicking a style preset persists it right away so it survives closing and reopening the settings sheet', async () => {
+  const settingsUiSrc = fs.readFileSync(
+    path.join(ROOT_DIR, 'vendor', 'thought-translator', 'thought-settings-ui.js'),
+    'utf8'
+  );
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-thought-style-'));
+  try {
+    // Real persistence layer on an isolated config dir; the bridge below is the only thing mocked.
+    const svc = new ThoughtTranslatorService({ configDir: tmpDir });
+    const saveCalls = [];
+    let holdNextLoad = null;
+    const { doc, rootBody, sandbox } = createMockDomEnv({
+      __agPrismThought: {
+        getViewMode: () => 'immersive',
+        setViewMode: () => {},
+        getLocalCacheStats: () => ({ memEntries: 0 }),
+        getConfig: async () => {
+          const snapshot = svc.getSanitizedConfig();
+          if (holdNextLoad) {
+            const gate = holdNextLoad;
+            holdNextLoad = null;
+            await gate;
+          }
+          return snapshot;
+        },
+        saveConfig: async (input) => {
+          saveCalls.push({ ...input });
+          return svc.saveConfig(input);
+        },
+      },
+    });
+    vm.runInNewContext(settingsUiSrc, sandbox);
+    const uiFactory = sandbox.__agPrismThoughtSettingsUi.createThoughtAiConfigBox;
+
+    // settings-panel.js builds a fresh config box every time the settings sheet is opened.
+    const openSheet = async () => {
+      const cfgUi = uiFactory({
+        mkEl: (tag, cls) => {
+          const e = doc.createElement(tag);
+          if (cls) e.className = cls;
+          return e;
+        },
+        btnClass: 'seg-btn',
+        ui: {},
+        getMode: () => 'ai',
+        runGuardedMut: (fn) => fn(),
+      });
+      rootBody.appendChild(cfgUi.box);
+      await new Promise((r) => setTimeout(r, 30));
+      return cfgUi;
+    };
+    const styleBtn = (root, sid) => {
+      for (const ch of root.children) {
+        if (ch.getAttribute('data-thought-style') === sid) return ch;
+        const hit = styleBtn(ch, sid);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const pressed = (cfgUi) =>
+      ['technical', 'concise', 'custom'].filter((sid) => styleBtn(cfgUi.box, sid).getAttribute('aria-pressed') === 'true');
+
+    // 1) Pick "concise", close the sheet without touching "Save Config", reopen it.
+    const first = await openSheet();
+    assert.deepEqual(pressed(first), ['technical'], 'default preset is technical');
+    styleBtn(first.box, 'concise').dispatchClick();
+    assert.deepEqual(pressed(first), ['concise'], 'clicked preset is highlighted immediately');
+    await new Promise((r) => setTimeout(r, 20));
+    first.box.remove();
+
+    const reopened = await openSheet();
+    assert.deepEqual(
+      pressed(reopened),
+      ['concise'],
+      'a style preset picked before closing the sheet must still be selected when it reopens (#105)'
+    );
+    assert.deepEqual(saveCalls, [{ stylePreset: 'concise' }], 'the click saves only the preset, like the sibling toggles');
+    assert.equal(svc.getSanitizedConfig().stylePreset, 'concise');
+    assert.equal(svc.getSanitizedConfig().styleTag, 'ai_concise', 'translations switch to the concise prompt');
+    assert.equal(
+      new ThoughtTranslatorService({ configDir: tmpDir }).getSanitizedConfig().stylePreset,
+      'concise',
+      'preset is written to obsidian-prism-thought.json'
+    );
+
+    // 2) A config load that was already in flight when the user clicked must not revert the fresh choice.
+    let releaseLoad;
+    holdNextLoad = new Promise((r) => {
+      releaseLoad = r;
+    });
+    reopened.box.remove();
+    const racing = await openSheet();
+    styleBtn(racing.box, 'technical').dispatchClick();
+    releaseLoad();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(pressed(racing), ['technical'], 'stale get-config response must not clobber the clicked preset');
+    assert.equal(svc.getSanitizedConfig().stylePreset, 'technical');
+
+    // 3) reloadConfig() (JSON import path) still follows the stored config afterwards.
+    svc.saveConfig({ stylePreset: 'concise' });
+    await racing.reloadConfig();
+    assert.deepEqual(pressed(racing), ['concise']);
+
+    // 4) "custom" is stored too; with no saved prompt it keeps using the technical prompt until one is saved.
+    styleBtn(racing.box, 'custom').dispatchClick();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(svc.getSanitizedConfig().stylePreset, 'custom');
+    assert.equal(svc.getSanitizedConfig().styleTag, 'ai_technical');
+    assert.equal(racing.box.querySelector('[data-testid="thought-custom-prompt"]').parentElement.hidden, false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('Phase 2 TS-1~TS-8 security & lifecycle audit: SSRF/redirect defense, key revocation, live SSE abort + 96K cap, Omni fallback & 600K storage budget', async () => {
   // 1) TS-3: Block cloud metadata SSRF, 0.0.0.0, and dangerous non-HTTP ports
   assert.equal(normalizeOpenAiBaseUrl('http://169.254.169.254/latest/meta-data/'), 'https://api.openai.com/v1');
