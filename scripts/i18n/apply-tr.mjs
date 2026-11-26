@@ -139,7 +139,7 @@ fs.writeFileSync(effortPath, effortSource);
 
 const usagePath = path.join(root, 'usage-core.js');
 let usageSource = fs.readFileSync(usagePath, 'utf8');
-usageSource = usageSource.replace('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE', 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE,tr-TR');
+usageSource = usageSource.replace(/zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE(?!,tr-TR)/, 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE,tr-TR');
 usageSource = usageSource.replace(/\['([^']+)',\s*(\d+),\s*\[([^\]]+)\]\]/g, (whole, id, days, inner) => {
   let labels;
   try { labels = Function(`return [${inner}]`)(); } catch { return whole; }
@@ -165,6 +165,11 @@ for (const [i, item] of (host.patterns || []).entries()) {
   const invalid = refs.filter((n) => n < 1 || n > groups);
   if (invalid.length) throw new Error(`${id} replacement references nonexistent regex group(s): ${[...new Set(invalid)].join(', ')}`);
   hostTr.patterns.push({ regex: item.regex, replacement });
+}
+const hostExtraPath = path.join(root, 'scripts/i18n/tr-extra.json');
+if (fs.existsSync(hostExtraPath)) {
+  const extras = JSON.parse(fs.readFileSync(hostExtraPath, 'utf8'));
+  for (const item of extras.patterns || []) hostTr.patterns.push(item);
 }
 fs.writeFileSync(path.join(root, 'vendor/host-i18n/tr.json'), `${JSON.stringify(hostTr)}\n`);
 

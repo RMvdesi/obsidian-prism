@@ -9950,7 +9950,9 @@ function shouldEnableHostI18n(config, hostLocaleHint = null) {
 
 function resolveHostI18nLocale(language, hostLocaleHint = null) {
   const raw = String(language || 'auto').trim().toLowerCase().replace(/_/g, '-');
-  const effective = raw === 'auto' ? String(hostLocaleHint || '').trim().split(/[.@]/)[0].toLowerCase().replace(/_/g, '-') : raw;
+  const effective = raw === 'auto'
+    ? String(hostLocaleHint || detectSystemUiLocale() || '').trim().split(/[.@]/)[0].toLowerCase().replace(/_/g, '-')
+    : raw;
   return effective === 'tr' || effective.startsWith('tr-') || effective === 'turkish' || effective === 'türkçe' ? 'tr' : 'zh-CN';
 }
 

@@ -406,6 +406,11 @@ test('v1.0.1 i18n keys cover all 8 languages for scene presets, 6 new config key
       assert.equal(ui[removedKey], undefined, `Obsolete ${removedKey} must be removed for language ${lang}`);
     }
   }
+  const trUi = i18nLocales.getUiStrings('tr');
+  assert.equal(trUi.showMoreN(11), '11 tane daha göster');
+  assert.equal(trUi.swarmSplitSub(72, 28), 'Ana 72% · Swarm 28%');
+  assert.doesNotMatch(trUi.showMoreN(11), /^Show\b/);
+  assert.doesNotMatch(trUi.swarmSplitSub(72, 28), /^Main\b/);
 });
 
 test('settings-panel schema, scene presets, strict apiKey-stripping JSON export, and allowlist-validated JSON import', () => {

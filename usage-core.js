@@ -175,7 +175,7 @@ losttime|1647000|追忆似水年华|追憶似水年華|失われた時を求め�
   }
 
   function homeShortDateFormat(langOrZh) {
-    return new Intl.DateTimeFormat(pick8('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR'.split(','), langOrZh), { month: 'short', day: 'numeric' });
+    return new Intl.DateTimeFormat(pick8('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE,tr-TR'.split(','), langOrZh), { month: 'short', day: 'numeric' });
   }
 
   function homeShortDate(format, day) {

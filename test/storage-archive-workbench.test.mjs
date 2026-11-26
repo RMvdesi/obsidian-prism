@@ -17,7 +17,7 @@ const settingsPanel = require(path.join(ROOT, 'settings-panel.js'));
 const i18nLocales = require(path.join(ROOT, 'i18n-locales.js'));
 const i18nCore = require(path.join(ROOT, 'i18n-core.js'));
 
-const SUPPORTED_8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+const SUPPORTED_8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
 const NON_CJK_4 = ['en', 'es', 'fr', 'de'];
 const CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/;
 

@@ -787,7 +787,7 @@ test('swarm-board-i18n 3: sandbox DOM translation, exemptions, <option>.value sa
   const vmBtn = vmEnv.makeEl('button', { id: 'tabbtn-feed', text: 'Board' });
   vmTabs.append(vmBtn);
   vmEnv.doc.body.append(vmTabs);
-  const expr = cdp.buildSwarmI18nExpression({ hostLocalization: 'on' });
+  const expr = cdp.buildSwarmI18nExpression({ hostLocalization: 'on', language: 'zh-CN' });
   const ctx = vm.createContext({
     window: vmEnv.win,
     document: vmEnv.doc,

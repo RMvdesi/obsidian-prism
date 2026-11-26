@@ -1972,6 +1972,8 @@
         ? `Principal ${mainPct} % · Sous-agents ${subPct} %`
         : lang === 'de'
         ? `Haupt ${mainPct} % · Sub ${subPct} %`
+        : lang === 'tr'
+        ? `Ana ${mainPct}% · Swarm ${subPct}%`
         : `Main ${mainPct}% · Swarm ${subPct}%`;
     out.showMoreN = (n) =>
       lang === 'zh-CN'
@@ -1988,6 +1990,8 @@
         ? `Afficher ${n} de plus`
         : lang === 'de'
         ? `${n} weitere anzeigen`
+        : lang === 'tr'
+        ? `${n} tane daha göster`
         : `Show ${n} more`;
     return out;
   }

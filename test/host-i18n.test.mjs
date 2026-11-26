@@ -1013,6 +1013,29 @@ test('[P0-1] shouldEnableHostI18n resolves LANG=zh_CN.UTF-8 and skips LC_ALL=C.U
   }
 });
 
+test('auto host localization follows Turkish system UI locale and preserves zh-CN/en-US behavior', () => {
+  const prevLcAll = process.env.LC_ALL;
+  const prevLcMsg = process.env.LC_MESSAGES;
+  const prevLang = process.env.LANG;
+  try {
+    process.env.LC_ALL = '';
+    process.env.LC_MESSAGES = '';
+    process.env.LANG = '';
+    for (const locale of ['tr-TR', 'zh-CN', 'en-US']) {
+      cdp._setWindowsUiLocaleReaderForTest(() => locale);
+      const cfg = { language: 'auto', hostLocalization: 'auto' };
+      assert.equal(cdp.detectSystemUiLocale(), locale);
+      assert.equal(cdp.shouldEnableHostI18n(cfg), locale !== 'en-US');
+      assert.equal(path.basename(cdp.getHostI18nDictionaryPath(cfg)), locale === 'tr-TR' ? 'tr.json' : 'zh-CN.json');
+    }
+  } finally {
+    cdp._setWindowsUiLocaleReaderForTest(null);
+    if (prevLcAll === undefined) delete process.env.LC_ALL; else process.env.LC_ALL = prevLcAll;
+    if (prevLcMsg === undefined) delete process.env.LC_MESSAGES; else process.env.LC_MESSAGES = prevLcMsg;
+    if (prevLang === undefined) delete process.env.LANG; else process.env.LANG = prevLang;
+  }
+});
+
 test('[PR #50] Windows UI Display Language overrides Intl regional format, preserves hostLocalization="off" reverse channel, and prevents daemon skippedByLiveCfg heal churn', async () => {
   const prevLcAll = process.env.LC_ALL;
   const prevLcMsg = process.env.LC_MESSAGES;
