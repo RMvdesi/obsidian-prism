@@ -418,6 +418,13 @@ test('swarm-board-i18n 2: Ch1 zero byte delta, zh-CN.json intact, dictionary & r
   assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'off', language: 'zh-CN' }), false);
   assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'on', language: 'en' }), true);
   assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'zh-CN' }), true);
+  assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'tr' }), true);
+  assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'auto' }, 'tr-TR'), true);
+  const trSwarmExpr = cdp.buildSwarmI18nExpression({ hostLocalization: 'auto', language: 'tr' });
+  assert.ok(trSwarmExpr.includes('"locale":"tr"'));
+  assert.equal(path.basename(cdp.getSwarmI18nDictionaryPath({ language: 'tr' })), 'swarm-tr.json');
+  assert.equal(path.basename(cdp.getSwarmI18nDictionaryPath({ language: 'zh-CN' })), 'swarm-zh-CN.json');
+  assert.equal(path.basename(cdp.getSwarmI18nDictionaryPath({ language: 'auto' }, 'tr-TR')), 'swarm-tr.json');
   assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'en' }), false);
   assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'auto' }, 'en-US'), false);
   assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'auto' }, 'zh-CN'), true);

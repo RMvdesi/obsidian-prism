@@ -1412,7 +1412,7 @@ test('WO-MAIN-001C: omni-client pre-paints dark overlay against white flash & wo
   assert.equal(env.htmlEl.style.getPropertyValue('--wb-font-sans'), "'Google Sans', sans-serif");
 });
 
-test('Battle 3: strict HTML sandbox="allow-scripts", srcdoc CSP meta, /sandbox-init fail-closed, SVG light/dark checker & XSS strip, and full 8+1 locales (0 CJK in non-CJK)', async () => {
+test('Battle 3: strict HTML sandbox="allow-scripts", srcdoc CSP meta, /sandbox-init fail-closed, SVG light/dark checker & XSS strip, and full 9+1 locales (0 CJK in non-CJK)', async () => {
   // 1. HTML iframe sandbox MUST strictly equal 'allow-scripts' + referrerpolicy='no-referrer' + sandbox badge
   const htmlFilePage = renderWorkbenchHtml({
     baseUrl: 'http://127.0.0.1:43199',
@@ -1572,14 +1572,14 @@ test('Battle 3: strict HTML sandbox="allow-scripts", srcdoc CSP meta, /sandbox-i
   await svgEnv.settle();
   assert.equal(svgMetaCalls, callsBeforeReload + 1, 'Visible document must reload on parent reload message');
 
-  // 5. Full 8+1 locales coverage & strict 0 CJK in non-CJK locales (en/ko/es/fr/de)
+  // 5. Full 9+1 locales coverage & strict 0 CJK in non-CJK locales (en/ko/es/fr/de/tr)
   const cjkRe = /[\u3400-\u9FFF\uF900-\uFAFF]/;
-  const localeCols = ['zh-CN', 'zh-TW', 'yue', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+  const localeCols = ['zh-CN', 'zh-TW', 'yue', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
   for (const [key, row] of Object.entries(WORKBENCH_I18N)) {
     assert.equal(row.length, localeCols.length, `WORKBENCH_I18N.${key} must provide all 9 locale columns`);
     for (let i = 0; i < localeCols.length; i++) {
       assert.ok(typeof row[i] === 'string' && row[i].length > 0, `WORKBENCH_I18N.${key}[${localeCols[i]}] must be non-empty`);
-      if (['en', 'ko', 'es', 'fr', 'de'].includes(localeCols[i])) {
+      if (['en', 'ko', 'es', 'fr', 'de', 'tr'].includes(localeCols[i])) {
         assert.equal(cjkRe.test(row[i]), false, `WORKBENCH_I18N.${key}[${localeCols[i]}] must contain 0 CJK chars: ${row[i]}`);
       }
     }

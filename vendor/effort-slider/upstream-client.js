@@ -508,9 +508,9 @@ if (s.textContent !== SLIDER_CSS) s.textContent = SLIDER_CSS;
 return s;
 }
 // ── 右键设置面板 ────────────────────────────────────────────────────────────
-var SET_TITLE_I18N = { "zh-CN": "推理等级滑条设置", "zh-TW": "推理等級滑桿設定", en: "Effort Slider", ja: "推論スライダー設定", ko: "추론 슬라이더 설정", es: "Ajustes de esfuerzo", fr: "Réglages d’effort", de: "Aufwandsregler-Einstellungen" };
-var SET_HEAD_I18N = { "zh-CN": "推理等级滑条", "zh-TW": "推理等級滑桿", en: "Effort Slider", ja: "推論スライダー", ko: "추론 슬라이더", es: "Nivel de esfuerzo", fr: "Niveau d’effort", de: "Aufwandsregler" };
-var FIXED_I18N = { "zh-CN": "固定", "zh-TW": "固定", en: "Fixed", ja: "固定", ko: "고정", es: "Fijo", fr: "Fixe", de: "Fest" };
+var SET_TITLE_I18N = { "zh-CN": "推理等级滑条设置", "zh-TW": "推理等級滑桿設定", en: "Effort Slider", ja: "推論スライダー設定", ko: "추론 슬라이더 설정", es: "Ajustes de esfuerzo", fr: "Réglages d’effort", de: "Aufwandsregler-Einstellungen", tr: "Çaba kaydırıcısı ayarları" };
+var SET_HEAD_I18N = { "zh-CN": "推理等级滑条", "zh-TW": "推理等級滑桿", en: "Effort Slider", ja: "推論スライダー", ko: "추론 슬라이더", es: "Nivel de esfuerzo", fr: "Niveau d’effort", de: "Aufwandsregler", tr: "Çaba kaydırıcısı" };
+var FIXED_I18N = { "zh-CN": "固定", "zh-TW": "固定", en: "Fixed", ja: "固定", ko: "고정", es: "Fijo", fr: "Fixe", de: "Fest", tr: "Sabit" };
 function _normSliderLang(raw, win) {
 var v = String(raw || "").trim();
 if (!v || v.toLowerCase() === "auto") {
@@ -528,6 +528,7 @@ if (/^(ko|kr)/.test(s) || s === "korean") return "ko";
 if (/^es/.test(s) || s === "spanish") return "es";
 if (/^fr/.test(s) || s === "french") return "fr";
 if (/^de/.test(s) || s === "german") return "de";
+if (/^tr/.test(s) || s === "turkish" || s === "türkçe") return "tr";
 return "en";
 }
 function _isZhLang(lk) { var n = _normSliderLang(lk); return n === "zh-CN" || n === "zh-TW"; }
@@ -1008,7 +1009,7 @@ if (typeof item?.label === "string" && item.label) return item.label;
 if (typeof seat?.formatEffortLabel === "function") { try { var f = seat.formatEffortLabel(effortKey); if (f) return String(f); } catch {} }
 return AG_EFFORT_LABELS[String(effortKey || "").toLowerCase()] || String(effortKey || "");
 }
-var EFFORT_TITLE_I18N = { "zh-CN": "推理等级", "zh-TW": "推理等級", en: "Reasoning Effort", ja: "推論レベル", ko: "추론 수준", es: "Nivel de razonamiento", fr: "Niveau de raisonnement", de: "Denkaufwand" };
+var EFFORT_TITLE_I18N = { "zh-CN": "推理等级", "zh-TW": "推理等級", en: "Reasoning Effort", ja: "推論レベル", ko: "추론 수준", es: "Nivel de razonamiento", fr: "Niveau de raisonnement", de: "Denkaufwand", tr: "Akıl yürütme çabası" };
 function resolveEffortTitle(doc, win) {
 var lang = _normSliderLang(getPrismRootAttr(doc, win, "data-ag-cs-lang"), win);
 try {

@@ -46,6 +46,7 @@
     es: 'Caché|Rendimiento|TTFT|Velocidad rec.|Ventana de ctx|Modelo activo|usado|libre| sub',
     fr: 'Cache|Débit|TTFT|Dernier débit|Fenêtre ctx|Modèle actif|utilisé|libre| sous',
     de: 'Cache|Durchsatz|TTFT|Akt. Rate|Kontextfenster|Aktives Modell|belegt|frei| Sub',
+    tr: 'Cache|Throughput|TTFT|Latest Rate|Context Window|Active Model|used|free| sub',
   };
   function normFbLang(raw, win) {
     let v = String(raw || '').trim();
@@ -63,6 +64,7 @@
     if (/^es/.test(s) || s === 'spanish') return 'es';
     if (/^fr/.test(s) || s === 'french') return 'fr';
     if (/^de/.test(s) || s === 'german') return 'de';
+    if (/^tr/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
     return 'en';
   }
   const FB_I18N = Object.fromEntries(

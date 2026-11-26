@@ -57,8 +57,8 @@
       }
     }
   };
-  const LITE_SWARM_FMT = { 'zh-CN': '主会话 {0}% · 子代理 {1}%', 'zh-TW': '主工作階段 {0}% · 子代理 {1}%', ja: 'メイン {0}% · サブ {1}%', ko: '메인 {0}% · 서브 {1}%', es: 'Principal {0}% · Sub {1}%', fr: 'Principal {0}% · Sous {1}%', de: 'Haupt {0}% · Sub {1}%' };
-  const LITE_MORE_FMT = { 'zh-CN': '再显示 {0} 个', 'zh-TW': '再顯示 {0} 個', ja: 'さらに {0} 件表示', ko: '{0}개 더 보기', es: 'Mostrar {0} más', fr: 'Afficher {0} de plus', de: '{0} weitere anzeigen' };
+  const LITE_SWARM_FMT = { 'zh-CN': '主会话 {0}% · 子代理 {1}%', 'zh-TW': '主工作階段 {0}% · 子代理 {1}%', ja: 'メイン {0}% · サブ {1}%', ko: '메인 {0}% · 서브 {1}%', es: 'Principal {0}% · Sub {1}%', fr: 'Principal {0}% · Sous {1}%', de: 'Haupt {0}% · Sub {1}%', tr: 'Main {0}% · Swarm {1}%' };
+  const LITE_MORE_FMT = { 'zh-CN': '再显示 {0} 个', 'zh-TW': '再顯示 {0} 個', ja: 'さらに {0} 件表示', ko: '{0}개 더 보기', es: 'Mostrar {0} más', fr: 'Afficher {0} de plus', de: '{0} weitere anzeigen', tr: 'Show {0} more' };
   const ensureLiteLocalesShim = (slicePayload) => {
     mergeRuntimeUiSlice(slicePayload);
     const cur = getLocalesMod();

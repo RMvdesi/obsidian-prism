@@ -873,6 +873,13 @@ test('Channel 4 isolation: main bundle < 690 KiB without dict, shouldEnableHostI
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'off', language: 'en' }), true);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'on', language: 'en' }), true);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'zh-CN' }), true);
+  assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'tr' }), true);
+  assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }, 'tr-TR'), true);
+  const trExpr = cdp.buildHostI18nExpression({ hostLocalization: 'auto', language: 'tr' });
+  assert.ok(trExpr.includes('locale: "tr"'));
+  assert.equal(path.basename(cdp.getHostI18nDictionaryPath({ language: 'tr' })), 'tr.json');
+  assert.equal(path.basename(cdp.getHostI18nDictionaryPath({ language: 'zh-CN' })), 'zh-CN.json');
+  assert.equal(path.basename(cdp.getHostI18nDictionaryPath({ language: 'auto' }, 'tr-TR')), 'tr.json');
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'en' }), false);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'zh-TW' }), false);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }, 'zh-CN'), true);

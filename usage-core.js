@@ -18,7 +18,7 @@
     return Number.isFinite(n) ? n : 0;
   }
 
-  const L8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+  const L8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
   function resolveLang(langOrZh) {
     if (langOrZh === true) return 'zh-CN';
     if (!langOrZh) return 'en';
@@ -26,7 +26,7 @@
     if (!lo) return 'en';
     if (/^yue(?:$|[-_])/.test(lo)) return 'zh-CN';
     if (/^zh(?:$|[-_])/.test(lo)) return /tw|hk|mo|hant/.test(lo) ? 'zh-TW' : 'zh-CN';
-    const m = lo.match(/^(en|ja|ko|es|fr|de)(?:$|[-_])/);
+    const m = lo.match(/^(en|ja|ko|es|fr|de|tr)(?:$|[-_])/);
     return m ? m[1] : 'en';
   }
 
@@ -37,9 +37,9 @@
 
   const mkLbls = (a) => Object.fromEntries(L8.map((k, i) => [k, a[i]]));
   const HOME_RANGES = [
-    ['all', 0, ['全部', '全部', 'All', '全期間', '전체', 'Todo', 'Tout', 'Alle']],
-    ['30d', 30, ['30 天', '30 天', '30d', '30日間', '30일', '30d', '30j', '30T']],
-    ['7d', 7, ['7 天', '7 天', '7d', '7日間', '7일', '7d', '7j', '7T']],
+    ['all', 0, ['全部', '全部', 'All', '全期間', '전체', 'Todo', 'Tout', 'Alle', "Tümü"]],
+    ['30d', 30, ['30 天', '30 天', '30d', '30日間', '30일', '30d', '30j', '30T', "30 gün"]],
+    ['7d', 7, ['7 天', '7 天', '7d', '7日間', '7일', '7d', '7j', '7T', "7 gün"]],
   ].map(([id, days, a]) => ({ id, days, labelZh: a[0], labelEn: a[2], labels: mkLbls(a) }));
 
   const wrapTitle = (s, l, r) => (s[0] === l ? s : l + s + r);
@@ -175,7 +175,7 @@ losttime|1647000|追忆似水年华|追憶似水年華|失われた時を求め�
   }
 
   function homeShortDateFormat(langOrZh) {
-    return new Intl.DateTimeFormat(pick8('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE'.split(','), langOrZh), { month: 'short', day: 'numeric' });
+    return new Intl.DateTimeFormat(pick8('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR,tr-TR'.split(','), langOrZh), { month: 'short', day: 'numeric' });
   }
 
   function homeShortDate(format, day) {

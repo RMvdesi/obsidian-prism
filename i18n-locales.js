@@ -2,7 +2,7 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.__agCsLocales = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
-  const LANG_IDS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+  const LANG_IDS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
 
   const LANG_INDEX = {
     'zh-CN': 0,
@@ -13,6 +13,7 @@
     es: 5,
     fr: 6,
     de: 7,
+    tr: 8,
   };
 
   function resolveLangId(lang) {
@@ -29,6 +30,7 @@
     if (clean === 'es' || clean.startsWith('es-')) return 'es';
     if (clean === 'fr' || clean.startsWith('fr-')) return 'fr';
     if (clean === 'de' || clean.startsWith('de-')) return 'de';
+    if (clean === 'tr' || clean.startsWith('tr-') || clean === 'turkish' || clean === 'türkçe') return 'tr';
     if (clean === 'yue' || clean.startsWith('yue-') || clean === 'zh-yue') return 'zh-CN';
     if (
       clean === 'zh-tw' ||
@@ -51,7 +53,7 @@
     return arr[idx] !== undefined ? arr[idx] : arr[2];
   }
 
-  // Unified 8-language table for Obsidian Prism UI [zh-CN, zh-TW, en, ja, ko, es, fr, de]
+  // Unified 9-language table for Obsidian Prism UI [zh-CN, zh-TW, en, ja, ko, es, fr, de, tr]
   const UI_TABLE = {
     // ── Brand Header & Collapsible Banner ────────────────────────────────────
     sectionTitle: [
@@ -63,6 +65,7 @@
       'Obsidian Prism',
       'Obsidian Prism',
       'Obsidian Prism',
+      "Obsidian Prism",
     ],
     sectionSubtitle: [
       'Clean UI & Productivity Suite for Antigravity',
@@ -73,6 +76,7 @@
       'Clean UI & Productivity Suite for Antigravity',
       'Clean UI & Productivity Suite for Antigravity',
       'Clean UI & Productivity Suite for Antigravity',
+      "Antigravity için sade arayüz ve üretkenlik paketi",
     ],
     foldExpandHint: [
       '点击展开界面与功能设置',
@@ -83,6 +87,7 @@
       'Haz clic para expandir los ajustes de apariencia y funciones',
       'Cliquer pour développer les paramètres d’apparence et de fonctions',
       'Klicken, um Darstellungs- und Funktionseinstellungen auszuklappen',
+      "Görünüm ve özellik ayarlarını genişletmek için tıklayın",
     ],
     foldCollapseHint: [
       '点击收起设置面板',
@@ -93,6 +98,7 @@
       'Haz clic para contraer el panel de ajustes',
       'Cliquer pour réduire le panneau des paramètres',
       'Klicken, um das Einstellungsfeld einzuklappen',
+      "Ayarlar panelini daraltmak için tıklayın",
     ],
 
     // ── About, Repo Sync & Open-Source Credits ───────────────────────────────
@@ -105,6 +111,7 @@
       'Acerca de, actualizaciones y créditos',
       'À propos, mises à jour et crédits open source',
       'Info, Updates & Open-Source-Hinweise',
+      "Hakkında, güncellemeler ve açık kaynak kredileri",
     ],
     aboutRepoSyncTitle: [
       '本地 Git 仓库状态与更新',
@@ -115,6 +122,7 @@
       'Estado y sincronización del repositorio Git',
       'État et synchronisation du dépôt Git',
       'Git-Repository-Status & Synchronisierung',
+      "Git deposu durumu ve eşitleme",
     ],
     aboutRepoSyncBtn: [
       '检查 / 同步 Git 更新',
@@ -125,6 +133,7 @@
       'Comprobar / sincronizar Git',
       'Vérifier / synchroniser Git',
       'Git-Updates prüfen / synchronisieren',
+      "Git güncellemelerini denetle / eşitle",
     ],
     aboutRepoChecking: [
       '正在检查 Git 状态…',
@@ -135,6 +144,7 @@
       'Comprobando estado de Git…',
       'Vérification de l’état Git…',
       'Git-Repository-Status wird geprüft…',
+      "Git deposu durumu denetleniyor…",
     ],
     aboutRepoUpToDate: [
       '当前已是最新版本',
@@ -145,6 +155,7 @@
       'El repositorio ya está actualizado',
       'Le dépôt est déjà à jour',
       'Repository ist bereits aktuell',
+      "Depo zaten güncel",
     ],
     aboutRepoUpdated: [
       '已同步最新提交并热更新界面',
@@ -155,6 +166,7 @@
       'Últimos commits sincronizados y UI recargada',
       'Derniers commits synchronisés et UI rechargée à chaud',
       'Neueste Commits synchronisiert & UI neu geladen',
+      "Son commit'ler alındı ve arayüz anında yenilendi",
     ],
     aboutRepoNoRemote: [
       '本地独立 Git 仓库（尚未配置远端 origin）',
@@ -165,6 +177,7 @@
       'Repositorio Git local (sin remoto configurado)',
       'Dépôt Git local (aucun dépôt distant configuré)',
       'Lokales Git-Repository (kein Remote konfiguriert)',
+      "Yerel Git deposu (uzak yapılandırılmamış)",
     ],
     setAutoUpdateTitle: [
       '自动更新',
@@ -175,6 +188,7 @@
       'Actualización automática',
       'Mise à jour auto',
       'Auto-Update',
+      "Otomatik güncelleme",
     ],
     setAutoUpdateDesc: [
       '默认关闭，仅手动检查时联网；开启后定期检测并自动热更新。',
@@ -185,6 +199,7 @@
       'Desactivado por defecto (solo comprueba manualmente); al activarse, revisa y recarga automáticamente.',
       'Désactivé par défaut (vérification manuelle uniquement) ; une fois activé, vérifie et recharge automatiquement.',
       'Standardmäßig aus (prüft nur manuell); wenn ein, wird regelmäßig geprüft und automatisch neu geladen.',
+      "Varsayılan kapalı (yalnızca elle tetiklenince denetlenir); açıkken düzenli denetlenir ve anında yenilenir.",
     ],
     setUpdateChannelTitle: [
       '更新通道',
@@ -195,6 +210,7 @@
       'Canal de actualización',
       'Canal de mise à jour',
       'Update-Kanal',
+      "Güncelleme kanalı",
     ],
     setUpdateChannelDesc: [
       '选择仅接收稳定正式版，或提前体验含 -beta / -rc 的尝鲜版。',
@@ -205,9 +221,10 @@
       'Recibe solo versiones estables o prueba las preliminares -beta / -rc.',
       'Recevoir uniquement les versions stables ou tester les préversions -beta / -rc.',
       'Nur stabile Releases erhalten oder -beta / -rc-Vorabversionen testen.',
+      "Yalnızca kararlı sürümleri alın veya -beta / -rc ön sürümlerine katılın.",
     ],
-    optChannelStable: ['正式版', '正式版', 'Stable', '安定版', '정식판', 'Estable', 'Stable', 'Stabil'],
-    optChannelBeta: ['Beta', 'Beta', 'Beta', 'Beta', 'Beta', 'Beta', 'Bêta', 'Beta'],
+    optChannelStable: ['正式版', '正式版', 'Stable', '安定版', '정식판', 'Estable', 'Stable', 'Stabil', "Kararlı"],
+    optChannelBeta: ['Beta', 'Beta', 'Beta', 'Beta', 'Beta', 'Beta', 'Bêta', 'Beta', "Beta"],
     updCheckBtn: [
       '检查更新',
       '檢查更新',
@@ -217,6 +234,7 @@
       'Buscar actualización',
       'Vérifier',
       'Auf Updates prüfen',
+      "Güncellemeyi denetle",
     ],
     updApplyBtn: [
       '立即更新（热加载）',
@@ -227,6 +245,7 @@
       'Actualizar ahora',
       'Mettre à jour',
       'Jetzt aktualisieren',
+      "Şimdi güncelle (anında yenile)",
     ],
     updUpToDate: [
       '已是最新 v{0}',
@@ -237,6 +256,7 @@
       'Actualizado v{0}',
       'À jour v{0}',
       'Aktuell v{0}',
+      "Güncel v{0}",
     ],
     updAvailTpl: [
       '发现新版本 v{0}',
@@ -247,6 +267,7 @@
       'Actualización v{0} disponible',
       'Mise à jour v{0} disponible',
       'Update v{0} verfügbar',
+      "v{0} güncellemesi var",
     ],
     updUpdating: [
       '正在下载并热更新…',
@@ -257,6 +278,7 @@
       'Descargando y recargando…',
       'Téléchargement et rechargement…',
       'Wird heruntergeladen und neu geladen…',
+      "İndiriliyor ve anında yenileniyor…",
     ],
     updHotDone: [
       '热更新已生效（若含核心或底层变更，请按 Ctrl+R / Cmd+R 强刷或重启）',
@@ -267,6 +289,7 @@
       'Recargado (pulsa Ctrl+R / Cmd+R o reinicia si cambió el núcleo)',
       'Rechargé à chaud (Ctrl+R / Cmd+R ou redémarrage si le cœur a changé)',
       'Hot-Reload aktiv (bei Kernänderungen Strg+R / Cmd+R oder Neustart)',
+      "Anında yenilendi (çekirdek değiştiyse Ctrl+R / Cmd+R ile tam yenileyin veya yeniden başlatın)",
     ],
     updManualHint: [
       '请前往 Release 下载安装包手动升级 v{0}',
@@ -277,6 +300,7 @@
       'Descarga el instalador desde Release para actualizar a v{0}',
       'Téléchargez l’installateur depuis Release pour passer à v{0}',
       'Installer von Release herunterladen, um auf v{0} zu aktualisieren',
+      "v{0} sürümüne güncellemek için yükleyiciyi Release sayfasından indirin",
     ],
     updHotNote: [
       '支持热加载即时生效，部分核心/样式或后台服务变更需强刷页面（Ctrl+R / Cmd+R）或重启 Antigravity。',
@@ -287,6 +311,7 @@
       'La recarga en caliente se aplica al instante; cambios de núcleo, estilos o del servicio en segundo plano requieren Ctrl+R / Cmd+R o reiniciar Antigravity.',
       'Le rechargement à chaud est immédiat ; les changements de cœur, de style ou du service en arrière-plan nécessitent Ctrl+R / Cmd+R ou un redémarrage.',
       'Hot-Reload greift sofort; Kern-, Stil- oder Hintergrunddienst-Änderungen erfordern Strg+R / Cmd+R oder einen Neustart von Antigravity.',
+      "Anında yenileme hemen uygulanır; çekirdek, stil veya arka plan hizmeti değişiklikleri tam yenileme (Ctrl+R / Cmd+R) ya da Antigravity yeniden başlatması gerektirir.",
     ],
     storageHealthTitle: [
       '对话库体积体检',
@@ -297,6 +322,7 @@
       'Salud de la BD de chats',
       'État de la base de chats',
       'Chat-DB-Zustand',
+      "Sohbet veritabanı sağlığı",
     ],
     storageHealthIdle: [
       '展开自动体检（防后台内存膨胀）',
@@ -307,6 +333,7 @@
       'Comprobación automática del tamaño de BD',
       'Vérification auto de la taille de la base',
       'Automatische DB-Prüfung beim Ausklappen',
+      "Arka plan hizmeti için veritabanı şişmesi otomatik denetlenir",
     ],
     storageArchiveBtn: [
       '生成归档脚本',
@@ -317,8 +344,9 @@
       'Preparar archivo',
       'Préparer l’archive',
       'Archiv vorbereiten',
+      "Arşivi hazırla",
     ],
-    storageOk: ['健康', '健康', 'Healthy', '正常', '정상', 'Saludable', 'Sain', 'Gesund'],
+    storageOk: ['健康', '健康', 'Healthy', '正常', '정상', 'Saludable', 'Sain', 'Gesund', "Sağlıklı"],
     storageWarn: [
       '建议归档防内存飙升',
       '建議封存防記憶體飆升',
@@ -328,6 +356,7 @@
       'Se recomienda archivar',
       'Archivage recommandé',
       'Archivierung empfohlen',
+      "Arşiv önerilir",
     ],
     storageSummaryTpl: [
       '{0}（主 {1} · 子代理 {2} / {3}）· {4}',
@@ -338,6 +367,7 @@
       '{0} ({1} principales · {2} subagentes / {3}) · {4}',
       '{0} ({1} princ. · {2} sous-agents / {3}) · {4}',
       '{0} ({1} Haupt · {2} Subagenten / {3}) · {4}',
+      "{0} ({1} ana · {2} alt ajan / {3}) · {4}",
     ],
     storageReadyTpl: [
       '脚本已就绪（可归档 {0} 个子代理 / {1}），退出 Antigravity 后运行：{2}',
@@ -348,6 +378,7 @@
       'Script listo ({0} subagentes / {1}). Cierra Antigravity y ejecuta: {2}',
       'Script prêt ({0} sous-agents / {1}). Fermez Antigravity puis exécutez : {2}',
       'Skript bereit ({0} Subagenten / {1}). Antigravity schließen & ausführen: {2}',
+      "Betik hazır ({0} alt ajan / {1}). Antigravity'yi kapatıp şunu çalıştırın: {2}",
     ],
     storageGuardTitle: [
       '后台内存与对话库守护提醒',
@@ -358,6 +389,7 @@
       'Aviso de memoria y BD de chats',
       'Alerte mémoire et base de chats',
       'Speicher- & Chat-DB-Schutzhinweis',
+      "Bellek ve sohbet veritabanı koruması",
     ],
     storageGuardSummaryTpl: [
       '对话库 {0} · 可安全归档子代理 {1} 个（{2}）· 后台服务内存 {3}（主对话 100% 保留、零删除）',
@@ -368,6 +400,7 @@
       'BD {0} · {1} subagentes archivables ({2}) · RAM en segundo plano {3} (chats principales 100 % intactos)',
       'Base {0} · {1} sous-agents archivables ({2}) · RAM arrière-plan {3} (discussions principales intactes)',
       'DB {0} · {1} archivierbare Subagenten ({2}) · Hintergrund-RAM {3} (Hauptchats 100 % erhalten)',
+      "VT {0} · {1} arşivlenebilir alt ajan ({2}) · Arka plan RAM {3} (ana sohbetlerin %100'ü korunur, sıfır silme)",
     ],
     storageGuardEnableAutoExitBtn: [
       '开启退出自动归档',
@@ -378,6 +411,7 @@
       'Activar autoarchivo al salir',
       'Activer l’archivage auto à la sortie',
       'Auto-Archiv beim Beenden aktivieren',
+      "Çıkışta otomatik arşivi aç",
     ],
     storageGuardSnooze24hBtn: [
       '24 小时不再提醒',
@@ -388,6 +422,7 @@
       'Posponer 24 h',
       'Rappeler dans 24 h',
       '24 Std. pausieren',
+      "24 saat ertele",
     ],
     storageGuardBusyMsg: [
       '检测到 AI 生成或蜂群仍在运行，请等待空闲后重试',
@@ -398,6 +433,7 @@
       'La IA o Swarm está en ejecución; inténtalo al terminar',
       'L’IA ou Swarm est actif ; réessayez une fois inactif',
       'KI oder Swarm ist aktiv; bitte im Leerlauf erneut versuchen',
+      "AI veya Swarm şu an çalışıyor; boşta yeniden deneyin",
     ],
     storageAutoExitTitle: [
       '退出自动静默归档',
@@ -408,6 +444,7 @@
       'Autoarchivo al salir',
       'Archivage auto à la sortie',
       'Auto-Archiv beim Beenden',
+      "Çıkışta otomatik arşiv",
     ],
     storageAutoExitDesc: [
       'Antigravity 与后台完全退出 4 秒后，自动离线移动已结束满 2 小时的子代理（主对话默认永不归档、零删除）',
@@ -418,9 +455,10 @@
       'Mueve subagentes finalizados (>2 h) sin conexión 4 s tras cerrar Antigravity (chats principales intactos, sin borrar)',
       'Archive hors ligne les sous-agents terminés (>2 h) 4 s après fermeture complète (discussions principales préservées)',
       'Verschiebt beendete Subagenten (>2 Std.) 4 s nach vollständigem Beenden offline (Hauptchats geschützt, kein Löschen)',
+      "Antigravity ve arka plan hizmeti kapandıktan 4 sn sonra bitmiş alt ajanları (>2 sa) çevrimdışına taşır (ana sohbetlere dokunulmaz, sıfır silme)",
     ],
-    storageAutoExitOff: ['关闭（默认）', '關閉（預設）', 'Off (Default)', 'オフ（既定）', '꺼짐 (기본값)', 'Desactivado', 'Désactivé', 'Aus (Standard)'],
-    storageAutoExitOn: ['开启', '開啟', 'On', 'オン', '켜짐', 'Activado', 'Activé', 'Ein'],
+    storageAutoExitOff: ['关闭（默认）', '關閉（預設）', 'Off (Default)', 'オフ（既定）', '꺼짐 (기본값)', 'Desactivado', 'Désactivé', 'Aus (Standard)', "Kapalı (varsayılan)"],
+    storageAutoExitOn: ['开启', '開啟', 'On', 'オン', '켜짐', 'Activado', 'Activé', 'Ein', "Açık"],
     storageAutoExitEnabledMsg: [
       '已开启退出自动静默归档',
       '已開啟退出自動靜默封存',
@@ -430,6 +468,7 @@
       'Autoarchivo al salir activado',
       'Archivage automatique à la sortie activé',
       'Automatisches Archivieren beim Beenden aktiviert',
+      "Çıkışta otomatik arşiv açıldı",
     ],
     storageArchiveRestartBtn: [
       '一键归档并重启',
@@ -440,6 +479,7 @@
       'Archivar y reiniciar',
       'Archiver et redémarrer',
       'Archivieren & Neustarten',
+      "Arşivle ve yeniden başlat",
     ],
     storageArchiveRestartConfirmDesc: [
       '确认后将：① 固化首页 Token 账本；② 温和关闭 Antigravity 并等待后台完全退出；③ 仅移动已结束满 2 小时的子代理（主对话 100% 保留、零删除、随时还原）；④ 自动重启。',
@@ -450,6 +490,7 @@
       'Pasos: 1) guardar estadísticas de tokens; 2) cerrar Antigravity con seguridad; 3) mover solo subagentes terminados (>2 h) sin borrar nada (chats principales intactos); 4) reiniciar automáticamente.',
       'Étapes : 1) sauvegarder le journal de jetons ; 2) fermer Antigravity proprement ; 3) déplacer uniquement les sous-agents terminés (>2 h) sans rien supprimer ; 4) relancer automatiquement.',
       'Ablauf: 1) Token-Statistik sichern; 2) Antigravity sauber beenden; 3) nur beendete Subagenten (>2 Std.) verschieben ohne zu löschen (Hauptchats bleiben); 4) automatisch neu starten.',
+      "Şunlar olur: 1) token kullanım istatistikleri kaydedilir; 2) Antigravity, arka plan hizmeti çıkana kadar düzgün kapatılır; 3) bitmiş alt ajanlar (>2 sa) hiçbir dosya silinmeden taşınır (tüm ana sohbetler kalır); 4) otomatik yeniden açılır.",
     ],
     storageArchiveRestartConfirmBtn: [
       '确认归档并重启',
@@ -460,6 +501,7 @@
       'Confirmar y reiniciar',
       'Confirmer et redémarrer',
       'Bestätigen & Neustarten',
+      "Onayla ve yeniden başlat",
     ],
     storageArchiveRestartRunning: [
       '正在固化账本并准备安全离线归档…',
@@ -470,6 +512,7 @@
       'Guardando estadísticas e iniciando archivado seguro…',
       'Sauvegarde du journal et lancement de l’archivage…',
       'Statistik wird gesichert und Archivierung gestartet…',
+      "Kullanım defteri kaydediliyor ve güvenli arşivleyici başlatılıyor…",
     ],
     storageArchiveRestartScheduled: [
       '已启动离线安全归档，即将温和关闭并在完成后自动重启',
@@ -480,6 +523,7 @@
       'Archivado seguro iniciado; Antigravity se cerrará y reiniciará automáticamente',
       'Archivage hors ligne lancé ; Antigravity va se fermer puis redémarrer',
       'Sichere Offline-Archivierung gestartet; Antigravity wird beendet und neu gestartet',
+      "Güvenli çevrimdışı arşiv başladı; Antigravity kapanıp otomatik yeniden açılacak",
     ],
     storageRestoreBtn: [
       '无损还原归档',
@@ -490,6 +534,7 @@
       'Restaurar archivo',
       'Restaurer l’archive',
       'Archiv wiederherstellen',
+      "Arşivi geri yükle",
     ],
     storageRestoreConfirmDesc: [
       '将温和关闭 Antigravity，把最近一批次（{0}）全部文件无损移回对话库并自动重启。',
@@ -500,6 +545,7 @@
       'Cerrará Antigravity de forma segura, restaurará el último lote ({0}) sin pérdidas y reiniciará.',
       'Fermera Antigravity proprement, restaurera le dernier lot ({0}) sans perte puis redémarrera.',
       'Beendet Antigravity sauber, stellt den neuesten Stapel ({0}) verlustfrei wieder her und startet neu.',
+      "Antigravity düzgün kapanacak, son toplu ({0}) kayıpsız geri yüklenecek ve yeniden açılacak.",
     ],
     storageRestoreConfirmBtn: [
       '确认还原并重启',
@@ -510,6 +556,7 @@
       'Confirmar restauración',
       'Confirmer la restauration',
       'Wiederherstellen & Neustarten',
+      "Geri yüklemeyi onayla",
     ],
     storageRestoreScheduled: [
       '已启动无损还原，即将关闭并重启 Antigravity',
@@ -520,6 +567,7 @@
       'Restauración iniciada; Antigravity se reiniciará automáticamente',
       'Restauration lancée ; Antigravity va redémarrer automatiquement',
       'Wiederherstellung gestartet; Antigravity startet automatisch neu',
+      "Kayıpsız geri yükleme zamanlandı; Antigravity otomatik yeniden açılacak",
     ],
     storageRestoreEmpty: [
       '暂无历史归档批次',
@@ -530,6 +578,7 @@
       'Sin lotes archivados',
       'Aucun lot archivé',
       'Noch keine Archivstapel',
+      "Henüz arşiv toplu işlemi yok",
     ],
     storageLsMemTpl: [
       '后台服务内存 {0}',
@@ -540,6 +589,7 @@
       'RAM en segundo plano {0}',
       'RAM arrière-plan {0}',
       'Hintergrund-RAM {0}',
+      "Arka plan RAM {0}",
     ],
     goMemLimitTitle: [
       '后台进程内存上限 (Go GOMEMLIMIT · 可选)',
@@ -550,6 +600,7 @@
       'Límite de memoria en segundo plano (Go GOMEMLIMIT · Opcional)',
       'Limite mémoire du processus d’arrière-plan (Go GOMEMLIMIT · Optionnel)',
       'Speicherlimit für Hintergrundprozesse (Go GOMEMLIMIT · Optional)',
+      "Arka plan işlem bellek sınırı (Go GOMEMLIMIT · isteğe bağlı)",
     ],
     goMemLimitDesc: [
       '通过 Go 1.19+ 官方用户级环境变量软限制宿主后台服务堆内存，不修改官方程序，重启 Antigravity 生效。',
@@ -560,6 +611,7 @@
       'Usa la variable de usuario nativa de Go 1.19+ GOMEMLIMIT para limitar de forma suave la memoria del servicio en segundo plano sin modificar binarios oficiales. Se aplica al reiniciar Antigravity.',
       'Utilise la variable utilisateur native Go 1.19+ GOMEMLIMIT pour plafonner en douceur la mémoire du service en arrière-plan sans modifier les binaires officiels. Effectif après redémarrage.',
       'Nutzt die offizielle Go-1.19+-Benutzervariable GOMEMLIMIT als weiches Heap-Limit für den Hintergrunddienst ohne Änderungen an offiziellen Binärdateien. Wirksam nach Neustart von Antigravity.',
+      "Resmi ikili dosyalar değiştirilmeden, ana uygulama arka plan hizmetinin yığınını Go 1.19+ kullanıcı düzeyi GOMEMLIMIT ortam değişkeniyle yumuşak sınırlar. Antigravity yeniden başlatılınca geçerli olur.",
     ],
     goMemLimitUnset: [
       '未设置（跟随系统默认）',
@@ -570,6 +622,7 @@
       'No definido (predeterminado)',
       'Non défini (par défaut)',
       'Nicht gesetzt (Standard)',
+      "Ayarlı değil (sistem varsayılanı)",
     ],
     goMemLimitActiveTpl: [
       '当前用户变量：{0}',
@@ -580,6 +633,7 @@
       'Variable actual: {0}',
       'Variable actuelle : {0}',
       'Aktuelle Variable: {0}',
+      "Kullanıcı ortamı: {0}",
     ],
     goMemLimitRestartNote: [
       '（重启 Antigravity 后生效）',
@@ -590,6 +644,7 @@
       '(Reinicia Antigravity para aplicar)',
       '(Redémarrez Antigravity pour appliquer)',
       '(Neustart von Antigravity erforderlich)',
+      "(Uygulamak için Antigravity'yi yeniden başlatın)",
     ],
     goMemLimitApplyBtn: [
       '应用设置',
@@ -600,6 +655,7 @@
       'Aplicar',
       'Appliquer',
       'Anwenden',
+      "Uygula",
     ],
     goMemLimitClearBtn: [
       '撤销设置',
@@ -610,6 +666,7 @@
       'Quitar',
       'Effacer',
       'Entfernen',
+      "Temizle",
     ],
     goMemLimitAppliedTpl: [
       '已设置 GOMEMLIMIT={0}，重启 Antigravity 后生效',
@@ -620,6 +677,7 @@
       'GOMEMLIMIT={0} aplicado; reinicia Antigravity para activarlo',
       'GOMEMLIMIT={0} défini ; redémarrez Antigravity pour appliquer',
       'GOMEMLIMIT={0} gesetzt; nach Neustart von Antigravity aktiv',
+      "GOMEMLIMIT={0} ayarlandı; etkili olması için Antigravity'yi yeniden başlatın",
     ],
     goMemLimitCleared: [
       '已撤销用户级 GOMEMLIMIT，重启 Antigravity 后恢复默认',
@@ -630,6 +688,7 @@
       'GOMEMLIMIT eliminado; reinicia Antigravity para restaurar valores',
       'GOMEMLIMIT supprimé ; redémarrez Antigravity pour restaurer par défaut',
       'GOMEMLIMIT entfernt; nach Neustart gilt wieder der Standard',
+      "GOMEMLIMIT temizlendi; varsayılana dönmek için Antigravity'yi yeniden başlatın",
     ],
     aboutCreditsTitle: [
       '上游开源项目与灵感致谢',
@@ -640,6 +699,7 @@
       'Créditos de código abierto e inspiración',
       'Crédits open source et inspirations',
       'Open-Source-Danksagungen',
+      "Açık kaynak üst projeler ve esin kredileri",
     ],
     aboutLicenseTitle: [
       'GPL-3.0 开源与署名协议',
@@ -650,6 +710,7 @@
       'Licencia GPL-3.0 y atribución',
       'Licence GPL-3.0 et mentions d’attribution',
       'GPL-3.0-Lizenz & Urheberhinweis',
+      "GPL-3.0 lisansı ve atıf bildirimi",
     ],
     aboutDisclaimer: [
       'Obsidian Prism 是独立的社区开源项目，与 Google LLC 无隶属、赞助或官方背书关系。Obsidian Prism is an independent open-source project and is not affiliated with or endorsed by Google LLC.',
@@ -660,6 +721,7 @@
       'Obsidian Prism es un proyecto independiente de código abierto y no está afiliado ni respaldado por Google LLC.',
       'Obsidian Prism est un projet open source indépendant et n’est ni affilié ni approuvé par Google LLC.',
       'Obsidian Prism ist ein unabhängiges Open-Source-Projekt und steht in keiner Verbindung zu Google LLC.',
+      "Obsidian Prism bağımsız bir açık kaynak projesidir; Google LLC ile bağlantılı değildir ve Google LLC tarafından desteklenmez.",
     ],
     uninstallBtn: [
       '卸载 Prism',
@@ -670,6 +732,7 @@
       'Desinstalar Prism',
       'Désinstaller Prism',
       'Prism deinstallieren',
+      "Prism'i kaldır",
     ],
     uninstallPurge: [
       '清除配置、API Key 与缓存',
@@ -680,6 +743,7 @@
       'Borrar configuración, clave y caché',
       'Purger config, clé et cache',
       'Konfiguration, API-Key & Cache löschen',
+      "Yapılandırma, anahtar ve önbelleği temizle",
     ],
     uninstallKeepNote: [
       '保留主对话、conversations_archive 及 Spark/知识空间',
@@ -690,9 +754,10 @@
       'Conserva los chats, conversations_archive, Spark y conocimiento',
       'Conserve les discussions, conversations_archive, Spark et la base de connaissances',
       'Behält Chats, conversations_archive, Spark & Wissen',
+      "Sohbetler, conversations_archive, Spark ve bilgi korunur",
     ],
-    uninstallCancelBtn: ['取消', '取消', 'Cancel', '中止', '취소', 'Cancelar', 'Annuler', 'Abbrechen'],
-    uninstallConfirmBtn: ['确认卸载', '確認卸載', 'Confirm', '実行', '확인', 'Confirmar', 'Confirmer', 'Bestätigen'],
+    uninstallCancelBtn: ['取消', '取消', 'Cancel', '中止', '취소', 'Cancelar', 'Annuler', 'Abbrechen', "İptal"],
+    uninstallConfirmBtn: ['确认卸载', '確認卸載', 'Confirm', '実行', '확인', 'Confirmar', 'Confirmer', 'Bestätigen', "Onayla"],
     uninstallDone: [
       '已发起卸载，即将恢复原生界面',
       '已發起卸載，即將還原原生介面',
@@ -702,6 +767,7 @@
       'Desinstalando; restaurando interfaz',
       'Désinstallation ; restauration de l’UI',
       'Deinstallation läuft; UI wird wiederhergestellt',
+      "Kaldırılıyor; arayüz geri yükleniyor",
     ],
 
     // ── Studio Placeholder & Home Dashboard ──────────────────────────────────
@@ -714,14 +780,15 @@
       'Describe una tarea o haz una pregunta',
       'Décrivez une tâche ou posez une question',
       'Aufgabe beschreiben oder Frage stellen',
+      "Bugün size nasıl yardımcı olabilirim?",
     ],
-    tabOverview: ['概览', '概覽', 'Overview', '概要', '개요', 'Resumen', 'Aperçu', 'Übersicht'],
-    tabModels: ['模型', '模型', 'Models', 'モデル', '모델', 'Modelos', 'Modèles', 'Modelle'],
-    kpiSessions: ['会话数', '工作階段數', 'Sessions', 'セッション', '세션', 'Sesiones', 'Sessions', 'Sitzungen'],
-    kpiCalls: ['消息数', '訊息數', 'Messages', 'メッセージ', '메시지', 'Mensajes', 'Messages', 'Nachrichten'],
-    kpiTokens: ['Token 总量', 'Token 總量', 'Total tokens', '総トークン', '총 토큰', 'Tokens totales', 'Jetons totaux', 'Tokens gesamt'],
-    kpiDays: ['活跃天数', '活躍天數', 'Active days', 'アクティブ日数', '활동 일수', 'Días activos', 'Jours actifs', 'Aktive Tage'],
-    kpiFavModel: ['最常用模型', '最常用模型', 'Favorite model', 'よく使うモデル', '주 사용 모델', 'Modelo favorito', 'Modèle favori', 'Bevorzugtes Modell'],
+    tabOverview: ['概览', '概覽', 'Overview', '概要', '개요', 'Resumen', 'Aperçu', 'Übersicht', "Genel bakış"],
+    tabModels: ['模型', '模型', 'Models', 'モデル', '모델', 'Modelos', 'Modèles', 'Modelle', "Modeller"],
+    kpiSessions: ['会话数', '工作階段數', 'Sessions', 'セッション', '세션', 'Sesiones', 'Sessions', 'Sitzungen', "Oturumlar"],
+    kpiCalls: ['消息数', '訊息數', 'Messages', 'メッセージ', '메시지', 'Mensajes', 'Messages', 'Nachrichten', "Mesajlar"],
+    kpiTokens: ['Token 总量', 'Token 總量', 'Total tokens', '総トークン', '총 토큰', 'Tokens totales', 'Jetons totaux', 'Tokens gesamt', "Toplam token"],
+    kpiDays: ['活跃天数', '活躍天數', 'Active days', 'アクティブ日数', '활동 일수', 'Días activos', 'Jours actifs', 'Aktive Tage', "Etkin günler"],
+    kpiFavModel: ['最常用模型', '最常用模型', 'Favorite model', 'よく使うモデル', '주 사용 모델', 'Modelo favorito', 'Modèle favori', 'Bevorzugtes Modell', "Favori model"],
     noModelUsage: [
       '暂无模型用量记录',
       '尚無模型用量紀錄',
@@ -731,21 +798,22 @@
       'Aún no hay datos de uso de modelos',
       'Aucune donnée d’utilisation des modèles',
       'Noch keine Modellnutzungsdaten',
+      "Henüz model kullanım verisi yok",
     ],
-    sessionsUnit: ['个会话', '個工作階段', 'sessions', 'セッション', '세션', 'sesiones', 'sessions', 'Sitzungen'],
-    subagentsUnit: ['子代理', '子代理', 'subagents', 'サブエージェント', '서브에이전트', 'subagentes', 'sous-agents', 'Subagenten'],
-    swarmBadge: ['蜂群', '蜂群', 'Swarm', 'Swarm', 'Swarm', 'Swarm', 'Swarm', 'Swarm'],
-    tokensInShort: ['入', '入', 'in', '入力', '입력', 'entr.', 'entr.', 'Ein'],
-    tokensOutShort: ['出', '出', 'out', '出力', '출력', 'sal.', 'sort.', 'Aus'],
-    quotaJustNow: ['刚刚', '剛剛', 'Just now', 'たった今', '방금', 'Ahora', 'À l’instant', 'Gerade eben'],
-    tokenUnit: ['Token', 'Token', 'tokens', 'トークン', '토큰', 'tokens', 'jetons', 'Tokens'],
-    showLess: ['收起', '收合', 'Show less', '折りたたむ', '접기', 'Mostrar menos', 'Réduire', 'Weniger'],
+    sessionsUnit: ['个会话', '個工作階段', 'sessions', 'セッション', '세션', 'sesiones', 'sessions', 'Sitzungen', "oturum"],
+    subagentsUnit: ['子代理', '子代理', 'subagents', 'サブエージェント', '서브에이전트', 'subagentes', 'sous-agents', 'Subagenten', "alt ajan"],
+    swarmBadge: ['蜂群', '蜂群', 'Swarm', 'Swarm', 'Swarm', 'Swarm', 'Swarm', 'Swarm', "Swarm"],
+    tokensInShort: ['入', '入', 'in', '入力', '입력', 'entr.', 'entr.', 'Ein', "giriş"],
+    tokensOutShort: ['出', '出', 'out', '出力', '출력', 'sal.', 'sort.', 'Aus', "çıkış"],
+    quotaJustNow: ['刚刚', '剛剛', 'Just now', 'たった今', '방금', 'Ahora', 'À l’instant', 'Gerade eben', "Az önce"],
+    tokenUnit: ['Token', 'Token', 'tokens', 'トークン', '토큰', 'tokens', 'jetons', 'Tokens', "token"],
+    showLess: ['收起', '收合', 'Show less', '折りたたむ', '접기', 'Mostrar menos', 'Réduire', 'Weniger', "Daha az göster"],
 
     // ── Studio Quotas & Effort Slider ────────────────────────────────────────
-    thinkingEllipsis: ['思考中…', '思考中…', 'Thinking…', '思考中…', '생각 중…', 'Pensando…', 'Réflexion…', 'Denkt nach…'],
-    kpiCacheHit: ['缓存命中率', '快取命中率', 'Cache Hit Rate', 'キャッシュ率', '캐시 적중률', 'Tasa de caché', 'Taux de cache', 'Cache-Trefferquote'],
-    cacheRead: ['缓存读取', '快取讀取', 'Cache Read', 'キャッシュ読込', '캐시 읽기', 'Lectura de caché', 'Lecture cache', 'Cache-Lesevorgänge'],
-    cacheShort: ['缓存', '快取', 'Cache', 'キャッシュ', '캐시', 'Caché', 'Cache', 'Cache'],
+    thinkingEllipsis: ['思考中…', '思考中…', 'Thinking…', '思考中…', '생각 중…', 'Pensando…', 'Réflexion…', 'Denkt nach…', "Düşünüyor…"],
+    kpiCacheHit: ['缓存命中率', '快取命中率', 'Cache Hit Rate', 'キャッシュ率', '캐시 적중률', 'Tasa de caché', 'Taux de cache', 'Cache-Trefferquote', "Önbellek isabet oranı"],
+    cacheRead: ['缓存读取', '快取讀取', 'Cache Read', 'キャッシュ読込', '캐시 읽기', 'Lectura de caché', 'Lecture cache', 'Cache-Lesevorgänge', "Önbellek okuma"],
+    cacheShort: ['缓存', '快取', 'Cache', 'キャッシュ', '캐시', 'Caché', 'Cache', 'Cache', "Önbellek"],
     quotaPoolsTitle: [
       '模型配额池剩余 (Model Quotas)',
       '模型配額池剩餘 (Model Quotas)',
@@ -755,6 +823,7 @@
       'Cuotas de modelos restantes',
       'Quotas de modèles restants',
       'Verbleibende Modellkontingente',
+      "Kalan model kota havuzları",
     ],
     quotaLoading: [
       '正在读取模型配额状态…',
@@ -765,8 +834,9 @@
       'Cargando estado de cuotas…',
       'Chargement des quotas de modèles…',
       'Modellkontingente werden geladen…',
+      "Model kota durumu yükleniyor…",
     ],
-    weeklyLabel: ['周配额', '週配額', 'Weekly', '週間', '주간', 'Semanal', 'Hebdo', 'Wöchentlich'],
+    weeklyLabel: ['周配额', '週配額', 'Weekly', '週間', '주간', 'Semanal', 'Hebdo', 'Wöchentlich', "Haftalık"],
     refreshBtnTitle: [
       '立即刷新遥测与配额',
       '立即重新整理遙測與配額',
@@ -776,9 +846,10 @@
       'Actualizar telemetría',
       'Actualiser la télémétrie',
       'Telemetrie aktualisieren',
+      "Telemetriyi yenile",
     ],
-    tabQuotas: ['模型配额', '模型配額', 'Quotas', 'クォータ', '할당량', 'Cuotas', 'Quotas', 'Kontingente'],
-    effortTitle: ['推理等级', '推理等級', 'Reasoning effort', '推論レベル', '추론 강도', 'Nivel de razonamiento', 'Effort de raisonnement', 'Denktiefe'],
+    tabQuotas: ['模型配额', '模型配額', 'Quotas', 'クォータ', '할당량', 'Cuotas', 'Quotas', 'Kontingente', "Kotalar"],
+    effortTitle: ['推理等级', '推理等級', 'Reasoning effort', '推論レベル', '추론 강도', 'Nivel de razonamiento', 'Effort de raisonnement', 'Denktiefe', "Akıl yürütme çabası"],
 
     // ── Settings Panel ───────────────────────────────────────────────────────
     grpAppearance: [
@@ -790,6 +861,7 @@
       'Apariencia y diseño',
       'Apparence et disposition',
       'Erscheinungsbild & Layout',
+      "Görünüm ve yerleşim",
     ],
     grpInteraction: [
       '输入、侧栏与宠物',
@@ -800,6 +872,7 @@
       'Editor, barra lateral y mascotas',
       'Zone de saisie, barre latérale et mascottes',
       'Eingabefeld, Seitenleiste & Maskottchen',
+      "Giriş kutusu, kenar çubuğu ve maskotlar",
     ],
     groupModules: [
       '实用功能模块',
@@ -810,6 +883,7 @@
       'Módulos de utilidad',
       'Modules utilitaires',
       'Hilfsmodule',
+      "Yardımcı modüller",
     ],
     grpBeta: [
       'Beta 内容',
@@ -820,6 +894,7 @@
       'Funciones Beta',
       'Fonctions Bêta',
       'Beta-Funktionen',
+      "Beta özellikler",
     ],
     betaPlaceholderNotice: [
       '提示：此分类包含实验性功能，默认关闭，交互与表现可能随版本持续调整。',
@@ -830,12 +905,13 @@
       'Nota: Esta sección incluye funciones experimentales desactivadas por defecto que pueden cambiar entre versiones.',
       'Note : Cette section contient des fonctions expérimentales désactivées par défaut, susceptibles d’évoluer au fil des versions.',
       'Hinweis: Dieser Bereich enthält experimentelle Funktionen, die standardmäßig deaktiviert sind und sich zwischen Versionen ändern können.',
+      "Not: Bu bölüm varsayılan olarak kapalı deneysel özellikler içerir ve sürümler arasında değişebilir.",
     ],
-    onLabel: ['开启', '開啟', 'On', 'オン', '켜기', 'Activado', 'Activé', 'Ein'],
-    offLabel: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus'],
-    optAutoCoexist: ['智能兼容', '智慧相容', 'Auto', '自動互換', '자동 호환', 'Auto', 'Auto', 'Auto'],
+    onLabel: ['开启', '開啟', 'On', 'オン', '켜기', 'Activado', 'Activé', 'Ein', "Açık"],
+    offLabel: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus', "Kapalı"],
+    optAutoCoexist: ['智能兼容', '智慧相容', 'Auto', '自動互換', '자동 호환', 'Auto', 'Auto', 'Auto', "Otomatik"],
 
-    setLanguageTitle: ['界面语言', '介面語言', 'UI Language', '表示言語', 'UI 언어', 'Idioma de la interfaz', 'Langue de l’interface', 'UI-Sprache'],
+    setLanguageTitle: ['界面语言', '介面語言', 'UI Language', '表示言語', 'UI 언어', 'Idioma de la interfaz', 'Langue de l’interface', 'UI-Sprache', "Arayüz dili"],
     setLanguageDesc: [
       '切换插件首页看板与设置面板的显示语言。',
       '切換外掛首頁看板與設定面板的顯示語言。',
@@ -845,6 +921,7 @@
       'Cambia el idioma del panel principal y ajustes de Obsidian Prism.',
       'Change la langue du tableau de bord et des paramètres d’Obsidian Prism.',
       'Wechselt die Anzeigesprache für Obsidian Prism-Dashboard und Einstellungen.',
+      "Obsidian Prism panosu ve ayarlar arayüzünün dilini değiştirir.",
     ],
     setHostI18nTitle: [
       '界面汉化（内置简体中文）',
@@ -855,6 +932,7 @@
       'Localización de interfaz (zh-CN)',
       'Traduction de l’interface hôte (zh-CN)',
       'Host-UI-Lokalisierung (zh-CN)',
+      "Ana uygulama arayüz yerelleştirmesi (zh-CN)",
     ],
     setHostI18nDesc: [
       '自动：简中时启用 Prism 汉化并礼让外部插件；开启：强制启用内置简中；关闭：还原宿主原生英文并温和压制外部界面汉化覆盖（不修改宿主安装包）。',
@@ -865,10 +943,11 @@
       'Auto: activa en zh-CN y cede ante externos; Activado: fuerza zh-CN integrado; Desactivado: restaura el inglés nativo y atenúa traducciones externas de interfaz sin modificar el paquete del host.',
       'Auto : actif en zh-CN et cède aux extensions ; Activé : force le zh-CN intégré ; Désactivé : restaure l’anglais natif et atténue les traductions d’interface externes sans modifier le paquet hôte.',
       'Auto: bei zh-CN aktiv & weicht externen Plugins; Ein: erzwingt integriertes zh-CN; Aus: stellt natives Englisch wieder her & dämpft externe UI-Übersetzungen sanft, ohne das Host-Paket zu verändern.',
+      "Otomatik: yalnızca zh-CN, dış eklentilere yol verir; Açık: yerleşik zh-CN zorlanır; Kapalı: özgün İngilizce arayüz geri gelir ve ana uygulama paketi değiştirilmeden dış arayüz yerelleştirme katmanları nazikçe bastırılır.",
     ],
-    optHostI18nAuto: ['智能礼让', '智慧禮讓', 'Auto', '自動譲歩', '자동 양보', 'Auto', 'Auto', 'Auto'],
-    optHostI18nOn: ['启用汉化', '啟用漢化', 'On (zh-CN)', 'オン (簡体字)', '켜기 (간체)', 'Sí (zh-CN)', 'Activé (zh-CN)', 'Ein (zh-CN)'],
-    optHostI18nOff: ['原生英文', '原生英文', 'Native EN', '標準英語', '원본 영어', 'Inglés nativo', 'Anglais natif', 'Natives EN'],
+    optHostI18nAuto: ['智能礼让', '智慧禮讓', 'Auto', '自動譲歩', '자동 양보', 'Auto', 'Auto', 'Auto', "Otomatik"],
+    optHostI18nOn: ['启用汉化', '啟用漢化', 'On (zh-CN)', 'オン (簡体字)', '켜기 (간체)', 'Sí (zh-CN)', 'Activé (zh-CN)', 'Ein (zh-CN)', "Açık (zh-CN)"],
+    optHostI18nOff: ['原生英文', '原生英文', 'Native EN', '標準英語', '원본 영어', 'Inglés nativo', 'Anglais natif', 'Natives EN', "Özgün EN"],
     hostLocStatusEnforced: [
       '已强制还原宿主原生英文',
       '已強制還原宿主原生英文',
@@ -878,6 +957,7 @@
       'Forzando inglés nativo',
       'Anglais natif forcé',
       'Natives Englisch erzwungen',
+      "Özgün İngilizce arayüz uygulanıyor",
     ],
     hostLocStatusBlocked: [
       '检测到外部汉化脚本持续强行覆写，已触发防循环保护；建议在扩展管理器中停用外部汉化插件。',
@@ -888,6 +968,7 @@
       'Un script de traducción externo sobrescribe la interfaz continuamente y se activó la protección anti-bucle; desactiva la extensión externa en Extensiones.',
       'Un script de traduction externe force la réécriture de l’interface ; la protection anti-boucle est active. Désactivez l’extension externe dans les Extensions.',
       'Ein externes Übersetzungsskript überschreibt die Oberfläche fortlaufend; der Schleifenschutz ist aktiv. Bitte deaktivieren Sie die externe Erweiterung.',
+      "Dış yerelleştirme betiği arayüzü ezmeye devam ediyor; döngü koruması etkin. Eklentiler'de dış yerelleştirme eklentisini kapatmayı düşünün.",
     ],
     hostI18nYieldHint: [
       '已检测外部汉化并自动礼让',
@@ -898,6 +979,7 @@
       'Traducción externa detectada — cedido automáticamente',
       'Traduction externe détectée — mise en retrait auto',
       'Externe Lokalisierung erkannt — automatisch gewichen',
+      "Dış yerelleştirme algılandı — otomatik yol verildi",
     ],
     hostI18nOffExtHint: [
       '已关闭 Prism 内置汉化；检测到外部汉化插件或客户端汉化补丁仍在接管界面。',
@@ -908,8 +990,9 @@
       'La localización de Prism está desactivada; un complemento externo o parche sigue activo.',
       'La traduction de Prism est désactivée ; une extension ou un correctif externe reste actif.',
       'Prism-Lokalisierung ist aus; ein externes Sprach-Plugin oder Client-Patch ist weiterhin aktiv.',
+      "Prism ana uygulama yerelleştirmesi kapalı; dış bir yerelleştirme eklentisi veya istemci yaması hâlâ etkin.",
     ],
-    setHomeLayoutTitle: ['首页版面', '首頁版面', 'Home Layout', 'ホームレイアウト', '홈 레이아웃', 'Diseño de inicio', 'Disposition d’accueil', 'Startseiten-Layout'],
+    setHomeLayoutTitle: ['首页版面', '首頁版面', 'Home Layout', 'ホームレイアウト', '홈 레이아웃', 'Diseño de inicio', 'Disposition d’accueil', 'Startseiten-Layout', "Ana sayfa yerleşimi"],
     setHomeLayoutDesc: [
       '切换新对话首页的显示布局（简洁看板 / 居中 / 默认）。',
       '切換新對話首頁的顯示版面（簡潔看板 / 置中 / 預設）。',
@@ -919,11 +1002,12 @@
       'Cambia el diseño de la pantalla de inicio de nueva conversación.',
       'Change la disposition de l’écran d’accueil des nouvelles conversations.',
       'Wechselt das Layout der Startseite für neue Unterhaltungen.',
+      "Yeni sohbet ana sayfa yerleşimini değiştirir.",
     ],
-    optStudio: ['Studio 看板', 'Studio 看板', 'Studio', 'スタジオ', 'Studio', 'Studio', 'Studio', 'Studio'],
-    optClassic: ['居中', '置中', 'Classic', 'クラシック', '클래식', 'Clásico', 'Classique', 'Klassisch'],
-    optNativeOff: ['原生', '原生', 'Off', '標準', '기본', 'Nativo', 'Natif', 'Nativ'],
-    setPaletteTitle: ['主题配色方案', '主題配色方案', 'Color Palette', 'カラーパレット', '색상 팔레트', 'Paleta de colores', 'Palette de couleurs', 'Farbpalette'],
+    optStudio: ['Studio 看板', 'Studio 看板', 'Studio', 'スタジオ', 'Studio', 'Studio', 'Studio', 'Studio', "Studio"],
+    optClassic: ['居中', '置中', 'Classic', 'クラシック', '클래식', 'Clásico', 'Classique', 'Klassisch', "Klasik"],
+    optNativeOff: ['原生', '原生', 'Off', '標準', '기본', 'Nativo', 'Natif', 'Nativ', "Kapalı"],
+    setPaletteTitle: ['主题配色方案', '主題配色方案', 'Color Palette', 'カラーパレット', '색상 팔레트', 'Paleta de colores', 'Palette de couleurs', 'Farbpalette', "Renk paleti"],
     setPaletteDesc: [
       '支持「跟随当前主题」、Obsidian 深空或 Alabaster 暖岩精调配色。',
       '支援「跟隨目前主題」、Obsidian 深空或 Alabaster 暖岩精調配色。',
@@ -933,13 +1017,14 @@
       'Sigue el tema anfitrión o cambia a Obsidian / Alabaster Warm.',
       'Suit le thème hôte ou bascule vers Obsidian / Alabaster Warm.',
       'Folgt dem Host-Theme oder wechselt zu Obsidian / Alabaster Warm.',
+      "Ana uygulama temasını izleyin veya rafine Obsidian / Alabaster Warm paletlerine geçin.",
     ],
-    optObsidian: ['Obsidian 深空', 'Obsidian 深空', 'Obsidian', 'オブシディアン', 'Obsidian', 'Obsidian', 'Obsidian', 'Obsidian'],
-    optWarm: ['Alabaster 暖岩', 'Alabaster 暖岩', 'Alabaster Warm', 'アラバスター暖岩', 'Alabaster Warm', 'Alabaster Cálido', 'Alabaster Chaud', 'Alabaster Warm'],
-    optClaude: ['Alabaster 暖岩', 'Alabaster 暖岩', 'Alabaster Warm', 'アラバスター暖岩', 'Alabaster Warm', 'Alabaster Cálido', 'Alabaster Chaud', 'Alabaster Warm'],
-    optHost: ['跟随当前主题', '跟隨目前主題', 'Follow Host', 'ホスト連動', '호스트 따르기', 'Seguir tema', 'Suivre l’hôte', 'Host folgen'],
+    optObsidian: ['Obsidian 深空', 'Obsidian 深空', 'Obsidian', 'オブシディアン', 'Obsidian', 'Obsidian', 'Obsidian', 'Obsidian', "Obsidian"],
+    optWarm: ['Alabaster 暖岩', 'Alabaster 暖岩', 'Alabaster Warm', 'アラバスター暖岩', 'Alabaster Warm', 'Alabaster Cálido', 'Alabaster Chaud', 'Alabaster Warm', "Alabaster Warm"],
+    optClaude: ['Alabaster 暖岩', 'Alabaster 暖岩', 'Alabaster Warm', 'アラバスター暖岩', 'Alabaster Warm', 'Alabaster Cálido', 'Alabaster Chaud', 'Alabaster Warm', "Alabaster Warm"],
+    optHost: ['跟随当前主题', '跟隨目前主題', 'Follow Host', 'ホスト連動', '호스트 따르기', 'Seguir tema', 'Suivre l’hôte', 'Host folgen', "Ana uygulamayı izle"],
 
-    setLightPresetTitle: ['浅色表面质感', '淺色表面質感', 'Daylight Surface Preset', 'ライトモード質感', '라이트 표면 질감', 'Superficie en modo claro', 'Surface mode clair', 'Helle Oberfläche'],
+    setLightPresetTitle: ['浅色表面质感', '淺色表面質感', 'Daylight Surface Preset', 'ライトモード質感', '라이트 표면 질감', 'Superficie en modo claro', 'Surface mode clair', 'Helle Oberfläche', "Gündüz yüzey ön ayarı"],
     setLightPresetDesc: [
       '选择浅色模式下的表面层级、对比度与背景风格。',
       '選擇淺色模式下的表面層級、對比度與背景風格。',
@@ -949,9 +1034,10 @@
       'Ajusta la elevación, contraste y tono en modo claro.',
       'Règle la profondeur, le contraste et la teinte en mode clair.',
       'Passt Oberflächentiefe, Kontrast und Tönung im hellen Modus an.',
+      "Açık modda yüzey yüksekliğini, cam kontrastını ve tonu ayarlar.",
     ],
-    optLightCrystal: ['白昼冷晶', '白晝冷晶', 'Daylight Crystal', '白昼クリスタル', '데이라이트 크리스탈', 'Cristal Diurno', 'Cristal Diurne', 'Tageslicht-Kristall'],
-    optLightAlabaster: ['暖白画册', '暖白畫冊', 'Warm Alabaster', 'ウォーム画集', '웜 알라바스터', 'Alabastro Cálido', 'Albâtre Chaud', 'Warmes Alabaster'],
+    optLightCrystal: ['白昼冷晶', '白晝冷晶', 'Daylight Crystal', '白昼クリスタル', '데이라이트 크리스탈', 'Cristal Diurno', 'Cristal Diurne', 'Tageslicht-Kristall', "Gündüz kristali"],
+    optLightAlabaster: ['暖白画册', '暖白畫冊', 'Warm Alabaster', 'ウォーム画集', '웜 알라바스터', 'Alabastro Cálido', 'Albâtre Chaud', 'Warmes Alabaster', "Sıcak alabaster"],
     lightPresetHintDark: [
       '当前处于深色模式，切换至浅色主题后生效',
       '目前處於深色模式，切換至淺色主題後生效',
@@ -961,6 +1047,7 @@
       'Activo en modo claro — cambia el tema a claro para previsualizar',
       'Actif en mode clair — passez en thème clair pour prévisualiser',
       'Im hellen Modus aktiv — zum Vorschauen auf helles Theme wechseln',
+      "Açık modda etkin — önizlemek için ana uygulama temasını Açık yapın",
     ],
     lightPresetHintWarm: [
       'Alabaster 暖岩配色已自动启用暖白画册质感',
@@ -971,6 +1058,7 @@
       'La paleta Alabaster Cálido aplica automáticamente la superficie cálida',
       'La palette Alabaster Chaud applique automatiquement la surface chaude',
       'Alabaster Warm wendet automatisch die warme Oberfläche an',
+      "Alabaster Warm paleti sıcak keten yüzeyi otomatik uygular",
     ],
     lightPresetHintHost: [
       '当前跟随宿主主题，切换为 Obsidian 配色并在浅色下生效',
@@ -981,6 +1069,7 @@
       'Siguiendo el tema anfitrión — selecciona Obsidian en modo claro para personalizar',
       'Suit le thème hôte — sélectionnez Obsidian en mode clair pour personnaliser',
       'Folgt Host-Theme — im hellen Modus Obsidian wählen zum Anpassen',
+      "Ana uygulama teması izleniyor — özelleştirmek için Açık modda Obsidian paletini seçin",
     ],
 
     setTelemetryTitle: [
@@ -992,6 +1081,7 @@
       'Telemetría inferior y HUD de contexto',
       'Télémétrie inférieure et HUD de contexte',
       'Untere Telemetrie & Kontext-HUD',
+      "Alt telemetri ve bağlam göstergesi",
     ],
     setTelemetryDesc: [
       '显示生成速度、缓存与上下文占用；已安装同类插件时自动兼容。',
@@ -1002,6 +1092,7 @@
       'Muestra velocidad, caché y uso de contexto; compatible con complementos externos.',
       'Affiche débit, cache et contexte ; compatible avec les extensions externes.',
       'Zeigt Geschwindigkeit, Cache & Kontextauslastung; kompatibel mit externen Plugins.',
+      "Hız, önbellek ve bağlam kullanımını gösterir; dış eklentilerle uyumludur.",
     ],
     setEffortSliderTitle: [
       '模型推理等级滑块',
@@ -1012,6 +1103,7 @@
       'Deslizador de esfuerzo de razonamiento',
       'Curseur d’effort de raisonnement',
       'Schieberegler für Denktiefe',
+      "Model akıl yürütme çabası kaydırıcısı",
     ],
     setEffortSliderDesc: [
       '在模型菜单中提供推理等级滑块；已安装同类插件时自动兼容。',
@@ -1022,6 +1114,7 @@
       'Añade un control deslizante de razonamiento en el menú de modelos.',
       'Ajoute un curseur d’effort de raisonnement dans le menu des modèles.',
       'Fügt einen Denktiefe-Regler im Modellmenü hinzu.',
+      "Model menüsüne akıl yürütme çabası kaydırıcısı ekler.",
     ],
     setEffortMemoryTitle: [
       '跨模型记住推理档位',
@@ -1032,6 +1125,7 @@
       'Recordar esfuerzo por modelo',
       'Mémoriser l’effort par modèle',
       'Denktiefe je Modell merken',
+      "Model başına çabayı hatırla",
     ],
     setEffortMemoryDesc: [
       '切换模型或关闭滑块后，仍自动记住每个模型与 Orchestrator 上次选过的推理档位，不再回落默认 Medium。',
@@ -1042,6 +1136,7 @@
       'Recuerda el último esfuerzo elegido por modelo y Orchestrator, incluso con el deslizador desactivado.',
       'Mémorise le dernier niveau d’effort par modèle et Orchestrator, même curseur désactivé.',
       'Merkt sich die letzte Denktiefe je Modell und Orchestrator, auch bei deaktiviertem Regler.',
+      "Kaydırıcı kapalı olsa bile her model ve Orchestrator planlayıcısı için son akıl yürütme çabanızı hatırlar.",
     ],
     setPeriodicPickerTitle: [
       '元素周期表选择器',
@@ -1052,6 +1147,7 @@
       'Selector de tabla periódica',
       'Sélecteur tableau périodique',
       'Periodensystem-Auswahl',
+      "Periyodik tablo seçici",
     ],
     setPeriodicPickerDesc: [
       '长按底部模型选择器打开 3D 元素周期表，短按仍打开原生列表。',
@@ -1062,6 +1158,7 @@
       'Mantén pulsado el selector inferior para la tabla periódica 3D; clic corto abre la lista nativa.',
       'Appui long sur le sélecteur pour le tableau périodique 3D ; clic court pour la liste native.',
       'Langes Drücken öffnet die 3D-Periodentafel; kurzer Klick öffnet die native Liste.',
+      "3B periyodik tablo için alttaki model seçiciye uzun basın; kısa tıklama yerleşik listeyi açar.",
     ],
     setOmniTitle: [
       '文件检视与右键菜单',
@@ -1072,6 +1169,7 @@
       'Visor de archivos y menú contextual',
       'Visionneuse et menu contextuel',
       'Dateiansicht & Kontextmenü',
+      "Dosya görüntüleyici ve bağlam menüsü",
     ],
     setOmniDesc: [
       '支持对话内链接与路径点击、右键文件操作及侧边栏多格式预览。',
@@ -1082,6 +1180,7 @@
       'Habilita enlaces, menú contextual de archivos y vista previa en el panel lateral.',
       'Active la gestion des liens, le menu contextuel et l’aperçu dans le panneau latéral.',
       'Aktiviert Link-Handling, Datei-Kontextmenü und Seitenvorschau für Medien und Daten.',
+      "Bağlantı işlemeyi, dosya bağlam menüsü eylemlerini ve yan bölmede ortam/veri önizlemesini açar.",
     ],
     setLinkTargetTitle: [
       '网页链接打开方式',
@@ -1092,6 +1191,7 @@
       'Destino de enlaces web',
       'Cible des liens web',
       'Ziel für Weblinks',
+      "Web bağlantısı hedefi",
     ],
     setLinkTargetDesc: [
       '设置左键点击网页链接的默认位置（按住 Ctrl/Cmd 点击可临时切换）。',
@@ -1102,6 +1202,7 @@
       'Destino por defecto al hacer clic en enlaces (Ctrl/Cmd+Clic para invertir).',
       'Cible par défaut au clic sur un lien web (Ctrl/Cmd+Clic pour inverser).',
       'Standardziel beim Klick auf Weblinks (Strg/Cmd+Klick zum Umkehren).',
+      "Web bağlantısına tıklanınca varsayılan hedef (tersine çevirmek için Ctrl/Cmd+Click basılı tutun).",
     ],
     setSidebarStudioTitle: [
       'Chat 对话模式 (Beta)',
@@ -1112,6 +1213,7 @@
       'Modo Chat (Beta)',
       'Mode Chat (Bêta)',
       'Chat-Modus (Beta)',
+      "Sohbet modu (Beta)",
     ],
     setSidebarStudioDesc: [
       '实验性功能，默认关闭。开启后在侧栏顶部显示 Code / Chat 切换，提供日常纯对话与文档整理空间。',
@@ -1122,11 +1224,12 @@
       'Experimental (desactivado por defecto). Añade un selector Code / Chat en la barra lateral.',
       'Expérimental (désactivé par défaut). Ajoute un sélecteur Code / Chat dans la barre latérale.',
       'Experimentell (standardmäßig aus). Fügt oben in der Seitenleiste einen Code / Chat-Umschalter hinzu.',
+      "Deneysel (varsayılan kapalı). Günlük sohbet ve belge işleri için kenar çubuğuna Kod / Sohbet anahtarı ekler.",
     ],
-    optLinkBuiltin: ['右侧内置面板', '右側內建面板', 'Side Pane', '右パネル', '사이드 패널', 'Panel lateral', 'Panneau latéral', 'Seitenpanel'],
-    optLinkExternal: ['系统浏览器', '系統瀏覽器', 'System Browser', '標準ブラウザ', '시스템 브라우저', 'Navegador del sistema', 'Navigateur système', 'Systembrowser'],
+    optLinkBuiltin: ['右侧内置面板', '右側內建面板', 'Side Pane', '右パネル', '사이드 패널', 'Panel lateral', 'Panneau latéral', 'Seitenpanel', "Yan bölme"],
+    optLinkExternal: ['系统浏览器', '系統瀏覽器', 'System Browser', '標準ブラウザ', '시스템 브라우저', 'Navegador del sistema', 'Navigateur système', 'Systembrowser', "Sistem tarayıcısı"],
 
-    setLogoInkTitle: ['问候标志着色', '問候標誌著色', 'Logo Color', 'ロゴカラー', '로고 색상', 'Color del logotipo', 'Couleur du logo', 'Logo-Farbe'],
+    setLogoInkTitle: ['问候标志着色', '問候標誌著色', 'Logo Color', 'ロゴカラー', '로고 색상', 'Color del logotipo', 'Couleur du logo', 'Logo-Farbe', "Logo rengi"],
     setLogoInkDesc: [
       '设置新会话首页问候星标的色彩风格。',
       '設定新對話首頁問候星標的色彩風格。',
@@ -1136,10 +1239,11 @@
       'Tono del símbolo de bienvenida en el inicio.',
       'Teinte de l’icône d’accueil.',
       'Farbton des Startseiten-Symbols.',
+      "Ana sayfa karşılama işaretinin tonu.",
     ],
-    optAccent: ['主题色', '主題色', 'Accent', 'アクセント', '강조색', 'Acento', 'Accent', 'Akzent'],
-    optForeground: ['前景色', '前景色', 'Ink', '前景色', '전경색', 'Tinta', 'Encre', 'Vordergrund'],
-    setSidebarTitle: ['侧栏紧凑排版', '側邊欄緊湊排版', 'Sidebar Restyle', 'サイドバー調整', '사이드바 재구성', 'Rediseño de barra lateral', 'Style de barre latérale', 'Seitenleiste anpassen'],
+    optAccent: ['主题色', '主題色', 'Accent', 'アクセント', '강조색', 'Acento', 'Accent', 'Akzent', "Vurgu"],
+    optForeground: ['前景色', '前景色', 'Ink', '前景色', '전경색', 'Tinta', 'Encre', 'Vordergrund', "Mürekkep"],
+    setSidebarTitle: ['侧栏紧凑排版', '側邊欄緊湊排版', 'Sidebar Restyle', 'サイドバー調整', '사이드바 재구성', 'Rediseño de barra lateral', 'Style de barre latérale', 'Seitenleiste anpassen', "Kenar çubuğu görünümü"],
     setSidebarDesc: [
       '为左侧对话与项目列表应用紧凑行距与悬停高亮。',
       '為左側對話與專案清單套用緊湊行距與懸停高亮。',
@@ -1149,8 +1253,9 @@
       'Aplica altura de fila compacta y resaltado al pasar el cursor en la barra lateral.',
       'Applique une hauteur de ligne soignée et un survol élégant à la barre latérale.',
       'Wendet kompakte Zeilenhöhe und Hover-Hervorhebung auf die Seitenleiste an.',
+      "Kenar çubuğuna özenli satır yüksekliği ve üzerine gelme zemini uygular.",
     ],
-    setSidebarCompactTitle: ['紧凑侧栏间距', '緊湊側邊欄間距', 'Compact Sidebar', 'コンパクトサイドバー', '컴팩트 사이드바', 'Barra lateral compacta', 'Barre latérale compacte', 'Kompakte Seitenleiste'],
+    setSidebarCompactTitle: ['紧凑侧栏间距', '緊湊側邊欄間距', 'Compact Sidebar', 'コンパクトサイドバー', '컴팩트 사이드바', 'Barra lateral compacta', 'Barre latérale compacte', 'Kompakte Seitenleiste', "Kompakt kenar çubuğu"],
     setSidebarCompactDesc: [
       '进一步收紧侧栏对话行高，一屏展示更多历史会话。',
       '進一步收緊側邊欄對話行高，一屏顯示更多歷史對話。',
@@ -1160,8 +1265,9 @@
       'Reduce la altura de fila de la barra lateral de 28px a 24px.',
       'Réduit la hauteur des lignes de la barre latérale de 28px à 24px.',
       'Verringert die Zeilenhöhe der Seitenleiste von 28px auf 24px.',
+      "Kenar çubuğu satır yüksekliğini 28px'ten 24px'e indirir.",
     ],
-    setComposerTitle: ['输入框紧凑排版', '輸入框緊湊排版', 'Composer Restyle', '入力欄リスタイル', '입력창 재구성', 'Rediseño del editor', 'Style de zone de saisie', 'Eingabefeld anpassen'],
+    setComposerTitle: ['输入框紧凑排版', '輸入框緊湊排版', 'Composer Restyle', '入力欄リスタイル', '입력창 재구성', 'Rediseño del editor', 'Style de zone de saisie', 'Eingabefeld anpassen', "Giriş kutusu görünümü"],
     setComposerDesc: [
       '优化输入区与底部工具栏布局。',
       '最佳化輸入區與底部工具列排版。',
@@ -1171,8 +1277,9 @@
       'Caja de entrada minimalista y pie de lienzo limpio.',
       'Zone de saisie minimaliste et pied de page épuré.',
       'Minimalistisches Eingabefeld und aufgeräumte Fußzeile.',
+      "Sade giriş kutusu ve temiz tuval alt bilgisi.",
     ],
-    setPlaceholderTitle: ['输入框提示语风格', '輸入框提示語風格', 'Placeholder Style', 'プレースホルダー', '플레이스홀더 스타일', 'Estilo de marcador', 'Style d’invite', 'Platzhalter-Stil'],
+    setPlaceholderTitle: ['输入框提示语风格', '輸入框提示語風格', 'Placeholder Style', 'プレースホルダー', '플레이스홀더 스타일', 'Estilo de marcador', 'Style d’invite', 'Platzhalter-Stil', "Yer tutucu stili"],
     setPlaceholderDesc: [
       '在极简 Studio 文案与宿主原生提示语之间切换。',
       '在極簡 Studio 文案與宿主原生提示語之間切換。',
@@ -1182,9 +1289,10 @@
       'Alterna entre el texto Studio y el predeterminado del sistema.',
       'Bascule entre le texte Studio et le texte natif par défaut.',
       'Wechselt zwischen Studio-Hinweistext und Host-Standard.',
+      "Studio yer tutucu metni ile ana uygulama varsayılanı arasında geçiş yapar.",
     ],
-    optPlaceholderHost: ['原生提示', '原生提示', 'Host', '標準', '호스트 기본', 'Nativo', 'Natif', 'Standard'],
-    setSmoothCaretTitle: ['平滑打字光标', '平滑打字游標', 'Smooth Typing Caret', 'スムーズ入力カーソル', '부드러운 입력 커서', 'Cursor de escritura suave', 'Curseur de saisie fluide', 'Weicher Schreibcursor'],
+    optPlaceholderHost: ['原生提示', '原生提示', 'Host', '標準', '호스트 기본', 'Nativo', 'Natif', 'Standard', "Ana uygulama"],
+    setSmoothCaretTitle: ['平滑打字光标', '平滑打字游標', 'Smooth Typing Caret', 'スムーズ入力カーソル', '부드러운 입력 커서', 'Cursor de escritura suave', 'Curseur de saisie fluide', 'Weicher Schreibcursor', "Akıcı yazma imleci"],
     setSmoothCaretDesc: [
       '启用输入框光标平滑位移过渡。',
       '啟用輸入框游標平滑位移過渡。',
@@ -1194,6 +1302,7 @@
       'Activa la transición fluida del cursor al escribir.',
       'Active le glissement fluide du curseur dans la zone de saisie.',
       'Aktiviert weiche Cursor-Animation im Eingabefeld.',
+      "Giriş kutusunda akıcı kayan imleç ara değerlemesini açar.",
     ],
     rowContextMenuTitle: [
       '会话直触右键菜单 (/btw)',
@@ -1204,6 +1313,7 @@
       'Menú rápido de conversación (/btw)',
       'Menu rapide de conversation (/btw)',
       'Schnellmenü für Unterhaltungen (/btw)',
+      "Sohbet hızlı menüsü (/btw)",
     ],
     rowContextMenuDesc: [
       '在会话任意位置右键直接拉起 /btw 侧边会话并预填选区，及一键直触 /compact 等指令；按住 Shift+右键保留系统菜单。',
@@ -1214,8 +1324,9 @@
       'Clic derecho en una conversación para abrir /btw con el texto seleccionado o ejecutar /compact (Shift+Clic derecho para el menú nativo).',
       'Clic droit dans une conversation pour ouvrir /btw avec la sélection ou lancer /compact (Maj+Clic droit pour le menu natif).',
       'Rechtsklick in einer Unterhaltung startet /btw-Seitenchat mit Auswahl oder /compact (Shift+Rechtsklick für natives Menü).',
+      "Seçili metinle /btw yan sohbetini açmak veya /compact çalıştırmak için sohbette herhangi bir yere sağ tıklayın; yerleşik menü için Shift+Right-Click basılı tutun.",
     ],
-    setMotionLevelTitle: ['动效档位', '動效檔位', 'Motion Level', 'モーション強度', '모션 강도', 'Nivel de animación', 'Niveau d’animation', 'Animationsstufe'],
+    setMotionLevelTitle: ['动效档位', '動效檔位', 'Motion Level', 'モーション強度', '모션 강도', 'Nivel de animación', 'Niveau d’animation', 'Animationsstufe', "Hareket düzeyi"],
     setMotionLevelDesc: [
       '控制交互动画、流式吐字与场景切换的动效丰富度。',
       '控制互動動畫、流式吐字與場景切換的動效豐富度。',
@@ -1225,12 +1336,13 @@
       'Controla microinteracciones, texto en flujo y transiciones de escena.',
       'Contrôle les micro-interactions, l’affichage fluide et les transitions.',
       'Steuert Federanimationen, Streaming-Texteinblendung und Szenenübergänge.',
+      "Yay mikro etkileşimlerini, akan metin açılımını ve sahne geçişlerini denetler.",
     ],
-    optMotionOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus'],
-    optMotionSubtle: ['克制', '克制', 'Subtle', '控えめ', '절제', 'Sutil', 'Subtil', 'Dezent'],
-    optMotionStandard: ['标准', '標準', 'Standard', '標準', '표준', 'Estándar', 'Standard', 'Standard'],
-    optMotionUltra: ['完整', '完整', 'Ultra', 'フル', '최대', 'Ultra', 'Ultra', 'Ultra'],
-    setTargetFpsTitle: ['目标刷新帧率', '目標重新整理幀率', 'Target Frame Rate', '目標フレームレート', '목표 프레임 레이트', 'Frecuencia de cuadros', 'Fréquence cible (FPS)', 'Ziel-Bildrate'],
+    optMotionOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus', "Kapalı"],
+    optMotionSubtle: ['克制', '克制', 'Subtle', '控えめ', '절제', 'Sutil', 'Subtil', 'Dezent', "Hafif"],
+    optMotionStandard: ['标准', '標準', 'Standard', '標準', '표준', 'Estándar', 'Standard', 'Standard', "Standart"],
+    optMotionUltra: ['完整', '完整', 'Ultra', 'フル', '최대', 'Ultra', 'Ultra', 'Ultra', "Ultra"],
+    setTargetFpsTitle: ['目标刷新帧率', '目標重新整理幀率', 'Target Frame Rate', '目標フレームレート', '목표 프레임 레이트', 'Frecuencia de cuadros', 'Fréquence cible (FPS)', 'Ziel-Bildrate', "Hedef kare hızı"],
     setTargetFpsDesc: [
       '控制边框流光、首页波纹与水晶条/药水瓶等交互动画的活跃帧率上限（静止自动休眠）。',
       '控制邊框流光、首頁波紋與水晶條/藥水瓶等互動動畫的活躍幀率上限（靜止自動休眠）。',
@@ -1240,12 +1352,13 @@
       'Limita los FPS activos del borde prisma, ondas de inicio, barra de cristal y vial (reposo automático).',
       'Plafonne les FPS actifs pour les effets prisme, ondes d’accueil, barre cristal et fiole (veille auto).',
       'Begrenzt aktive FPS für Prismenrand, Start-Wellen, Kristallleiste & Phiole (schläft im Leerlauf).',
+      "Prizma kenarı, ana sayfa dalgaları, kristal çubuk ve şişe animasyonları için etkin FPS üst sınırını koyar (boşta otomatik uyur).",
     ],
-    optFps60: ['60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS'],
-    optFps120: ['120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS'],
-    optFps180: ['180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS'],
-    optFpsNative: ['原生满帧', '原生滿幀', 'Native Max', 'ネイティブ最大', '네이티브 최대', 'Máximo nativo', 'Max natif', 'Natives Maximum'],
-    setMascotTitle: ['桌面像素宠物', '桌面像素寵物', 'Pixel Mascot Stage', 'ピクセルマスコット', '픽셀 마스코트', 'Mascotas píxel', 'Mascottes pixel', 'Pixel-Maskottchen'],
+    optFps60: ['60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', '60 FPS', "60 FPS"],
+    optFps120: ['120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', '120 FPS', "120 FPS"],
+    optFps180: ['180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', '180 FPS', "180 FPS"],
+    optFpsNative: ['原生满帧', '原生滿幀', 'Native Max', 'ネイティブ最大', '네이티브 최대', 'Máximo nativo', 'Max natif', 'Natives Maximum', "Doğal en yüksek"],
+    setMascotTitle: ['桌面像素宠物', '桌面像素寵物', 'Pixel Mascot Stage', 'ピクセルマスコット', '픽셀 마스코트', 'Mascotas píxel', 'Mascottes pixel', 'Pixel-Maskottchen', "Piksel maskot sahnesi"],
     setMascotDesc: [
       '在输入框顶部显示互动像素宠物。',
       '在輸入框頂部顯示互動像素寵物。',
@@ -1255,22 +1368,23 @@
       'Muestra mascotas píxel interactivas sobre el editor.',
       'Affiche des mascottes pixel interactives sur la zone de saisie.',
       'Zeigt interaktive Pixel-Maskottchen über dem Eingabefeld.',
+      "Giriş kutusunda etkileşimli piksel maskotlar gösterir.",
     ],
-    optMascotCrab: ['双宠', '雙寵', 'Dual', 'ペア', '듀얼', 'Dúo', 'Duo', 'Duo'],
-    optMascotMinis: ['双宠+三蟹', '雙寵+三蟹', 'Dual + Crabs', 'ペア+蟹', '듀얼+미니 크랩', 'Dúo + Cangrejos', 'Duo + Crabes', 'Duo + Krabben'],
-    optMascotQuad: ['四宠', '四寵', 'Quad', '4匹全員', '4마리', 'Cuarteto', 'Quatuor', 'Quartett'],
-    optMascotQuadMinis: ['四宠+三蟹', '四寵+三蟹', 'Quad + Crabs', '4匹+蟹', '4마리+미니 크랩', 'Cuarteto + Cangrejos', 'Quatuor + Crabes', 'Quartett + Krabben'],
-    optMascotOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus'],
-    mascotRosterTitle: ['自定义上场阵容', '自訂上場陣容', 'Custom Roster', 'カスタム編成', '커스텀 편성', 'Equipo personalizado', 'Équipe personnalisée', 'Eigene Besetzung'],
-    mascotRosterCount: ['主宠 {n}/4', '主寵 {n}/4', 'Main {n}/4', 'メイン {n}/4', '메인 {n}/4', 'Principales {n}/4', 'Principaux {n}/4', 'Haupttiere {n}/4'],
-    mascotRosterMinis: ['+3 迷你蟹', '+3 迷你蟹', '+3 Mini Crabs', '+3 ミニ蟹', '+3 미니 크랩', '+3 Mini cangrejos', '+3 Mini crabes', '+3 Mini-Krabben'],
-    mascotSpeciesCrab: ['Claude 蟹', 'Claude 蟹', 'Claude Crab', 'Claude カニ', 'Claude 크랩', 'Cangrejo Claude', 'Crabe Claude', 'Claude-Krabbe'],
-    mascotSpeciesCat: ['Gemini 猫', 'Gemini 貓', 'Gemini Cat', 'Gemini ネコ', 'Gemini 캣', 'Gato Gemini', 'Chat Gemini', 'Gemini-Katze'],
-    mascotSpeciesDragon: ['GPT 白龙', 'GPT 白龍', 'GPT Dragon', 'GPT 白龍', 'GPT 백룡', 'Dragón GPT', 'Dragon GPT', 'GPT-Drache'],
-    mascotSpeciesWhale: ['DeepSeek 蓝鲸', 'DeepSeek 藍鯨', 'DeepSeek Whale', 'DeepSeek クジラ', 'DeepSeek 고래', 'Ballena DeepSeek', 'Baleine DeepSeek', 'DeepSeek-Wal'],
-    mascotStageOpenBtn: ['打开桌宠选角舞台', '開啟桌寵選角舞台', 'Open Casting Stage', '編成ステージを開く', '마스코트 무대 열기', 'Abrir escenario', 'Ouvrir la scène', 'Bühne öffnen'],
-    mascotStageTitle: ['桌宠选角舞台', '桌寵選角舞台', 'Mascot Casting Stage', 'マスコット編成ステージ', '마스코트 캐스팅 무대', 'Escenario de mascotas', 'Scène des mascottes', 'Maskottchen-Bühne'],
-    mascotStageBackBtn: ['返回设置', '返回設定', 'Back to Settings', '設定に戻る', '설정으로 돌아가기', 'Volver a ajustes', 'Retour aux réglages', 'Zurück zu Einstellungen'],
+    optMascotCrab: ['双宠', '雙寵', 'Dual', 'ペア', '듀얼', 'Dúo', 'Duo', 'Duo', "İkili"],
+    optMascotMinis: ['双宠+三蟹', '雙寵+三蟹', 'Dual + Crabs', 'ペア+蟹', '듀얼+미니 크랩', 'Dúo + Cangrejos', 'Duo + Crabes', 'Duo + Krabben', "İkili + yengeçler"],
+    optMascotQuad: ['四宠', '四寵', 'Quad', '4匹全員', '4마리', 'Cuarteto', 'Quatuor', 'Quartett', "Dörtlü"],
+    optMascotQuadMinis: ['四宠+三蟹', '四寵+三蟹', 'Quad + Crabs', '4匹+蟹', '4마리+미니 크랩', 'Cuarteto + Cangrejos', 'Quatuor + Crabes', 'Quartett + Krabben', "Dörtlü + yengeçler"],
+    optMascotOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus', "Kapalı"],
+    mascotRosterTitle: ['自定义上场阵容', '自訂上場陣容', 'Custom Roster', 'カスタム編成', '커스텀 편성', 'Equipo personalizado', 'Équipe personnalisée', 'Eigene Besetzung', "Özel kadro"],
+    mascotRosterCount: ['主宠 {n}/4', '主寵 {n}/4', 'Main {n}/4', 'メイン {n}/4', '메인 {n}/4', 'Principales {n}/4', 'Principaux {n}/4', 'Haupttiere {n}/4', "Ana {n}/4"],
+    mascotRosterMinis: ['+3 迷你蟹', '+3 迷你蟹', '+3 Mini Crabs', '+3 ミニ蟹', '+3 미니 크랩', '+3 Mini cangrejos', '+3 Mini crabes', '+3 Mini-Krabben', "+3 mini yengeç"],
+    mascotSpeciesCrab: ['Claude 蟹', 'Claude 蟹', 'Claude Crab', 'Claude カニ', 'Claude 크랩', 'Cangrejo Claude', 'Crabe Claude', 'Claude-Krabbe', "Claude Crab"],
+    mascotSpeciesCat: ['Gemini 猫', 'Gemini 貓', 'Gemini Cat', 'Gemini ネコ', 'Gemini 캣', 'Gato Gemini', 'Chat Gemini', 'Gemini-Katze', "Gemini Cat"],
+    mascotSpeciesDragon: ['GPT 白龙', 'GPT 白龍', 'GPT Dragon', 'GPT 白龍', 'GPT 백룡', 'Dragón GPT', 'Dragon GPT', 'GPT-Drache', "GPT Dragon"],
+    mascotSpeciesWhale: ['DeepSeek 蓝鲸', 'DeepSeek 藍鯨', 'DeepSeek Whale', 'DeepSeek クジラ', 'DeepSeek 고래', 'Ballena DeepSeek', 'Baleine DeepSeek', 'DeepSeek-Wal', "DeepSeek Whale"],
+    mascotStageOpenBtn: ['打开桌宠选角舞台', '開啟桌寵選角舞台', 'Open Casting Stage', '編成ステージを開く', '마스코트 무대 열기', 'Abrir escenario', 'Ouvrir la scène', 'Bühne öffnen', "Seçme sahnesini aç"],
+    mascotStageTitle: ['桌宠选角舞台', '桌寵選角舞台', 'Mascot Casting Stage', 'マスコット編成ステージ', '마스코트 캐스팅 무대', 'Escenario de mascotas', 'Scène des mascottes', 'Maskottchen-Bühne', "Maskot seçme sahnesi"],
+    mascotStageBackBtn: ['返回设置', '返回設定', 'Back to Settings', '設定に戻る', '설정으로 돌아가기', 'Volver a ajustes', 'Retour aux réglages', 'Zurück zu Einstellungen', "Ayarlara dön"],
     mascotStageHint: [
       '点击酒馆舞台角色或下方阵营名牌点亮/熄灯聚光灯，移动指针体验 3D 视差',
       '點擊酒館舞台角色或下方陣營名牌點亮/熄燈聚光燈，移動指標體驗 3D 視差',
@@ -1280,14 +1394,15 @@
       'Haz clic en una mascota o insignia para alternar su foco; mueve el cursor para paralaje 3D',
       'Cliquez sur une mascotte ou un badge pour son projecteur ; bougez le curseur en 3D',
       'Klicke auf ein Maskottchen oder Schild für den Scheinwerfer; Maus bewegt 3D-Parallaxe',
+      "Spotları açıp kapatmak için handaki maskotlara veya aşağıdaki rozetlere tıklayın; 3B paralaks için işaretçiyi oynatın",
     ],
-    mascotStagePresetDual: ['双宠经典', '雙寵經典', 'Classic Dual', '定番ペア', '클래식 듀얼', 'Dúo clásico', 'Duo classique', 'Klassisches Duo'],
-    mascotStagePresetQuad: ['四宠同台', '四寵同台', 'All Four', '4匹共演', '4마리 합동', 'Los cuatro', 'Tous les quatre', 'Alle vier'],
-    mascotStagePresetOff: ['全员休息', '全員休息', 'All Resting', '全員お休み', '전원 휴식', 'Todos descansan', 'Tous au repos', 'Alle ruhen'],
-    mascotStageMinisSlot: ['迷你小蟹角', '迷你小蟹角', 'Mini Crab Corner', 'ミニ蟹コーナー', '미니 크랩 코너', 'Rincón mini cangrejos', 'Coin mini crabes', 'Mini-Krabben-Ecke'],
-    mascotStageActiveOn: ['在场中', '在場中', 'On Stage', '出演中', '출연 중', 'En escena', 'En scène', 'Auf Bühne'],
-    mascotStageActiveOff: ['休息中', '休息中', 'Resting', '休憩中', '휴식 중', 'En reposo', 'Au repos', 'Ruht'],
-    setRippleTitle: ['首页字符波纹', '首頁字元波紋', 'Home Matrix Ripple', 'ホーム文字リップル', '홈 문자 리플', 'Onda matricial en inicio', 'Onde matricielle d’accueil', 'Startseiten-Matrixwelle'],
+    mascotStagePresetDual: ['双宠经典', '雙寵經典', 'Classic Dual', '定番ペア', '클래식 듀얼', 'Dúo clásico', 'Duo classique', 'Klassisches Duo', "Klasik ikili"],
+    mascotStagePresetQuad: ['四宠同台', '四寵同台', 'All Four', '4匹共演', '4마리 합동', 'Los cuatro', 'Tous les quatre', 'Alle vier', "Dördü birden"],
+    mascotStagePresetOff: ['全员休息', '全員休息', 'All Resting', '全員お休み', '전원 휴식', 'Todos descansan', 'Tous au repos', 'Alle ruhen', "Hepsi dinlenmede"],
+    mascotStageMinisSlot: ['迷你小蟹角', '迷你小蟹角', 'Mini Crab Corner', 'ミニ蟹コーナー', '미니 크랩 코너', 'Rincón mini cangrejos', 'Coin mini crabes', 'Mini-Krabben-Ecke', "Mini yengeç köşesi"],
+    mascotStageActiveOn: ['在场中', '在場中', 'On Stage', '出演中', '출연 중', 'En escena', 'En scène', 'Auf Bühne', "Sahnede"],
+    mascotStageActiveOff: ['休息中', '休息中', 'Resting', '休憩中', '휴식 중', 'En reposo', 'Au repos', 'Ruht', "Dinlenmede"],
+    setRippleTitle: ['首页字符波纹', '首頁字元波紋', 'Home Matrix Ripple', 'ホーム文字リップル', '홈 문자 리플', 'Onda matricial en inicio', 'Onde matricielle d’accueil', 'Startseiten-Matrixwelle', "Ana sayfa matris dalgası"],
     setRippleDesc: [
       '在首页铺设字符点阵，点击空白处触发波纹扩散。',
       '在首頁鋪設字元點陣，點擊空白處觸發波紋擴散。',
@@ -1297,8 +1412,9 @@
       'Campo interactivo de ondas de caracteres en la vista de inicio.',
       'Champ interactif d’ondes de caractères sur la page d’accueil.',
       'Interaktives Zeichenmatrix-Wellenfeld auf der Startseite.',
+      "Ana sayfa görünümünde etkileşimli karakter matrisi dalga alanı.",
     ],
-    setConvRippleTitle: ['对话页字符波纹', '對話頁字元波紋', 'Chat Matrix Ripple', '会話文字リップル', '대화 문자 리플', 'Onda matricial en chat', 'Onde matricielle de chat', 'Chat-Matrixwelle'],
+    setConvRippleTitle: ['对话页字符波纹', '對話頁字元波紋', 'Chat Matrix Ripple', '会話文字リップル', '대화 문자 리플', 'Onda matricial en chat', 'Onde matricielle de chat', 'Chat-Matrixwelle', "Sohbet matris dalgası"],
     setConvRippleDesc: [
       '在对话页背景铺设字符点阵波纹并调节显示强度（默认关闭，开启自定义壁纸或浏览器分屏时自动避让）。',
       '在對話頁背景鋪設字元點陣波紋並調節顯示強度（預設關閉，開啟自訂桌布或瀏覽器分割畫面時自動避讓）。',
@@ -1308,11 +1424,12 @@
       'Onda de matriz de caracteres en el fondo del chat con intensidad ajustable (desactivada por defecto; cede paso al fondo personalizado o vista dividida).',
       'Onde matricielle en arrière-plan du chat à intensité réglable (désactivée par défaut ; s’efface avec un fond personnalisé ou l’écran partagé).',
       'Zeichenmatrix-Welle im Chat-Hintergrund mit einstellbarer Intensität (standardmäßig aus; weicht bei eigenem Hintergrundbild oder geteilter Ansicht aus).',
+      "Sohbet arka planında ayarlanabilir yoğunlukta karakter matrisi dalgası (varsayılan kapalı; özel duvar kâğıdı veya bölünmüş görünümde otomatik yol verir).",
     ],
-    optConvRippleOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus'],
-    optConvRippleSubtle: ['微光', '微光', 'Subtle', '微光', '은은함', 'Sutil', 'Subtil', 'Dezent'],
-    optConvRippleMedium: ['标准', '標準', 'Medium', '標準', '보통', 'Medio', 'Moyen', 'Mittel'],
-    optConvRippleFull: ['鲜明', '鮮明', 'Full', '鮮明', '선명', 'Intenso', 'Intense', 'Kräftig'],
+    optConvRippleOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus', "Kapalı"],
+    optConvRippleSubtle: ['微光', '微光', 'Subtle', '微光', '은은함', 'Sutil', 'Subtil', 'Dezent', "Hafif"],
+    optConvRippleMedium: ['标准', '標準', 'Medium', '標準', '보통', 'Medio', 'Moyen', 'Mittel', "Orta"],
+    optConvRippleFull: ['鲜明', '鮮明', 'Full', '鮮明', '선명', 'Intenso', 'Intense', 'Kräftig', "Tam"],
 
     // ── Thought Translator & OpenAI Polisher ─────────────────────────────────
     grpThought: [
@@ -1324,6 +1441,7 @@
       'Traducción y pulido de pensamiento',
       'Traduction et polissage de la réflexion',
       'Gedankenübersetzung & Feinschliff',
+      "Düşünce çevirisi ve düzenleme",
     ],
     setThoughtModeTitle: [
       '思考过程转译模式',
@@ -1334,6 +1452,7 @@
       'Modo de traducción de pensamiento',
       'Mode de traduction de la réflexion',
       'Gedanken-Übersetzungsmodus',
+      "Düşünce çevirisi modu",
     ],
     setThoughtModeDesc: [
       '支持免配置机器翻译，或接入 OpenAI 兼容接口流式翻译润色。',
@@ -1344,10 +1463,11 @@
       'Traduce cadenas de razonamiento mediante traducción automática sin clave o pulido IA compatible con OpenAI.',
       'Traduit les chaînes de raisonnement via traduction automatique ou polissage IA compatible OpenAI.',
       'Übersetzt Gedankengänge per konfigurationsfreier Maschinenübersetzung oder OpenAI-kompatibler KI.',
+      "İngilizce akıl yürütme zincirlerini yapılandırmasız makine çevirisi veya akan OpenAI uyumlu AI düzenlemesiyle çevirir.",
     ],
-    optThoughtOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus'],
-    optThoughtMachine: ['机器翻译', '機器翻譯', 'Machine', '機械翻訳', '기계 번역', 'Automática', 'Automatique', 'Maschinell'],
-    optThoughtAi: ['AI 翻译润色', 'AI 翻譯潤色', 'AI Polish', 'AI 翻訳・推敲', 'AI 번역·다듬기', 'Pulido IA', 'Polissage IA', 'KI-Feinschliff'],
+    optThoughtOff: ['关闭', '關閉', 'Off', 'オフ', '끄기', 'Desactivado', 'Désactivé', 'Aus', "Kapalı"],
+    optThoughtMachine: ['机器翻译', '機器翻譯', 'Machine', '機械翻訳', '기계 번역', 'Automática', 'Automatique', 'Maschinell', "Makine çevirisi"],
+    optThoughtAi: ['AI 翻译润色', 'AI 翻譯潤色', 'AI Polish', 'AI 翻訳・推敲', 'AI 번역·다듬기', 'Pulido IA', 'Polissage IA', 'KI-Feinschliff', "AI düzenleme"],
     setThoughtTriggerTitle: [
       '自动转译触发时机',
       '自動轉譯觸發時機',
@@ -1357,6 +1477,7 @@
       'Momento de activación',
       'Déclenchement de la traduction',
       'Übersetzungs-Auslöser',
+      "Çeviri tetik zamanı",
     ],
     setThoughtTriggerDesc: [
       '「完结预译」在最新思考块输出结束后后台静默预热缓存；「点开按需」仅在展开思考折叠块时请求。',
@@ -1367,13 +1488,14 @@
       'Precarga el último pensamiento al terminar o traduce solo al desplegar para ahorrar tokens.',
       'Précharge la dernière réflexion en arrière-plan ou traduit uniquement au dépliage.',
       'Lädt abgeschlossene Gedanken im Hintergrund vor oder übersetzt erst beim Aufklappen.',
+      "Son biten düşünceyi arka planda önceden yükler veya token tasarrufu için yalnızca genişletince çevirir.",
     ],
-    optTriggerPreload: ['完结预译', '完結預譯', 'Preload', '完了時プリロード', '완료 시 미리 번역', 'Precargar', 'Précharger', 'Vorladen'],
-    optTriggerExpand: ['点开按需', '點開按需', 'On Expand', '展開時のみ', '펼칠 때만', 'Al expandir', 'Au dépliage', 'Beim Aufklappen'],
-    thoughtStyleLabel: ['润色文风预设', '潤色文風預設', 'Polishing Style', '推敲スタイル', '다듬기 스타일', 'Estilo de pulido', 'Style de rédaction', 'Schreibstil'],
-    optStyleTech: ['专业工程手稿', '專業工程手稿', 'Technical Manuscript', '技術エンジニアリング', '기술 엔지니어링 노트', 'Manuscrito técnico', 'Manuscrit technique', 'Technisches Manuskript'],
-    optStyleConcise: ['精炼核心要点', '精煉核心要點', 'Concise Key Points', '要点サマリー', '핵심 요점 요약', 'Puntos clave concisos', 'Points clés concis', 'Prägnante Kernpunkte'],
-    optStyleCustom: ['自定义提示词', '自訂提示詞', 'Custom Prompt', 'カスタムプロンプト', '사용자 지정 프롬프트', 'Prompt personalizado', 'Prompt personnalisé', 'Eigener Prompt'],
+    optTriggerPreload: ['完结预译', '完結預譯', 'Preload', '完了時プリロード', '완료 시 미리 번역', 'Precargar', 'Précharger', 'Vorladen', "Ön yükle"],
+    optTriggerExpand: ['点开按需', '點開按需', 'On Expand', '展開時のみ', '펼칠 때만', 'Al expandir', 'Au dépliage', 'Beim Aufklappen', "Genişletince"],
+    thoughtStyleLabel: ['润色文风预设', '潤色文風預設', 'Polishing Style', '推敲スタイル', '다듬기 스타일', 'Estilo de pulido', 'Style de rédaction', 'Schreibstil', "Düzenleme stili"],
+    optStyleTech: ['专业工程手稿', '專業工程手稿', 'Technical Manuscript', '技術エンジニアリング', '기술 엔지니어링 노트', 'Manuscrito técnico', 'Manuscrit technique', 'Technisches Manuskript', "Teknik metin"],
+    optStyleConcise: ['精炼核心要点', '精煉核心要點', 'Concise Key Points', '要点サマリー', '핵심 요점 요약', 'Puntos clave concisos', 'Points clés concis', 'Prägnante Kernpunkte', "Kısa ana noktalar"],
+    optStyleCustom: ['自定义提示词', '自訂提示詞', 'Custom Prompt', 'カスタムプロンプト', '사용자 지정 프롬프트', 'Prompt personalizado', 'Prompt personnalisé', 'Eigener Prompt', "Özel istem"],
     thoughtCustomPromptPh: [
       '输入自定义润色提示词（仅保存在本机配置中）…',
       '輸入自訂潤色提示詞（僅儲存在本機設定中）…',
@@ -1383,17 +1505,18 @@
       'Introduce un prompt personalizado (solo se guarda en local)…',
       'Saisissez un prompt personnalisé (enregistré localement uniquement)…',
       'Eigenen Prompt eingeben (wird nur lokal gespeichert)…',
+      "Özel düzenleme istemini girin (yalnızca bu cihazda saklanır)…",
     ],
-    thoughtProfilesLabel: ['OpenAI 兼容渠道预设', 'OpenAI 相容渠道預設', 'OpenAI Endpoint Profiles', 'OpenAI 互換プロファイル', 'OpenAI 호환 프로필', 'Perfiles OpenAI', 'Profils OpenAI', 'OpenAI-Profile'],
-    thoughtAddProfileBtn: ['+ 新增渠道', '+ 新增渠道', '+ New Profile', '+ 追加', '+ 새 프로필', '+ Nuevo perfil', '+ Nouveau profil', '+ Neues Profil'],
-    thoughtDelProfileBtn: ['删除当前', '刪除目前', 'Delete', '削除', '삭제', 'Eliminar', 'Supprimer', 'Löschen'],
-    thoughtFieldName: ['渠道名称', '渠道名稱', 'Profile Name', 'プロファイル名', '프로필 이름', 'Nombre del perfil', 'Nom du profil', 'Profilname'],
-    thoughtFieldBaseUrl: ['接口地址 (Base URL)', '介面位址 (Base URL)', 'Base URL', 'Base URL', 'Base URL', 'URL base', 'URL de base', 'Basis-URL'],
-    thoughtFieldApiKey: ['接口密钥 (API Key)', '介面金鑰 (API Key)', 'API Key', 'API Key', 'API Key', 'Clave API', 'Clé API', 'API-Key'],
-    thoughtFieldModel: ['模型 ID (Model)', '模型 ID (Model)', 'Model ID', 'モデル ID', '모델 ID', 'ID de modelo', 'ID de modèle', 'Modell-ID'],
-    thoughtFetchModelsBtn: ['拉取模型列表', '拉取模型清單', 'Fetch Models', 'モデル一覧取得', '모델 목록 가져오기', 'Obtener modelos', 'Charger modèles', 'Modelle abrufen'],
-    thoughtSaveBtn: ['保存渠道配置', '儲存渠道設定', 'Save Config', '設定を保存', '설정 저장', 'Guardar ajuste', 'Enregistrer', 'Speichern'],
-    thoughtTestBtn: ['发送测试消息', '發送測試訊息', 'Send Test Message', '接続テスト送信', '테스트 메시지 전송', 'Enviar prueba', 'Tester la connexion', 'Test senden'],
+    thoughtProfilesLabel: ['OpenAI 兼容渠道预设', 'OpenAI 相容渠道預設', 'OpenAI Endpoint Profiles', 'OpenAI 互換プロファイル', 'OpenAI 호환 프로필', 'Perfiles OpenAI', 'Profils OpenAI', 'OpenAI-Profile', "OpenAI uç nokta profilleri"],
+    thoughtAddProfileBtn: ['+ 新增渠道', '+ 新增渠道', '+ New Profile', '+ 追加', '+ 새 프로필', '+ Nuevo perfil', '+ Nouveau profil', '+ Neues Profil', "+ Yeni profil"],
+    thoughtDelProfileBtn: ['删除当前', '刪除目前', 'Delete', '削除', '삭제', 'Eliminar', 'Supprimer', 'Löschen', "Sil"],
+    thoughtFieldName: ['渠道名称', '渠道名稱', 'Profile Name', 'プロファイル名', '프로필 이름', 'Nombre del perfil', 'Nom du profil', 'Profilname', "Profil adı"],
+    thoughtFieldBaseUrl: ['接口地址 (Base URL)', '介面位址 (Base URL)', 'Base URL', 'Base URL', 'Base URL', 'URL base', 'URL de base', 'Basis-URL', "Temel URL"],
+    thoughtFieldApiKey: ['接口密钥 (API Key)', '介面金鑰 (API Key)', 'API Key', 'API Key', 'API Key', 'Clave API', 'Clé API', 'API-Key', "API anahtarı"],
+    thoughtFieldModel: ['模型 ID (Model)', '模型 ID (Model)', 'Model ID', 'モデル ID', '모델 ID', 'ID de modelo', 'ID de modèle', 'Modell-ID', "Model kimliği"],
+    thoughtFetchModelsBtn: ['拉取模型列表', '拉取模型清單', 'Fetch Models', 'モデル一覧取得', '모델 목록 가져오기', 'Obtener modelos', 'Charger modèles', 'Modelle abrufen', "Modelleri getir"],
+    thoughtSaveBtn: ['保存渠道配置', '儲存渠道設定', 'Save Config', '設定を保存', '설정 저장', 'Guardar ajuste', 'Enregistrer', 'Speichern', "Yapılandırmayı kaydet"],
+    thoughtTestBtn: ['发送测试消息', '發送測試訊息', 'Send Test Message', '接続テスト送信', '테스트 메시지 전송', 'Enviar prueba', 'Tester la connexion', 'Test senden', "Deneme mesajı gönder"],
     thoughtPrivacyHint: [
       '密钥与自定义提示词仅加密权限保存在本机配置目录，脱敏展示，不会对外上传。',
       '金鑰與自訂提示詞僅保存在本機設定目錄，脫敏顯示，不會對外上傳。',
@@ -1403,16 +1526,17 @@
       'Las claves API y prompts personalizados se guardan solo localmente y nunca se suben.',
       'Les clés API et prompts personnalisés restent stockés localement et ne sont jamais envoyés.',
       'API-Keys und eigene Prompts werden ausschließlich lokal gespeichert und niemals hochgeladen.',
+      "API anahtarları ve özel istemler yalnızca yerelde saklanır, asla yüklenmez.",
     ],
 
     // ── Studio Quotas, Scene Presets, Config Keys & Backup ───────────────────
-    workspaceAll: ['全部项目', '全部專案', 'All Projects', '全プロジェクト', '전체 프로젝트', 'Todos los proyectos', 'Tous les projets', 'Alle Projekte'],
-    workspaceFilterAria: ['按项目筛选用量', '依專案篩選用量', 'Filter usage by workspace', 'ワークスペースで絞り込み', '프로젝트별 사용량 필터', 'Filtrar uso por proyecto', 'Filtrer par espace de travail', 'Nutzung nach Projekt filtern'],
-    homeScopeAll: ['含归档', '含歸檔', 'All', '履歴含む', '보관 포함', 'Todo', 'Tout', 'Alle'],
-    homeScopeActive: ['仅当前', '僅當前', 'Current', '現在のみ', '현재만', 'Actuales', 'Actuelles', 'Aktuell'],
-    homeScopeActiveCount: ['当前', '當前', 'Active', '現在', '현재', 'Activas', 'Actives', 'Aktiv'],
-    homeScopeArchivedCount: ['归档', '歸檔', 'Archived', 'アーカイブ', '보관', 'Archiv.', 'Archiv.', 'Archiv.'],
-    homeLocalOnlyTag: ['仅本地', '僅本機', 'Local only', 'ローカルのみ', '로컬만', 'Solo local', 'Local', 'Nur lokal'],
+    workspaceAll: ['全部项目', '全部專案', 'All Projects', '全プロジェクト', '전체 프로젝트', 'Todos los proyectos', 'Tous les projets', 'Alle Projekte', "Tüm projeler"],
+    workspaceFilterAria: ['按项目筛选用量', '依專案篩選用量', 'Filter usage by workspace', 'ワークスペースで絞り込み', '프로젝트별 사용량 필터', 'Filtrar uso por proyecto', 'Filtrer par espace de travail', 'Nutzung nach Projekt filtern', "Kullanımı çalışma alanına göre süz"],
+    homeScopeAll: ['含归档', '含歸檔', 'All', '履歴含む', '보관 포함', 'Todo', 'Tout', 'Alle', "Tümü"],
+    homeScopeActive: ['仅当前', '僅當前', 'Current', '現在のみ', '현재만', 'Actuales', 'Actuelles', 'Aktuell', "Geçerli"],
+    homeScopeActiveCount: ['当前', '當前', 'Active', '現在', '현재', 'Activas', 'Actives', 'Aktiv', "Etkin"],
+    homeScopeArchivedCount: ['归档', '歸檔', 'Archived', 'アーカイブ', '보관', 'Archiv.', 'Archiv.', 'Archiv.', "Arşivlenen"],
+    homeLocalOnlyTag: ['仅本地', '僅本機', 'Local only', 'ローカルのみ', '로컬만', 'Solo local', 'Local', 'Nur lokal', "Yalnızca yerel"],
     homeLocalScopeNote: [
       '仅统计本机已保存会话（不含云端）',
       '僅統計本機已儲存工作階段（不含雲端）',
@@ -1422,8 +1546,9 @@
       'Solo sesiones locales guardadas (sin nube)',
       'Sessions locales enregistrées uniquement (hors cloud)',
       'Nur lokal gespeicherte Sitzungen (ohne Cloud)',
+      "Yalnızca kayıtlı yerel oturumları sayar (bulut hariç)",
     ],
-    fiveHourLabel: ['5 小时窗口', '5 小時視窗', '5-Hour Window', '5時間枠', '5시간 창', 'Ventana 5h', 'Fenêtre 5 h', '5-Std.-Fenster'],
+    fiveHourLabel: ['5 小时窗口', '5 小時視窗', '5-Hour Window', '5時間枠', '5시간 창', 'Ventana 5h', 'Fenêtre 5 h', '5-Std.-Fenster', "5 saatlik pencere"],
     quotaEmptyHint: [
       '暂未获取到实时配额池快照，可点击右上角刷新重试',
       '暫未取得即時配額池快照，可點擊右上角重新整理',
@@ -1433,20 +1558,21 @@
       'Esperando instantánea de cuotas — pulsa Actualizar para reintentar',
       'En attente des quotas en direct — cliquez sur Actualiser',
       'Warte auf Live-Kontingente — zum Wiederholen Aktualisieren klicken',
+      "Canlı kota anlık görüntüsü bekleniyor — yeniden denemek için Yenile'ye tıklayın",
     ],
-    presetBarLabel: ['场景预设', '場景預設', 'Scene Presets', 'プリセット', '프리셋', 'Preajustes', 'Préréglages', 'Voreinstellungen'],
-    presetUltra: ['完整光效', '完整光效', 'Full Visuals', 'フル視覚効果', '전체 시각 효과', 'Visual completo', 'Visuels complets', 'Volle Effekte'],
-    presetFocus: ['专注编码', '專注編碼', 'Deep Focus', '集中コーディング', '집중 코딩', 'Enfoque profundo', 'Concentration', 'Tiefer Fokus'],
-    presetEco: ['静默省电', '靜默省電', 'Silent Eco', '省電力静音', '저전력 무음', 'Eco silencioso', 'Éco silencieux', 'Lautlos-Öko'],
-    subTabAll: ['全部', '全部', 'All', 'すべて', '전체', 'Todo', 'Tout', 'Alle'],
-    subTabAppearance: ['外观', '外觀', 'Appearance', '外観', '외관', 'Apariencia', 'Apparence', 'Aussehen'],
-    subTabInteraction: ['交互', '互動', 'Workspace', '操作', '작업공간', 'Espacio', 'Espace', 'Arbeitsbereich'],
-    subTabThought: ['思考转译', '思考轉譯', 'Thought', '思考翻訳', '사고 번역', 'Pensamiento', 'Réflexion', 'Gedanken'],
-    subTabModules: ['实用模块', '實用模組', 'Modules', 'モジュール', '모듈', 'Módulos', 'Modules', 'Module'],
-    subTabBeta: ['Beta 内容', 'Beta 內容', 'Beta', 'Beta', 'Beta', 'Beta', 'Bêta', 'Beta'],
-    subTabAbout: ['配置与关于', '設定與關於', 'Config & About', '設定・情報', '설정 및 정보', 'Config y Acerca', 'Config & À propos', 'Konfig & Info'],
+    presetBarLabel: ['场景预设', '場景預設', 'Scene Presets', 'プリセット', '프리셋', 'Preajustes', 'Préréglages', 'Voreinstellungen', "Sahne ön ayarları"],
+    presetUltra: ['完整光效', '完整光效', 'Full Visuals', 'フル視覚効果', '전체 시각 효과', 'Visual completo', 'Visuels complets', 'Volle Effekte', "Tam görseller"],
+    presetFocus: ['专注编码', '專注編碼', 'Deep Focus', '集中コーディング', '집중 코딩', 'Enfoque profundo', 'Concentration', 'Tiefer Fokus', "Derin odak"],
+    presetEco: ['静默省电', '靜默省電', 'Silent Eco', '省電力静音', '저전력 무음', 'Eco silencioso', 'Éco silencieux', 'Lautlos-Öko', "Sessiz tasarruf"],
+    subTabAll: ['全部', '全部', 'All', 'すべて', '전체', 'Todo', 'Tout', 'Alle', "Tümü"],
+    subTabAppearance: ['外观', '外觀', 'Appearance', '外観', '외관', 'Apariencia', 'Apparence', 'Aussehen', "Görünüm"],
+    subTabInteraction: ['交互', '互動', 'Workspace', '操作', '작업공간', 'Espacio', 'Espace', 'Arbeitsbereich', "Çalışma alanı"],
+    subTabThought: ['思考转译', '思考轉譯', 'Thought', '思考翻訳', '사고 번역', 'Pensamiento', 'Réflexion', 'Gedanken', "Düşünce"],
+    subTabModules: ['实用模块', '實用模組', 'Modules', 'モジュール', '모듈', 'Módulos', 'Modules', 'Module', "Modüller"],
+    subTabBeta: ['Beta 内容', 'Beta 內容', 'Beta', 'Beta', 'Beta', 'Beta', 'Bêta', 'Beta', "Beta"],
+    subTabAbout: ['配置与关于', '設定與關於', 'Config & About', '設定・情報', '설정 및 정보', 'Config y Acerca', 'Config & À propos', 'Konfig & Info', "Yapılandırma ve hakkında"],
 
-    setAccentToneTitle: ['强调色倾向', '強調色傾向', 'Accent Tone', 'アクセントトーン', '강조 색조', 'Tono de acento', 'Ton d’accent', 'Akzentton'],
+    setAccentToneTitle: ['强调色倾向', '強調色傾向', 'Accent Tone', 'アクセントトーン', '강조 색조', 'Tono de acento', 'Ton d’accent', 'Akzentton', "Vurgu tonu"],
     setAccentToneDesc: [
       '调节按钮高亮、焦点环与图表主色的色相倾向。',
       '調節按鈕高亮、焦點環與圖表主色的色相傾向。',
@@ -1456,14 +1582,15 @@
       'Ajusta el tono de acento para controles activos, anillos de enfoque y gráficos.',
       'Ajuste la teinte d’accentuation des contrôles, anneaux de focus et graphiques.',
       'Passt den Akzentfarbton für aktive Steuerelemente, Fokusringe und Diagramme an.',
+      "Etkin denetimler, odak halkaları ve grafikler için vurgu rengini ayarlar.",
     ],
-    optToneFollow: ['跟随模型', '跟隨模型', 'Follow Model', 'モデル連動', '모델 따르기', 'Seguir modelo', 'Suivre modèle', 'Modell folgen'],
-    optToneCobalt: ['钴蓝', '鈷藍', 'Cobalt', 'コバルト', '코발트', 'Cobalto', 'Cobalt', 'Kobalt'],
-    optToneIris: ['鸢尾紫', '鳶尾紫', 'Iris', 'アイリス', '아이리스', 'Iris', 'Iris', 'Iris'],
-    optToneAmber: ['琥珀金', '琥珀金', 'Amber', 'アンバー', '앰버', 'Ámbar', 'Ambre', 'Bernstein'],
-    optToneMono: ['极简单色', '極簡單色', 'Monochrome', 'モノクロ', '모노크롬', 'Monocromo', 'Monochrome', 'Monochrom'],
+    optToneFollow: ['跟随模型', '跟隨模型', 'Follow Model', 'モデル連動', '모델 따르기', 'Seguir modelo', 'Suivre modèle', 'Modell folgen', "Modeli izle"],
+    optToneCobalt: ['钴蓝', '鈷藍', 'Cobalt', 'コバルト', '코발트', 'Cobalto', 'Cobalt', 'Kobalt', "Kobalt"],
+    optToneIris: ['鸢尾紫', '鳶尾紫', 'Iris', 'アイリス', '아이리스', 'Iris', 'Iris', 'Iris', "İris"],
+    optToneAmber: ['琥珀金', '琥珀金', 'Amber', 'アンバー', '앰버', 'Ámbar', 'Ambre', 'Bernstein', "Kehribar"],
+    optToneMono: ['极简单色', '極簡單色', 'Monochrome', 'モノクロ', '모노크롬', 'Monocromo', 'Monochrome', 'Monochrom', "Tek renk"],
 
-    setCornerStyleTitle: ['界面圆角风格', '介面圓角風格', 'Corner Radius Style', '角丸スタイル', '모서리 곡률 스타일', 'Estilo de esquinas', 'Style des coins', 'Eckenradius-Stil'],
+    setCornerStyleTitle: ['界面圆角风格', '介面圓角風格', 'Corner Radius Style', '角丸スタイル', '모서리 곡률 스타일', 'Estilo de esquinas', 'Style des coins', 'Eckenradius-Stil', "Köşe yarıçapı stili"],
     setCornerStyleDesc: [
       '统一调节输入框、卡片与弹出面板的几何曲率。',
       '統一調節輸入框、卡片與彈出面板的幾何曲率。',
@@ -1473,12 +1600,13 @@
       'Ajusta el radio de borde en editor, tarjetas y menús emergentes.',
       'Ajuste le rayon des bordures des cartes, éditeur et fenêtres.',
       'Passt die Eckenrundung von Eingabefeld, Karten und Popovers an.',
+      "Giriş kutusu, kartlar ve açılır pencerelerde köşe yarıçapını ayarlar.",
     ],
-    optCornerSharp: ['利落锐角', '俐落銳角', 'Sharp', 'シャープ', '샤프', 'Recto', 'Net', 'Kantig'],
-    optCornerBalanced: ['均衡标准', '均衡標準', 'Balanced', '標準', '균형', 'Equilibrado', 'Équilibré', 'Ausgewogen'],
-    optCornerSoft: ['柔和圆润', '柔和圓潤', 'Soft', 'ソフト', '소프트', 'Suave', 'Doux', 'Weich'],
+    optCornerSharp: ['利落锐角', '俐落銳角', 'Sharp', 'シャープ', '샤프', 'Recto', 'Net', 'Kantig', "Keskin"],
+    optCornerBalanced: ['均衡标准', '均衡標準', 'Balanced', '標準', '균형', 'Equilibrado', 'Équilibré', 'Ausgewogen', "Dengeli"],
+    optCornerSoft: ['柔和圆润', '柔和圓潤', 'Soft', 'ソフト', '소프트', 'Suave', 'Doux', 'Weich', "Yumuşak"],
 
-    setScrollBottomTitle: ['回到底部滚落动效', '回到底部滾落動效', 'Scroll-to-Bottom Motion', '最下部スクロール演出', '맨 아래로 스크롤 모션', 'Desplazamiento al fondo', 'Défilement vers le bas', 'Nach-unten-Scrollen'],
+    setScrollBottomTitle: ['回到底部滚落动效', '回到底部滾落動效', 'Scroll-to-Bottom Motion', '最下部スクロール演出', '맨 아래로 스크롤 모션', 'Desplazamiento al fondo', 'Défilement vers le bas', 'Nach-unten-Scrollen', "Alta kaydırma hareketi"],
     setScrollBottomDesc: [
       '点击「回到底部」按钮时采用高速惯性滑落并贴底柔刹（手拨滚轮即刻中断），或切回原生瞬移。',
       '點擊「回到底部」按鈕時採用高速慣性滑落並貼底柔煞（手撥滾輪即刻中斷），或切回原生瞬移。',
@@ -1488,12 +1616,13 @@
       'Usa deslizamiento inercial rápido al pulsar Ir abajo (la rueda interrumpe al instante) o salto instantáneo.',
       'Utilise un glissement inertiel rapide vers le bas (interrompu par la molette) ou le saut instantané.',
       'Nutzt schnelles Trägheitsgleiten beim Klick auf Nach unten (Mausrad stoppt sofort) oder Direktsprung.',
+      "Alta Kaydır tıklanınca yüksek hızlı eylemsiz kayma kullanır (tekerlek anında keser) veya yerleşik anlık atlamayı korur.",
     ],
-    optScrollBottomSmooth: ['高速惯性', '高速慣性', 'Fast Glide', '高速慣性', '고속 관성', 'Deslizamiento', 'Glisse rapide', 'Schnellgleiten'],
-    optScrollBottomInstant: ['原生瞬移', '原生瞬移', 'Instant', '瞬間移動', '즉시 이동', 'Instantáneo', 'Instantané', 'Sofort'],
-    inlineDiffOpenSidebar: ['在侧栏打开', '在側欄開啟', 'Open in Sidebar', 'サイドバーで開く', '사이드바에서 열기', 'Abrir en barra lateral', 'Ouvrir dans la barre', 'In Seitenleiste öffnen'],
-    inlineDiffCollapse: ['收起', '收合', 'Collapse', '閉じる', '접기', 'Contraer', 'Réduire', 'Einklappen'],
-    inlineDiffLoading: ['正在读取差异...', '正在讀取差異...', 'Loading diff...', '差分を読み込み中...', '차이 불러오는 중...', 'Cargando diferencias...', 'Chargement du diff...', 'Diff wird geladen...'],
+    optScrollBottomSmooth: ['高速惯性', '高速慣性', 'Fast Glide', '高速慣性', '고속 관성', 'Deslizamiento', 'Glisse rapide', 'Schnellgleiten', "Hızlı kayma"],
+    optScrollBottomInstant: ['原生瞬移', '原生瞬移', 'Instant', '瞬間移動', '즉시 이동', 'Instantáneo', 'Instantané', 'Sofort', "Anında"],
+    inlineDiffOpenSidebar: ['在侧栏打开', '在側欄開啟', 'Open in Sidebar', 'サイドバーで開く', '사이드바에서 열기', 'Abrir en barra lateral', 'Ouvrir dans la barre', 'In Seitenleiste öffnen', "Kenar çubuğunda aç"],
+    inlineDiffCollapse: ['收起', '收合', 'Collapse', '閉じる', '접기', 'Contraer', 'Réduire', 'Einklappen', "Daralt"],
+    inlineDiffLoading: ['正在读取差异...', '正在讀取差異...', 'Loading diff...', '差分を読み込み中...', '차이 불러오는 중...', 'Cargando diferencias...', 'Chargement du diff...', 'Diff wird geladen...', "Diff yükleniyor..."],
     inlineDiffBinary: [
       '二进制文件暂不支持行内预览，请右键此条选择「在侧栏打开」查看。',
       '二進位檔案暫不支援行內預覽，請右鍵此項目選擇「在側欄開啟」檢視。',
@@ -1503,6 +1632,7 @@
       'Los archivos binarios no admiten vista previa en línea. Haz clic derecho para abrir en la barra lateral.',
       'Fichier binaire non prévisualisable en ligne. Clic droit pour l’ouvrir dans la barre latérale.',
       'Binärdatei nicht inline anzeigbar. Rechtsklick zum Öffnen in der Seitenleiste.',
+      "İkili dosya satır içi önizlenemez. Kenar çubuğunda açmak için sağ tıklayın.",
     ],
     inlineDiffNoPreview: [
       '当前步骤未携带完整行级补丁，请右键此条选择「在侧栏打开」查看完整对比。',
@@ -1513,6 +1643,7 @@
       'Este paso no incluye el parche completo. Haz clic derecho para ver el diff en la barra lateral.',
       'Cette étape ne contient pas le patch complet. Clic droit pour voir le diff dans la barre latérale.',
       'Für diesen Schritt liegt kein vollständiger Patch vor. Rechtsklick für vollständigen Diff in der Seitenleiste.',
+      "Bu adımda tam bölüm metni önbellekte yok. Tam diff'i kenar çubuğunda açmak için sağ tıklayın.",
     ],
     inlineDiffSnapshotNotice: [
       '未受 Git 追踪 · 预览当前文件内容（右键可在侧栏打开完整对比）',
@@ -1523,11 +1654,12 @@
       'Sin seguimiento de Git · vista previa actual (clic derecho para abrir en barra lateral)',
       'Non suivi par Git · aperçu du fichier actuel (clic droit pour le diff complet)',
       'Nicht von Git verfolgt · aktuelle Dateivorschau (Rechtsklick für Seitenleisten-Diff)',
+      "Git tarafından izlenmiyor · geçerli dosya önizleniyor (tam diff'i kenar çubuğunda açmak için sağ tıklayın)",
     ],
-    inlineDiffLongLinesTag: ['单行长改', '單行長改', 'long line', '長行', '긴 줄', 'línea larga', 'ligne longue', 'lange Zeile'],
-    inlineDiffMenuExpand: ['展开行内对比', '展開行內比對', 'Expand inline diff', 'インライン差分を展開', '인라인 차이 펼치기', 'Expandir diff en línea', 'Déplier le diff en ligne', 'Inline-Diff ausklappen'],
-    inlineDiffMenuCollapse: ['收起行内对比', '收合行內比對', 'Collapse inline diff', 'インライン差分を折りたたむ', '인라인 차이 접기', 'Contraer diff en línea', 'Replier le diff en ligne', 'Inline-Diff einklappen'],
-    inlineDiffMenuCopyPath: ['复制文件路径', '複製檔案路徑', 'Copy file path', 'ファイルパスをコピー', '파일 경로 복사', 'Copiar ruta de archivo', 'Copier le chemin', 'Dateipfad kopieren'],
+    inlineDiffLongLinesTag: ['单行长改', '單行長改', 'long line', '長行', '긴 줄', 'línea larga', 'ligne longue', 'lange Zeile', "uzun satır"],
+    inlineDiffMenuExpand: ['展开行内对比', '展開行內比對', 'Expand inline diff', 'インライン差分を展開', '인라인 차이 펼치기', 'Expandir diff en línea', 'Déplier le diff en ligne', 'Inline-Diff ausklappen', "Satır içi diff'i genişlet"],
+    inlineDiffMenuCollapse: ['收起行内对比', '收合行內比對', 'Collapse inline diff', 'インライン差分を折りたたむ', '인라인 차이 접기', 'Contraer diff en línea', 'Replier le diff en ligne', 'Inline-Diff einklappen', "Satır içi diff'i daralt"],
+    inlineDiffMenuCopyPath: ['复制文件路径', '複製檔案路徑', 'Copy file path', 'ファイルパスをコピー', '파일 경로 복사', 'Copiar ruta de archivo', 'Copier le chemin', 'Dateipfad kopieren', "Dosya yolunu kopyala"],
     inlineDiffLargeExpandBtn: [
       '⋯ 大文件仅节选关键片段 · 点击在右侧栏查看完整对比',
       '⋯ 大檔案僅節錄關鍵片段 · 點擊在右側欄檢視完整對比',
@@ -1537,10 +1669,11 @@
       '⋯ Mostrando fragmentos clave · Clic para abrir el diff completo',
       '⋯ Extraits clés affichés · Cliquer pour ouvrir le diff complet',
       '⋯ Wichtige Ausschnitte · Klicken für vollständigen Diff in Seitenleiste',
+      "⋯ Önemli bölümler gösteriliyor · Tam diff'i kenar çubuğunda açmak için tıklayın",
     ],
-    sidebarMoreLabel: ['更多', '更多', 'More', 'その他', '더보기', 'Más', 'Plus', 'Mehr'],
-    sidebarLessLabel: ['收起', '收合', 'Less', '折りたたむ', '접기', 'Menos', 'Moins', 'Weniger'],
-    setSidebarNavFoldLabel: ['紧凑侧栏收纳', '緊湊側欄收納', 'Compact Sidebar Nav', 'サイドバー項目収納', '컴팩트 사이드바 탐색', 'Navegación lateral compacta', 'Navigation latérale compacte', 'Kompakte Seitenleisten-Navi'],
+    sidebarMoreLabel: ['更多', '更多', 'More', 'その他', '더보기', 'Más', 'Plus', 'Mehr', "Daha fazla"],
+    sidebarLessLabel: ['收起', '收合', 'Less', '折りたたむ', '접기', 'Menos', 'Moins', 'Weniger', "Daha az"],
+    setSidebarNavFoldLabel: ['紧凑侧栏收纳', '緊湊側欄收納', 'Compact Sidebar Nav', 'サイドバー項目収納', '컴팩트 사이드바 탐색', 'Navegación lateral compacta', 'Navigation latérale compacte', 'Kompakte Seitenleisten-Navi', "Kompakt kenar çubuğu gezintisi"],
     setSidebarNavFoldDesc: [
       '关闭时显示全部 3 项导航；开启后仅常驻「新建会话」，将「自动化」「自定义扩展」收进「更多」。',
       '關閉時顯示全部 3 項導覽；開啟後僅常駐「新增對話」，將「自動化」「自訂擴充功能」收進「更多」。',
@@ -1550,11 +1683,12 @@
       'Muestra los 3 elementos al desactivar; al activar, fija Nueva conversación y agrupa el resto en Más.',
       'Affiche les 3 éléments sinon ; actif, épingle Nouvelle conversation et replie le reste dans Plus.',
       'Zeigt alle 3 Punkte wenn aus; wenn ein, bleibt Neue Unterhaltung fixiert und der Rest wandert unter Mehr.',
+      "Kapalıyken 3 gezinti öğesinin tümü görünür; açıkken Yeni sohbet sabit kalır, Otomasyonlar ve Özelleştirmeler Daha fazla içine katlanır.",
     ],
-    optSidebarNavFoldOff: ['全部显示', '全部顯示', 'Show All', 'すべて表示', '모두 표시', 'Mostrar todo', 'Tout afficher', 'Alle zeigen'],
-    optSidebarNavFoldOn: ['收纳折叠', '收納折疊', 'Fold Extra', '収納する', '접어두기', 'Plegar extras', 'Replier', 'Einklappen'],
+    optSidebarNavFoldOff: ['全部显示', '全部顯示', 'Show All', 'すべて表示', '모두 표시', 'Mostrar todo', 'Tout afficher', 'Alle zeigen', "Tümünü göster"],
+    optSidebarNavFoldOn: ['收纳折叠', '收納折疊', 'Fold Extra', '収納する', '접어두기', 'Plegar extras', 'Replier', 'Einklappen', "Fazlayı katla"],
 
-    setCodeFontTitle: ['代码等宽字体', '程式碼等寬字型', 'Code Monospace Font', 'コード等幅フォント', '코드 고정폭 글꼴', 'Fuente monoespaciada', 'Police à chasse fixe', 'Monospace-Schrift'],
+    setCodeFontTitle: ['代码等宽字体', '程式碼等寬字型', 'Code Monospace Font', 'コード等幅フォント', '코드 고정폭 글꼴', 'Fuente monoespaciada', 'Police à chasse fixe', 'Monospace-Schrift', "Kod eş aralıklı yazı tipi"],
     setCodeFontDesc: [
       '设置对话代码块、行内代码与终端片段的首选等宽字体栈。',
       '設定對話程式碼區塊、行內程式碼與終端片段的首選等寬字型。',
@@ -1564,11 +1698,12 @@
       'Familia monoespaciada preferida para bloques y fragmentos de código.',
       'Police à chasse fixe préférée pour les blocs de code et le code en ligne.',
       'Bevorzugte Monospace-Schriftart für Codeblöcke und Inline-Code.',
+      "Kod blokları ve satır içi kod için yeğlenen eş aralıklı yazı tipi ailesi.",
     ],
-    optFontDefault: ['系统默认', '系統預設', 'Default', 'システム標準', '시스템 기본값', 'Por defecto', 'Par défaut', 'Standard'],
-    optFontSfmono: ['SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas'],
+    optFontDefault: ['系统默认', '系統預設', 'Default', 'システム標準', '시스템 기본값', 'Por defecto', 'Par défaut', 'Standard', "Varsayılan"],
+    optFontSfmono: ['SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', 'SF Mono / Consolas', "SF Mono / Consolas"],
 
-    setCodeLigaturesTitle: ['代码编程连字', '程式碼連字', 'Code Font Ligatures', 'コード合字（リガチャ）', '코드 폰트 합자', 'Ligaduras de fuente', 'Ligatures de code', 'Code-Ligaturen'],
+    setCodeLigaturesTitle: ['代码编程连字', '程式碼連字', 'Code Font Ligatures', 'コード合字（リガチャ）', '코드 폰트 합자', 'Ligaduras de fuente', 'Ligatures de code', 'Code-Ligaturen', "Kod yazı tipi ligatürleri"],
     setCodeLigaturesDesc: [
       '在代码块中启用 =>、!==、>= 等多字符运算符连字特性。',
       '在程式碼區塊中啟用 =>、!==、>= 等多字元運算子連字特性。',
@@ -1578,9 +1713,10 @@
       'Activa ligaduras de programación (=>, !==, >=) en los bloques de código.',
       'Active les ligatures typographiques (=>, !==, >=) dans les blocs de code.',
       'Aktiviert Programmier-Ligaturen (=>, !==, >=) in Codeblöcken.',
+      "Kod bloklarında programlama yazı tipi ligatürlerini (=>, !==, >=) açar.",
     ],
 
-    setAmbientIntensityTitle: ['环境氛围光浓度', '環境氛圍光濃度', 'Ambient Glow Intensity', '環境グロー強度', '주변 광채 강도', 'Intensidad de brillo ambiental', 'Intensité de lueur ambiante', 'Umgebungsleucht-Intensität'],
+    setAmbientIntensityTitle: ['环境氛围光浓度', '環境氛圍光濃度', 'Ambient Glow Intensity', '環境グロー強度', '주변 광채 강도', 'Intensidad de brillo ambiental', 'Intensité de lueur ambiante', 'Umgebungsleucht-Intensität', "Ortam parıltısı yoğunluğu"],
     setAmbientIntensityDesc: [
       '精细控制背景极光与边缘折射光晕的不透明度比例。',
       '精細控制背景極光與邊緣折射光暈的不透明度比例。',
@@ -1590,12 +1726,13 @@
       'Controla la opacidad de la aurora ambiental y el brillo de refracción en bordes.',
       'Contrôle l’opacité de l’aurore ambiante et de la lueur de réfraction.',
       'Steuert die Deckkraft von Hintergrund-Aurora und Kantenbrechungsglühen.',
+      "Ortam aurorası ve kenar kırılma parıltısının opaklık ölçeğini denetler.",
     ],
-    optAmb0: ['关闭 (0%)', '關閉 (0%)', '0%', 'オフ (0%)', '꺼짐 (0%)', '0%', '0 %', '0 %'],
-    optAmb35: ['微光 (35%)', '微光 (35%)', '35%', '控えめ (35%)', '은은함 (35%)', '35%', '35 %', '35 %'],
-    optAmb70: ['柔和 (70%)', '柔和 (70%)', '70%', '標準 (70%)', '부드러움 (70%)', '70%', '70 %', '70 %'],
-    optAmb100: ['标准 (100%)', '標準 (100%)', '100%', 'フル (100%)', '표준 (100%)', '100%', '100 %', '100 %'],
-    setDarkAuraStyleLabel: ['深色表面材质', '深色表面材質', 'Dark Surface Material', 'ダーク表面質感', '다크 표면 질감', 'Material de superficie oscuro', 'Matériau en mode sombre', 'Dunkelmodus-Material'],
+    optAmb0: ['关闭 (0%)', '關閉 (0%)', '0%', 'オフ (0%)', '꺼짐 (0%)', '0%', '0 %', '0 %', "%0"],
+    optAmb35: ['微光 (35%)', '微光 (35%)', '35%', '控えめ (35%)', '은은함 (35%)', '35%', '35 %', '35 %', "%35"],
+    optAmb70: ['柔和 (70%)', '柔和 (70%)', '70%', '標準 (70%)', '부드러움 (70%)', '70%', '70 %', '70 %', "%70"],
+    optAmb100: ['标准 (100%)', '標準 (100%)', '100%', 'フル (100%)', '표준 (100%)', '100%', '100 %', '100 %', "%100"],
+    setDarkAuraStyleLabel: ['深色表面材质', '深色表面材質', 'Dark Surface Material', 'ダーク表面質感', '다크 표면 질감', 'Material de superficie oscuro', 'Matériau en mode sombre', 'Dunkelmodus-Material', "Koyu yüzey malzemesi"],
     setDarkAuraStyleDesc: [
       '选择深色模式下对话页底部极光的光谱折射风格。',
       '選擇深色模式下對話頁底部極光的光譜折射風格。',
@@ -1605,10 +1742,11 @@
       'Elige el estilo cromático de la aurora inferior en modo oscuro.',
       'Choisit le style chromatique de l’aurore en mode sombre.',
       'Wählt den Farbstil der unteren Aurora im dunklen Modus.',
+      "Koyu sohbet modunda alt aurora tayf stilini belirler.",
     ],
-    optDarkAuraPrism: ['极夜琉纱', '極夜琉紗', 'Polar Silk', '極夜シルク', '극야 실크', 'Seda Polar', 'Soie Polaire', 'Polarseide'],
-    optDarkAuraNeon: ['幽邃光晕', '幽邃光暈', 'Abyssal Glow', '幽邃グロー', '심연 글로우', 'Brillo Abisal', 'Lueur Abyssale', 'Tiefenleuchten'],
-    setDarkAuraLabel: ['深色极光浓度', '深色極光濃度', 'Dark Horizon Intensity', 'ダーク極光濃度', '다크 오로라 농도', 'Intensidad de aurora oscura', 'Intensité d’aurore sombre', 'Dunkelmodus-Aurora-Intensität'],
+    optDarkAuraPrism: ['极夜琉纱', '極夜琉紗', 'Polar Silk', '極夜シルク', '극야 실크', 'Seda Polar', 'Soie Polaire', 'Polarseide', "Kutup ipeği"],
+    optDarkAuraNeon: ['幽邃光晕', '幽邃光暈', 'Abyssal Glow', '幽邃グロー', '심연 글로우', 'Brillo Abisal', 'Lueur Abyssale', 'Tiefenleuchten', "Uçurum parıltısı"],
+    setDarkAuraLabel: ['深色极光浓度', '深色極光濃度', 'Dark Horizon Intensity', 'ダーク極光濃度', '다크 오로라 농도', 'Intensidad de aurora oscura', 'Intensité d’aurore sombre', 'Dunkelmodus-Aurora-Intensität', "Koyu ufuk yoğunluğu"],
     setDarkAuraDesc: [
       '调节深色模式下对话页底部极光的亮度与视野范围。',
       '調節深色模式下對話頁底部極光的亮度與視野範圍。',
@@ -1618,6 +1756,7 @@
       'Ajusta el brillo y el alcance de la aurora inferior en modo oscuro.',
       'Règle la luminosité et la portée de l’aurore en mode sombre.',
       'Passt Helligkeit und Reichweite der unteren Aurora im dunklen Chat an.',
+      "Koyu sohbet görünümünde alt auroranın parlaklığını ve erişimini ayarlar.",
     ],
     darkAuraHintLight: [
       '当前处于浅色模式，切换至深色主题后生效',
@@ -1628,12 +1767,13 @@
       'Activo en modo oscuro — cambia el tema a oscuro para previsualizar',
       'Actif en mode sombre — passez en thème sombre pour prévisualiser',
       'Im dunklen Modus aktiv — zum Vorschauen auf dunkles Theme wechseln',
+      "Koyu modda etkin — önizlemek için ana uygulama temasını Koyu yapın",
     ],
-    optDarkAuraSubtle: ['静谧', '靜謐', 'Subtle', '控えめ', '은은함', 'Sutil', 'Discret', 'Dezent'],
-    optDarkAuraBalanced: ['均衡', '均衡', 'Balanced', '標準', '균형', 'Equilibrado', 'Équilibré', 'Ausgewogen'],
-    optDarkAuraVivid: ['绚丽', '絢麗', 'Vivid', '鮮やか', '선명함', 'Intenso', 'Vif', 'Lebhaft'],
+    optDarkAuraSubtle: ['静谧', '靜謐', 'Subtle', '控えめ', '은은함', 'Sutil', 'Discret', 'Dezent', "Hafif"],
+    optDarkAuraBalanced: ['均衡', '均衡', 'Balanced', '標準', '균형', 'Equilibrado', 'Équilibré', 'Ausgewogen', "Dengeli"],
+    optDarkAuraVivid: ['绚丽', '絢麗', 'Vivid', '鮮やか', '선명함', 'Intenso', 'Vif', 'Lebhaft', "Canlı"],
 
-    setThoughtViewTitle: ['译文排版视图', '譯文排版檢視', 'Translated Thought View', '翻訳表示レイアウト', '번역 보기 레이아웃', 'Vista de traducción', 'Vue de traduction', 'Übersetzungsansicht'],
+    setThoughtViewTitle: ['译文排版视图', '譯文排版檢視', 'Translated Thought View', '翻訳表示レイアウト', '번역 보기 레이아웃', 'Vista de traducción', 'Vue de traduction', 'Übersetzungsansicht', "Çevrilmiş düşünce görünümü"],
     setThoughtViewDesc: [
       '在「沉浸纯译文」与「中英段落上下双语对照」之间切换。',
       '在「沉浸純譯文」與「原文譯文上下雙語對照」之間切換。',
@@ -1643,11 +1783,12 @@
       'Alterna entre traducción inmersiva limpia y vista bilingüe apilada.',
       'Bascule entre traduction immersive et vue bilingue superposée.',
       'Wechselt zwischen immersiver Übersetzung und gestapelter zweisprachiger Ansicht.',
+      "Sade sürükleyici çeviri ile üst üste iki dilli görünüm arasında geçiş yapar.",
     ],
-    optThoughtImmersive: ['沉浸纯译文', '沉浸純譯文', 'Immersive', '翻訳のみ', '번역 전용', 'Inmersiva', 'Immersive', 'Immersiv'],
-    optThoughtBilingual: ['双语上下对照', '雙語上下對照', 'Bilingual', '二言語対訳', '이중언어 대조', 'Bilingüe', 'Bilingue', 'Zweisprachig'],
+    optThoughtImmersive: ['沉浸纯译文', '沉浸純譯文', 'Immersive', '翻訳のみ', '번역 전용', 'Inmersiva', 'Immersive', 'Immersiv', "Sürükleyici"],
+    optThoughtBilingual: ['双语上下对照', '雙語上下對照', 'Bilingual', '二言語対訳', '이중언어 대조', 'Bilingüe', 'Bilingue', 'Zweisprachig', "İki dilli"],
 
-    cfgToolbarTitle: ['配置备份与重置', '設定備份與重設', 'Configuration Backup & Reset', '設定のバックアップと初期化', '설정 백업 및 초기화', 'Respaldo y reinicio', 'Sauvegarde et réinitialisation', 'Konfigurations-Backup & Reset'],
+    cfgToolbarTitle: ['配置备份与重置', '設定備份與重設', 'Configuration Backup & Reset', '設定のバックアップと初期化', '설정 백업 및 초기화', 'Respaldo y reinicio', 'Sauvegarde et réinitialisation', 'Konfigurations-Backup & Reset', "Yapılandırma yedekleme ve sıfırlama"],
     cfgToolbarHint: [
       '导出 JSON 时会自动剥离所有 API Key 私密凭据，可安全分享或跨机迁移。',
       '匯出 JSON 時會自動剝離所有 API Key 私密憑證，可安全分享或跨機遷移。',
@@ -1657,10 +1798,11 @@
       'El JSON exportado elimina todas las claves API automáticamente para compartirlo con seguridad.',
       'Le JSON exporté supprime automatiquement toutes les clés API pour un partage sûr.',
       'Exportiertes JSON entfernt alle API-Keys automatisch für sicheres Teilen.',
+      "Dışa aktarılan JSON, güvenli yedek ve paylaşım için tüm API anahtarlarını otomatik ayıklar.",
     ],
-    cfgExportBtn: ['导出配置 JSON', '匯出設定 JSON', 'Export JSON', 'JSON 書き出し', 'JSON 내보내기', 'Exportar JSON', 'Exporter JSON', 'JSON exportieren'],
-    cfgImportBtn: ['导入恢复', '匯入還原', 'Import JSON', 'JSON 読み込み', 'JSON 가져오기', 'Importar JSON', 'Importer JSON', 'JSON importieren'],
-    cfgResetBtn: ['恢复默认', '恢復預設', 'Reset Defaults', '初期設定に戻す', '기본값 복원', 'Restablecer', 'Réinitialiser', 'Zurücksetzen'],
+    cfgExportBtn: ['导出配置 JSON', '匯出設定 JSON', 'Export JSON', 'JSON 書き出し', 'JSON 내보내기', 'Exportar JSON', 'Exporter JSON', 'JSON exportieren', "JSON dışa aktar"],
+    cfgImportBtn: ['导入恢复', '匯入還原', 'Import JSON', 'JSON 読み込み', 'JSON 가져오기', 'Importar JSON', 'Importer JSON', 'JSON importieren', "JSON içe aktar"],
+    cfgResetBtn: ['恢复默认', '恢復預設', 'Reset Defaults', '初期設定に戻す', '기본값 복원', 'Restablecer', 'Réinitialiser', 'Zurücksetzen', "Varsayılanlara sıfırla"],
     cfgExportOk: [
       '已导出脱敏配置（不含 API Key）',
       '已匯出脫敏設定（不含 API Key）',
@@ -1670,6 +1812,7 @@
       'Configuración exportada sin claves API',
       'Configuration exportée sans clés API',
       'Bereinigte Konfiguration exportiert (ohne API-Keys)',
+      "Temizlenmiş yapılandırma dışa aktarıldı (API anahtarları ayıklandı)",
     ],
     cfgImportOk: [
       '已校验并恢复配置项',
@@ -1680,6 +1823,7 @@
       'Ajustes validados y restaurados',
       'Paramètres validés et restaurés',
       'Einstellungen validiert und wiederhergestellt',
+      "Ayarlar doğrulandı ve geri yüklendi",
     ],
     cfgImportErr: [
       '配置 JSON 格式无效或无合法字段',
@@ -1690,6 +1834,7 @@
       'JSON no válido o sin claves de ajuste reconocidas',
       'JSON invalide ou aucune clé reconnue',
       'Ungültiges JSON oder keine erkannten Einstellungs-Keys',
+      "Geçersiz JSON veya tanınan ayar anahtarı yok",
     ],
     cfgResetOk: [
       '已恢复全部默认配置',
@@ -1700,27 +1845,28 @@
       'Todos los ajustes restablecidos',
       'Tous les paramètres réinitialisés',
       'Alle Standardeinstellungen wiederhergestellt',
+      "Tüm varsayılan ayarlar geri yüklendi",
     ],
-    thoughtClearCacheBtn: ['清空缓存', '清除快取', 'Clear Cache', 'キャッシュ消去', '캐시 비우기', 'Limpiar caché', 'Vider le cache', 'Cache leeren'],
-    thoughtViewLabel: ['译文排版视图', '譯文排版檢視', 'Reading View', '翻訳表示レイアウト', '번역 보기 레이아웃', 'Vista de lectura', 'Vue de lecture', 'Leseansicht'],
+    thoughtClearCacheBtn: ['清空缓存', '清除快取', 'Clear Cache', 'キャッシュ消去', '캐시 비우기', 'Limpiar caché', 'Vider le cache', 'Cache leeren', "Önbelleği temizle"],
+    thoughtViewLabel: ['译文排版视图', '譯文排版檢視', 'Reading View', '翻訳表示レイアウト', '번역 보기 레이아웃', 'Vista de lectura', 'Vue de lecture', 'Leseansicht', "Okuma görünümü"],
 
     // ── Omni Context Menu & Built-in Side-Pane Browser / Viewer ──────────────
-    omniOpenBuiltin: ['在右侧面板打开', '在右側面板開啟', 'Open in Side Pane', '右パネルで開く', '오른쪽 패널에서 열기', 'Abrir en panel lateral', 'Ouvrir dans le panneau latéral', 'Im Seitenpanel öffnen'],
-    omniOpenPreview: ['在右侧检视台预览', '在右側檢視台預覽', 'Preview in Workbench', 'ワークベンチでプレビュー', '워크벤치에서 미리보기', 'Vista previa en el banco', 'Aperçu dans l’atelier', 'In Workbench vorschauen'],
-    omniOpenExternal: ['使用系统默认程序打开', '使用系統預設程式開啟', 'Open in Default App', '既定のアプリで開く', '기본 앱으로 열기', 'Abrir con app predeterminada', 'Ouvrir avec l’app par défaut', 'In Standard-App öffnen'],
-    omniOpenBrowser: ['在系统浏览器中打开', '在系統瀏覽器中開啟', 'Open in System Browser', '標準ブラウザで開く', '시스템 브라우저에서 열기', 'Abrir en navegador', 'Ouvrir dans le navigateur', 'Im Systembrowser öffnen'],
-    omniRevealFolder: ['在文件夹中显示', '在資料夾中顯示', 'Reveal in Folder', 'フォルダに表示', '폴더에서 보기', 'Mostrar en carpeta', 'Afficher dans le dossier', 'Im Ordner anzeigen'],
-    omniInsertMention: ['作为 @引用 填入输入框', '作為 @引用 填入輸入框', 'Insert as @Mention', '@参照として入力欄へ挿入', '@멘션으로 입력창에 삽입', 'Insertar como @mención', 'Insérer comme @mention', 'Als @Erwähnung einfügen'],
-    omniCopyLink: ['复制链接地址', '複製連結位址', 'Copy Link URL', 'リンクURLをコピー', '링크 URL 복사', 'Copiar URL del enlace', 'Copier l’URL du lien', 'Link-URL kopieren'],
-    omniCopyAbsPath: ['复制绝对路径', '複製絕對路徑', 'Copy Absolute Path', '絶対パスをコピー', '절대 경로 복사', 'Copiar ruta absoluta', 'Copier le chemin absolu', 'Absoluten Pfad kopieren'],
-    omniCopyRelPath: ['复制相对路径', '複製相對路徑', 'Copy Relative Path', '相対パスをコピー', '상대 경로 복사', 'Copiar ruta relativa', 'Copier le chemin relatif', 'Relativen Pfad kopieren'],
-    omniCopyText: ['复制文本', '複製文字', 'Copy Text', 'テキストをコピー', '텍스트 복사', 'Copiar texto', 'Copier le texte', 'Text kopieren'],
-    omniZoomDiagram: ['放大查看图表', '放大檢視圖表', 'Zoom Diagram', '図を拡大表示', '다이어그램 확대', 'Ampliar diagrama', 'Agrandir le diagramme', 'Diagramm vergrößern'],
-    omniViewWorkbench: ['检视台视图', '檢視台檢視', 'Workbench View', 'プレビュー表示', '워크벤치 보기', 'Vista de banco', 'Vue atelier', 'Workbench-Ansicht'],
-    omniViewRaw: ['原始视图', '原始檢視', 'Raw View', 'ソース表示', '원본 보기', 'Vista sin formato', 'Vue brute', 'Rohansicht'],
-    omniReload: ['刷新', '重新整理', 'Reload', '再読み込み', '새로고침', 'Recargar', 'Recharger', 'Neu laden'],
-    omniBack: ['后退', '返回', 'Back', '戻る', '뒤로', 'Atrás', 'Précédent', 'Zurück'],
-    omniForward: ['前进', '前進', 'Forward', '進む', '앞으로', 'Adelante', 'Suivant', 'Vor'],
+    omniOpenBuiltin: ['在右侧面板打开', '在右側面板開啟', 'Open in Side Pane', '右パネルで開く', '오른쪽 패널에서 열기', 'Abrir en panel lateral', 'Ouvrir dans le panneau latéral', 'Im Seitenpanel öffnen', "Yan bölmede aç"],
+    omniOpenPreview: ['在右侧检视台预览', '在右側檢視台預覽', 'Preview in Workbench', 'ワークベンチでプレビュー', '워크벤치에서 미리보기', 'Vista previa en el banco', 'Aperçu dans l’atelier', 'In Workbench vorschauen', "Çalışma tezgahında önizle"],
+    omniOpenExternal: ['使用系统默认程序打开', '使用系統預設程式開啟', 'Open in Default App', '既定のアプリで開く', '기본 앱으로 열기', 'Abrir con app predeterminada', 'Ouvrir avec l’app par défaut', 'In Standard-App öffnen', "Varsayılan uygulamada aç"],
+    omniOpenBrowser: ['在系统浏览器中打开', '在系統瀏覽器中開啟', 'Open in System Browser', '標準ブラウザで開く', '시스템 브라우저에서 열기', 'Abrir en navegador', 'Ouvrir dans le navigateur', 'Im Systembrowser öffnen', "Sistem tarayıcısında aç"],
+    omniRevealFolder: ['在文件夹中显示', '在資料夾中顯示', 'Reveal in Folder', 'フォルダに表示', '폴더에서 보기', 'Mostrar en carpeta', 'Afficher dans le dossier', 'Im Ordner anzeigen', "Klasörde göster"],
+    omniInsertMention: ['作为 @引用 填入输入框', '作為 @引用 填入輸入框', 'Insert as @Mention', '@参照として入力欄へ挿入', '@멘션으로 입력창에 삽입', 'Insertar como @mención', 'Insérer comme @mention', 'Als @Erwähnung einfügen', "@Mention olarak ekle"],
+    omniCopyLink: ['复制链接地址', '複製連結位址', 'Copy Link URL', 'リンクURLをコピー', '링크 URL 복사', 'Copiar URL del enlace', 'Copier l’URL du lien', 'Link-URL kopieren', "Bağlantı URL'sini kopyala"],
+    omniCopyAbsPath: ['复制绝对路径', '複製絕對路徑', 'Copy Absolute Path', '絶対パスをコピー', '절대 경로 복사', 'Copiar ruta absoluta', 'Copier le chemin absolu', 'Absoluten Pfad kopieren', "Mutlak yolu kopyala"],
+    omniCopyRelPath: ['复制相对路径', '複製相對路徑', 'Copy Relative Path', '相対パスをコピー', '상대 경로 복사', 'Copiar ruta relativa', 'Copier le chemin relatif', 'Relativen Pfad kopieren', "Göreli yolu kopyala"],
+    omniCopyText: ['复制文本', '複製文字', 'Copy Text', 'テキストをコピー', '텍스트 복사', 'Copiar texto', 'Copier le texte', 'Text kopieren', "Metni kopyala"],
+    omniZoomDiagram: ['放大查看图表', '放大檢視圖表', 'Zoom Diagram', '図を拡大表示', '다이어그램 확대', 'Ampliar diagrama', 'Agrandir le diagramme', 'Diagramm vergrößern', "Diyagramı yakınlaştır"],
+    omniViewWorkbench: ['检视台视图', '檢視台檢視', 'Workbench View', 'プレビュー表示', '워크벤치 보기', 'Vista de banco', 'Vue atelier', 'Workbench-Ansicht', "Çalışma tezgahı görünümü"],
+    omniViewRaw: ['原始视图', '原始檢視', 'Raw View', 'ソース表示', '원본 보기', 'Vista sin formato', 'Vue brute', 'Rohansicht', "Ham görünüm"],
+    omniReload: ['刷新', '重新整理', 'Reload', '再読み込み', '새로고침', 'Recargar', 'Recharger', 'Neu laden', "Yeniden yükle"],
+    omniBack: ['后退', '返回', 'Back', '戻る', '뒤로', 'Atrás', 'Précédent', 'Zurück', "Geri"],
+    omniForward: ['前进', '前進', 'Forward', '進む', '앞으로', 'Adelante', 'Suivant', 'Vor', "İleri"],
   };
 
   // Static UI keys required by non-settings runtime modules (Channel 1 slim slice)

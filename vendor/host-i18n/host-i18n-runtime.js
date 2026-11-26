@@ -758,6 +758,7 @@
   }
 
   function detectExternalLocalization(rootObj, doc, options) {
+    if (options && options.locale === 'tr') return { detected: false, layer: 0, reason: null, provider: null, detail: null };
     var l1 = detectLayer1External(rootObj, doc);
     if (l1.hit) {
       return {
@@ -1888,6 +1889,8 @@
       }
     } catch (e) {}
     var mode = opts.mode === 'on' || opts.mode === 'off' ? opts.mode : 'auto';
+    var locale = opts.locale === 'tr' ? 'tr' : 'zh-CN';
+    var initialHtmlLang = doc && doc.documentElement ? getAttr(doc.documentElement, 'lang') : null;
     var nowFn =
       typeof opts.nowFn === 'function'
         ? opts.nowFn
@@ -2619,7 +2622,7 @@
         origText !== undefined
           ? currentText === origText
           : hasOwn.call(st.entries, currentText) || currentText === st.lastOrig;
-      var isExternalZh = ZH_CHAR_RE.test(currentText || '') && currentText !== expectedText;
+      var isExternalZh = locale !== 'tr' && ZH_CHAR_RE.test(currentText || '') && currentText !== expectedText;
       if (isBackToOrig || isExternalZh) {
         var refAt = translatedAt || st.lastTranslatedAt;
         var inWindow =
@@ -3907,6 +3910,9 @@
     function boot(targetMode) {
       mode = targetMode === 'on' || targetMode === 'off' ? targetMode : 'auto';
       state.mode = mode;
+      if (locale === 'tr' && doc && doc.documentElement) {
+        try { doc.documentElement.setAttribute('lang', 'tr'); } catch (e) {}
+      }
 
       selectEngineForMode(mode);
 
@@ -3949,7 +3955,7 @@
       }
 
       if (mode === 'auto') {
-        var extCheck = detectExternalLocalization(win, doc);
+        var extCheck = detectExternalLocalization(win, doc, { locale: locale });
         if (extCheck.detected) {
           state.active = false;
           state.status = 'yielded';
@@ -3970,7 +3976,7 @@
           domReadyHandler = function () {
             if (!state.active || state.destroyed) return;
             if (state.mode === 'auto') {
-              var recheck = detectExternalLocalization(win, doc);
+              var recheck = detectExternalLocalization(win, doc, { locale: locale });
               if (recheck.detected) {
                 yieldAndRollback(recheck.reason || 'external-ui-zh', recheck.provider);
                 return;
@@ -4005,6 +4011,12 @@
       },
       destroy: function () {
         teardownRuntime('off', 'destroyed', false, null, true);
+        if (locale === 'tr' && doc && doc.documentElement && getAttr(doc.documentElement, 'lang') === 'tr') {
+          try {
+            if (initialHtmlLang === null) doc.documentElement.removeAttribute('lang');
+            else doc.documentElement.setAttribute('lang', initialHtmlLang);
+          } catch (e) {}
+        }
       },
       setMode: function (nextMode, forceReboot) {
         var norm = nextMode === 'on' || nextMode === 'off' ? nextMode : 'auto';

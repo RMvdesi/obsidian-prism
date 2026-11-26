@@ -11,6 +11,7 @@
     { id: 'es', label: 'Español', htmlLang: 'es', intl: 'es-ES' },
     { id: 'fr', label: 'Français', htmlLang: 'fr', intl: 'fr-FR' },
     { id: 'de', label: 'Deutsch', htmlLang: 'de', intl: 'de-DE' },
+    { id: 'tr', label: 'Türkçe', htmlLang: 'tr', intl: 'tr-TR' },
   ]);
 
   const SUPPORTED_LANG_IDS = Object.freeze(LANG_OPTIONS.map((opt) => opt.id));
@@ -37,6 +38,7 @@
       return 'fr';
     }
     if (clean === 'de' || clean.startsWith('de-') || clean === 'german' || clean === 'deutsch') return 'de';
+    if (clean === 'tr' || clean.startsWith('tr-') || clean === 'turkish' || clean === 'türkçe') return 'tr';
     if (clean === 'yue' || clean.startsWith('yue-') || clean === 'zh-yue' || clean.includes('cantonese')) {
       return 'zh-CN';
     }

@@ -73,6 +73,12 @@ export const SYSTEM_PROMPTS_BY_LANG = Object.freeze({
     concise:
       'Du bist ein effizienter Assistent für prägnante Übersetzungen technischer Überlegungen. Fasse die eingegebene Gedankenkette klar und knapp in der Ich-Form auf Deutsch zusammen. Bewahre alle exakten Dateipfade, Zeilennummern, wichtigen Code-Bezeichner und Kernbegründungen ohne zusätzliche Überschriften oder Fülltext.',
   }),
+  tr: Object.freeze({
+    technical:
+      'Translate the input Chain-of-Thought into clear, natural first-person engineering notes in Turkish. Translate all foreign-language prose completely. Preserve code identifiers, function and class names, file paths, line numbers, terminal commands, and backtick formatting exactly. Do not add greetings or headings; output only the translated reasoning.',
+    concise:
+      'Summarize and translate the input Chain-of-Thought into concise first-person engineering notes in Turkish. Preserve exact file paths, line numbers, key code identifiers, and conclusions. Output only the translated notes.',
+  }),
 });
 
 const GTX_TARGET_LANG_MAP = Object.freeze({
@@ -84,6 +90,7 @@ const GTX_TARGET_LANG_MAP = Object.freeze({
   es: 'es',
   fr: 'fr',
   de: 'de',
+  tr: 'tr',
 });
 
 export function normalizeTargetLang(lang) {
@@ -97,6 +104,7 @@ export function normalizeTargetLang(lang) {
   if (/^es(?:\b|-)/.test(s) || s === 'spanish') return 'es';
   if (/^fr(?:\b|-)/.test(s) || s === 'french') return 'fr';
   if (/^de(?:\b|-)/.test(s) || s === 'german') return 'de';
+  if (/^tr(?:\b|-)/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
   if (/^en(?:\b|-)/.test(s) || s === 'english') return 'en';
   return 'zh-CN';
 }
@@ -2608,6 +2616,7 @@ export class ThoughtTranslatorService {
         es: 'Spanish (Español)',
         fr: 'French (Français)',
         de: 'German (Deutsch)',
+        tr: 'Turkish',
       };
       return `${cp}\n\n[Output Language Requirement] Target output language MUST be ${langNames[tl] || tl}. When the source mixes languages, preserve already-natural target-language parts and translate all foreign paragraphs completely.`;
     }
@@ -3604,7 +3613,7 @@ export class ThoughtTranslatorService {
     const prose = stripNonProseForLangCheck(p).trim();
     if (!prose) return true;
     const tl = normalizeTargetLang(targetLang);
-    if (tl === 'zh-TW' || tl === 'es' || tl === 'fr' || tl === 'de') {
+    if (tl === 'zh-TW' || tl === 'es' || tl === 'fr' || tl === 'de' || tl === 'tr') {
       // 繁中及西/法/德语机翻需经过 GTX 完整转换，仅纯符号/无正文跳过
       return false;
     }

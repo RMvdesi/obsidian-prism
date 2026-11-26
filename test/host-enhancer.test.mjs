@@ -979,7 +979,7 @@ test('style.css covers all 6 Wave-2 config hooks, eliminates double borders & en
 });
 
 // ── Test 6: #153 8-Language Live Refresh + yue->zh-CN Migration, Warm-Light Sidecar Parity, Mid-History Turn Math & Group-Card Yield ─
-test('Host enhancer supports 8 languages + yue->zh-CN migration + live switch, aligns warm-light sidecar to prism-alabaster, resolves mid-history turn numbers, and yields to host group-card', () => {
+test('Host enhancer supports 9 languages + yue->zh-CN migration + live switch, aligns warm-light sidecar to prism-alabaster, resolves mid-history turn numbers, and yields to host group-card', () => {
   const env = createMockEnv();
   let curLang = 'yue';
 
@@ -1068,7 +1068,7 @@ test('Host enhancer supports 8 languages + yue->zh-CN migration + live switch, a
   const turnNums = pop.querySelectorAll('.ag-cs-nav-outline-item').map((n) => n.getAttribute('data-turn-num'));
   assert.deepEqual(turnNums, ['27', '28', '29'], 'Mid-history virtualized slice must anchor to active turn dot #28');
 
-  // Switch across all 8 languages dynamically -> sync()/onThemeChange(false) refreshes fold button & open outline immediately
+  // Switch across all supported languages dynamically -> sync()/onThemeChange(false) refreshes fold button & open outline immediately
   for (const [nextLang, expFold, expFoldSteps] of [
     ['zh-TW', '摺疊 (52行)', '收起步驟'],
     ['ja', '折りたたむ (52行)', '手順を畳む'],
@@ -1076,6 +1076,7 @@ test('Host enhancer supports 8 languages + yue->zh-CN migration + live switch, a
     ['es', 'Contraer (52L)', 'Contraer pasos'],
     ['fr', 'Replier (52L)', 'Replier étapes'],
     ['de', 'Einklappen (52Z)', 'Schritte einklappen'],
+    ['tr', 'Katla (52 satır)', 'Adımları katla'],
     ['en', 'Fold (52L)', 'Fold Steps'],
   ]) {
     curLang = nextLang;

@@ -79,7 +79,7 @@ const NON_CHAT_MODEL_RE = new RegExp(
 );
 const FAST_CHAT_MODEL_RE = /(?:^|[-_/:.])(?:flash|mini|nano|haiku|deepseek-chat|turbo|lite)(?:$|[-_/:.\d])/i;
 
-// 将语言码统一规范为 8 语（zh-CN/zh-TW/en/ja/ko/es/fr/de），移除 yue，未知语言兜底 en
+// Normalize supported locales (zh-CN/zh-TW/en/ja/ko/es/fr/de/tr); legacy yue maps to zh-CN.
 function normalizeSuggesterLang(raw, defaultLang = 'en') {
   const s = String(raw || '').trim().toLowerCase().replace(/_/g, '-');
   if (!s || s === 'auto') return defaultLang;
@@ -91,6 +91,7 @@ function normalizeSuggesterLang(raw, defaultLang = 'en') {
   if (/^es(?:\b|-)/.test(s) || s === 'spanish') return 'es';
   if (/^fr(?:\b|-)/.test(s) || s === 'french') return 'fr';
   if (/^de(?:\b|-)/.test(s) || s === 'german') return 'de';
+  if (/^tr(?:\b|-)/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
   if (/^en(?:\b|-)/.test(s) || s === 'english') return 'en';
   return defaultLang;
 }
@@ -386,6 +387,7 @@ function buildSamplingInstruction(lang = 'en') {
     es: 'Spanish (Español)',
     fr: 'French (Français)',
     de: 'German (Deutsch)',
+    tr: 'Turkish',
   };
   const normLang = normalizeSuggesterLang(lang, 'en');
   const langLabel = langLabelMap[normLang] || langLabelMap.en;

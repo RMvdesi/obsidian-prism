@@ -1146,8 +1146,8 @@ test('Defense 3: optional Go native GOMEMLIMIT enforces strict preset allowlist,
   }
 });
 
-test('Settings panel 8-locale Memory/DB Guard + GOMEMLIMIT controls and engineering gates (Ch1 < 550KB, configRefresh < 4KB, 0 CJK leak, 0 BOM/CRLF, 0 top-level :has)', async () => {
-  // 1) All 8 locales have complete non-empty strings & 0 CJK leak in en/es/fr/de
+test('Settings panel 9-locale Memory/DB Guard + GOMEMLIMIT controls and engineering gates (Ch1 < 550KB, configRefresh < 4KB, 0 CJK leak, 0 BOM/CRLF, 0 top-level :has)', async () => {
+  // 1) All 9 locales have complete non-empty strings & 0 CJK leak in Latin locales
   const newKeys = [
     'storageGuardTitle', 'storageGuardSummaryTpl', 'storageGuardEnableAutoExitBtn', 'storageGuardSnooze24hBtn',
     'storageGuardBusyMsg', 'storageAutoExitTitle', 'storageAutoExitDesc', 'storageAutoExitOff', 'storageAutoExitOn',
@@ -1160,8 +1160,8 @@ test('Settings panel 8-locale Memory/DB Guard + GOMEMLIMIT controls and engineer
   ];
   for (const k of newKeys) {
     const row = i18nLocales.UI_TABLE[k];
-    assert.ok(Array.isArray(row) && row.length === 8, `Missing 8-locale row for ${k}`);
-    for (const idx of [2, 5, 6, 7]) {
+    assert.ok(Array.isArray(row) && row.length === 9, `Missing 9-locale row for ${k}`);
+    for (const idx of [2, 5, 6, 7, 8]) {
       assert.equal(CJK_RE.test(row[idx]), false, `CJK leak in ${k}[${idx}]: ${row[idx]}`);
     }
   }

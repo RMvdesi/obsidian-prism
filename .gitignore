@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+i18n-work/
 .antigravity/
 installer.exe
 *.exe
@@ -36,3 +37,4 @@ obj/
 docs/audit/
 *.bak
 *.swp
+i18n-work/

@@ -3320,6 +3320,7 @@ export class PrismDaemon {
       es: 'Cerrar',
       fr: 'Fermer',
       de: 'Schließen',
+      tr: 'Close',
     };
     const expr = buildStorageGuardBannerExpression({
       autoArchiveOnExit: Boolean(health.autoArchiveOnExit),
