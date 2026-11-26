@@ -12420,6 +12420,7 @@ const REMOVE_EXPRESSION = `(() => {
     'data-ag-sb-more-hidden',
     'data-ag-sb-more-item',
     'data-ag-scrolling',
+    'data-ag-cs-stream-active',
     'data-ag-diff-chip',
     'data-ag-diff-chip-file',
     'data-ag-diff-chip-row',

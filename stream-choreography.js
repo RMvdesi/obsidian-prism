@@ -1539,9 +1539,21 @@
       }
     };
 
+    const syncStreamActiveAttr = (on) => {
+      const h = docOf()?.documentElement;
+      if (!h) return;
+      if (on) {
+        if (ga(h, 'data-ag-cs-stream-active') !== '1' && typeof h.setAttribute === 'function') setAttrIfChanged(h, 'data-ag-cs-stream-active', '1');
+      } else if (ha(h, 'data-ag-cs-stream-active') && typeof h.removeAttribute === 'function') {
+        ra(h, 'data-ag-cs-stream-active');
+      }
+    };
+
     const syncDualStreamEngine = () => {
-      const active = canStreamMotion() && isConvRunning();
-      const views = active ? findFormalConvViews() : [];
+      const running = isConvRunning();
+      const views = running ? findFormalConvViews() : [];
+      syncStreamActiveAttr(running && views.length > 0);
+      const active = canStreamMotion() && running;
       if (!active || views.length === 0) {
         if (streamObs) {
           try {
@@ -1707,6 +1719,7 @@
     };
 
     const disconnectStreamObserver = () => {
+      syncStreamActiveAttr(false);
       if (streamObs) {
         try {
           streamObs.disconnect();

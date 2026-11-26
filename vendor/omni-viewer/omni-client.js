@@ -2295,6 +2295,7 @@
 
     function decorateMermaidContainers(scopeEl) {
       if (!D || !scopeEl || typeof scopeEl.querySelectorAll !== 'function') return;
+      if (scopeEl.nodeType === 1 && !scopeEl.firstElementChild && !isMermaidContainer(scopeEl)) return;
       const candidates = scopeEl.querySelectorAll(
         '[data-testid*="mermaid"], .mermaid, svg[id^="mermaid"], svg[aria-roledescription]'
       );
@@ -2744,13 +2745,28 @@
       decorateAuxUnsupportedViews(root);
     }
 
-    function isIgnoredMutationTarget(node) {
+    function isIgnoredMutationTarget(node, batchCache) {
       let cur = node && node.nodeType === 1 ? node : node?.parentElement;
       let sawExplicitScan = false;
+      let trail = null;
+      const finish = (val) => {
+        if (batchCache && !sawExplicitScan && trail) {
+          for (let i = 0; i < trail.length; i++) batchCache.set(trail[i], val);
+        }
+        return val;
+      };
       for (let d = 0; cur && d < 24; d++, cur = cur.parentElement) {
+        if (batchCache && !sawExplicitScan) {
+          const cached = batchCache.get(cur);
+          if (cached !== undefined) return finish(cached);
+          (trail || (trail = [])).push(cur);
+        }
         const scanAttr = cur.getAttribute?.('data-omni-scan');
         if (scanAttr !== null && scanAttr !== undefined && scanAttr !== 'false' && scanAttr !== '0') {
           sawExplicitScan = true;
+        }
+        if (!sawExplicitScan && cur.hasAttribute?.('data-ag-owned')) {
+          return finish(true);
         }
         const id = cur.id;
         if (
@@ -2762,23 +2778,23 @@
           id === 'antigravity-quota-widget' ||
           id === 'antigravity-translation-audit'
         ) {
-          return true;
+          return finish(true);
         }
         if (cur.hasAttribute?.('data-agy-hans-ui')) {
-          return true;
+          return finish(true);
         }
         if (!sawExplicitScan && cur.getAttribute?.('role') === 'dialog') {
-          return true;
+          return finish(true);
         }
-        if (cur.hasAttribute?.('data-hover-card-popup') || cur.tagName === 'ASIDE') return true;
+        if (cur.hasAttribute?.('data-hover-card-popup') || cur.tagName === 'ASIDE') return finish(true);
         if (d === 0) {
           const f = cur.firstElementChild;
-          if (f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup')) return true;
-          if (cur.hasAttribute?.('data-base-ui-portal') && cur.querySelector?.('[data-hover-card-popup]')) return true;
+          if (f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup')) return finish(true);
+          if (cur.hasAttribute?.('data-base-ui-portal') && cur.querySelector?.('[data-hover-card-popup]')) return finish(true);
         }
         const tid = cur.getAttribute?.('data-testid');
-        if (tid === 'agent-input-box' || tid === 'conversation-row-sidebar' || tid === 'conversation-list-sidebar' || tid === 'project-header') return true;
-        if (cur.parentElement?.getAttribute?.('data-testid') === 'sidebar-split' && cur === cur.parentElement.firstElementChild) return true;
+        if (tid === 'agent-input-box' || tid === 'conversation-row-sidebar' || tid === 'conversation-list-sidebar' || tid === 'project-header') return finish(true);
+        if (cur.parentElement?.getAttribute?.('data-testid') === 'sidebar-split' && cur === cur.parentElement.firstElementChild) return finish(true);
         const cls = typeof cur.className === 'string' ? cur.className : '';
         if (
           cls &&
@@ -2797,10 +2813,10 @@
             cls.indexOf('ag-v2-mascot-') !== -1 ||
             cls.indexOf('ag-v2-chroma-fx') !== -1)
         ) {
-          return true;
+          return finish(true);
         }
       }
-      return false;
+      return finish(false);
     }
 
     function scheduleTextNodeHighlight(textNode) {
@@ -2994,23 +3010,24 @@
       D.addEventListener('keydown', onDocKeyDown, true);
       D.addEventListener('mousemove', onDocPointerMove, { passive: true });
       D.addEventListener('visibilitychange', onWindowBlurOrScroll);
-      D.addEventListener('scroll', onWindowBlurOrScroll, true);
+      D.addEventListener('scroll', onWindowBlurOrScroll, { capture: true, passive: true });
       W.addEventListener?.('blur', onWindowBlurOrScroll);
       W.addEventListener?.('resize', onWindowBlurOrScroll);
       W.addEventListener?.('message', onWindowMessage);
 
       if (typeof W.MutationObserver === 'function') {
         domObserver = new W.MutationObserver((mutations) => {
+          const batchIgnored = typeof WeakMap === 'function' ? new WeakMap() : null;
           for (let i = 0; i < mutations.length; i++) {
             const m = mutations[i];
-            if (isIgnoredMutationTarget(m.target)) continue;
+            if (isIgnoredMutationTarget(m.target, batchIgnored)) continue;
             if (m.type === 'childList') {
               const useHl = supportsHighlightApi();
               let queuedTargetAux = false;
               for (let j = 0; j < m.addedNodes.length; j++) {
                 const n = m.addedNodes[j];
                 if (n.nodeType !== 1 && n.nodeType !== 3) continue;
-                if (isIgnoredMutationTarget(n)) continue;
+                if (isIgnoredMutationTarget(n, batchIgnored)) continue;
                 if (useHl && n.nodeType === 3) {
                   scheduleTextNodeHighlight(n);
                   if (!queuedTargetAux && mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) {
@@ -3112,7 +3129,7 @@
         D.removeEventListener('keydown', onDocKeyDown, true);
         D.removeEventListener('mousemove', onDocPointerMove, { passive: true });
         D.removeEventListener('visibilitychange', onWindowBlurOrScroll);
-        D.removeEventListener('scroll', onWindowBlurOrScroll, true);
+        D.removeEventListener('scroll', onWindowBlurOrScroll, { capture: true, passive: true });
         try { D.getElementById?.(STYLE_EL_ID)?.remove?.(); } catch (_) {}
         if (D.documentElement) {
           D.documentElement.removeAttribute?.('data-ag-omni-hover-token');

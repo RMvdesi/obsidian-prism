@@ -748,16 +748,22 @@
       var docListeners = [];
       var rootListeners = [];
 
+      function normListenerOpt(opt) {
+        return typeof opt === 'object' && opt !== null ? opt : Boolean(opt);
+      }
+
       function onDoc(type, fn, capture) {
         if (!doc || typeof doc.addEventListener !== 'function') return;
-        doc.addEventListener(type, fn, Boolean(capture));
-        docListeners.push([type, fn, Boolean(capture)]);
+        var opt = normListenerOpt(capture);
+        doc.addEventListener(type, fn, opt);
+        docListeners.push([type, fn, opt]);
       }
 
       function onRoot(type, fn, capture) {
         if (!root || typeof root.addEventListener !== 'function') return;
-        root.addEventListener(type, fn, Boolean(capture));
-        rootListeners.push([type, fn, Boolean(capture)]);
+        var opt = normListenerOpt(capture);
+        root.addEventListener(type, fn, opt);
+        rootListeners.push([type, fn, opt]);
       }
 
       function removeAllListeners() {
@@ -6497,7 +6503,12 @@
         }
 
         if (!suppressUntilMs) {
-          if (ev && ev.type === 'click' && !overlayEl) syncMiniKeycapBadges();
+          if (ev && ev.type === 'click' && !overlayEl) {
+            var cTgt = ev.target;
+            if (!cTgt || !cTgt.closest || !cTgt.closest('input,textarea,[contenteditable="true"],.ProseMirror,[data-testid="autoscroll-viewport"]')) {
+              scheduleBadgeSync(40);
+            }
+          }
           return;
         }
         if (Date.now() > suppressUntilMs) {
@@ -6705,16 +6716,16 @@
         bentoUi.ensureStyles(doc);
         onDoc('pointerdown', onDocPointerDown, true);
         onDoc('mousedown', onDocMouseDown, true);
-        onDoc('pointermove', onDocPointerMove, true);
+        onDoc('pointermove', onDocPointerMove, { capture: true, passive: true });
         onDoc('pointerup', onDocPointerUp, true);
-        onDoc('pointercancel', onDocPointerCancel, true);
+        onDoc('pointercancel', onDocPointerCancel, { capture: true, passive: true });
         onDoc('contextmenu', onDocPointerCancel, true);
-        onDoc('scroll', onDocScroll, true);
+        onDoc('scroll', onDocScroll, { capture: true, passive: true });
         onDoc('visibilitychange', onDocVisibilityChange, false);
         onDoc('mouseup', onDocSuppressClick, true);
         onDoc('click', onDocSuppressClick, true);
         onDoc('keydown', onDocKeyDown, true);
-        onRoot('resize', onWindowResize, false);
+        onRoot('resize', onWindowResize, { passive: true });
         onRoot('blur', onWindowBlur, false);
         onRoot('focus', onWindowFocus, false);
         onRoot('mouseout', onWindowMouseOut, false);

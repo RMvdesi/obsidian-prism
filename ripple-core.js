@@ -1691,6 +1691,16 @@ a *= 0.5;
 }
 return v;
 }
+float fbm3(vec2 p) {
+float v = 0.0625;
+float a = 0.5;
+for (int i = 0; i < 3; i++) {
+v += a * noise(p);
+p = p * 2.03 + 17.1;
+a *= 0.5;
+}
+return v;
+}
 float halftone(vec2 px, vec2 res, float y, float t, float cell, float msk) {
 float persp = 1.0 / (0.55 + y);
 vec2 g = vec2((px.x - res.x * 0.5) * persp, res.y * log(0.55 + y));
@@ -1783,21 +1793,30 @@ vec2 px = gl_FragCoord.xy / max(uDpr, 0.5);
 vec2 res = uRes / max(uDpr, 0.5);
 float t = uTime;
 vec2 p = (px - res * 0.5) / max(res.y, 1.0);
-vec2 q = p + 0.09 * vec2(fbm(p * 2.0 + vec2(t * 0.16, 0.0)), fbm(p * 2.0 + vec2(3.1, -t * 0.13))) - 0.045;
+vec2 q = p + 0.09 * vec2(fbm3(p * 2.0 + vec2(t * 0.16, 0.0)), fbm3(p * 2.0 + vec2(3.1, -t * 0.13))) - 0.045;
 float y = uv.y / reach;
 float waveA = sin(uv.x * 5.2 - t * 0.68);
 float waveB = sin(uv.x * 8.6 + t * 0.46 + 1.4);
 float curtain = 0.5 + 0.32 * waveA + 0.18 * waveB;
-float jut = (fbm(vec2(px.x / 220.0 + t * 0.18, t * 0.11)) - 0.5) * 0.68 + (waveA * 0.65 + waveB * 0.35) * 0.24;
-float h = y + stretch * (0.36 * jut + 0.11 * (fbm(vec2(px.x / 90.0 - t * 0.21, t * 0.14 + 3.0)) - 0.5));
+float jut = (fbm3(vec2(px.x / 220.0 + t * 0.18, t * 0.11)) - 0.5) * 0.68 + (waveA * 0.65 + waveB * 0.35) * 0.24;
+float h = y + stretch * (0.36 * jut + 0.11 * (fbm3(vec2(px.x / 90.0 - t * 0.21, t * 0.14 + 3.0)) - 0.5));
 float glow = exp(-max(h, 0.0) * max(h, 0.0) * 4.0) * (0.76 + 0.42 * curtain) * mix(0.35, 1.0, smoothstep(0.0, 0.3, uv.x) * (1.0 - smoothstep(0.7, 1.0, uv.x)));
-float basePhase = px.x / max(res.x, 1.0) * 0.9 + t * 0.15 + 0.22 * fbm(q * 1.5);
+if (glow * topFeather < 0.0008 && abs(uSurge) < 0.0001) {
+outColor = vec4(0.0);
+return;
+}
+float basePhase = px.x / max(res.x, 1.0) * 0.9 + t * 0.15 + 0.22 * fbm3(q * 1.5);
 float semId = floor(uSemantic + 0.001);
 float semW = semId > 0.5 ? clamp(1.0 - (uSemantic - semId) / 0.98, 0.0, 1.0) : 0.0;
 vec3 base = sm(spectrumBaseDark(uSpectrum, basePhase), 1.0, basePhase, semId, semW);
 float n = fbm(q * 3.0 + t * 0.16);
 float field = (1.0 - exp(-1.8 * glow * (0.75 + 0.45 * n))) / (1.0 - exp(-1.8 * 1.2));
-float pPhase = uv.x * 1.18 - t * 0.18 + 0.28 * fbm(q * 2.1 + vec2(0.0, t * 0.12)) + 0.14 * y;
+bool M = abs(uSpectrum - 5.0) < 0.5;
+float effPrism = M ? uPrism * 0.28 : uPrism;
+float pPhase = 0.0;
+if (uDark <= 0.5 || effPrism > 0.0001 || abs(uSurge) > 0.0001) {
+pPhase = uv.x * 1.18 - t * 0.18 + 0.28 * fbm3(q * 2.1 + vec2(0.0, t * 0.12)) + 0.14 * y;
+}
 vec3 dotPrismTint = vec3(0.0);
 float dotPrismMix = 0.0;
 float dotBoost = 0.0;
@@ -1805,8 +1824,6 @@ float surgeArc = 0.0;
 float surgeDy = 0.0;
 float chimeWave = 0.0;
 float chimePhase = 0.0;
-bool M = abs(uSpectrum - 5.0) < 0.5;
-float effPrism = M ? uPrism * 0.28 : uPrism;
 if (effPrism > 0.0001 || abs(uSurge) > 0.0001) {
 vec3 pCol = sm(spectrumPrismDark(uSpectrum, pPhase), 1.0, pPhase, semId, semW);
 if (effPrism > 0.0001) {
@@ -1835,7 +1852,7 @@ field *= topFeather;
 dotBoost *= topFeather;
 float band = smoothstep(0.3, 0.55, field) * (1.0 - smoothstep(0.7, 0.98, field));
 float dotMsk = clamp(band * 0.8 * smoothstep(0.12, 0.32, -jut) + dotBoost, 0.0, 1.0);
-float dA = halftone(px, res, uv.y, t, 7.0, dotMsk);
+float dA = dotMsk > 0.001 ? halftone(px, res, uv.y, t, 7.0, dotMsk) : 0.0;
 float grain=hash(px+fract(t*7.)*91.)-.5;
 vec3 c,dc;float a,da;
 if(uDark>.5){

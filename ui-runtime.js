@@ -1776,9 +1776,11 @@
     ', #ag-prism-css, #ag-prism-omni-css, #ag-prism-sidebar-studio-css, #ag-prism-periodic-picker-root, #ag-prism-periodic-picker-css, .ag-pp-hold-ring, .ag-pp-mini-keycap, #ag-claude-style-css, #ag-prism-motion-off-css, #ag-prism-host-alert-css, ' +
     EXT_ZH_UI_SEL;
 
-  const isOwnPluginNode = (t) => {
+  const isOwnPluginNode = (t, selfOnly) => {
     const el = t ? (t.closest ? t : t[K_PE]) : null;
-    return !!(el?.closest && (el.closest('[data-ag-owned],[data-prism-ignore]') || el.closest(OWN_PLUGIN_SELECTOR)));
+    if (!el?.closest) return false;
+    if (el.closest('[data-ag-owned],[data-prism-ignore]')) return true;
+    return selfOnly && el === t && el.matches ? el.matches(OWN_PLUGIN_SELECTOR) : !!el.closest(OWN_PLUGIN_SELECTOR);
   };
   const isOwnPluginMutation = (m) => isMutAll(m, isOwnPluginNode);
 
@@ -1806,7 +1808,7 @@
 
   const A_BL = 'data-ag-cs-bleed', BLEED_TRIGS = new Set(['thinking-collapsible-trigger', 'tool-group-collapsible', 'worked-for-collapsible']), bleedEls = new Set();
   const syncBleedTables = () => {
-    const hosts = qa(D, '.md-table-host');
+    const hosts = D.getElementsByClassName ? D.getElementsByClassName('md-table-host') : qa(D, '.md-table-host');
     if (!hosts.length && !bleedEls.size) return;
     const next = new Set();
     for (const h of hosts) {
@@ -2772,12 +2774,12 @@
               dirtyFlags.c = anyRelevant = true;
               continue;
             }
-            if (/^data-(?:ag-prism-wallpaper|has-(?:drawer-)?browser-hole)$/.test(m.attributeName)) { dirtyFlags.r = anyRelevant = true; continue; }
+            if (m.attributeName?.charCodeAt(0) === 100 && /^data-(?:ag-prism-wallpaper|has-(?:drawer-)?browser-hole)$/.test(m.attributeName)) { dirtyFlags.r = anyRelevant = true; continue; }
             if (m.attributeName === 'data-ag-prism-mode') dirtyFlags.c = true;
             dirtyFlags.t = anyRelevant = true;
             continue;
           }
-          if (/^data-has-(?:drawer-)?browser-hole$/.test(m.attributeName)) { dirtyFlags.r = anyRelevant = true; continue; }
+          if (m.attributeName?.charCodeAt(0) === 100 && /^data-has-(?:drawer-)?browser-hole$/.test(m.attributeName)) { dirtyFlags.r = anyRelevant = true; continue; }
           if (tidOf(tgt?.[K_PE]) === 'aux-pane-split') {
             let dualChanged = false;
             runGuardedMut(() => { dualChanged = axU(tgt[K_PE]); });
@@ -2853,7 +2855,7 @@
             if (!list || !list.length) return;
             for (let j = 0; j < list.length; j++) {
               const node = list[j];
-              if (!isElementLike(node) || isThoughtIsolatedNode(node) || isOwnPluginNode(node) || isHoverCardNode(node)) continue;
+              if (!isElementLike(node) || isThoughtIsolatedNode(node) || isOwnPluginNode(node, !!pCtx) || isHoverCardNode(node)) continue;
               if (isAdd && tidOf(node) === 'conversation-row-sidebar' && ga(node, 'data-selected') === 'true') {
                 streamChoreoCtl.stampSidebarRowRunningImmediate?.(node);
               }
@@ -3096,7 +3098,7 @@
       qa(D, '#ag-prism-settings-v101-css,#ag-prism-studio-v101-css,#ag-prism-omni-css,#ag-prism-motion-off-css,#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap,#ag-prism-wallpaper-root,#ag-prism-wallpaper-css,#ag-prism-suggester-css,.ag-omni-dock,.ag-omni-menu,.ag-prism-omni-menu,.ag-prism-omni-pane,.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-sb-more-wrap,[data-ag-prism-omni-owned="1"],.ag-cs-home-panel,.ag-cs-home-panel-seat,.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill,.ag-cs-pill-glide,.ag-cs-conv-aura-host,.ag-cs-conv-glow,.ag-cs-prism-rim-cv,.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-model-glyph,.ag-cs-panel-row-glyph,[data-testid="orchestrator-effort-bar"],.ag-cs-thinking-spark,.ag-cs-orbital-backdrop,.ag-cs-perf-backdrop,.ag-v2-habitat-prop,#' + SETTINGS_SEC_ID).forEach((e) => e.remove());
       const html = de();
       if (html) {
-        for (const s of 'style|theme|palette|light-preset|motion|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);
+        for (const s of 'style|theme|palette|light-preset|motion|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple|stream-active'.split('|')) ra(html, 'data-ag-cs-' + s);
         for (const s of '|thought-view|omni|link-target|sidebar-studio|sidebar-host-sync'.split('|')) ra(html, s ? 'data-ag-prism-' + s : 'data-ag-prism');
         rp(html, '--ag-spring-sidebar-ease'); rp(html, '--ag-spring-sidebar-dur');
       }

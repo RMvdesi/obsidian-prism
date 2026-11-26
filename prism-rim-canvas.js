@@ -454,7 +454,7 @@
       ) {
         refreshPrismBoxRectCache(now, allowReadRect);
         lastPrismRectReadAt = now;
-      } else if (allowReadRect && now - lastPrismRectReadAt >= (prismBoxRo ? 1500 : 250)) {
+      } else if (allowReadRect && now - lastPrismRectReadAt >= (prismBoxRo ? 5000 : 250)) {
         lastPrismRectReadAt = now;
         for (const e of pBoxes) if (e.box?.getBoundingClientRect) e.rect = e.box.getBoundingClientRect();
         if (orchE?.box?.getBoundingClientRect) orchE.rect = orchE.box.getBoundingClientRect();
@@ -491,7 +491,14 @@
     const cancelPendingRaf = () => { if (prismRaf) { typeof cancelAnimationFrame === 'function' && cancelAnimationFrame(prismRaf); prismRaf = 0; } };
 
     const SB_SEL = 'aside,[data-testid="sidebar-split"]>div:first-child,[data-testid="conversation-row-sidebar"],[data-testid="project-header"],[data-hover-card-popup]';
-    const inSb = (t) => { try { return !!t?.closest?.(SB_SEL); } catch { return false; } };
+    let lastSbTarget = null, lastSbRes = false, lastSbAt = 0;
+    const inSb = (t, now) => {
+      if (t && t === lastSbTarget && now - lastSbAt < 120) return lastSbRes;
+      let res = false;
+      try { res = !!t?.closest?.(SB_SEL); } catch { res = false; }
+      lastSbTarget = t || null; lastSbRes = res; lastSbAt = now;
+      return res;
+    };
 
     const onPointerMove = (ev) => {
       if (isDestroyed() || isWB()) return;
@@ -499,7 +506,7 @@
       lastPointerPos.x = x; lastPointerPos.y = y;
       if (isDragSuspended()) { pDirty = true; return; }
       const now = performance.now(), rimOn = isRimOn();
-      if (inSb(ev?.target)) {
+      if (inSb(ev?.target, now)) {
         if (rimOn && hasLitRim()) { lastPointerPos.x = lastPointerPos.y = -9999; schedRaf(); }
         onPointerActivity?.(now);
         return;
@@ -529,6 +536,7 @@
 
     const invalidateMetrics = () => {
       pDirty = true;
+      lastPrismRectReadAt = 0;
       for (const e of pBoxes) e.borderRadius = -1;
       if (isDestroyed()) return;
       runGuardedMut(() => {
@@ -541,6 +549,7 @@
 
     const markDirty = () => {
       pDirty = true;
+      lastSbTarget = null; lastSbAt = 0;
       if (isDestroyed()) return;
       syncSp(0);
       runGuardedMut(() => {
@@ -551,6 +560,7 @@
 
     const teardown = () => {
       cancelPendingRaf(); emitComposerRim(null); bindEv('removeEventListener'); shrinkRims(1); trkCvs.clear();
+      lastSbTarget = null; lastSbAt = 0; lastPrismRectReadAt = 0;
       if (prismBoxRo) { try { prismBoxRo.disconnect(); } catch {} prismBoxRo = null; }
       obsSet.clear();
       if (stepPlanIo) { try { stepPlanIo.disconnect(); } catch {} stepPlanIo = null; }

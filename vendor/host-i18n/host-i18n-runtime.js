@@ -2504,6 +2504,7 @@
       textUntranslatedCache = new WeakMap();
       attrUntranslatedCache = new WeakMap();
       elementConflictState = new WeakMap();
+      hoverBoundaryCache = new WeakMap();
       exemptElements = new WeakSet();
       exemptNodes = new WeakSet();
       processedAlerts = new WeakSet();
@@ -3490,12 +3491,73 @@
       reconnectObserver();
     }
 
-    function runHoverTargetScan(target) {
+    var hoverBoundaryCache = new WeakMap();
+
+    function getHoverBoundary(el, now) {
+      if (!el || el.nodeType !== 1) return { blocked: true };
+      var cached = hoverBoundaryCache.get(el);
+      if (cached && now - cached.ts < 64) return cached.res;
+      var res = measureSafeBoundaryDepth(el);
+      hoverBoundaryCache.set(el, { ts: now, res: res });
+      return res;
+    }
+
+    function hasHoverCandidateWork(el, includeSubtree) {
+      if (!el || el.nodeType !== 1 || state.mode === 'off') return true;
+      if (exemptElements.has(el)) return false;
+      var stack = [[el, 0]];
+      var visited = 0;
+      while (stack.length) {
+        var pair = stack.pop();
+        var cur = pair[0];
+        var depth = pair[1];
+        if (!cur || cur.nodeType !== 1 || cur.isConnected === false || exemptElements.has(cur)) continue;
+        if (depth > 0) {
+          var cTag = String(cur.tagName || '').toUpperCase();
+          if (IGNORED_TAGS[cTag] || isIgnoredBoundary(cur)) continue;
+        }
+        if (++visited > 40) return true;
+        for (var ai = 0; ai < TRANSLATABLE_ATTRS.length; ai++) {
+          var attr = TRANSLATABLE_ATTRS[ai];
+          if (!hasAttr(cur, attr)) continue;
+          var val = getAttr(cur, attr);
+          if (!val) continue;
+          var mapRec = attrSnapshots.get(cur);
+          var aSnap = mapRec && attr in mapRec.entries ? mapRec.entries[attr] : null;
+          if (aSnap && aSnap.expected === val) continue;
+          var untransMap = attrUntranslatedCache.get(cur);
+          if (!aSnap && untransMap && attr in untransMap && untransMap[attr] === val) continue;
+          return true;
+        }
+        var child = cur.firstChild;
+        while (child) {
+          if (child.nodeType === 3) {
+            if (!exemptNodes.has(child)) {
+              var txt = child.nodeValue;
+              if (txt && txt.trim()) {
+                var tSnap = textSnapshots.get(child);
+                if (!(tSnap && tSnap.expected === txt) && !(!tSnap && textUntranslatedCache.get(child) === txt)) {
+                  return true;
+                }
+              }
+            }
+          } else if (child.nodeType === 1 && includeSubtree) {
+            if (depth >= 4) return true;
+            stack.push([child, depth + 1]);
+          }
+          child = child.nextSibling;
+        }
+      }
+      return false;
+    }
+
+    function runHoverTargetScan(target, preBound) {
       if (!state.active || state.destroyed || isPaused() || !target || target.nodeType !== 1) return;
       if (target.isConnected === false || exemptElements.has(target)) return;
       if (isDialogOrPortalWrappingDialog(target) || isWorkbenchOrRoot(target, doc)) return;
 
-      var targetCtx = measureSafeBoundaryDepth(target);
+      var now = nowFn();
+      var targetCtx = preBound || getHoverBoundary(target, now);
       if (targetCtx.blocked) return;
 
       var scanTarget = getChildElementCount(target) <= 12;
@@ -3507,19 +3569,21 @@
         !isDialogOrPortalWrappingDialog(parent) &&
         getChildElementCount(parent) <= 8
       ) {
-        var pCtx = measureSafeBoundaryDepth(parent);
+        var pCtx = getHoverBoundary(parent, now);
         if (!pCtx.blocked) parentCtx = pCtx;
       }
 
       if (!scanTarget && !parentCtx) return;
+      var needTarget = scanTarget && hasHoverCandidateWork(target, true);
+      var needParent = !!parentCtx && hasHoverCandidateWork(parent, true);
 
       var visitedSet = new WeakSet();
       disconnectObserver();
       try {
-        if (scanTarget) {
+        if (needTarget) {
           translateElement(target, visitedSet, targetCtx, null);
         }
-        if (parentCtx && state.active && !state.destroyed) {
+        if (needParent && state.active && !state.destroyed) {
           translateElement(parent, visitedSet, parentCtx, null);
         }
       } catch (err) {}
@@ -3830,26 +3894,27 @@
         var target = rawTarget && rawTarget.nodeType === 3 ? rawTarget.parentElement || rawTarget.parentNode : rawTarget;
         if (!target || target.nodeType !== 1 || target.isConnected === false) return;
 
+        var now = nowFn();
         var isContextMenu = Boolean(e && e.type === 'contextmenu');
+        var hoverBound = null;
         if (isContextMenu) {
           pendingFullFloatScan = true;
         } else if (e && e.type === 'pointerenter') {
           var tg = String(target.tagName || '').toUpperCase();
-          if (tg === 'PATH' || tg === 'CIRCLE' || tg === 'RECT' || tg === 'LINE' || tg === 'POLYLINE' || tg === 'POLYGON' || tg === 'ELLIPSE' || tg === 'G' || tg === 'DEFS' || tg === 'USE' || tg === 'STOP') return;
-          if (exemptElements.has(target) || isDialogOrPortalWrappingDialog(target)) return;
+          if (IGNORED_TAGS[tg] || tg === 'PATH' || tg === 'CIRCLE' || tg === 'RECT' || tg === 'LINE' || tg === 'POLYLINE' || tg === 'POLYGON' || tg === 'ELLIPSE' || tg === 'G' || tg === 'DEFS' || tg === 'USE' || tg === 'STOP') return;
+          if (exemptElements.has(target) || hasAttr(target, 'data-ag-owned') || hasAttr(target, 'data-ag-no-i18n') || isDialogOrPortalWrappingDialog(target)) return;
           if (target.closest?.('[data-testid="conversation-row-sidebar"],[data-testid="project-header"],[data-testid="conversation-list-sidebar"],[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup]')) return;
-          var hoverBound = measureSafeBoundaryDepth(target);
+          hoverBound = getHoverBoundary(target, now);
           if (hoverBound.blocked) return;
           if (isInsideDialog(target) && !isSmallHoverControl(target)) return;
         }
 
-        var now = nowFn();
         var elapsed = now - lastHoverTime;
         var ranImmediate = false;
         if (elapsed >= 120) {
           lastHoverTime = now;
           ranImmediate = true;
-          runHoverTargetScan(target);
+          runHoverTargetScan(target, hoverBound);
         }
         if (hoverScanTimer !== null) {
           clearTimeoutFn(hoverScanTimer);
@@ -3859,7 +3924,7 @@
           hoverScanTimer = null;
           lastHoverTime = nowFn();
           if (!ranImmediate) {
-            runHoverTargetScan(target);
+            runHoverTargetScan(target, hoverBound);
           }
           var doFull = pendingFullFloatScan;
           pendingFullFloatScan = false;

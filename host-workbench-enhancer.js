@@ -343,6 +343,8 @@
     const ovSecAnimRafs = new Set();
     let scrollGlideRaf = 0;
     let scrollGlideCleanup = null;
+    let scrollBlurTimer = 0;
+    let scrollBlurCv = null;
     let sidebarMoreExpanded = false;
     let sidebarMoreBtn = null;
 
@@ -1549,12 +1551,15 @@
       const rows = qa(doc, '[data-testid="subagent-node"], [data-testid="running-row"], [data-testid="background-task-row"]');
       const sps = qa(doc, '[data-testid="step-plan"]');
       const ovPanels = qa(doc, '[data-testid="overview-panel"]');
-      const ovShells = qa(doc, '[data-ag-cs-overview-shell="1"]');
-      const runPanels = qa(doc, '[data-testid="running-items-panel"].grid-rows-\\[1fr\\]');
-      let anyInRun = false;
-      for (const rp of runPanels) {
-        if (qs(rp, SP)) { anyInRun = true; break; }
-      }
+      let anyInRun = null;
+      const getAnyInRun = () => {
+        if (anyInRun !== null) return anyInRun;
+        anyInRun = false;
+        for (const rp of qa(doc, '[data-testid="running-items-panel"].grid-rows-\\[1fr\\]')) {
+          if (qs(rp, SP)) { anyInRun = true; break; }
+        }
+        return anyInRun;
+      };
       mut(() => {
         for (const r of rows) {
           if (qs(r, SP)) setA(r, 'data-ag-sub-running', '1');
@@ -1565,14 +1570,14 @@
           else if (ha(sp, 'data-ag-sp-running')) ra(sp, 'data-ag-sp-running');
         }
         if (!ovPanels.length) {
-          for (const sh of ovShells) if (ha(sh, 'data-ag-overview-running')) ra(sh, 'data-ag-overview-running');
+          for (const sh of qa(doc, '[data-ag-cs-overview-shell="1"]')) if (ha(sh, 'data-ag-overview-running')) ra(sh, 'data-ag-overview-running');
           return;
         }
         for (const ovPanel of ovPanels) {
           const ovCv = cl(ovPanel, S_CV);
           const localRun = ovCv
             ? Boolean(qs(qs(ovCv, '[data-testid="running-items-panel"].grid-rows-\\[1fr\\]'), SP))
-            : anyInRun;
+            : getAnyInRun();
           let ovRun = localRun || Boolean(qs(ovPanel, SP));
           for (const sec of qa(ovPanel, '.p-1')) {
             const hb = qs(sec, 'button');
@@ -1968,9 +1973,40 @@
       } catch {}
     }
 
+    function onWinScrollPassive(ev) {
+      if (isDead()) return;
+      const t = ev?.target;
+      if (!t || (!t.matches?.(S_VP) && ga(t, 'data-testid') !== 'autoscroll-viewport')) return;
+      const cv = cl(t, S_CV);
+      if (!cv || !qs(cv, '.agy-scroll-bottom, [data-ag-cs-overview-shell="1"]')) return;
+      if (scrollBlurCv && scrollBlurCv !== cv && ha(scrollBlurCv, 'data-ag-scrolling')) {
+        const oldCv = scrollBlurCv;
+        mut(() => ra(oldCv, 'data-ag-scrolling'));
+      }
+      if (scrollBlurCv !== cv || ga(cv, 'data-ag-scrolling') !== '1') {
+        mut(() => setA(cv, 'data-ag-scrolling', '1'));
+      }
+      scrollBlurCv = cv;
+      if (scrollBlurTimer) {
+        clearTimeout(scrollBlurTimer);
+        nonDiffAnimTimers.delete(scrollBlurTimer);
+      }
+      scrollBlurTimer = setTimeout(() => {
+        nonDiffAnimTimers.delete(scrollBlurTimer);
+        scrollBlurTimer = 0;
+        const targetCv = scrollBlurCv;
+        scrollBlurCv = null;
+        if (targetCv && !isDead() && ha(targetCv, 'data-ag-scrolling')) {
+          mut(() => ra(targetCv, 'data-ag-scrolling'));
+        }
+      }, 150);
+      nonDiffAnimTimers.add(scrollBlurTimer);
+    }
+
     if (win && typeof win.addEventListener === 'function') {
       win.addEventListener('click', onDocClickCapture, true);
       win.addEventListener('keydown', onWinKeyDown);
+      win.addEventListener('scroll', onWinScrollPassive, { capture: true, passive: true });
     }
 
     // ── Public Lifecycle API ───────────────────────────────────────────────
@@ -2045,10 +2081,21 @@
         win?.__agPrismInlineDiff?.unbindHooks?.();
       } catch {}
 
+      if (scrollBlurTimer) {
+        try { clearTimeout(scrollBlurTimer); } catch {}
+        nonDiffAnimTimers.delete(scrollBlurTimer);
+        scrollBlurTimer = 0;
+      }
+      if (scrollBlurCv) {
+        const scv = scrollBlurCv;
+        scrollBlurCv = null;
+        if (ha(scv, 'data-ag-scrolling')) mut(() => ra(scv, 'data-ag-scrolling'));
+      }
       if (win && typeof win.removeEventListener === 'function') {
         try {
           win.removeEventListener('click', onDocClickCapture, true);
           win.removeEventListener('keydown', onWinKeyDown);
+          win.removeEventListener('scroll', onWinScrollPassive, { capture: true, passive: true });
         } catch {}
       }
       pruneUnsubs(iframeUnsubscribers, true, boundIframes);

@@ -2150,3 +2150,115 @@ test('perf guard 22: home-ripple-host coalesces burst ResizeObserver ticks via r
   assert.ok(fnSlice.includes("ga(btn, 'role')"), 'bSig must include role');
   assert.ok(fnSlice.includes('rawSvgCls'), 'bSig must include original <svg> className to prevent stale copy->check->copy hits');
 });
+
+test('perf guard (lag root-cause & throughput): stream-active throttling, hover/scroll fast-paths, and WebGL fill-rate', () => {
+  // 1) data-ag-cs-stream-active lifecycle wired across stream-choreography, conv-aura, ui-runtime, and cdp
+  const streamSrc = fs.readFileSync(path.join(ROOT, 'stream-choreography.js'), 'utf8');
+  const auraSrc = fs.readFileSync(path.join(ROOT, 'conv-aura.js'), 'utf8');
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
+  const cdpSrc = fs.readFileSync(path.join(ROOT, 'cdp.js'), 'utf8');
+  assert.ok(streamSrc.includes('data-ag-cs-stream-active') && streamSrc.includes('syncStreamActiveAttr('));
+  assert.ok(auraSrc.includes('data-ag-cs-stream-active') && auraSrc.includes('setStreamAttr('));
+  assert.ok(uiSrc.includes('|stream-active'), 'ui-runtime destroy() must clean data-ag-cs-stream-active');
+  assert.ok(cdpSrc.includes("'data-ag-cs-stream-active'"), 'cdp REMOVE_EXPRESSION must clean data-ag-cs-stream-active');
+
+  // 2) motion-engine caches matchMedia/CSS.supports, skips querySelector on plain hover targets, and stays < 35840 B with animated-icons.js
+  const motionSrc = fs.readFileSync(path.join(ROOT, 'motion-engine.js'), 'utf8');
+  const animIconsSrc = fs.readFileSync(path.join(ROOT, 'animated-icons.js'), 'utf8');
+  assert.ok(
+    Buffer.byteLength(motionSrc, 'utf8') + Buffer.byteLength(animIconsSrc, 'utf8') < 35840,
+    'motion-engine.js + animated-icons.js must remain < 35840 bytes'
+  );
+  let mmCalls = 0;
+  let qsCalls = 0;
+  const listeners = new Map();
+  const fakeDoc = {
+    documentElement: {},
+    head: { appendChild() {} },
+    getElementById: () => null,
+    addEventListener(type, fn) { listeners.set(type, fn); },
+    removeEventListener(type) { listeners.delete(type); },
+    querySelectorAll: () => [],
+  };
+  const fakeWin = {
+    document: fakeDoc,
+    matchMedia: () => { mmCalls += 1; return { matches: false }; },
+    CSS: { supports: () => false },
+    requestAnimationFrame: (cb) => 1,
+    cancelAnimationFrame() {},
+  };
+  vm.runInNewContext(motionSrc, {
+    globalThis: fakeWin,
+    window: fakeWin,
+    document: fakeDoc,
+    performance: { now: () => 100 },
+    CSS: fakeWin.CSS,
+    requestAnimationFrame: fakeWin.requestAnimationFrame,
+    cancelAnimationFrame: fakeWin.cancelAnimationFrame,
+  });
+  const binding = fakeWin.__agMotionEngine.bindMicroInteractions(fakeDoc, { motionTier: 'standard' });
+  const plainTarget = {
+    nodeType: 1,
+    matches: () => false,
+    closest: () => null,
+    querySelector: () => { qsCalls += 1; return null; },
+    getAttribute: () => null,
+  };
+  const overHandler = listeners.get('pointerover');
+  assert.equal(typeof overHandler, 'function');
+  overHandler({ target: plainTarget });
+  overHandler({ target: plainTarget });
+  assert.equal(qsCalls, 0, 'pointerover on plain non-host elements must not run querySelector([data-anim-icon])');
+  fakeWin.__agMotionEngine.prefersReducedMotion();
+  fakeWin.__agMotionEngine.prefersReducedMotion();
+  assert.ok(mmCalls <= 1, `matchMedia should be cached across calls (saw ${mmCalls})`);
+  binding.unbind();
+
+  // 3) ripple-core WebGL2 fragment shader FBM3, early-out, deferred pPhase, and halftone mask guard
+  const rippleSrc = fs.readFileSync(path.join(ROOT, 'ripple-core.js'), 'utf8');
+  assert.ok(rippleSrc.includes('float fbm3(vec2 p)'), 'ripple-core must define 3-octave fbm3');
+  assert.ok(rippleSrc.includes('if (glow * topFeather < 0.0008 && abs(uSurge) < 0.0001)'), 'ripple-core must early-out transparent fragments');
+  assert.ok(rippleSrc.includes('if (uDark <= 0.5 || effPrism > 0.0001 || abs(uSurge) > 0.0001)'), 'ripple-core must defer pPhase FBM');
+  assert.ok(rippleSrc.includes('dotMsk > 0.001 ? halftone('), 'ripple-core must guard halftone evaluation');
+
+  // 4) omni-client passive scroll, MO batchCache + data-ag-owned fast-path, leaf mermaid skip, and hygiene
+  const omniSrc = fs.readFileSync(path.join(ROOT, 'vendor/omni-viewer/omni-client.js'), 'utf8');
+  assert.ok(omniSrc.includes("addEventListener('scroll', onWindowBlurOrScroll, { capture: true, passive: true })"));
+  assert.ok(omniSrc.includes("removeEventListener('scroll', onWindowBlurOrScroll, { capture: true, passive: true })"));
+  assert.ok(omniSrc.includes('batchCache') && omniSrc.includes('data-ag-owned'));
+  const omniLines = omniSrc.split('\n');
+  const blankLines = omniLines.filter((l) => l.trim() === '').length;
+  assert.ok(blankLines / omniLines.length < 0.12, 'omni-client blank lines must stay < 12%');
+  assert.ok(!omniSrc.includes('\n\n\n'), 'omni-client must contain no triple blank lines');
+
+  // 5) host-workbench-enhancer scroll blur suspension & ambient QSA pruning
+  const enhSrc = fs.readFileSync(path.join(ROOT, 'host-workbench-enhancer.js'), 'utf8');
+  assert.ok(enhSrc.includes("win.addEventListener('scroll', onWinScrollPassive, { capture: true, passive: true })"));
+  assert.ok(enhSrc.includes("win.removeEventListener('scroll', onWinScrollPassive, { capture: true, passive: true })"));
+  assert.ok(enhSrc.includes('data-ag-scrolling'));
+  assert.ok(enhSrc.includes('const getAnyInRun = () =>'), 'syncSubagentRunningAmbient must lazily evaluate running-items-panel QSA');
+
+  // 6) ui-runtime & prism-rim-canvas hot-path guards
+  assert.ok(uiSrc.includes('const isOwnPluginNode = (t, selfOnly) =>'));
+  assert.ok(uiSrc.includes("D.getElementsByClassName('md-table-host')"));
+  assert.ok(uiSrc.includes('m.attributeName?.charCodeAt(0) === 100'));
+  const rimSrc = fs.readFileSync(path.join(ROOT, 'prism-rim-canvas.js'), 'utf8');
+  assert.ok(rimSrc.includes('prismBoxRo ? 5000 : 250'));
+  assert.ok(rimSrc.includes('now - lastSbAt < 120'), 'inSb must cache within 120ms window');
+
+  // 7) vendor scroll/hover optimizations
+  const diffSrc = fs.readFileSync(path.join(ROOT, 'vendor/inline-diff/inline-diff-client.js'), 'utf8');
+  assert.ok(diffSrc.includes("addEventListener('scroll', onWinScrollCapture, { capture: true, passive: true })"));
+  assert.ok(diffSrc.includes("cl(t, '.ag-cs-inline-diff-box, [data-testid=\"diff-line-count\"], [data-ag-diff-chip=\"1\"]')"));
+  const ppSrc = fs.readFileSync(path.join(ROOT, 'vendor/periodic-picker/periodic-picker.js'), 'utf8');
+  assert.ok(ppSrc.includes("onDoc('pointermove', onDocPointerMove, { capture: true, passive: true })"));
+  assert.ok(ppSrc.includes("onDoc('scroll', onDocScroll, { capture: true, passive: true })"));
+  assert.ok(ppSrc.includes('scheduleBadgeSync(40)'));
+  const pulseSrc = fs.readFileSync(path.join(ROOT, 'vendor/pulse-dashboard/compat/inline-widget.cjs'), 'utf8');
+  assert.ok(pulseSrc.includes("document.addEventListener('scroll',scheduleLayout,{capture:true,passive:true})"));
+  assert.ok(pulseSrc.includes("document.removeEventListener('scroll',scheduleLayout,{capture:true,passive:true})"));
+
+  // 8) host-i18n hover boundary cache & no-op disconnectObserver skip
+  const i18nSrc = fs.readFileSync(path.join(ROOT, 'vendor/host-i18n/host-i18n-runtime.js'), 'utf8');
+  assert.ok(i18nSrc.includes('getHoverBoundary(') && i18nSrc.includes('hasHoverCandidateWork('));
+});

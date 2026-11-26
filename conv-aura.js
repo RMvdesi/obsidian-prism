@@ -363,7 +363,14 @@
     let wb = false;
     const WB = 'data-ag-cs-win-blur';
     const PP_OPEN = 'data-ag-pp-open';
+    const SA_ATTR = 'data-ag-cs-stream-active';
     const getHtml = () => (typeof document !== 'undefined' ? document.documentElement : null);
+    const setStreamAttr = (on) => {
+      const h = getHtml();
+      if (!h) return;
+      if (on) { if (h.getAttribute?.(SA_ATTR) !== '1') h.setAttribute?.(SA_ATTR, '1'); }
+      else if (h.hasAttribute?.(SA_ATTR)) h.removeAttribute?.(SA_ATTR);
+    };
     const isAB = () => getHtml()?.getAttribute?.(WB) === '1';
     const isPpOpen = () => getHtml()?.getAttribute?.(PP_OPEN) === '1';
     const isH = () => !!(typeof document !== 'undefined' && document.hidden);
@@ -461,6 +468,7 @@
       const skipSyncVis = !!(fromAnimLoop && lastFullVisAt >= 0 && M.abs(now - lastFullVisAt) < 2000);
       const scope = convAura.convView || null;
       const runningNow = isConvRunning(skipSyncVis, scope);
+      setStreamAttr(runningNow);
       const awaitingNow = externalAwaiting !== null ? !!(externalAwaiting) : isAwaitingDecision(skipSyncVis, scope);
       const freshErr = externalErrorPending || (!runningNow && consumeFreshDomError(scope));
       if (externalErrorPending) externalErrorPending = false;
@@ -553,6 +561,7 @@
 
     function unmount() {
       preferredView = null;
+      setStreamAttr(false);
       if (!convAura) return;
       const a = convAura;
       detachFocusWakeListeners(a);

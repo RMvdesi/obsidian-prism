@@ -1529,7 +1529,7 @@ module.exports = function installAgPulseInlineWidget() {
   const onFocus=e=>{if(!instances.length||!e.composedPath().some(isOwnNode))scheduleLayout();};
   const onMotionChange=()=>{for(const inst of instances)inst.stopDensityMotion();};
   document.addEventListener('keydown',onKey);document.addEventListener('pointerdown',onPointer);document.addEventListener('focusin',onFocus);
-  window.addEventListener('resize',scheduleLayout);document.addEventListener('scroll',scheduleLayout,true);
+  window.addEventListener('resize',scheduleLayout);document.addEventListener('scroll',scheduleLayout,{capture:true,passive:true});
   densityMedia.addEventListener('change',onMotionChange);
   const timerId=setInterval(()=>{mount();for(const inst of instances)inst.poll();},1000);
   window.__agPulseDispose=()=>{
@@ -1537,7 +1537,7 @@ module.exports = function installAgPulseInlineWidget() {
     clearInterval(timerId);if(layoutFrame!==null)cancelAnimationFrame(layoutFrame);observer.disconnect();preferences.dispose();
     for(const inst of instances.splice(0))inst.dispose();
     document.removeEventListener('keydown',onKey);document.removeEventListener('pointerdown',onPointer);document.removeEventListener('focusin',onFocus);
-    document.removeEventListener('scroll',scheduleLayout,true);window.removeEventListener('resize',scheduleLayout);
+    document.removeEventListener('scroll',scheduleLayout,{capture:true,passive:true});window.removeEventListener('resize',scheduleLayout);
     densityMedia.removeEventListener('change',onMotionChange);
     document.removeEventListener('DOMContentLoaded',mount);
     window.__agPulseInlineInstalled=false;delete window.__agPulseDispose;

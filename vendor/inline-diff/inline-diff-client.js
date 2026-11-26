@@ -1218,11 +1218,16 @@
       try {
         const t = ev?.target;
         if (isDead() || !t?.closest) return;
-        if (typeof win?.__agPrismInlineDiffCall !== 'function' || cl(t, '.ag-cs-inline-diff-box')) {
+        if (typeof win?.__agPrismInlineDiffCall !== 'function') {
           clearHoverPrefetchTimer();
           return;
         }
-        const db = resolveDiffBadgeFromTarget(t);
+        const hit = cl(t, '.ag-cs-inline-diff-box, [data-testid="diff-line-count"], [data-ag-diff-chip="1"]');
+        if (!hit || hit.classList?.contains?.('ag-cs-inline-diff-box') || cl(hit, '[data-testid="changed-files-card"]')) {
+          clearHoverPrefetchTimer();
+          return;
+        }
+        const db = ga(hit, 'data-testid') === 'diff-line-count' ? hit : qs(hit, '[data-testid="diff-line-count"]');
         if (!db || ga(db, 'data-ag-inline-diff-open') === '1') {
           clearHoverPrefetchTimer();
           return;
@@ -1279,7 +1284,7 @@
       win.addEventListener('keydown', onWinKeyDownCapture, true);
       win.addEventListener('pointerover', onWinPointerOver, { passive: true });
       win.addEventListener('pointerout', onWinPointerOut, { passive: true });
-      win.addEventListener('scroll', onWinScrollCapture, true);
+      win.addEventListener('scroll', onWinScrollCapture, { capture: true, passive: true });
       win.addEventListener('blur', onWinBlurOrResize);
       win.addEventListener('resize', onWinBlurOrResize);
       win.addEventListener('ag-prism:ctx-open', onCtxOpenBus);
@@ -1362,7 +1367,7 @@
           win.removeEventListener('keydown', onWinKeyDownCapture, true);
           win.removeEventListener('pointerover', onWinPointerOver);
           win.removeEventListener('pointerout', onWinPointerOut);
-          win.removeEventListener('scroll', onWinScrollCapture, true);
+          win.removeEventListener('scroll', onWinScrollCapture, { capture: true, passive: true });
           win.removeEventListener('blur', onWinBlurOrResize);
           win.removeEventListener('resize', onWinBlurOrResize);
           win.removeEventListener('ag-prism:ctx-open', onCtxOpenBus);
