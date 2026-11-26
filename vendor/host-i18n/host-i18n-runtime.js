@@ -123,7 +123,6 @@
     'user-message-content': 1,
     'user-input-step': 1,
     'planner-response-text': 1,
-    'agent-response': 1,
     'artifact-view': 1,
     'side-question-panel': 1,
     'side-question-conversation': 1,
@@ -340,7 +339,7 @@
   function isConversationStreamSelf(el) {
     if (!el || el.nodeType !== 1) return false;
     var tid = getAttr(el, 'data-testid');
-    if (tid === 'conversation-view' || tid === 'agent-input-box') return true;
+    if (tid === 'conversation-view' || tid === 'agent-input-box' || tid === 'agent-response') return true;
     if (hasAttr(el, 'data-cascade-id')) return true;
     return false;
   }
@@ -355,7 +354,7 @@
       return true;
     }
     var tid = getAttr(el, 'data-testid');
-    if (tid === 'permissions-selector-trigger' || tid === 'plan-command-fyi-alert') return true;
+    if (tid === 'permissions-selector-trigger' || tid === 'plan-command-fyi-alert' || tid === 'changed-files-card-header') return true;
     return false;
   }
 

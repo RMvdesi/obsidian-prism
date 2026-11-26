@@ -2768,3 +2768,90 @@ test('Issue #80: host-i18n exempts orchestrator-picker-row/effort and data-ag-cs
 
   inst.destroy();
 });
+
+test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collapsible, changed-files-card-header/review) translates while data-markdown-root, bare prose & thinking-collapsible-trigger stay strictly protected', () => {
+  const env = createTestEnv();
+  const dict = {
+    exact: { Review: '审查', Settings: '设置', Save: '保存' },
+    patterns: [
+      { regex: '^Worked\\s+for\\s+(\\d+(?:\\.\\d+)?)\\s*s$', replacement: '已运行 $1 秒' },
+      { regex: '^Worked\\s+for\\s+(\\d+)\\s*m$', replacement: '已运行 $1 分钟' },
+      { regex: '^(\\d+) files? changed$', replacement: '$1 个文件已修改' },
+    ],
+  };
+
+  const conv = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const agentResp = env.makeEl('div', { attrs: { 'data-testid': 'agent-response' } });
+
+  // 1) Interactive turn chrome inside agent-response -> MUST translate
+  const stepList = env.makeEl('div', { attrs: { 'data-step-list': 'true' } });
+  const workedBtn = env.makeEl('button', { attrs: { 'data-testid': 'worked-for-collapsible', 'aria-expanded': 'false' } });
+  const workedSpan = env.makeEl('span', { text: 'Worked for 54s' });
+  workedBtn.append(workedSpan);
+
+  // Thinking collapsible trigger MUST remain protected (owned by thought-translator)
+  const thinkBtn = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Save' });
+
+  // Bare prose directly inside agent-response (legacy layout without data-markdown-root) -> MUST stay untouched
+  const bareProse = env.makeEl('p', { text: 'Settings' });
+
+  // Actual v2.35 AI markdown prose (data-markdown-root) -> MUST stay hard-blocked, even buttons inside it
+  const mdRoot = env.makeEl('div', { attrs: { 'data-markdown-root': '' } });
+  const mdPara = env.makeEl('p', { text: 'Review' });
+  const mdBtn = env.makeEl('button', { text: 'Save' });
+  mdRoot.append(mdPara, mdBtn);
+
+  stepList.append(workedBtn, thinkBtn, bareProse, mdRoot);
+
+  // 2) Changed files card header + review button -> MUST translate, while file list row outside header stays untouched
+  const turnCards = env.makeEl('div', { attrs: { 'data-testid': 'turn-cards-container' } });
+  const cfCard = env.makeEl('div', { attrs: { 'data-testid': 'changed-files-card' } });
+  const cfHeader = env.makeEl('div', { attrs: { 'data-testid': 'changed-files-card-header' } });
+  const cfCount = env.makeEl('span', { text: '3 files changed' });
+  const cfReviewBtn = env.makeEl('button', { attrs: { 'data-testid': 'changed-files-card-review' } });
+  const cfReviewSpan = env.makeEl('span', { text: 'Review' });
+  cfReviewBtn.append(cfReviewSpan);
+  cfHeader.append(cfCount, cfReviewBtn);
+  const cfFileRow = env.makeEl('div', { text: 'Settings' });
+  cfCard.append(cfHeader, cfFileRow);
+  turnCards.append(cfCard);
+
+  agentResp.append(stepList, turnCards);
+  conv.append(agentResp);
+  env.doc.body.append(conv);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // Turn chrome translated cleanly
+  assert.equal(workedSpan.textContent, '已运行 54 秒');
+  assert.equal(cfCount.textContent, '3 个文件已修改');
+  assert.equal(cfReviewSpan.textContent, '审查');
+
+  // Prose, bare text, file rows & thinking trigger remain 100% protected
+  assert.equal(thinkBtn.textContent, 'Save');
+  assert.equal(bareProse.textContent, 'Settings');
+  assert.equal(mdPara.textContent, 'Review');
+  assert.equal(mdBtn.textContent, 'Save');
+  assert.equal(cfFileRow.textContent, 'Settings');
+
+  // Dynamic mutation on worked-for timer tick translates cleanly
+  workedSpan.firstChild.nodeValue = 'Worked for 2m';
+  env.advanceTime(100);
+  assert.equal(workedSpan.textContent, '已运行 2 分钟');
+
+  // Lossless destroy() restores all turn chrome cleanly
+  inst.destroy();
+  assert.equal(workedSpan.textContent, 'Worked for 2m');
+  assert.equal(cfCount.textContent, '3 files changed');
+  assert.equal(cfReviewSpan.textContent, 'Review');
+});

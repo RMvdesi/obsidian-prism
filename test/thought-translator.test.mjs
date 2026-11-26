@@ -172,28 +172,30 @@ function createMockDomEnv(extraWindowProps = {}) {
       },
       querySelectorAll(sel) {
         const results = [];
-        const matchNode = (node) => {
+        const parts = String(sel || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const matchSingle = (node, part) => {
           if (!node || node.nodeType !== 1) return false;
-          if (sel.includes('thinking-collapsible-trigger')) {
+          if (part.includes('thinking-collapsible-trigger')) {
             if (node.getAttribute('data-testid') !== 'thinking-collapsible-trigger') return false;
-            if (sel.includes('aria-expanded="true"')) {
+            if (part.includes('aria-expanded="true"')) {
               return node.getAttribute('aria-expanded') === 'true';
             }
             return true;
           }
-          if (sel.includes('.ag-prism-thought-overlay')) {
+          if (part.includes('.ag-prism-thought-overlay')) {
             return node.classList.contains('ag-prism-thought-overlay');
           }
-          const testIdMatch = /^\[data-testid="([^"]+)"\]$/.exec(sel);
-          if (testIdMatch) {
-            return node.getAttribute('data-testid') === testIdMatch[1];
+          const attrMatch = /^\[([a-zA-Z0-9_-]+)="([^"]+)"\]$/.exec(part);
+          if (attrMatch) {
+            return node.getAttribute(attrMatch[1]) === attrMatch[2];
           }
-          const clsMatch = /^\.([A-Za-z0-9_-]+)$/.exec(sel);
+          const clsMatch = /^\.([A-Za-z0-9_-]+)$/.exec(part);
           if (clsMatch) {
             return node.classList.contains(clsMatch[1]);
           }
           return false;
         };
+        const matchNode = (node) => parts.some((p) => matchSingle(node, p));
         const walk = (n) => {
           for (const ch of n.children || []) {
             if (matchNode(ch)) results.push(ch);
@@ -233,7 +235,17 @@ function createMockDomEnv(extraWindowProps = {}) {
       return e;
     },
     createTextNode(txt) {
-      return { nodeType: 3, nodeValue: String(txt), textContent: String(txt) };
+      return {
+        nodeType: 3,
+        isConnected: true,
+        _v: String(txt),
+        get nodeValue() { return this._v; },
+        set nodeValue(v) { this._v = String(v ?? ''); },
+        get data() { return this._v; },
+        set data(v) { this._v = String(v ?? ''); },
+        get textContent() { return this._v; },
+        set textContent(v) { this._v = String(v ?? ''); },
+      };
     },
     querySelectorAll(sel) {
       return rootBody.querySelectorAll(sel);
@@ -3665,4 +3677,132 @@ test('Red-team security hardening: HTTPS proxy SNI servername, microtask queue c
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('Issue #99: thought-client translates v2.35 tool steps beside step-plan-chip, tool-group headers & standalone action verbs (0 API calls) while skipping data-markdown-root and restoring losslessly', async () => {
+  const clientSrc = fs.readFileSync(
+    path.join(ROOT_DIR, 'vendor', 'thought-translator', 'thought-client.js'),
+    'utf8'
+  );
+  const batchRequests = [];
+  const { doc, rootBody, sandbox } = createMockDomEnv({
+    __agPrismThoughtBridge: {
+      call: async (payload) => {
+        if (payload.action === 'get-cache') return { ok: true, entries: {} };
+        return { ok: true };
+      },
+      translateStream: async (payload) => {
+        const parsed = JSON.parse(payload.text);
+        batchRequests.push(parsed.items);
+        return {
+          ok: true,
+          items: parsed.items.map((s) => {
+            if (s.includes('Running inspect')) return '正在检查 Antigravity 浏览器文档部分';
+            if (s.includes('marketplace for')) return '在应用市场中搜索 "computer use"';
+            return `译:${s}`;
+          }),
+          engine: 'ai',
+        };
+      },
+    },
+  });
+  doc.documentElement.setAttribute('data-ag-cs-thought-translate', 'ai');
+  doc.documentElement.setAttribute('data-ag-cs-lang', 'zh-CN');
+
+  // Antigravity v2.35 DOM: worked-for-collapsible wrapped inside a flex row beside step-plan-chip
+  const conv = doc.createElement('div');
+  conv.setAttribute('data-testid', 'conversation-view');
+  const stepWrap = doc.createElement('div');
+  const headerRow = doc.createElement('div');
+  headerRow.className = 'flex min-w-0 items-center';
+  const workedTrig = doc.createElement('button');
+  workedTrig.setAttribute('data-testid', 'worked-for-collapsible');
+  workedTrig.setAttribute('aria-expanded', 'true');
+  workedTrig.appendChild(doc.createTextNode('Worked for 54s'));
+  const planChip = doc.createElement('button');
+  planChip.setAttribute('data-testid', 'step-plan-chip');
+  planChip.appendChild(doc.createTextNode('4/4 steps'));
+  workedTrig.nextElementSibling = planChip;
+  headerRow.appendChild(workedTrig);
+  headerRow.appendChild(planChip);
+
+  const bodyDiv = doc.createElement('div');
+  const groupTrig = doc.createElement('button');
+  groupTrig.setAttribute('data-testid', 'tool-group-collapsible');
+  groupTrig.setAttribute('aria-expanded', 'true');
+  const groupTitle = doc.createElement('span');
+  groupTitle.appendChild(doc.createTextNode('Running inspect Antigravity browser documentation section'));
+  groupTrig.appendChild(groupTitle);
+
+  const row1 = doc.createElement('div');
+  const verbAnalyzed = doc.createElement('span');
+  verbAnalyzed.appendChild(doc.createTextNode('Analyzed'));
+  const fileChip = doc.createElement('span');
+  fileChip.setAttribute('data-file-path', 'SKILL.md');
+  fileChip.appendChild(doc.createTextNode('SKILL.md'));
+  row1.appendChild(verbAnalyzed);
+  row1.appendChild(fileChip);
+
+  const row2 = doc.createElement('div');
+  const verbSearched = doc.createElement('span');
+  verbSearched.appendChild(doc.createTextNode('Searched'));
+  const sumSearched = doc.createElement('span');
+  sumSearched.appendChild(doc.createTextNode('marketplace for "computer use"'));
+  row2.appendChild(verbSearched);
+  row2.appendChild(sumSearched);
+
+  const row3 = doc.createElement('div');
+  const verbRan = doc.createElement('span');
+  verbRan.appendChild(doc.createTextNode('Ran'));
+  row3.appendChild(verbRan);
+
+  // Prose guard inside container must NEVER be translated by tool summary scanner
+  const proseGuard = doc.createElement('div');
+  proseGuard.setAttribute('data-markdown-root', '');
+  const proseText = doc.createElement('p');
+  proseText.appendChild(doc.createTextNode('Analyzed'));
+  proseGuard.appendChild(proseText);
+
+  bodyDiv.appendChild(groupTrig);
+  bodyDiv.appendChild(row1);
+  bodyDiv.appendChild(row2);
+  bodyDiv.appendChild(row3);
+  bodyDiv.appendChild(proseGuard);
+
+  headerRow.nextElementSibling = bodyDiv;
+  stepWrap.appendChild(headerRow);
+  stepWrap.appendChild(bodyDiv);
+  conv.appendChild(stepWrap);
+  rootBody.appendChild(conv);
+
+  vm.runInNewContext(clientSrc, sandbox);
+  sandbox.window.__agPrismThought.sync({ thoughtTranslate: 'ai', language: 'zh-CN', translateToolSummaries: true });
+  sandbox.window.__agPrismThought.scanImmediate();
+  await new Promise((r) => setTimeout(r, 25));
+
+  // Standalone verbs translated immediately with 0 API calls (excluded from batchRequests)
+  assert.equal(verbAnalyzed.textContent, '已分析');
+  assert.equal(verbSearched.textContent, '已搜索');
+  assert.equal(verbRan.textContent, '已运行');
+  const sentFlat = batchRequests.flat();
+  assert.equal(sentFlat.includes('Analyzed'), false, 'Static tool verb must not spend AI API calls');
+  assert.equal(sentFlat.includes('Searched'), false, 'Static tool verb must not spend AI API calls');
+  assert.equal(sentFlat.includes('Ran'), false, 'Static tool verb must not spend AI API calls');
+
+  // Tool group header & summary inside body beside step-plan-chip translated via AI batch
+  assert.equal(groupTitle.textContent, '正在检查 Antigravity 浏览器文档部分');
+  assert.equal(sumSearched.textContent, '在应用市场中搜索 "computer use"');
+
+  // File chip, worked-for trigger (owned by host-i18n), and data-markdown-root prose untouched
+  assert.equal(fileChip.textContent, 'SKILL.md');
+  assert.equal(workedTrig.textContent, 'Worked for 54s');
+  assert.equal(proseText.textContent, 'Analyzed');
+
+  // Lossless destroy() restores both static verbs and AI-translated tool summaries
+  sandbox.window.__agPrismThought.destroy();
+  assert.equal(verbAnalyzed.textContent, 'Analyzed');
+  assert.equal(verbSearched.textContent, 'Searched');
+  assert.equal(verbRan.textContent, 'Ran');
+  assert.equal(groupTitle.textContent, 'Running inspect Antigravity browser documentation section');
+  assert.equal(sumSearched.textContent, 'marketplace for "computer use"');
 });

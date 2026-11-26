@@ -3194,10 +3194,72 @@
 
   const TOOL_SKIP_TAGS = new Set('SCRIPT,STYLE,SVG,NOSCRIPT,PRE,CODE,A,INPUT,TEXTAREA,SELECT'.split(','));
 
+  // Exact standalone Antigravity tool-step action verb prefixes (0 API cost, 0ms replace, full undo tracking)
+  const TOOL_STEP_VERB_KEYS = ['Analyzed', 'Searched', 'Ran', 'Running', 'Edited', 'Viewed', 'Explored', 'Created', 'Updated', 'Deleted', 'Listed', 'Checked'];
+  const TOOL_STEP_VERB_LOCALES = {
+    'zh-CN': '已分析|已搜索|已运行|正在运行|已编辑|已查看|已浏览|已创建|已更新|已删除|已列出|已检查',
+    'zh-TW': '已分析|已搜尋|已執行|執行中|已編輯|已檢視|已瀏覽|已建立|已更新|已刪除|已列出|已檢查',
+    ja: '分析済み|検索済み|実行済み|実行中|編集済み|閲覧済み|探索済み|作成済み|更新済み|削除済み|一覧取得|確認済み',
+    ko: '분석함|검색함|실행함|실행 중|편집함|조회함|탐색함|생성함|업데이트함|삭제함|목록 조회|확인함',
+    es: 'Analizado|Buscado|Ejecutado|Ejecutando|Editado|Visto|Explorado|Creado|Actualizado|Eliminado|Listado|Verificado',
+    fr: 'Analysé|Recherché|Exécuté|Exécution|Modifié|Consulté|Exploré|Créé|Mis à jour|Supprimé|Listé|Vérifié',
+    de: 'Analysiert|Gesucht|Ausgeführt|Läuft|Bearbeitet|Angesehen|Erkundet|Erstellt|Aktualisiert|Gelöscht|Aufgelistet|Geprüft',
+  };
+  const TOOL_STEP_VERB_MAP = Object.create(null);
+  for (const lk of Object.keys(TOOL_STEP_VERB_LOCALES)) {
+    const vals = TOOL_STEP_VERB_LOCALES[lk].split('|');
+    const m = Object.create(null);
+    for (let i = 0; i < TOOL_STEP_VERB_KEYS.length; i++) {
+      m[TOOL_STEP_VERB_KEYS[i].toLowerCase()] = vals[i];
+    }
+    TOOL_STEP_VERB_MAP[lk] = m;
+  }
+
+  function lookupStaticToolVerb(trimmed, targetLang = currentLang) {
+    if (!trimmed || trimmed.length < 3 || trimmed.length > 14 || /\s/.test(trimmed)) return null;
+    const tl = normalizeLangCode(targetLang) || resolveActiveLang();
+    const map = TOOL_STEP_VERB_MAP[tl];
+    if (!map) return null;
+    return map[trimmed.toLowerCase()] || null;
+  }
+
+  function isProseBoundaryEl(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const tid = ga(el, 'data-testid') || '';
+    if (tid === 'planner-response-text' || tid === 'user-message-bubble') return true;
+    if (hasAttr(el, 'data-markdown-root')) return true;
+    const cls = el.classList;
+    if (cls && (cls.contains('prose') || cls.contains('markdown-body') || cls.contains('rendered-markdown'))) return true;
+    return false;
+  }
+
+  function findToolCollapsibleBody(trig) {
+    if (!trig) return null;
+    const direct = nextSib(trig);
+    if (direct && String(direct.tagName || '').toUpperCase() === 'DIV' && !isProseBoundaryEl(direct)) {
+      return direct;
+    }
+    // Antigravity v2.35 may place [data-testid="step-plan-chip"] alongside worked-for-collapsible inside a flex header wrapper.
+    let sib = direct ? nextSib(direct) : null;
+    while (sib) {
+      if (String(sib.tagName || '').toUpperCase() === 'DIV' && !isProseBoundaryEl(sib)) return sib;
+      sib = nextSib(sib);
+    }
+    const parent = parEl(trig);
+    if (parent && String(parent.tagName || '').toUpperCase() === 'DIV' && !isProseBoundaryEl(parent)) {
+      const pNext = nextSib(parent);
+      if (pNext && String(pNext.tagName || '').toUpperCase() === 'DIV' && !isProseBoundaryEl(pNext) && !hasAttr(pNext, 'data-step-index')) {
+        return pNext;
+      }
+    }
+    return null;
+  }
+
   function isExcludedToolAncestor(el, thoughtPanelSet) {
     if (!el || el.nodeType !== 1) return true;
     if (thoughtPanelSet && thoughtPanelSet.has(el)) return true;
     if (isOverlayOrIgnoredElement(el)) return true;
+    if (isProseBoundaryEl(el)) return true;
     const tag = el.tagName ? String(el.tagName).toUpperCase() : '';
     if (TOOL_SKIP_TAGS.has(tag)) return true;
     const tid = ga(el, 'data-testid') || '';
@@ -3215,29 +3277,41 @@
     return `${lead}${translatedStr}${trail}`;
   }
 
-  function collectToolSummaryTextNodes(rootNode, outList, visitedNodes, thoughtPanelSet) {
-    if (!rootNode || outList.length >= 24) return;
+  function collectToolSummaryTextNodes(rootNode, outList, visitedNodes, thoughtPanelSet, counts) {
+    const c = counts || { ai: 0, st: 0 };
+    if (!rootNode || (c.ai >= 24 && c.st >= 200)) return;
     const nt = rootNode.nodeType;
     if (nt === 3) {
       if (visitedNodes.has(rootNode)) return;
       visitedNodes.add(rootNode);
       const val = getTnStr(rootNode);
+      const activeLang = resolveActiveLang();
       const prevRec = toolSummaryNodeMap.get(rootNode);
-      if (prevRec && prevRec.trans === val && prevRec.lang === resolveActiveLang() && prevRec.mode === currentMode) {
+      if (prevRec && prevRec.trans === val && prevRec.lang === activeLang && prevRec.mode === currentMode) {
         return;
       }
       if (val.length > 1024) return;
       const trimmed = trm(val);
-      if (!trimmed || trimmed.length < 4 || trimmed.length > 280) return;
-      if (!isToolSummaryCandidate(trimmed, resolveActiveLang())) return;
+      if (!trimmed) return;
+      const staticTr = lookupStaticToolVerb(trimmed, activeLang);
+      if (staticTr) {
+        if (c.st < 200) {
+          c.st += 1;
+          outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed, staticTr });
+        }
+        return;
+      }
+      if (c.ai >= 24 || trimmed.length < 4 || trimmed.length > 280) return;
+      if (!isToolSummaryCandidate(trimmed, activeLang)) return;
+      c.ai += 1;
       outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed });
       return;
     }
     if (nt !== 1 || isExcludedToolAncestor(rootNode, thoughtPanelSet)) return;
     const chs = rootNode[K_CN];
     if (!chs || !chs.length) return;
-    for (let i = 0; i < chs.length && outList.length < 24; i++) {
-      collectToolSummaryTextNodes(chs[i], outList, visitedNodes, thoughtPanelSet);
+    for (let i = 0; i < chs.length && (c.ai < 24 || c.st < 200); i++) {
+      collectToolSummaryTextNodes(chs[i], outList, visitedNodes, thoughtPanelSet, c);
     }
   }
 
@@ -3305,9 +3379,13 @@
     const groupTrigs = scope.querySelectorAll ? scope.querySelectorAll(SEL_TOOL_TRIGGERS) : [];
     for (let i = 0; i < groupTrigs.length; i++) {
       const trig = groupTrigs[i];
-      if (!trig || ga(trig, A_EXP) !== 'true') continue;
-      const bodyDiv = nextSib(trig);
-      if (bodyDiv && String(bodyDiv.tagName || '').toUpperCase() === 'DIV') {
+      if (!trig) continue;
+      if (ga(trig, 'data-testid') === 'tool-group-collapsible') {
+        pushContainer(trig);
+      }
+      if (ga(trig, A_EXP) !== 'true') continue;
+      const bodyDiv = findToolCollapsibleBody(trig);
+      if (bodyDiv) {
         pushContainer(bodyDiv);
       }
     }
@@ -3371,6 +3449,10 @@
 
       for (let i = 0; i < candidates.length; i++) {
         const cand = candidates[i];
+        if (cand.staticTr) {
+          applyToolSummaryText(cand, cand.staticTr, activeLang, activeMode);
+          continue;
+        }
         const cacheKey = `${modePrefix}${cand.trimmed}`;
         const hit = toolSummaryCache.get(cacheKey);
         if (hit) {
