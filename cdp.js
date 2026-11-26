@@ -8071,80 +8071,65 @@ let _configRefreshTemplate = '';
 function getConfigRefreshTemplate() {
   if (_configRefreshTemplate) return _configRefreshTemplate;
   const rawTpl = `(() => {
-    const cfg = __AG_REF_CFG__;
-    const api = window.__agPrism || window.__agClaudeStyle;
+    const W = window, G = globalThis, D = document, R = D.documentElement, cfg = __AG_REF_CFG__, api = W.__agPrism || W.__agClaudeStyle;
     if (api && api.version === __AG_REF_VER__ && api.codeHash === __AG_REF_HASH__ && typeof api.refreshConfig === 'function') {
-      const applied = api.refreshConfig(cfg);
-      if (applied === false) return { refreshed: true, skippedStale: true, version: api.version };
-      const effectiveCfg = api.getState?.()?.cfg || cfg;
-      try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}
-      try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}
-      try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}
-      try { window.__agPrismInlineDiff?.sync?.(effectiveCfg); } catch {}
-      if (effectiveCfg?.omniModule === 'off') { try { window.__agPrismOmni?.destroy?.(); } catch {} }
-      else { try { window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {} }
-      if (effectiveCfg?.sidebarStudio !== 'on') {
-        try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}
-        try { window.__agPrismSidebar?.destroy?.(); } catch {}
-        try { delete window.__agPrismSidebar; } catch {}
-        try {
-          if (document.documentElement) {
-            ['data-ag-prism-mode','data-ag-prism-chat-kind','data-ag-prism-chat-telemetry','data-ag-cs-space','data-ag-cs-space-palette','data-ag-cs-space-accent'].forEach((a) => document.documentElement.removeAttribute(a));
-          }
-        } catch {}
-      } else {
-        try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}
+      if (api.refreshConfig(cfg) === false) return { refreshed: true, skippedStale: true, version: api.version };
+      const e = api.getState?.()?.cfg || cfg;
+      const r = (s) => s.split(',').forEach((a) => R?.removeAttribute?.(a));
+      const x = (s) => s.split(',').forEach((k) => { try { delete W[k]; } catch {} try { delete G[k]; } catch {} });
+      for (const k of '__agPrismTelemetry,__agPrismEffortSlider,__agPrismThought,__agPrismInlineDiff'.split(',')) try { W[k]?.sync?.(e); } catch {}
+      try { e?.omniModule === 'off' ? W.__agPrismOmni?.destroy?.() : W.__agPrismOmni?.sync?.(e, W.__agPrismOmniServerMeta || null); } catch {}
+      try { W.__agPrismSidebar?.sync?.(e, W.__agPrismSidebarMeta || null); } catch {}
+      if (e?.sidebarStudio !== 'on') {
+        try { W.__agPrismSidebar?.destroy?.(); } catch {}
+        try { delete W.__agPrismSidebar; } catch {}
+        try { r('data-ag-prism-mode,data-ag-prism-chat-kind,data-ag-prism-chat-telemetry,data-ag-cs-space,data-ag-cs-space-palette,data-ag-cs-space-accent'); } catch {}
       }
       try {
-        const hiMode = effectiveCfg?.hostLocalization;
-        const hiLang = effectiveCfg?.language;
-        const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim();
-        if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off');
-        else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on');
-        else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(navL))) window.__agPrismHostI18n?.destroy?.();
-        else window.__agPrismHostI18n?.setMode?.('auto');
+        const h = W.__agPrismHostI18n;
+        if (h) {
+          const m = e?.hostLocalization, l = e?.language || e?.lang || '';
+          const n = typeof navigator !== 'undefined' ? String(navigator.languages?.[0] || navigator.language || '').trim() : '';
+          if (m === 'on') h.setMode?.('on');
+          else if (m === 'off') __AG_REF_IS_TR__ ? h.destroy?.() : h.setMode?.('off');
+          else if (__AG_REF_IS_TR__ ? !/^(?:$|auto$|tr(?:$|[-_]))/i.test(String(l).trim()) : (l && l !== 'zh-CN' && l !== 'auto') || ((!l || l === 'auto') && n && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(n))) h.destroy?.();
+          else h.setMode?.('auto');
+        }
       } catch {}
-      if (effectiveCfg?.mascot === 'off' || effectiveCfg?.mascot === false) {
+      if (e?.mascot === 'off' || e?.mascot === false) {
         try {
-          try { window.__agDualMascotRig?.dispose?.(); } catch {}
-          try { (window.__agPrism || window.__agClaudeStyle)?.sync?.(); } catch {}
-          document.querySelectorAll?.('.ag-cs-crab, .ag-cs-dual-stage, .ag-cs-crab-stage, .ag-cs-mascot-stage, .ag-v2-mascot-stage, .ag-v2-habitat-prop').forEach((n) => {
+          try { W.__agDualMascotRig?.dispose?.(); } catch {}
+          try { api.sync?.(); } catch {}
+          D.querySelectorAll?.('.ag-cs-crab,.ag-cs-dual-stage,.ag-cs-crab-stage,.ag-cs-mascot-stage,.ag-v2-mascot-stage,.ag-v2-habitat-prop').forEach((n) => {
             try { n.__agMascotApi?.dispose?.(); } catch {}
             n.remove?.();
           });
-          document.querySelectorAll?.('[data-ag-cs-crab-anchor]').forEach((n) => n.removeAttribute?.('data-ag-cs-crab-anchor'));
-          document.documentElement?.removeAttribute?.('data-ag-cs-has-crab');
-          document.documentElement?.removeAttribute?.('data-ag-cs-mascot-drag');
-          delete window.__agDualMascotRig;
-          delete globalThis.__agDualMascotRig;
-          delete window.__agPrismMascotArt;
-          delete globalThis.__agPrismMascotArt;
+          D.querySelectorAll?.('[data-ag-cs-crab-anchor]').forEach((n) => n.removeAttribute?.('data-ag-cs-crab-anchor'));
+          r('data-ag-cs-has-crab,data-ag-cs-mascot-drag');
+          x('__agDualMascotRig,__agPrismMascotArt');
         } catch {}
       }
-      if (effectiveCfg?.homeLayout && effectiveCfg.homeLayout !== 'studio') {
+      if (e?.homeLayout && e.homeLayout !== 'studio') {
         try {
-          (window.__agPrism || window.__agClaudeStyle)?.detachHomeStudio?.();
-          document.getElementById?.('ag-prism-studio-v101-css')?.remove?.();
-          document.querySelectorAll?.('.ag-cs-home-panel-seat,.ag-cs-home-panel')?.forEach?.((n) => n.remove());
-          document.documentElement?.removeAttribute?.('data-ag-prism-scope');
-          for (const k of ['__agPrismHomeStudioPanel', '__agHomeStudioPanel']) { delete window[k]; delete globalThis[k]; }
+          api.detachHomeStudio?.();
+          D.getElementById?.('ag-prism-studio-v101-css')?.remove?.();
+          D.querySelectorAll?.('.ag-cs-home-panel-seat,.ag-cs-home-panel')?.forEach?.((n) => n.remove());
+          R?.removeAttribute?.('data-ag-prism-scope');
+          x('__agPrismHomeStudioPanel,__agHomeStudioPanel');
         } catch {}
       }
-      if (effectiveCfg?.periodicModelPicker === 'off' || effectiveCfg?.periodicModelPicker === false) {
+      if (e?.periodicModelPicker === 'off' || e?.periodicModelPicker === false) {
         try {
-          window.__agPrismPeriodicPicker?.destroy?.();
-          ['data-ag-prism-periodic-picker','data-ag-pp-open','data-ag-pp-holding'].forEach((a) => document.documentElement?.removeAttribute?.(a));
-          document.querySelectorAll?.('#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap').forEach((n) => n.remove());
-          ['__agPrismPeriodicPicker','__agPrismPeriodicPickerFactory','__agPrismKeyboard3D','__agPrismPeriodicKeyboard3D','__agPrismOledScreen','__agPrismGrainAssets','__agPeriodicAudioFx','__agPeriodicModelCatalog','__agPeriodicHostBridge','__agPeriodicBentoUi','__agPeriodicPbrGrainAssets','__agPeriodicOledScreen','__agPeriodicKeyboard3D'].forEach((k) => { try { delete window[k]; } catch {} try { delete globalThis[k]; } catch {} });
+          W.__agPrismPeriodicPicker?.destroy?.();
+          r('data-ag-prism-periodic-picker,data-ag-pp-open,data-ag-pp-holding');
+          D.querySelectorAll?.('#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap').forEach((n) => n.remove());
+          x('__agPrismPeriodicPicker,__agPrismPeriodicPickerFactory,__agPrismKeyboard3D,__agPrismPeriodicKeyboard3D,__agPrismOledScreen,__agPrismGrainAssets,__agPeriodicAudioFx,__agPeriodicModelCatalog,__agPeriodicHostBridge,__agPeriodicBentoUi,__agPeriodicPbrGrainAssets,__agPeriodicOledScreen,__agPeriodicKeyboard3D');
         } catch {}
       }
-      if (document.documentElement) {
-        if (effectiveCfg?.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') {
-          document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');
-        } else {
-          document.documentElement.removeAttribute('data-ag-prism-thought-view');
-        }
-        document.documentElement.setAttribute('data-ag-prism-sidebar-studio', effectiveCfg?.sidebarStudio === 'on' ? 'on' : 'off');
+      if (R) {
+        if (e?.thoughtTranslate && e.thoughtTranslate !== 'off') R.setAttribute('data-ag-prism-thought-view', e.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');
+        else R.removeAttribute('data-ag-prism-thought-view');
+        R.setAttribute('data-ag-prism-sidebar-studio', e?.sidebarStudio === 'on' ? 'on' : 'off');
       }
       return { refreshed: true, version: api.version };
     }
@@ -8159,6 +8144,7 @@ function buildConfigRefreshExpression(customConfig, extraMeta = null) {
   const codeHash = resolveCurrentBundleCodeHash();
   const hasExplicitLang = !customConfig || Object.prototype.hasOwnProperty.call(config, 'language') || Object.prototype.hasOwnProperty.call(config, 'lang');
   const uiSlice = hasExplicitLang ? buildRuntimeUiSlicePayload(config) : null;
+  const isTrHostLocale = resolveHostI18nLocale(config.language || config.lang || 'auto') === 'tr';
   const bootCfg = {
     ...config,
     ...(uiSlice ? { __uiSlice: uiSlice } : {}),
@@ -8168,9 +8154,10 @@ function buildConfigRefreshExpression(customConfig, extraMeta = null) {
     __fromFile: true,
   };
   return getConfigRefreshTemplate()
-    .replace('__AG_REF_CFG__', () => JSON.stringify(bootCfg))
+    .replace(/__AG_REF_IS_TR__/g, isTrHostLocale ? '1' : '0')
     .replace('__AG_REF_VER__', () => JSON.stringify(PLUGIN_VERSION))
-    .replace('__AG_REF_HASH__', () => JSON.stringify(codeHash));
+    .replace('__AG_REF_HASH__', () => JSON.stringify(codeHash))
+    .replace('__AG_REF_CFG__', () => JSON.stringify(bootCfg));
 }
 
 let _injectWrapperTemplate = null;
@@ -10156,6 +10143,7 @@ function buildHostI18nExpression(config = null, hostLocaleHint = null, opts = nu
   }
   const mode = cfg.hostLocalization === 'on' ? 'on' : cfg.hostLocalization === 'off' ? 'off' : 'auto';
   const modeJson = serializeJsonForEval(mode);
+  const expectedLocaleJson = serializeJsonForEval(effectiveHostLang);
   const localeOption = effectiveHostLang === 'tr' ? 'locale: "tr",' : '';
   const hashJson = serializeJsonForEval(codeHash);
 
@@ -10222,35 +10210,46 @@ function buildHostI18nExpression(config = null, hostLocaleHint = null, opts = nu
       }
     } catch {}
 
+    const expectedLocale = ${expectedLocaleJson};
     let targetMode = ${modeJson};
     try {
       const liveCfg = window.__agPrism?.getState?.()?.cfg;
       if (liveCfg && typeof liveCfg === 'object') {
         if (liveCfg.hostLocalization === 'off') {
+          if (expectedLocale === 'tr') {
+            try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}
+            return { ok: true, status: 'off', skippedByLiveCfg: true };
+          }
           targetMode = 'off';
         } else if (liveCfg.hostLocalization === 'on') {
           targetMode = 'on';
         } else {
           targetMode = 'auto';
-          if (${serializeJsonForEval(effectiveHostLang)} !== 'tr') {
           const liveLang = liveCfg.language || liveCfg.lang || '';
-          if (liveLang && liveLang !== 'zh-CN' && liveLang !== 'auto') {
-            try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}
-            return { ok: true, status: 'off', skippedByLiveCfg: true };
-          }
-          if (!liveLang || liveLang === 'auto') {
-            const navLang = String(
-              (typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || ''
-            )
-              .trim()
-              .split(/[.@]/)[0]
-              .toLowerCase()
-              .replace(/_/g, '-');
-            if (navLang && navLang !== 'zh' && !/^zh-(?:cn|hans|sg)(?:-|$)/.test(navLang)) {
+          if (expectedLocale === 'tr') {
+            const normLiveLang = String(liveLang).trim().toLowerCase().replace(/_/g, '-');
+            if (normLiveLang && normLiveLang !== 'auto' && normLiveLang !== 'tr' && !normLiveLang.startsWith('tr-')) {
               try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}
               return { ok: true, status: 'off', skippedByLiveCfg: true };
             }
-          }
+          } else {
+            if (liveLang && liveLang !== 'zh-CN' && liveLang !== 'auto') {
+              try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}
+              return { ok: true, status: 'off', skippedByLiveCfg: true };
+            }
+            if (!liveLang || liveLang === 'auto') {
+              const navLang = String(
+                (typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || ''
+              )
+                .trim()
+                .split(/[.@]/)[0]
+                .toLowerCase()
+                .replace(/_/g, '-');
+              if (navLang && navLang !== 'zh' && !/^zh-(?:cn|hans|sg)(?:-|$)/.test(navLang)) {
+                try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}
+                return { ok: true, status: 'off', skippedByLiveCfg: true };
+              }
+            }
           }
         }
       }

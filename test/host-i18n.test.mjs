@@ -2798,3 +2798,122 @@ test('Issue #80: host-i18n exempts orchestrator-picker-row/effort and data-ag-cs
 
   inst.destroy();
 });
+
+test('in-page liveCfg guard preserves Turkish host-i18n on en-US navigator while keeping zh-CN navigator guard unchanged', () => {
+  const runHostExpr = (expr, liveCfg, nav = { language: 'en-US', languages: ['en-US'] }) => {
+    const env = createTestEnv();
+    const btn = env.makeEl('button', { text: 'Settings' });
+    env.doc.body.append(btn);
+    env.win.window = env.win;
+    env.win.globalThis = env.win;
+    env.win.self = env.win;
+    env.win.top = env.win;
+    env.win.navigator = nav;
+    env.win.__agPrism = { getState: () => ({ cfg: liveCfg }) };
+    const res = vm.runInNewContext(expr, {
+      window: env.win,
+      globalThis: env.win,
+      document: env.doc,
+      navigator: nav,
+      MutationObserver: env.win.MutationObserver,
+      setTimeout: env.setTimeoutFn,
+      clearTimeout: env.clearTimeoutFn,
+    });
+    return { res, btn, env };
+  };
+
+  // 1. Turkish auto + Turkish locale hint: liveCfg { language: 'auto' } + navigator.language='en-US' must NOT be skipped
+  const trAutoExpr = cdp.buildHostI18nExpression({ language: 'auto', hostLocalization: 'auto' }, 'tr-TR');
+  assert.ok(trAutoExpr.includes('const expectedLocale = "tr";'));
+  const trAutoRun = runHostExpr(trAutoExpr, { language: 'auto' }, { language: 'en-US', languages: ['en-US'] });
+  assert.equal(trAutoRun.res.ok, true);
+  assert.equal(trAutoRun.res.status, 'active');
+  assert.equal(Boolean(trAutoRun.res.skippedByLiveCfg), false);
+  assert.notEqual(trAutoRun.btn.textContent, 'Settings');
+
+  // 2. Turkish explicit language: 'tr' + navigator.language='en-US' must NOT be skipped
+  const trExplicitExpr = cdp.buildHostI18nExpression({ language: 'tr', hostLocalization: 'auto' });
+  const trExplicitRun = runHostExpr(trExplicitExpr, { language: 'tr', hostLocalization: 'auto' }, { language: 'en-US', languages: ['en-US'] });
+  assert.equal(trExplicitRun.res.ok, true);
+  assert.equal(trExplicitRun.res.status, 'active');
+  assert.equal(Boolean(trExplicitRun.res.skippedByLiveCfg), false);
+  assert.notEqual(trExplicitRun.btn.textContent, 'Settings');
+
+  // 3. Turkish expectedLocale with concrete non-Turkish liveLang ('en') or hostLocalization='off' MUST be skipped
+  const trLiveEnRun = runHostExpr(trExplicitExpr, { language: 'en', hostLocalization: 'auto' }, { language: 'en-US', languages: ['en-US'] });
+  assert.equal(trLiveEnRun.res.status, 'off');
+  assert.equal(trLiveEnRun.res.skippedByLiveCfg, true);
+  assert.equal(trLiveEnRun.btn.textContent, 'Settings');
+
+  const trLiveOffRun = runHostExpr(trExplicitExpr, { language: 'tr', hostLocalization: 'off' }, { language: 'en-US', languages: ['en-US'] });
+  assert.equal(trLiveOffRun.res.status, 'off');
+  assert.equal(trLiveOffRun.res.skippedByLiveCfg, true);
+  assert.equal(trLiveOffRun.btn.textContent, 'Settings');
+
+  // 4. Turkish expectedLocale with hostLocalization='on' keeps active mode='on'
+  const trLiveOnRun = runHostExpr(trExplicitExpr, { language: 'en', hostLocalization: 'on' }, { language: 'en-US', languages: ['en-US'] });
+  assert.equal(trLiveOnRun.res.ok, true);
+  assert.equal(trLiveOnRun.res.status, 'active');
+  assert.equal(trLiveOnRun.res.mode, 'on');
+  assert.equal(Boolean(trLiveOnRun.res.skippedByLiveCfg), false);
+
+  // 5. zh-CN auto + navigator.language='en-US' MUST still be skipped (unchanged zh-CN behaviour)
+  const zhAutoExpr = cdp.buildHostI18nExpression({ language: 'auto', hostLocalization: 'auto' }, 'zh-CN');
+  assert.ok(zhAutoExpr.includes('const expectedLocale = "zh-CN";'));
+  const zhAutoRun = runHostExpr(zhAutoExpr, { language: 'auto', hostLocalization: 'auto' }, { language: 'en-US', languages: ['en-US'] });
+  assert.equal(zhAutoRun.res.status, 'off');
+  assert.equal(zhAutoRun.res.skippedByLiveCfg, true);
+  assert.equal(zhAutoRun.btn.textContent, 'Settings');
+
+  // 6. buildConfigRefreshExpression preserves Turkish host-i18n on en-US navigator
+  const runRefresh = (cfg, nav) => {
+    const calls = [];
+    const refExpr = cdp.buildConfigRefreshExpression(cfg);
+    const codeHashMatch = refExpr.match(/"codeHash":"([^"]+)"/);
+    const sb = {
+      navigator: nav,
+      document: {
+        documentElement: { setAttribute() {}, removeAttribute() {} },
+        querySelectorAll: () => [],
+      },
+      window: null,
+      globalThis: null,
+      __agPrism: {
+        version: cdp.PLUGIN_VERSION,
+        codeHash: codeHashMatch ? codeHashMatch[1] : '',
+        refreshConfig: () => true,
+        getState: () => ({ cfg }),
+      },
+      __agPrismHostI18n: {
+        setMode: (m) => calls.push(['setMode', m]),
+        destroy: () => calls.push(['destroy']),
+      },
+    };
+    sb.window = sb;
+    sb.globalThis = sb;
+    const res = vm.runInNewContext(refExpr, sb);
+    assert.equal(res.refreshed, true);
+    return calls;
+  };
+
+  assert.deepEqual(
+    runRefresh({ ...cdp.DEFAULT_CONFIG, hostLocalization: 'auto', language: 'tr' }, { language: 'en-US', languages: ['en-US'] }),
+    [['setMode', 'auto']],
+    'config refresh with language="tr" must keep hostI18n mounted'
+  );
+  assert.deepEqual(
+    runRefresh({ ...cdp.DEFAULT_CONFIG, hostLocalization: 'off', language: 'tr' }, { language: 'en-US', languages: ['en-US'] }),
+    [['destroy']],
+    'config refresh with language="tr" and hostLocalization="off" must destroy hostI18n'
+  );
+  cdp._setWindowsUiLocaleReaderForTest(() => 'tr-TR');
+  try {
+    assert.deepEqual(
+      runRefresh({ ...cdp.DEFAULT_CONFIG, hostLocalization: 'auto', language: 'auto' }, { language: 'en-US', languages: ['en-US'] }),
+      [['setMode', 'auto']],
+      'config refresh with auto on tr-TR Windows must trust Node decision and keep hostI18n mounted'
+    );
+  } finally {
+    cdp._setWindowsUiLocaleReaderForTest(null);
+  }
+});
