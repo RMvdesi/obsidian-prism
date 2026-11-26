@@ -393,6 +393,17 @@ export function isKeylessAllowedEndpoint(rawUrl) {
   }
 }
 
+function isOpenAiReasoningModel(model) {
+  return /(?:^|\/)o[134](?:[-_.]|$)|gpt-5/i.test(String(model || '').trim());
+}
+
+function chatSamplingParams(model, temperature, tokenLimit) {
+  if (isOpenAiReasoningModel(model)) {
+    return tokenLimit === undefined ? {} : { max_completion_tokens: tokenLimit };
+  }
+  return tokenLimit === undefined ? { temperature } : { temperature, max_tokens: tokenLimit };
+}
+
 export function buildNoThinkingParams(model, baseUrl = '') {
   const m = String(model || '').trim().toLowerCase();
   if (!m) return null;
@@ -410,7 +421,7 @@ export function buildNoThinkingParams(model, baseUrl = '') {
   if (/glm|zhipu|deepseek|doubao|kimi|moonshot/i.test(m)) {
     return { thinking: { type: 'disabled' } };
   }
-  if (/^(?:o1|o3|o4)(?:[-_]|$)|gpt-5|reasoning/i.test(m)) {
+  if (isOpenAiReasoningModel(m) || /reasoning/i.test(m)) {
     return { reasoning_effort: 'low' };
   }
   if (isOllamaPort && /r1|think|nemotron/i.test(m)) {
@@ -2765,8 +2776,7 @@ export class ThoughtTranslatorService {
       const payload = {
         model,
         stream: false,
-        max_tokens: 160,
-        temperature: 0.2,
+        ...chatSamplingParams(model, 0.2, 160),
         messages: [
           {
             role: 'user',
@@ -2815,7 +2825,12 @@ export class ThoughtTranslatorService {
         return { ok: false, status: res.status, latencyMs, model, error: '响应非合法 JSON' };
       }
       const replyRaw = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || '';
-      const reply = stripThinkTagsAndQuotes(replyRaw).slice(0, 80) || 'OK';
+      const reply = stripThinkTagsAndQuotes(replyRaw).slice(0, 80);
+      if (!reply) {
+        const reason = data?.choices?.[0]?.finish_reason;
+        const error = reason === 'length' ? '模型达到输出上限，未返回回复正文' : '模型未返回回复正文';
+        return { ok: false, status: res.status, latencyMs, model, error };
+      }
       return { ok: true, status: res.status, latencyMs, model, reply };
     } catch (err) {
       return {
@@ -3775,7 +3790,7 @@ export class ThoughtTranslatorService {
       const payload = {
         model,
         stream: true,
-        temperature: 0.32,
+        ...chatSamplingParams(model, 0.32),
         messages: [
           { role: 'system', content: sysPrompt },
           { role: 'user', content: userContent },
@@ -4143,7 +4158,7 @@ export class ThoughtTranslatorService {
             const payload = {
               model,
               stream: false,
-              temperature: 0.1,
+              ...chatSamplingParams(model, 0.1),
               messages: [
                 { role: 'system', content: sysPrompt },
                 { role: 'user', content: numberedInput },
