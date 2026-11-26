@@ -13,7 +13,7 @@ final class InstallerOptions {
     var noKillLegacy = false
     var noNativeDaemon = false
     var noRelaunchPrompt = false
-    var autoRelaunch = false
+    var noAutoRelaunch = false
     var purgeData = false
     var createLauncher = true
     var explicitLauncherFlag = false
@@ -490,7 +490,7 @@ enum InstallerCore {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
-    static func registerLaunchAgent(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, autoRelaunch: Bool = false, lang: String? = nil) throws {
+    static func registerLaunchAgent(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, noAutoRelaunch: Bool = false, lang: String? = nil) throws {
         let plistPath = getLaunchAgentPlistPath()
         let launchAgentsDir = (plistPath as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: launchAgentsDir, withIntermediateDirectories: true, attributes: nil)
@@ -511,8 +511,8 @@ enum InstallerCore {
         if noRelaunchPrompt {
             args.append("--no-relaunch-prompt")
         }
-        if autoRelaunch {
-            args.append("--auto-relaunch")
+        if noAutoRelaunch {
+            args.append("--no-auto-relaunch")
         }
         if let explicitLang = InstallerI18n.normalizeLangCode(lang) {
             args.append("--lang")
@@ -560,7 +560,7 @@ enum InstallerCore {
         }
     }
 
-    private static func spawnWatcherDirectly(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, autoRelaunch: Bool = false, lang: String? = nil) throws {
+    private static func spawnWatcherDirectly(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, noAutoRelaunch: Bool = false, lang: String? = nil) throws {
         let watcherExe = (installDir as NSString).appendingPathComponent(watcherExeName)
         var args = ["--watch", "--dir", installDir]
         if !pluginDir.isEmpty {
@@ -577,8 +577,8 @@ enum InstallerCore {
         if noRelaunchPrompt {
             args.append("--no-relaunch-prompt")
         }
-        if autoRelaunch {
-            args.append("--auto-relaunch")
+        if noAutoRelaunch {
+            args.append("--no-auto-relaunch")
         }
         if let explicitLang = InstallerI18n.normalizeLangCode(lang) {
             args.append("--lang")
@@ -1618,7 +1618,7 @@ enum InstallerCore {
                         cdpPort: opts.cdpPort,
                         noNativeDaemon: opts.noNativeDaemon,
                         noRelaunchPrompt: opts.noRelaunchPrompt,
-                        autoRelaunch: opts.autoRelaunch,
+                        noAutoRelaunch: opts.noAutoRelaunch,
                         lang: opts.lang
                     )
                     Thread.sleep(forTimeInterval: 0.25)
@@ -1658,7 +1658,7 @@ enum InstallerCore {
                             cdpPort: opts.cdpPort,
                             noNativeDaemon: opts.noNativeDaemon,
                             noRelaunchPrompt: opts.noRelaunchPrompt,
-                            autoRelaunch: opts.autoRelaunch,
+                            noAutoRelaunch: opts.noAutoRelaunch,
                             lang: opts.lang
                         )
                         spawned = true
@@ -3077,8 +3077,8 @@ func parseInstallerArgs(_ args: [String]) -> InstallerOptions {
         else if a == "--no-kill-legacy" { opts.noKillLegacy = true }
         else if a == "--no-native-daemon" { opts.noNativeDaemon = true }
         else if a == "--no-relaunch-prompt" { opts.noRelaunchPrompt = true }
-        else if a == "--auto-relaunch" { opts.autoRelaunch = true }
-        else if a == "--no-auto-relaunch" { opts.autoRelaunch = false }
+        else if a == "--auto-relaunch" { opts.noAutoRelaunch = false }
+        else if a == "--no-auto-relaunch" { opts.noAutoRelaunch = true }
         else if a == "--purge-data" { opts.purgeData = true }
         else if a == "--create-launcher" {
             opts.createLauncher = true

@@ -88,12 +88,12 @@ final class WatcherApp {
     private let isWatch: Bool
     private let noNativeDaemon: Bool
     private let noRelaunchPrompt: Bool
-    private let autoRelaunchCliFlag: Bool
+    private let noAutoRelaunchCliFlag: Bool
     private let logLock = NSLock()
     private let promptedHostsLock = NSLock()
     private var promptedHostKeys: Set<String> = []
 
-    init(baseDir: String, pluginDir: String, isWatch: Bool, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, autoRelaunch: Bool = false) {
+    init(baseDir: String, pluginDir: String, isWatch: Bool, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, noAutoRelaunch: Bool = false) {
         self.baseDir = baseDir
         self.pluginDir = pluginDir
         self.logFile = (baseDir as NSString).appendingPathComponent("watch.log")
@@ -102,7 +102,7 @@ final class WatcherApp {
         self.isWatch = isWatch
         self.noNativeDaemon = noNativeDaemon || (ProcessInfo.processInfo.environment["AG_PRISM_NO_NATIVE_DAEMON"] == "1")
         self.noRelaunchPrompt = noRelaunchPrompt
-        self.autoRelaunchCliFlag = autoRelaunch
+        self.noAutoRelaunchCliFlag = noAutoRelaunch
     }
 
     func log(_ line: String) {
@@ -1031,6 +1031,7 @@ final class WatcherApp {
             !(envForGuard["NODE_TEST_CONTEXT"] ?? "").isEmpty
         let shouldAttachWorkspaceObserver = overridePort == nil &&
             !self.noRelaunchPrompt &&
+            !self.noAutoRelaunchCliFlag &&
             envForGuard["PRISM_NO_RELAUNCH_PROMPT"] != "1" &&
             envForGuard["AG_PRISM_NO_RELAUNCH_PROMPT"] != "1" &&
             envForGuard["AG_PRISM_NO_AUTO_RELAUNCH"] != "1" &&
@@ -1214,6 +1215,7 @@ final class WatcherApp {
     private func isAutoRelaunchOnBareLaunchEnabled(isDefaultDir: Bool) -> Bool {
         let env = ProcessInfo.processInfo.environment
         if self.noRelaunchPrompt ||
+            self.noAutoRelaunchCliFlag ||
             env["PRISM_NO_RELAUNCH_PROMPT"] == "1" ||
             env["AG_PRISM_NO_RELAUNCH_PROMPT"] == "1" ||
             env["AG_PRISM_NO_AUTO_RELAUNCH"] == "1" ||
@@ -1245,7 +1247,8 @@ final class WatcherApp {
                 return false
             }
         }
-        return self.autoRelaunchCliFlag
+        // Enabled by default for fresh cold launches (gated by <=5s cold-start window); opt out via config.json or --no-auto-relaunch
+        return true
     }
 
     private func isAutoArchiveOnExitAllowed() -> Bool {
@@ -1739,7 +1742,7 @@ func runWatcherMain() -> Int32 {
     var outFile: String?
     var noNativeDaemon = false
     var noRelaunchPrompt = false
-    var autoRelaunch = false
+    var noAutoRelaunch = false
 
     let args = CommandLine.arguments
     var i = 1
@@ -1751,8 +1754,8 @@ func runWatcherMain() -> Int32 {
         else if a == "--self-test-launch-guard" { mode = "self-test-launch-guard" }
         else if a == "--no-native-daemon" { noNativeDaemon = true }
         else if a == "--no-relaunch-prompt" { noRelaunchPrompt = true }
-        else if a == "--auto-relaunch" { autoRelaunch = true }
-        else if a == "--no-auto-relaunch" { autoRelaunch = false }
+        else if a == "--auto-relaunch" { noAutoRelaunch = false }
+        else if a == "--no-auto-relaunch" { noAutoRelaunch = true }
         else if a == "--dir" && i + 1 < args.count { i += 1; customDir = args[i] }
         else if a == "--plugin-dir" && i + 1 < args.count { i += 1; customPluginDir = args[i] }
         else if a == "--cdp-port" && i + 1 < args.count {
@@ -1797,7 +1800,7 @@ func runWatcherMain() -> Int32 {
         return runLaunchGuardSelfTest()
     }
 
-    let app = WatcherApp(baseDir: baseDir, pluginDir: pluginDir, isWatch: mode == "watch", noNativeDaemon: noNativeDaemon, noRelaunchPrompt: noRelaunchPrompt, autoRelaunch: autoRelaunch)
+    let app = WatcherApp(baseDir: baseDir, pluginDir: pluginDir, isWatch: mode == "watch", noNativeDaemon: noNativeDaemon, noRelaunchPrompt: noRelaunchPrompt, noAutoRelaunch: noAutoRelaunch)
 
     if mode == "once" {
         return app.runOnce(overridePort: overridePort, outFile: outFile)

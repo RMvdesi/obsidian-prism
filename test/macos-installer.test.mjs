@@ -1179,8 +1179,8 @@ test('macOS Opt-in event-driven Launch Guard: NSWorkspace observer, double-layer
   assert.ok(watcherSwift.includes('"--auto-relaunch"'), 'Watcher accepts --auto-relaunch flag');
   assert.ok(watcherSwift.includes('"--self-test-launch-guard"'), 'Watcher exposes --self-test-launch-guard');
 
-  // 4) Setup/main.swift opt-in default false & Aqua/Background LaunchAgent keys
-  assert.ok(setupSwift.includes('var autoRelaunch = false'), 'Setup defaults autoRelaunch to false (opt-in)');
+  // 4) Setup/main.swift default-on cold-start guard with --no-auto-relaunch opt-out & Aqua/Background LaunchAgent keys
+  assert.ok(setupSwift.includes('var noAutoRelaunch = false'), 'Setup enables cold-start auto-relaunch by default with opt-out');
   assert.ok(setupSwift.includes('"--auto-relaunch"') && setupSwift.includes('"--no-auto-relaunch"'), 'Setup supports --auto-relaunch / --no-auto-relaunch');
   assert.match(setupSwift, /<key>LimitLoadToSessionType<\/key>\s*<string>Aqua<\/string>/, 'LaunchAgent limits load to Aqua GUI session');
   assert.match(setupSwift, /<key>ProcessType<\/key>\s*<string>Background<\/string>/, 'LaunchAgent sets ProcessType to Background');
