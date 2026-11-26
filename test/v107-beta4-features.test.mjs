@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const cdp = require(path.join(ROOT, 'cdp.js'));
 const locales = require(path.join(ROOT, 'i18n-locales.js'));
@@ -724,16 +725,36 @@ test('v1.0.7-beta.4: ui-runtime switches host-i18n to off reverse-restore on off
     sandbox.__agPrism.sync();
     assert.equal(crab.getAttribute('data-ag-mascot-peek'), '1', 'takeover card must trigger peek');
 
-    // Remove takeover card, open model menu -> mascot stays in peek mode
+    // Remove takeover card, open native model menu -> Issue #58: native model menu must NOT force mascot peek (keeps crabs visible while style.css:534 blocks misclicks)
     tk.remove();
     const mdl = doc.createElement('div');
     mdl.setAttribute('data-testid', 'model-selector-panel');
     doc.body.appendChild(mdl);
     sandbox.__agPrism.sync();
-    assert.equal(crab.getAttribute('data-ag-mascot-peek'), '1', 'model menu must trigger peek');
-
-    // Remove model menu -> mascot leaves peek mode
+    assert.equal(doc.documentElement.getAttribute('data-ag-cs-model-menu'), '1', 'native model menu must still mark data-ag-cs-model-menu for pointer-events passthrough');
+    assert.equal(crab.getAttribute('data-ag-mascot-peek'), null, 'native model menu must NOT force mascot peek');
     mdl.remove();
+    sandbox.__agPrism.sync();
+    assert.equal(doc.documentElement.getAttribute('data-ag-cs-model-menu'), null);
+
+    // 3D Periodic Table Picker (data-ag-pp-open="1") must still trigger peek (0fps sleep)
+    doc.documentElement.setAttribute('data-ag-pp-open', '1');
+    sandbox.__agPrism.sync();
+    assert.equal(crab.getAttribute('data-ag-mascot-peek'), '1', '3D periodic table picker must still trigger peek');
+    doc.documentElement.removeAttribute('data-ag-pp-open');
+    sandbox.__agPrism.sync();
+    assert.equal(crab.getAttribute('data-ag-mascot-peek'), null, 'closing periodic picker must exit peek');
+
+    // Queued / running sibling banner above composer card must still trigger peek
+    const queuedBanner = doc.createElement('div');
+    queuedBanner.textContent = 'Queued message';
+    inputBox.insertBefore(queuedBanner, card);
+    sandbox.__agPrism.sync();
+    assert.equal(queuedBanner.getAttribute('data-ag-cs-queued'), '1', 'queued sibling above composer must be marked data-ag-cs-queued="1"');
+    assert.equal(crab.getAttribute('data-ag-mascot-peek'), '1', 'queued card above composer must still trigger peek');
+
+    // Remove queued banner -> mascot leaves peek mode
+    queuedBanner.remove();
     sandbox.__agPrism.sync();
     assert.equal(crab.getAttribute('data-ag-mascot-peek'), null, 'closing overlays must exit peek');
 

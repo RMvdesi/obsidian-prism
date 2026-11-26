@@ -8,7 +8,7 @@
  *    （含 plugin.json、assets/logo.svg、THIRD_PARTY_NOTICES.md、sidecars/daemon/sidecar.json、全部运行时与 vendor/）；
  * 2. 自动停用并清理旧临时插件目录 ~/.gemini/config/plugins/antigravity-prism（若存在用户配置则平滑迁入新目录）；
  * 3. 写入 repo-meta.json 链接本地 Git 源码目录，支持设置面板「检查 / 同步 Git 更新」；
- * 4. 通过 PowerShell Start-Process -WindowStyle Hidden 脱离终端 Job Object 确保后台守护实例已启动并接管当前 CDP 窗口！
+ * 4. 通过纯 Node detached + windowsHide 脱离派生确保后台守护实例已启动并接管当前 CDP 窗口！
  */
 
 const crypto = require("node:crypto");
@@ -613,9 +613,9 @@ function normalizeMacosAntigravityAppPath(rawPath) {
   return normalized.toLowerCase().endsWith(".app") ? normalized : fallback;
 }
 
-function generateMacosLauncherInfoPlist(version = "1.0.8-beta.2") {
-  const safeShort = escapeXmlText(version || "1.0.8-beta.2");
-  const numericMatch = String(version || "1.0.8-beta.2").match(/^\d+(?:\.\d+){0,2}/);
+function generateMacosLauncherInfoPlist(version = "1.0.8-beta.3") {
+  const safeShort = escapeXmlText(version || "1.0.8-beta.3");
+  const numericMatch = String(version || "1.0.8-beta.3").match(/^\d+(?:\.\d+){0,2}/);
   const safeBundleVer = escapeXmlText(numericMatch ? numericMatch[0] : "1.0.8");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -917,9 +917,9 @@ function createMacosLosslessLauncher(opts = {}) {
   if (!version) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(opts.sourceDir || ROOT_DIR, "package.json"), "utf8"));
-      version = pkg?.version || "1.0.8-beta.2";
+      version = pkg?.version || "1.0.8-beta.3";
     } catch {
-      version = "1.0.8-beta.2";
+      version = "1.0.8-beta.3";
     }
   }
   const targetApp = normalizeMacosAntigravityAppPath(opts.targetApp || "/Applications/Antigravity.app");
@@ -1166,9 +1166,9 @@ function resolveLinuxLauncherTargetExe(opts = {}) {
   return "antigravity";
 }
 
-function generateLinuxLauncherDesktop({ targetExe = "antigravity", iconPath = "obsidian-prism", version = "1.0.8-beta.2" } = {}) {
+function generateLinuxLauncherDesktop({ targetExe = "antigravity", iconPath = "obsidian-prism", version = "1.0.8-beta.3" } = {}) {
   const safeIcon = String(iconPath || "obsidian-prism").replace(/[\r\n]+/g, "").trim() || "obsidian-prism";
-  const safeVersion = String(version || "1.0.8-beta.2").replace(/[\r\n]+/g, "").trim() || "1.0.8-beta.2";
+  const safeVersion = String(version || "1.0.8-beta.3").replace(/[\r\n]+/g, "").trim() || "1.0.8-beta.3";
   const execToken = formatDesktopExecArg(targetExe);
   return [
     "[Desktop Entry]",
@@ -1225,9 +1225,9 @@ function createLinuxLosslessLauncher(opts = {}) {
   if (!version) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(opts.sourceDir || ROOT_DIR, "package.json"), "utf8"));
-      version = pkg?.version || "1.0.8-beta.2";
+      version = pkg?.version || "1.0.8-beta.3";
     } catch {
-      version = "1.0.8-beta.2";
+      version = "1.0.8-beta.3";
     }
   }
 
@@ -1766,7 +1766,6 @@ async function installPlugin(opts = {}) {
 
     const spawnRes = spawnBreakawayNodeProcess(daemonArgs, {
       cwd: path.dirname(daemonScript),
-      disablePowerShellBreakaway: Boolean(opts.disablePowerShellBreakaway),
     });
 
     const pidFile = path.join(targetDir, ".daemon.pid");

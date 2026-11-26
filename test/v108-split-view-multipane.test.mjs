@@ -612,7 +612,7 @@ test('Issue #62 ui-runtime Multi-Pane Wiring: all visible prism-box, single masc
   vm.runInNewContext(streamChoreoSrc, sb);
   vm.runInNewContext(modelGlyphSrc, sb);
 
-  const bootSrc = `(${uiMainFactory.toString()})(${JSON.stringify({ ...cdp.DEFAULT_CONFIG, motionLevel: 'ultra', smoothCaret: false })}, { version: '1.0.8-beta.2', codeHash: 'split-test' });`;
+  const bootSrc = `(${uiMainFactory.toString()})(${JSON.stringify({ ...cdp.DEFAULT_CONFIG, motionLevel: 'ultra', smoothCaret: false })}, { version: '1.0.8-beta.3', codeHash: 'split-test' });`;
   vm.runInNewContext(bootSrc, sb);
   const api = sb.__agPrism;
 

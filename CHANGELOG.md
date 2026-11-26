@@ -5,6 +5,65 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 本项目遵循语义化版本（SemVer）规范，记录各正式版本的新增功能、架构变更、安全加固与缺陷修复。
 
+## [1.0.8-beta.3] - 2026-11-26
+
+> **Obsidian Prism `v1.0.8-beta.3` 预发布版**（实测完整兼容 **`Antigravity v2.35.2`**）完成了 **全链路（JS + Windows C# 安装器）卡巴斯基误报清雷与 `klif.sys` `10.5×` 安装提速（[#71](https://github.com/RMvdesi/obsidian-prism/issues/71)）**、**深色对话极光材质预设与光学渲染调优（[PR #74](https://github.com/RMvdesi/obsidian-prism/pull/74) · [PR #75](https://github.com/RMvdesi/obsidian-prism/pull/75)）**、**Channel 1/侧栏/HoverCard 深度性能优化与 Ch4 热自愈（[PR #76](https://github.com/RMvdesi/obsidian-prism/pull/76) · [PR #77](https://github.com/RMvdesi/obsidian-prism/pull/77)）**、**Channel 9 设置面板热重载与对比度精修（[PR #67](https://github.com/RMvdesi/obsidian-prism/pull/67)）**、**纯 Node 脱离重启与跨平台归档过滤加固（[PR #66](https://github.com/RMvdesi/obsidian-prism/pull/66) · [PR #68](https://github.com/RMvdesi/obsidian-prism/pull/68)）**、**7 项一线社区 UI/兼容修复（[#58](https://github.com/RMvdesi/obsidian-prism/issues/58) · [PR #79](https://github.com/RMvdesi/obsidian-prism/pull/79) · [#78](https://github.com/RMvdesi/obsidian-prism/issues/78) · [#80](https://github.com/RMvdesi/obsidian-prism/issues/80) · [#81](https://github.com/RMvdesi/obsidian-prism/issues/81) · [#82](https://github.com/RMvdesi/obsidian-prism/issues/82)）**，以及 **RFC #69 Phase 1 仓库规范化与含空格/非 ASCII 路径 ESM 测试修复（[PR #70](https://github.com/RMvdesi/obsidian-prism/pull/70) · [PR #86](https://github.com/RMvdesi/obsidian-prism/pull/86)）**。
+>
+> **3D 元素周期表协议归属说明 / Design Provenance & License Notice**：本版继续包含基于原作者另一仓库 **[RMvdesi/prism-periodic-console](https://github.com/RMvdesi/prism-periodic-console)**（该设计稿仓库采用 `All Rights Reserved`）视觉与交互方案在本仓库独立集成实现的 Channel 8 元素周期表模块，并继续按 `obsidian-prism` 的 **GPL-3.0** 协议开源发布。
+> *The Channel 8 3D periodic-table model picker integrated in this release originates from the author's separate design study repository [RMvdesi/prism-periodic-console](https://github.com/RMvdesi/prism-periodic-console) (`All Rights Reserved`) and is implemented and released here by the original author under `obsidian-prism`'s **GPL-3.0** license.*
+
+### Kaspersky False-Positive Elimination & Installer Hardening / 卡巴斯基全链路清雷与安装器提速
+
+- **全仓 JS + Windows C# 安装器清零 WMI / 隐藏 PowerShell / `WScript.Shell`（[#71](https://github.com/RMvdesi/obsidian-prism/issues/71) · [PR #68](https://github.com/RMvdesi/obsidian-prism/pull/68)）**：
+  - JS 侧（`cdp.js`、`tools/install-plugin.cjs`、`tools/patch-asar.cjs`、`sidecars/daemon/main.mjs`、`sidecars/daemon/conversation-archive.mjs`）彻底移除全部 `-WindowStyle Hidden -EncodedCommand`、WMI `Win32_Process.Create` 与 `WScript.Shell` 调用：改为纯 Node MS-SHLLINK 二进制 `.lnk` 读写器、纯 Node 脱离重启器（`--run-relaunch-task` + `ELECTRON_RUN_AS_NODE=1`）、原生 `tasklist` 进程校验与 `reg.exe` 环境变量管理；外置 `sidecars/daemon/sensitive-path-rules.json` 与 `sidecars/daemon/redact.mjs` 剥离 `main.mjs` 内联敏感词表；
+  - Windows C# 安装器（`installer/common/CdpClient.cs`、`installer/setup/Program.cs`、`scripts/build-installer.mjs`）同步彻底移除 `System.Management`、`ManagementObjectSearcher("...Win32_Process")`、`QueryProcessCommandLineViaPowerShell`、`ScheduleSelfDeleteIfNeeded` 的 Base64 隐藏 PowerShell 以及全部 5 处 `WScript.Shell` COM 反射，替换为纯 Win32 PEB `NtQueryInformationProcess(60)` 只读探测、纯 C# `WindowsLnkCodec`（MS-SHLLINK 读写 + `IShellLinkW` 创建）与零子进程同/跨盘符原子自删，并纳入 `test/av-heuristics-hygiene.test.mjs` 双端红线门禁；
+  - **根治卡巴斯基微过滤驱动（`klif.sys`）`ReplaceFileW` `9s` 阻塞**：`installer/` 全量将 `File.Replace` 替换为轻量单步 `MoveFileExW(..., MOVEFILE_REPLACE_EXISTING)`，且全新文件直接 `CreateNew` 一步落盘，在卡巴斯基实时防护与入侵防御全开下将单次安装从 `55.95s` 提速至 **`5.31s`（10.5×）** 且全程 0 报警、0 拦截。
+  - *Full JS + Windows C# AV Hygiene & 10.5× Install Speedup (#71 / PR #68)*: Eliminated every hidden PowerShell `-EncodedCommand`, WMI `Win32_Process` call, and `WScript.Shell` COM reflection across both Node/JS and C# (`installer/`) via pure MS-SHLLINK `.lnk` codecs, native `NtQueryInformationProcess(60)` PEB probing, pure-Node detached host relaunch with `app_storage.json` `runInBackground` 3-retry restoration, externalized `sensitive-path-rules.json` / `redact.mjs`, and same-volume atomic self-delete. Replacing `File.Replace` (`9,030 ms` stall under Kaspersky `klif.sys`) with `MoveFileExW` and single-pass `CreateNew` speeds up clean installs 10.5× (`55.95s -> 5.31s`) with zero AV detections.
+
+### Dark Horizon Presets & Optical / Rendering Performance / 深色极光预设与渲染性能优化
+
+- **深色对话极光材质预设与 3 档浓度校准（[PR #74](https://github.com/RMvdesi/obsidian-prism/pull/74)）**：
+  - 新增 `darkAuraStyle`（`prism` 极夜琉纱 / `neon` 幽邃光晕）与 `darkAura`（`subtle` / `balanced` / `vivid`）设置项及 8 语种词典；校准 `prismLoop` 7 段 OKLCH 回折抑制橄榄绿、`neonLoop` 纯冷色光谱（`uSpectrum=6`）、解耦色纯度与降噪并同步补全 `ui-runtime.js` 5s 轮询状态键同步防误刷。
+  - *Dark Horizon Aura Styles & Intensity Presets (PR #74)*: Adds `darkAuraStyle` (`prism` / `neon`) and `darkAura` (`subtle` / `balanced` / `vivid`) across all 8 locales with calibrated OKLCH diffraction, decoupled chroma/grain, and synchronized 5s theme-poll keys.
+- **165Hz 拍频对齐与休眠时钟平滑淡出（[PR #75](https://github.com/RMvdesi/obsidian-prism/pull/75)）**：
+  - `ripple-core.js` 将 `nebulaFrameMs` 调优至 `28ms` 消除高刷拍频抖动；`home-ripple-host.js` 引入暂停安全唤醒时钟与 `750–1200ms` smoothstep 睡前淡出并零回流初始化画布。
+  - *165Hz Beat-Frequency Alignment & Smooth Pre-Sleep Fade (PR #75)*: Tunes `nebulaFrameMs` to `28ms`, adds pause-safe wake clocks and `750–1200ms` smoothstep fade-out, and initializes canvas sizes with zero reflow.
+- **真实侧栏/HoverCard 全链路隔离、跳过 CSS 扁平化、Ch4 汉化热自愈与 ForcedReflow / GPU 降载（[PR #76](https://github.com/RMvdesi/obsidian-prism/pull/76) · [PR #77](https://github.com/RMvdesi/obsidian-prism/pull/77)）**：
+  - 覆盖 Antigravity 真实 `[data-testid="sidebar-split"]` 侧栏、`project-header` 与 2 层 Base UI HoverCard 门户（`[data-base-ui-portal]`），将 `conversation-row-sidebar` 属性监听严格收口至 `data-selected`、实现侧栏 0 rAF Rim Canvas 短路、`host-i18n` `120ms` HoverCard 防抖与 Channel 4 `hostI18nCodeHash` 无需重启热自愈；
+  - 原生支持 CSS Nesting（`&`）时由 `flattenMainStyleSheet()` 首行与 `cdp.js` `applyStyle` 协同跳过冗余扁平化与覆写（彻底避免 CSSOM `var()` 简写丢失）；消除 Channel 1 多处 `ForcedReflow` 热点并将 `sidebar-client.js` 11 层 `<feGaussianBlur>` 替换为 3 个 `radialGradient`、`blur(96px->24px)`、`backdrop-filter(22px->12px)`；
+  - 将 10 KB 纯 Channel 9 设置面板展开体专属样式从 `style.css` 迁入 `settings-panel.js`（展开/热更按需挂载 `#ag-prism-settings-v101-css`），`Ch1 auto` 反降至 `546,088 B`。
+  - *Sidebar/HoverCard Isolation, Native CSS Nesting, Ch4 Hot-Heal & Zero-Reflow / GPU Slimming (PR #76 / PR #77)*: Isolates real `sidebar-split` & 2-level Base UI HoverCard portals (0 rim rAFs, 0 `runSync`, `120ms` i18n debounce, live Ch4 `hostI18nCodeHash` hot-heal), skips redundant CSS flattening when native `&` nesting is supported, eliminates Ch1 `ForcedReflow` hotspots, slims Sidebar Studio GPU blurs, and offloads 10 KB of Ch9-only settings CSS out of Ch1.
+
+### Channel 9 Hot-Reload, Daemon Archive & Community UI Fixes / 通道热重载、归档加固与社区修复
+
+- **Channel 9 热重载、壁纸热更闭环与对比度精修（[PR #67](https://github.com/RMvdesi/obsidian-prism/pull/67)）**：
+  - 支持 Channel 9 设置面板热重载、2 行防挤压致谢卡、存储工作台按钮层级与 `280px` 详情窗、`markdown-alert` / `step-plan done` 深浅对比度及壁纸 3 滑块数值胶囊；修复 `main.mjs` `verifyAndHealEntry` 漏判 `wallpaperHashMismatch` 导致的壁纸热更空转并确保设置面板在子通道后重挂。
+  - *Channel 9 Hot-Reload, Wallpaper Self-Heal Convergence & Contrast Polish (PR #67)*: Enables live Ch9 settings hot-reload, 2-line credit cards, storage workbench button hierarchy, `markdown-alert`/`step-plan` contrast, and wallpaper slider pills, plus fixes the `wallpaperHashMismatch` heal-loop edge case in `main.mjs`.
+- **孤立外部 `agy acp` 过滤与归档循环加固（[PR #66](https://github.com/RMvdesi/obsidian-prism/pull/66)）**：
+  - 在严守零 PowerShell / 零 WMI 红线下落地 `isIsolatedExternalAgyCommandLine`（严格前置校对 `--gemini-dir`、`--app-data-dir` 与 `agy(.exe) acp` 子命令，Windows 默认无探针时对 `agy.exe` fail-closed）、`createLoopRunningChecker`（500ms 节流与时钟回拨保护）、父链预校验与每 25 条 checkpoint 及 `512 KB` trace 安全截断。
+  - *Isolated `agy acp` Filtering & Archive Loop Hardening (PR #66)*: Integrates strict `agy(.exe) acp` isolation rules without PowerShell/WMI, plus `500ms` clock-skew-safe loop throttling, parent-chain caching, 25-item checkpoints, and `512 KB` trace rotation.
+- **7 项一线社区 UI 与 `Antigravity v2.35.2` 兼容修复**：
+  - **桌宠「克制」模式悬停/点击左移 & 开模型菜单三蟹可见 & `Shift+右键` 贯穿蓝线 & `/btw` 底栏防裁切（[#58](https://github.com/RMvdesi/obsidian-prism/issues/58) · [PR #79](https://github.com/RMvdesi/obsidian-prism/pull/79)）**：`style.css` `subtle` 档位精确排除 `.ag-v2-mascot-actor` 与 `[data-no-press-spring="1"]`；取消原生模型菜单触发 `peek` 并移除 `.ag-v2-mini-pile{opacity:0}`（完整保留 3D 元素周期表 `data-ag-pp-open="1"` 0fps 休眠与防误点）；视口焦点环压制升级至 `(1,3,1)` 优先级并补全 `overview-panel-host`；保护 `/btw` 输入框底栏入口不被窄窗横向裁切；
+  - **浅色模式 Chat 画布黑底（[#78](https://github.com/RMvdesi/obsidian-prism/issues/78)）**：`vendor/sidebar-studio/sidebar-client.js` 全部 11 处浅色规则补全 `html[data-ag-cs-theme="light"]` 及 `body:is(.theme-light,.light-theme,.light)` 与 `obsidian+alabaster` 暖浅联动；
+  - **Antigravity `v2.35.1` / `v2.35.2` Orchestrator L2 子菜单高频闪烁（[#80](https://github.com/RMvdesi/obsidian-prism/issues/80)）**：三层加固 `vendor/effort-slider/upstream-client.js`、`style.css` 与 `host-i18n-runtime.js`，在 L2/L3 嵌套同一父容器时不误隐藏 L2、不压低外层定位容器 `z-[6000]`、抑制边缘缩放抖动并防止第 0 帧汉化误触；实测完整兼容 **`Antigravity v2.35.2`**；
+  - **外部 Dashboard 共存浮窗底色被覆盖（[#81](https://github.com/RMvdesi/obsidian-prism/issues/81)）**：`vendor/pulse-dashboard/inline-fallback.js` `TIER_CSS` 将 `--c` 隔离重命名为 `--pt-c`，彻底避免覆写 `pulse-vial-bridge.js` 的 `--c` 卡片底色；
+  - **首页 Models Tab 模型配色去重（[#82](https://github.com/RMvdesi/obsidian-prism/issues/82)）**：`home-studio-panel.js` 扩展 26 槽双主题高对比调色板 + 阵营偏好与黄金角 `HSL` 去重，确保堆叠占比条与图例色标一模型一色。
+
+### Repo Governance & Hygiene Gates / 仓库规范化与门禁建设
+
+- **落地 RFC #69 Phase 1 与 ESM 测试跨平台路径修复（[PR #70](https://github.com/RMvdesi/obsidian-prism/pull/70) · [PR #86](https://github.com/RMvdesi/obsidian-prism/pull/86)）**：
+  - 将社区治理文档归位 `.github/`（`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`），贡献者名录迁至 `docs/CONTRIBUTORS.md`（保留 `README.md` 与 `README.en.md` 同留仓库根目录），Windows 辅助脚本迁入 `scripts/win/*.bat`；
+  - 抽取公共 `test/helpers/mini-dom.mjs`，新增 `scripts/run-tests.mjs`（`npm run test:gates` / `npm run test:fast`）与 `test/gates/repo-hygiene.test.mjs`（根目录白名单、文档相对链接与域测试命名棘轮）；
+  - 吸收 [PR #86](https://github.com/RMvdesi/obsidian-prism/pull/86) 将 8 个 ESM 测试文件中的 `URL.pathname` 替换为 `fileURLToPath(...)`，彻底修复含空格或非 ASCII 字符本地仓库路径下的跨平台测试加载失败。
+  - *RFC #69 Phase 1 & Cross-Platform ESM Test Path Fix (PR #70 / PR #86)*: Relocates governance docs to `.github/`, `CONTRIBUTORS.md` to `docs/`, and batch scripts to `scripts/win/` while keeping `README.md`/`README.en.md` at root; adds `scripts/run-tests.mjs` and `test/gates/repo-hygiene.test.mjs`; and adopts `fileURLToPath` across 8 ESM test files so paths with spaces or non-ASCII characters work reliably.
+
+### Acknowledgements / 社区致谢（Community Credits）
+
+- 衷心感谢推动 `v1.0.8-beta.3` 落地的社区贡献者与验票伙伴（已同步收录至 [`docs/CONTRIBUTORS.md`](./docs/CONTRIBUTORS.md) 并保留 `Co-authored-by` 署名）：
+  - **代码贡献（PR）**：**[@OyatsuSuki](https://github.com/OyatsuSuki)**（[PR #67](https://github.com/RMvdesi/obsidian-prism/pull/67) · [PR #68](https://github.com/RMvdesi/obsidian-prism/pull/68) · [PR #70](https://github.com/RMvdesi/obsidian-prism/pull/70) · [PR #75](https://github.com/RMvdesi/obsidian-prism/pull/75) · [PR #76](https://github.com/RMvdesi/obsidian-prism/pull/76) · [PR #77](https://github.com/RMvdesi/obsidian-prism/pull/77)）、**[@yzd05](https://github.com/yzd05)**（[PR #66](https://github.com/RMvdesi/obsidian-prism/pull/66)）、**[@ZaneColinSD](https://github.com/ZaneColinSD)**（[PR #74](https://github.com/RMvdesi/obsidian-prism/pull/74)）、**[@DDykarc](https://github.com/DDykarc)**（[PR #79](https://github.com/RMvdesi/obsidian-prism/pull/79)）、**[@alanheverton](https://github.com/alanheverton)**（[PR #86](https://github.com/RMvdesi/obsidian-prism/pull/86)）。
+  - **问题定位与实测验证**：**[@IASUI](https://github.com/IASUI)**（[#58](https://github.com/RMvdesi/obsidian-prism/issues/58)）、**[@Wenzi1911](https://github.com/Wenzi1911)**（[#72](https://github.com/RMvdesi/obsidian-prism/issues/72) · [#73](https://github.com/RMvdesi/obsidian-prism/issues/73)）、**[@zxyzx0430](https://github.com/zxyzx0430)**（[#78](https://github.com/RMvdesi/obsidian-prism/issues/78)）、**[@peco331](https://github.com/peco331)**（[#80](https://github.com/RMvdesi/obsidian-prism/issues/80) · [#81](https://github.com/RMvdesi/obsidian-prism/issues/81)）、**[@uwu9039](https://github.com/uwu9039)**（[#80](https://github.com/RMvdesi/obsidian-prism/issues/80)）、**[@hukun01](https://github.com/hukun01)**（[#82](https://github.com/RMvdesi/obsidian-prism/issues/82)）。
+  - *Special thanks to PR contributors [@OyatsuSuki](https://github.com/OyatsuSuki), [@yzd05](https://github.com/yzd05), [@ZaneColinSD](https://github.com/ZaneColinSD), [@DDykarc](https://github.com/DDykarc), and [@alanheverton](https://github.com/alanheverton), and to community diagnostics & feedback from [@IASUI](https://github.com/IASUI), [@Wenzi1911](https://github.com/Wenzi1911), [@zxyzx0430](https://github.com/zxyzx0430), [@peco331](https://github.com/peco331), [@uwu9039](https://github.com/uwu9039), and [@hukun01](https://github.com/hukun01).*
+
 ## [1.0.8-beta.2] - 2026-11-25
 
 > **Obsidian Prism `v1.0.8-beta.2` 预发布版**在 `v1.0.8-beta.1` 基础上重点交付 **多分屏视图（Split View）全量适配与 Channel 12 首页看板卸载**、**4 档可选「对话页字符波纹」与 WebGL2 三层防白屏自愈加固**、**Antigravity `v2.34+` 壳层自定义壁纸透出修复**、**Windows 托盘退出与 Linux 便携包更新器修复**，以及 **2 个社区 PR（#60 / #61）深度融合**。
@@ -38,7 +97,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Acknowledgements / 社区致谢（Community Credits）
 
-- 衷心感谢推动 `v1.0.8-beta.2` 落地的社区贡献者与验票伙伴（已同步收录至 [`CONTRIBUTORS.md`](./CONTRIBUTORS.md) 并保留 `Co-authored-by` 署名）：
+- 衷心感谢推动 `v1.0.8-beta.2` 落地的社区贡献者与验票伙伴（已同步收录至 [`docs/CONTRIBUTORS.md`](./docs/CONTRIBUTORS.md) 并保留 `Co-authored-by` 署名）：
   - **代码贡献（PR）**：**[@OyatsuSuki](https://github.com/OyatsuSuki)**（[PR #60](https://github.com/RMvdesi/obsidian-prism/pull/60) · [PR #61](https://github.com/RMvdesi/obsidian-prism/pull/61)）。
   - **问题定位与实测验证**：**[@IASUI](https://github.com/IASUI)**（[#62](https://github.com/RMvdesi/obsidian-prism/issues/62)）、**[@VehideX](https://github.com/VehideX)**（[#63](https://github.com/RMvdesi/obsidian-prism/issues/63)）、**[@water707](https://github.com/water707)**（[#64](https://github.com/RMvdesi/obsidian-prism/issues/64)）、**[@yuaniyuan](https://github.com/yuaniyuan)**（[#59](https://github.com/RMvdesi/obsidian-prism/issues/59)）、**[@Xinbeok](https://github.com/Xinbeok)**（PR #60 macOS 验证）。
   - *Special thanks to [@OyatsuSuki](https://github.com/OyatsuSuki) (PR #60/#61), [@IASUI](https://github.com/IASUI) (#62), [@VehideX](https://github.com/VehideX) (#63), [@water707](https://github.com/water707) (#64), [@yuaniyuan](https://github.com/yuaniyuan) (#59), and [@Xinbeok](https://github.com/Xinbeok) (PR #60 macOS verification).*
@@ -102,7 +161,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Acknowledgements / 社区致谢（Community Credits）
 
-- 衷心感谢通过 PR、兼容性排查与细致复现推动 `v1.0.8-beta.1` 落地的各位社区贡献者（全部 PR 贡献者均已保留 `Co-authored-by` 署名并收录于 [`CONTRIBUTORS.md`](./CONTRIBUTORS.md)）：
+- 衷心感谢通过 PR、兼容性排查与细致复现推动 `v1.0.8-beta.1` 落地的各位社区贡献者（全部 PR 贡献者均已保留 `Co-authored-by` 署名并收录于 [`docs/CONTRIBUTORS.md`](./docs/CONTRIBUTORS.md)）：
   - **代码贡献（PR）**：**[@tone-leh](https://github.com/tone-leh)**（PR #53 / #54 / #55 / #56 & #52）、**[@OyatsuSuki](https://github.com/OyatsuSuki)**（PR #41 / #43 / #48 & #40 / #47）、**[@Gruu6y](https://github.com/Gruu6y)**（PR #45 & #18）、**[@yzd05](https://github.com/yzd05)**（PR #42）、**[@hukun01](https://github.com/hukun01)**（PR #49 / #50）、**[@zmzwynzj](https://github.com/zmzwynzj)**（PR #51）。
   - **问题定位与社区反馈**：**[@wanghaoyi216](https://github.com/wanghaoyi216)**（#44）、**[@legegeCoder](https://github.com/legegeCoder)**（#57）、**[@IASUI](https://github.com/IASUI)**（#58）。
   - *Special thanks to all PR authors and issue reporters who contributed to `v1.0.8-beta.1`: [@tone-leh](https://github.com/tone-leh), [@OyatsuSuki](https://github.com/OyatsuSuki), [@Gruu6y](https://github.com/Gruu6y), [@yzd05](https://github.com/yzd05), [@hukun01](https://github.com/hukun01), [@zmzwynzj](https://github.com/zmzwynzj), [@wanghaoyi216](https://github.com/wanghaoyi216), [@legegeCoder](https://github.com/legegeCoder), and [@IASUI](https://github.com/IASUI).*
@@ -173,7 +232,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Acknowledgements / 社区致谢（Community Credits）
 
-- 衷心感谢通过 PR、深度根因分析、复现视频与细心建议推动 `v1.0.7` 正式版落地的每一位社区伙伴（PR 贡献者均已保留 `Co-authored-by` 署名并永久收录于 [`CONTRIBUTORS.md`](./CONTRIBUTORS.md)）：
+- 衷心感谢通过 PR、深度根因分析、复现视频与细心建议推动 `v1.0.7` 正式版落地的每一位社区伙伴（PR 贡献者均已保留 `Co-authored-by` 署名并永久收录于 [`docs/CONTRIBUTORS.md`](./docs/CONTRIBUTORS.md)）：
   - **代码贡献（PR）**：**[@yzd05](https://github.com/yzd05)**（PR #10 / #13 / #20 / #21 / #22 / #23 / #29）、**[@zzirui321-rgb](https://github.com/zzirui321-rgb)**（PR #30 / #33 / #35 & #28 / #32 / #34 / #36）、**[@Kazaorus](https://github.com/Kazaorus)**（PR #19）、**[@DDykarc](https://github.com/DDykarc)**（PR #12）、**[@SuzumiyaHaruhi719](https://github.com/SuzumiyaHaruhi719)**（PR #17）。
   - **问题定位与社区反馈**：**[@boy14204367](https://github.com/boy14204367)**（#9 / #11 / #14 / #15）、**[@nanpi8633-spec](https://github.com/nanpi8633-spec)**（#38）、**[@yanzhem02](https://github.com/yanzhem02)**（#37）、**[@awasllll0317](https://github.com/awasllll0317)**（#39）、**[@baihao2006](https://github.com/baihao2006)**（#31）、**[@fenzsen](https://github.com/fenzsen)**（#27）、**[@L-yifan](https://github.com/L-yifan)**（#26）、**[@Gruu6y](https://github.com/Gruu6y)**（#18）、**[@Freezecatmeow](https://github.com/Freezecatmeow)**（#16）。
   - *Special thanks to all PR authors and issue reporters who shaped `v1.0.7`: [@yzd05](https://github.com/yzd05), [@zzirui321-rgb](https://github.com/zzirui321-rgb), [@Kazaorus](https://github.com/Kazaorus), [@DDykarc](https://github.com/DDykarc), [@SuzumiyaHaruhi719](https://github.com/SuzumiyaHaruhi719), [@boy14204367](https://github.com/boy14204367), [@nanpi8633-spec](https://github.com/nanpi8633-spec), [@yanzhem02](https://github.com/yanzhem02), [@awasllll0317](https://github.com/awasllll0317), [@baihao2006](https://github.com/baihao2006), [@fenzsen](https://github.com/fenzsen), [@L-yifan](https://github.com/L-yifan), [@Gruu6y](https://github.com/Gruu6y), and [@Freezecatmeow](https://github.com/Freezecatmeow).*

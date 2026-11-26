@@ -11,6 +11,7 @@ import * as arch from '../sidecars/daemon/conversation-archive.mjs';
 import {
   ALLOWED_GOMEMLIMIT_PRESETS,
   isValidGoMemLimitValue,
+  parseWindowsRegQueryValue,
   getGoMemLimitStatus,
   setGoMemLimit,
   clearGoMemLimit,
@@ -1009,32 +1010,107 @@ test('Defense 3: optional Go native GOMEMLIMIT enforces strict preset allowlist,
     assert.equal(res.code, 'INVALID_GOMEMLIMIT');
   }
 
-  // 1) Windows: passes value exclusively via AG_PRISM_GOMEMLIMIT_VAL env var (zero command interpolation)
+  // 1) Windows: uses native reg.exe array args exclusively (zero PowerShell / zero shell interpolation)
+  assert.equal(
+    parseWindowsRegQueryValue('\r\nHKEY_CURRENT_USER\\Environment\r\n    GOMEMLIMIT    REG_SZ    3GiB\r\n'),
+    '3GiB'
+  );
+  assert.equal(
+    parseWindowsRegQueryValue('    GOMEMLIMIT    REG_EXPAND_SZ    2500MiB  \r\n'),
+    '2500MiB'
+  );
+  assert.equal(parseWindowsRegQueryValue('ERROR: The system was unable to find the specified registry key or value.'), '');
+
   let winUserVal = '';
   const winCalls = [];
   const winExec = async (bin, args, opts) => {
-    winCalls.push({ bin, args, envVal: opts?.env?.AG_PRISM_GOMEMLIMIT_VAL });
-    if (opts?.env?.AG_PRISM_GOMEMLIMIT_VAL) {
-      winUserVal = opts.env.AG_PRISM_GOMEMLIMIT_VAL;
-      return '';
+    winCalls.push({ bin, args, opts });
+    assert.equal(bin, 'reg.exe', 'Windows GOMEMLIMIT must invoke reg.exe exclusively');
+    assert.equal(opts?.windowsHide, true);
+    if (args[0] === 'add') {
+      assert.deepEqual(args.slice(0, 6), ['add', 'HKCU\\Environment', '/v', 'GOMEMLIMIT', '/t', 'REG_SZ']);
+      assert.equal(args[6], '/d');
+      assert.equal(args[8], '/f');
+      winUserVal = args[7];
+      return 'The operation completed successfully.\r\n';
     }
-    const decoded = Buffer.from(args[args.length - 1], 'base64').toString('utf16le');
-    if (decoded.includes('SetEnvironmentVariable("GOMEMLIMIT", $null')) {
+    if (args[0] === 'delete') {
+      assert.deepEqual(args, ['delete', 'HKCU\\Environment', '/v', 'GOMEMLIMIT', '/f']);
+      if (!winUserVal) {
+        const err = new Error('ERROR: The system was unable to find the specified registry key or value.');
+        err.code = 1;
+        throw err;
+      }
       winUserVal = '';
-      return '';
+      return 'The operation completed successfully.\r\n';
     }
-    return winUserVal;
+    if (args[0] === 'query') {
+      assert.deepEqual(args, ['query', 'HKCU\\Environment', '/v', 'GOMEMLIMIT']);
+      if (!winUserVal) {
+        const err = new Error('ERROR: The system was unable to find the specified registry key or value.');
+        err.code = 1;
+        throw err;
+      }
+      return `\r\nHKEY_CURRENT_USER\\Environment\r\n    GOMEMLIMIT    REG_SZ    ${winUserVal}\r\n`;
+    }
+    throw new Error(`Unexpected reg.exe args: ${JSON.stringify(args)}`);
   };
   const winSet = await setGoMemLimit('2GiB', { platform: 'win32', execAsync: winExec, env: {} });
   assert.equal(winSet.ok, true);
   assert.equal(winSet.currentValue, '2GiB');
+  assert.equal(winSet.source, 'win-user-env');
   assert.equal(winSet.restartRequired, true);
-  assert.equal(winCalls[0].envVal, '2GiB');
+  assert.deepEqual(winCalls[0].args, ['add', 'HKCU\\Environment', '/v', 'GOMEMLIMIT', '/t', 'REG_SZ', '/d', '2GiB', '/f']);
 
   const winClear = await clearGoMemLimit({ platform: 'win32', execAsync: winExec, env: { GOMEMLIMIT: '2GiB' } });
   assert.equal(winClear.ok, true);
   assert.equal(winClear.configured, false);
+  assert.equal(winClear.currentValue, '');
   assert.equal(winClear.cleared, true);
+  assert.equal(winClear.restartRequired, true);
+
+  // Idempotent clear when GOMEMLIMIT is already absent in HKCU\Environment
+  const winClearAgain = await clearGoMemLimit({ platform: 'win32', execAsync: winExec, env: {} });
+  assert.equal(winClearAgain.ok, true);
+  assert.equal(winClearAgain.configured, false);
+  assert.equal(winClearAgain.cleared, true);
+
+  // Genuine access denied error on reg.exe delete MUST NOT be masked as success
+  const winDenied = await clearGoMemLimit({
+    platform: 'win32',
+    execAsync: async () => {
+      const err = new Error('ERROR: Access is denied.');
+      err.code = 1;
+      throw err;
+    },
+    env: {},
+  });
+  assert.equal(winDenied.ok, false);
+  assert.equal(winDenied.code, 'CLEAR_FAILED');
+
+  // Static AV/host-redline hygiene check on gomemlimit-service.mjs and conversation-archive.mjs
+  const forbiddenPatterns = [
+    /-EncodedCommand/i,
+    /-WindowStyle\s+Hidden/i,
+    /\bWin32_Process\b/i,
+    /\bInvoke-CimMethod\b/i,
+    /\bGet-CimInstance\b/i,
+    /\bwmic\b/i,
+    /\bpowershell(?:\.exe)?\b/i,
+    /\btaskkill\b/i,
+    /\bStop-Process\b/i,
+    /\bSIGKILL\b/i,
+    /\bTerminateProcess\b/i,
+    /\bOpenProcess\b/i,
+    /app\.asar/i,
+    /(?:fetchTimer|timer)\.unref\s*\(/i,
+  ];
+  for (const rel of ['sidecars/daemon/gomemlimit-service.mjs', 'sidecars/daemon/conversation-archive.mjs']) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    for (const re of forbiddenPatterns) {
+      assert.equal(re.test(src), false, `${rel} must contain 0 matches for ${re}`);
+    }
+  }
 
   // 2) Linux: isolated ~/.config/environment.d/90-obsidian-prism-gomemlimit.conf
   const tmpDir = mkTmp('prism-gomem-');
@@ -2416,6 +2492,392 @@ test('Adversarial follow-up fixes: langProbe auto/html[lang] precedence, collaps
     }
 
     await daemon.stop(false, { skipAutoArchive: true });
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('PR #66 Track 3: isIsolatedExternalAgyCommandLine (tilde expansion, --gemini-dir, --app-data-dir, acp boundaries), POSIX ps -ww, and zero-PS Windows queryCommandLines', () => {
+  const defaultGem = 'C:\\Users\\Alice\\.gemini';
+  const t3Cmd =
+    'C:\\Users\\Alice\\.t3\\tools\\antigravity-acp\\win32-x64\\versions\\6b80\\agy.exe acp --gemini-dir C:\\Users\\Alice\\.t3\\userdata\\providers\\antigravity\\ac0a3dfd --app-data-dir antigravity-acp';
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine(t3Cmd, { platform: 'win32', defaultGeminiDir: defaultGem }),
+    true,
+    'T3 Code ACP agy.exe with isolated --gemini-dir and --app-data-dir must be exempted'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('"C:\\Program Files\\T3 Code\\agy.exe" acp --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    true,
+    'Quoted agy.exe path with acp subcommand and isolated --app-data-dir must be exempted'
+  );
+
+  // 3 strict acp isolation boundaries + non-acp / language_server rejections
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('C:\\Program Files\\agy\\agy.exe chat', { platform: 'win32', defaultGeminiDir: defaultGem }),
+    false,
+    'Standard agy CLI using default ~/.gemini/antigravity must block archiving'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe chat --app-data-dir custom-profile', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Non-ACP subcommand (agy chat --app-data-dir custom-profile) must NOT be exempted'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe --gemini-dir C:\\isolated --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Missing acp subcommand must NOT be exempted'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('language_server.exe acp --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'language_server.exe must NEVER be exempted'
+  );
+
+  // Pre-check --gemini-dir (including ~ expansion) & --app-data-dir full-path normalization
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine(`agy.exe acp --gemini-dir "${defaultGem}" --app-data-dir antigravity-acp`, {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Explicit default --gemini-dir must fail-closed even when --app-data-dir is custom'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --gemini-dir "C:/Users/Alice/.gemini/antigravity/" --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Explicit ~/.gemini/antigravity in --gemini-dir must fail-closed even with forward slashes'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --gemini-dir "~/.gemini" --app-data-dir antigravity-acp', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Tilde ~/.gemini in --gemini-dir must expand and fail-closed on Win32'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy acp --gemini-dir ~/.gemini/antigravity --app-data-dir antigravity-acp', {
+      platform: 'linux',
+      defaultGeminiDir: '/home/alice/.gemini',
+    }),
+    false,
+    'Tilde ~/.gemini/antigravity in --gemini-dir must expand and fail-closed on Linux'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy acp --gemini-dir ~/.t3/isolated --app-data-dir antigravity-acp', {
+      platform: 'linux',
+      defaultGeminiDir: '/home/alice/.gemini',
+    }),
+    true,
+    'Tilde ~/.t3/isolated must expand to non-default path and be exempted'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --app-data-dir "C:\\Users\\Alice\\AppData\\Roaming\\Antigravity"', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    false,
+    'Full path --app-data-dir pointing to default AppData\\Roaming\\Antigravity must fail-closed'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy acp --app-data-dir "~/.config/Antigravity"', {
+      platform: 'linux',
+      defaultGeminiDir: '/home/alice/.gemini',
+    }),
+    false,
+    'Tilde ~/.config/Antigravity --app-data-dir must expand and fail-closed on Linux'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy acp --app-data-dir "~/Library/Application Support/Antigravity"', {
+      platform: 'darwin',
+      defaultGeminiDir: '/Users/alice/.gemini',
+    }),
+    false,
+    'Tilde ~/Library/Application Support/Antigravity --app-data-dir must expand and fail-closed on macOS'
+  );
+  assert.equal(
+    arch.isIsolatedExternalAgyCommandLine('agy.exe acp --app-data-dir "C:\\Users\\Alice\\.t3\\custom-appdata"', {
+      platform: 'win32',
+      defaultGeminiDir: defaultGem,
+    }),
+    true,
+    'Full path --app-data-dir pointing to an isolated external directory must be exempted'
+  );
+
+  // Windows: default zero-PS/WMI path stays fail-closed for uninspected agy.exe; injected queryCommandLines unlocks isolated ACP + caches/evicts cleanly
+  const csvOnlyT3Agy = [
+    '"T3 Code (Beta).exe","36012","Console","1","45,764 K"',
+    '"agy.exe","49084","Console","1","12,544 K"',
+    '"agy.exe","56244","Console","1","18,684 K"',
+  ].join('\r\n');
+
+  const execCalls = [];
+  const defaultWinProbe = arch.inspectLanguageServerProcesses({
+    platform: 'win32',
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    exec: (bin, args) => {
+      execCalls.push({ bin, args });
+      return csvOnlyT3Agy;
+    },
+  });
+  assert.equal(execCalls.length, 1);
+  assert.equal(execCalls[0].bin, 'tasklist.exe');
+  assert.equal(defaultWinProbe.running, true, 'Default zero-PS Windows probe must fail-closed on unverified agy.exe');
+  assert.equal(defaultWinProbe.blockers.length, 2);
+
+  const detailExempt = arch.parseWindowsTasklistCsvDetailed(csvOnlyT3Agy, {
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    queryCommandLines: () =>
+      new Map([
+        [49084, t3Cmd],
+        [56244, t3Cmd],
+      ]),
+  });
+  assert.equal(detailExempt.running, false, 'Injected queryCommandLines confirming isolated agy.exe acp must allow archiving');
+  assert.equal(detailExempt.ignoredAcp.length, 2);
+
+  const detailMissingCmd = arch.parseWindowsTasklistCsvDetailed(csvOnlyT3Agy, {
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    queryCommandLines: () => new Map([[49084, t3Cmd]]),
+  });
+  assert.equal(detailMissingCmd.running, true, 'Missing CommandLine for any agy.exe PID must fail-closed');
+  assert.deepEqual(detailMissingCmd.blockers, [{ imageName: 'agy.exe', pid: 56244 }]);
+
+  // Verify PID CommandLine caching & PID-disappearance eviction with injected queryCommandLines (0 PowerShell)
+  let tasklistCalls = 0;
+  let queryCmdCalls = 0;
+  let currentCsv = csvOnlyT3Agy;
+  let currentCmdFor56244 = t3Cmd;
+  const mockExec = (bin) => {
+    assert.equal(bin, 'tasklist.exe', 'Windows probe must NEVER spawn powershell/wmic');
+    tasklistCalls += 1;
+    return currentCsv;
+  };
+  const injectedQuery = (pids) => {
+    queryCmdCalls += 1;
+    const out = new Map();
+    for (const pid of pids) {
+      if (pid === 49084) out.set(49084, t3Cmd);
+      if (pid === 56244) out.set(56244, currentCmdFor56244);
+    }
+    return out;
+  };
+
+  for (let i = 0; i < 50; i++) {
+    const r = arch.inspectLanguageServerProcesses({
+      platform: 'win32',
+      selfPid: 99999,
+      defaultGeminiDir: defaultGem,
+      exec: mockExec,
+      queryCommandLines: injectedQuery,
+    });
+    assert.equal(r.running, false);
+  }
+  assert.equal(tasklistCalls, 50);
+  assert.equal(queryCmdCalls, 1, '50 consecutive polls of unchanged T3 Code agy.exe PIDs must invoke queryCommandLines only ONCE');
+
+  currentCsv = '"Antigravity.exe","12345","Console","1","120,000 K"';
+  assert.equal(
+    arch.inspectLanguageServerProcesses({
+      platform: 'win32',
+      selfPid: 99999,
+      defaultGeminiDir: defaultGem,
+      exec: mockExec,
+      queryCommandLines: injectedQuery,
+    }).running,
+    true
+  );
+  currentCsv = csvOnlyT3Agy;
+  currentCmdFor56244 = 'C:\\Program Files\\agy\\agy.exe chat';
+  const afterReuse = arch.inspectLanguageServerProcesses({
+    platform: 'win32',
+    selfPid: 99999,
+    defaultGeminiDir: defaultGem,
+    exec: mockExec,
+    queryCommandLines: injectedQuery,
+  });
+  assert.equal(queryCmdCalls, 2, 'Reused PID after disappearing from tasklist must evict cache and re-query');
+  assert.equal(afterReuse.running, true);
+  assert.deepEqual(afterReuse.blockers, [{ imageName: 'agy.exe', pid: 56244 }]);
+
+  // POSIX ps -ww -eo pid=,args= feeds isIsolatedExternalAgyCommandLine directly
+  for (const posixPlat of ['linux', 'darwin']) {
+    let seenArgs = null;
+    const psIsolated = arch.inspectLanguageServerProcesses({
+      platform: posixPlat,
+      selfPid: 99999,
+      selfPpid: 99998,
+      defaultGeminiDir: '/home/alice/.gemini',
+      exec: (bin, args) => {
+        assert.equal(bin, 'ps');
+        seenArgs = args;
+        return [
+          '  100 /sbin/launchd',
+          '  200 /home/alice/.t3/tools/agy acp --gemini-dir /home/alice/.t3/isolated --app-data-dir antigravity-acp',
+        ].join('\n');
+      },
+    });
+    assert.deepEqual(seenArgs, ['-ww', '-eo', 'pid=,args='], `${posixPlat} must pass -ww to avoid truncating CLI flags`);
+    assert.equal(psIsolated.running, false);
+  }
+  assert.equal(
+    arch.parsePosixProcessList(
+      '  200 agy acp --gemini-dir ~/.gemini --app-data-dir antigravity-acp',
+      { selfPid: 99999, selfPpid: 99998, platform: 'linux', defaultGeminiDir: '/home/alice/.gemini' }
+    ),
+    true,
+    'POSIX agy acp pointing to ~/.gemini must still block archiving'
+  );
+});
+
+test('PR #66 Track 4: createLoopRunningChecker (500ms throttle + clock-rollback guard), trustedParentDirs, 25-item checkpoints & appendArchiveTrace 512KB line-safe truncation', async () => {
+  // 1) createLoopRunningChecker: 500ms throttle, latch-on-true, and clock-rollback protection
+  let fakeNow = 10_000;
+  let rawCalls = 0;
+  let fakeRunning = false;
+  const markedProbe = () => {
+    rawCalls += 1;
+    return fakeRunning;
+  };
+  markedProbe.__allowLoopThrottle = true;
+  const loopChecker = arch.createLoopRunningChecker(markedProbe, markedProbe, 500, () => fakeNow);
+  for (let step = 0; step < 100; step++) {
+    fakeNow += 20; // 100 * 20ms = 2000ms -> 4 intervals of 500ms
+    assert.equal(loopChecker(), false);
+  }
+  assert.equal(rawCalls, 4, '100 loop iterations over 2000ms must invoke underlying probe only 4 times');
+
+  // Clock rollback protection: if system clock jumps backward (now < lastCheckedAt), lastCheckedAt resets to 0 and probes immediately
+  fakeNow = 2_000;
+  assert.equal(loopChecker(), false);
+  assert.equal(rawCalls, 5, 'Clock rollback (now < lastCheckedAt) must reset lastCheckedAt=0 and probe immediately');
+  fakeNow = 2_100;
+  assert.equal(loopChecker(), false);
+  assert.equal(rawCalls, 5, 'After clock rollback re-syncs lastCheckedAt, 500ms throttle resumes');
+
+  fakeRunning = true;
+  fakeNow = 2_600;
+  assert.equal(loopChecker(), true, 'Must detect host startup at next window');
+  const callsAtLatch = rawCalls;
+  fakeNow += 5000;
+  assert.equal(loopChecker(), true, 'Once latched true, must stay true without re-probing');
+  assert.equal(rawCalls, callsAtLatch);
+
+  // Unmarked synchronous mock probe remains unthrottled
+  let unmarkedCalls = 0;
+  const unmarked = () => { unmarkedCalls += 1; return false; };
+  const unthrottledChecker = arch.createLoopRunningChecker(unmarked, unmarked);
+  for (let i = 0; i < 5; i++) unthrottledChecker();
+  assert.equal(unmarkedCalls, 5, 'Unmarked unit-test checkRunning mock must stay unthrottled');
+
+  // 2) archiveConversations (60 subagents, 25-item checkpoints, trustedParentDirs) + restoreArchiveBatch + appendArchiveTrace 512KB truncation
+  const tmpRoot = mkTmp('prism-track4-');
+  try {
+    const convDir = path.join(tmpRoot, 'conversations');
+    const archiveDir = path.join(tmpRoot, 'archive');
+    fs.mkdirSync(convDir, { recursive: true });
+    fs.mkdirSync(archiveDir, { recursive: true });
+
+    const now = Date.now();
+    const mainId = makeGuid(900);
+    fs.writeFileSync(path.join(convDir, `${mainId}.db`), 'main-db');
+    const summaries = {
+      [mainId]: { status: 'CASCADE_RUN_STATUS_IDLE', lastModifiedTime: new Date(now - 3600_000).toISOString() },
+    };
+    const oldMtime = new Date(now - 5 * 3600_000);
+    for (let i = 1; i <= 60; i++) {
+      const subId = makeGuid(900 + i);
+      for (const ext of ['.db', '.db-wal', '.db-shm']) {
+        const fp = path.join(convDir, `${subId}${ext}`);
+        fs.writeFileSync(fp, `sub-${i}${ext}`);
+        fs.utimesSync(fp, oldMtime, oldMtime);
+      }
+      summaries[subId] = {
+        status: 'CASCADE_RUN_STATUS_IDLE',
+        lastModifiedTime: oldMtime.toISOString(),
+        trajectoryMetadata: { parentConversationId: mainId },
+      };
+    }
+    arch.saveCatalogIndex(archiveDir, summaries);
+
+    let probeCount = 0;
+    const throttledProbe = () => {
+      probeCount += 1;
+      return false;
+    };
+    throttledProbe.__allowLoopThrottle = true;
+
+    const t0 = Date.now();
+    const res = arch.archiveConversations({
+      convDir,
+      archiveDir,
+      mode: 'subagents',
+      subagentMaxAgeHours: 2,
+      now,
+      checkRunning: throttledProbe,
+    });
+    const elapsedMs = Math.max(0, Date.now() - t0);
+    const maxExpectedProbes = 2 + Math.ceil(elapsedMs / 450);
+    assert.equal(res.ok, true);
+    assert.equal(res.movedCount, 60);
+    assert.ok(
+      probeCount <= maxExpectedProbes && probeCount < 60,
+      `Expected <= ${maxExpectedProbes} throttled probes over ${elapsedMs}ms, got ${probeCount}`
+    );
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(res.batchDir, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.status, 'completed');
+    assert.equal(manifest.movedCount, 60);
+    assert.equal(manifest.items.length, 60);
+
+    const restRes = arch.restoreArchiveBatch({
+      convDir,
+      archiveDir,
+      batchName: res.batchName,
+      checkRunning: throttledProbe,
+    });
+    assert.equal(restRes.ok, true);
+    assert.equal(restRes.restoredCount, 60);
+
+    // 3) appendArchiveTrace 512KB truncation: skips partial first line & preserves valid JSONL + 0o600
+    const tracePath = path.join(archiveDir, 'archive-trace.log');
+    const sampleRow = JSON.stringify({ ts: '2026-11-26T00:00:00.000Z', pid: 123, event: 'SEED', pad: 'x'.repeat(180) }) + '\n';
+    const repeatCount = Math.ceil((540 * 1024) / Buffer.byteLength(sampleRow, 'utf8'));
+    // Prepend a partial prefix to guarantee the 256KB slice boundary cuts mid-line
+    fs.writeFileSync(tracePath, 'PARTIAL_PREFIX_' + sampleRow.repeat(repeatCount), { encoding: 'utf8', mode: 0o600 });
+    assert.ok(fs.statSync(tracePath).size > 512 * 1024);
+
+    arch.appendArchiveTrace(archiveDir, 'AFTER_TRUNCATE', { marker: 'ok' });
+    const afterStat = fs.statSync(tracePath);
+    assert.ok(afterStat.size < 512 * 1024, `Trace log must be truncated below 512KB, got ${afterStat.size}`);
+    if (process.platform !== 'win32') {
+      assert.equal(afterStat.mode & 0o777, 0o600, 'Trace log must preserve 0o600 permissions');
+    }
+    const lines = fs.readFileSync(tracePath, 'utf8').trim().split('\n');
+    assert.ok(lines.length > 10, 'Truncated trace log must retain recent JSONL history');
+    for (let idx = 0; idx < lines.length; idx++) {
+      assert.doesNotThrow(() => JSON.parse(lines[idx]), `Line ${idx} after 512KB truncation must be valid JSON (partial first line skipped)`);
+    }
+    assert.equal(JSON.parse(lines[lines.length - 1]).event, 'AFTER_TRUNCATE');
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }

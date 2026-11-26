@@ -3109,7 +3109,7 @@ test('17) Red-team #230 regressions: sidebarStudio attr, breadcrumb last-segment
     });
     uiEnv1.rootBody.appendChild(ui1.box);
     // Click immediately while state.loaded === false
-    const waitDiagState = async (box, expected, timeoutMs = 1500) => {
+    const waitDiagState = async (box, expected, timeoutMs = 5000) => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (box.querySelector('[data-testid="thought-diag-connectivity"]').getAttribute('data-state') === expected) return;

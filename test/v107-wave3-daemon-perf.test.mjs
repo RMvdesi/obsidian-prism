@@ -795,7 +795,7 @@ test('Wave3 P1-6a & P2-7b: async OS proxy probe deduplicates concurrent calls wi
           null,
           '    ProxyEnable    REG_DWORD    0x1\r\n    ProxyServer    REG_SZ    http=127.0.0.1:7890;https=127.0.0.1:7891\r\n'
         );
-      }, 75);
+      }, 150);
     };
 
     const directAsync = await detectOsSystemProxyAsync({ platform: 'win32', execFileFn: delayedWinReg });

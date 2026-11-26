@@ -2707,3 +2707,64 @@ test('[Coexist-13] Layer 1 detects all Top 13 external localization fingerprints
   assert.equal(rtSrc.includes(localWorkspaceLeak), false, 'Runtime must not contain local workspace path');
   assert.equal(testSelfSrc.includes(localWorkspaceLeak), false, 'Test file must not contain local workspace path');
 });
+
+test('Issue #80: host-i18n exempts orchestrator-picker-row/effort and data-ag-cs-orch-l2/l3 / data-ces-orch-row on initial scan and frame-0 pointerenter', () => {
+  const env = createTestEnv();
+  const dict = { exact: { Settings: '设置', Save: '保存', Cancel: '取消' }, patterns: [] };
+
+  const orchRow = env.makeEl('div', { attrs: { 'data-testid': 'orchestrator-picker-row', role: 'menuitem' } });
+  const orchRowLabel = env.makeEl('span', { text: 'Settings' });
+  orchRow.append(orchRowLabel);
+
+  const orchEffort = env.makeEl('div', { attrs: { 'data-testid': 'orchestrator-picker-effort' } });
+  const orchEffortLabel = env.makeEl('span', { text: 'Save' });
+  orchEffort.append(orchEffortLabel);
+
+  const l2Menu = env.makeEl('div', { attrs: { role: 'menu', 'data-ag-cs-orch-l2': '1' } });
+  const l2Item = env.makeEl('span', { text: 'Cancel' });
+  l2Menu.append(l2Item);
+
+  const l3Menu = env.makeEl('div', { attrs: { role: 'menu', 'data-ag-cs-orch-l3': '1' } });
+  const l3Item = env.makeEl('span', { text: 'Settings' });
+  l3Menu.append(l3Item);
+
+  const cesRow = env.makeEl('div', { attrs: { 'data-ces-orch-row': '1' } });
+  const cesItem = env.makeEl('span', { text: 'Save' });
+  cesRow.append(cesItem);
+
+  const normalBtn = env.makeEl('button', { text: 'Settings' });
+  env.doc.body.append(orchRow, orchEffort, l2Menu, l3Menu, cesRow, normalBtn);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // Control button translates normally while all 5 Orchestrator submenu targets remain completely untouched
+  assert.equal(normalBtn.textContent, '设置');
+  assert.equal(orchRowLabel.textContent, 'Settings');
+  assert.equal(orchEffortLabel.textContent, 'Save');
+  assert.equal(l2Item.textContent, 'Cancel');
+  assert.equal(l3Item.textContent, 'Settings');
+  assert.equal(cesItem.textContent, 'Save');
+
+  // Simulate frame-0 pointerenter directly on each Orchestrator submenu node
+  for (const tgt of [orchRowLabel, orchEffortLabel, l2Item, l3Item, cesItem]) {
+    env.doc.dispatchEvent?.({ type: 'pointerenter', target: tgt });
+  }
+  env.flushRafs?.();
+  assert.equal(orchRowLabel.textContent, 'Settings');
+  assert.equal(orchEffortLabel.textContent, 'Save');
+  assert.equal(l2Item.textContent, 'Cancel');
+  assert.equal(l3Item.textContent, 'Settings');
+  assert.equal(cesItem.textContent, 'Save');
+
+  inst.destroy();
+});

@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const cdp = require(path.join(ROOT, 'cdp.js'));
 
@@ -321,13 +322,31 @@ test('Issue #57: ui-runtime marks .md-table-host turns & collapsible bodies with
 test('Issue #58 Bugs 3 & 5: focus outline suppression on conversation-view/autoscroll-viewport/mascot, inset :focus-visible ring & >=7px gap in composer footer', () => {
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
 
-  // Bug 5: conversation-view & autoscroll-viewport disable focus/focus-visible outline and box-shadow
+  // Bug 5 + Issue #58 residual #4: overview-panel-host, conversation-view & autoscroll-viewport disable focus/focus-visible outline and box-shadow with (1,3,1) specificity
   assert.match(
     css,
-    /:is\(\[data-testid="conversation-view"\],\[data-testid="autoscroll-viewport"\]\)\{&:is\(:focus,:focus-visible\)\{outline:none !important;box-shadow:none !important;\}\}/,
-    'conversation-view and autoscroll-viewport must suppress :focus/:focus-visible outline and box-shadow'
+    /:is\(\[data-testid="overview-panel-host"\],\[data-testid="conversation-view"\],\[data-testid="autoscroll-viewport"\]\):not\(#_\)\{&:is\(:focus,:focus-visible\)\{outline:none !important;box-shadow:none !important;\}\}/,
+    'overview-panel-host, conversation-view and autoscroll-viewport must suppress :focus/:focus-visible outline and box-shadow via :not(#_)'
   );
   assert.equal(css.includes(',[data-testid="autoscroll-viewport"],'), false, 'must keep Issue #8 autoscroll-viewport scrollbar guard intact');
+
+  // Subtle motion mode: exclude .ag-v2-mascot-actor from [role="button"] transform:none override (prevents mascot teleport on hover/drag)
+  const subtleIdx = css.indexOf('&[data-ag-cs-motion="subtle"]{');
+  assert.ok(subtleIdx > 0, 'subtle motion block must exist');
+  const subtleSlice = css.slice(subtleIdx, css.indexOf('\n}\n', subtleIdx));
+  assert.ok(
+    subtleSlice.includes('& :is(button,[role="button"]:not(.ag-v2-mascot-actor):not([data-no-press-spring="1"])):is(:hover,:active){transform:none !important;}'),
+    'subtle motion mode must exclude .ag-v2-mascot-actor from transform:none !important on :hover/:active'
+  );
+  assert.ok(
+    subtleSlice.includes('[role="button"]:not(.ag-v2-mascot-actor):not([data-no-press-spring="1"])'),
+    'subtle motion transition-property rule must exclude .ag-v2-mascot-actor and [data-no-press-spring="1"]'
+  );
+
+  // Issue #58 residual #1: peek mode must NOT hide .ag-v2-mini-pile (keeps 3 mini crabs visible), while keeping .ag-v2-mascot-actor::after shadow hidden & pointer-events passthrough
+  assert.equal(css.includes('.ag-v2-mini-pile{opacity:0 !important;}'), false, 'style.css must not hide .ag-v2-mini-pile in peek mode');
+  assert.ok(css.includes('.ag-cs-crab[data-ag-mascot-peek="1"] .ag-v2-mascot-actor::after{opacity:0 !important;}'), 'peek mode must still hide mascot ground shadow');
+  assert.ok(css.includes('html[data-ag-cs-model-menu="1"] .ag-cs-crab,html[data-ag-pp-open="1"] .ag-cs-crab'), 'model-menu and periodic-picker pointer-events passthrough must remain intact');
 
   // Bug 3 (mascot): .ag-v2-mascot-actor disables focus/focus-visible outline & box-shadow
   const actorLine = css.split('\n').find((l) => l.includes('& .ag-v2-mascot-actor{')) || '';
@@ -358,6 +377,39 @@ test('Issue #58 Bugs 3 & 5: focus outline suppression on conversation-view/autos
   const rightGroupLine = footerSlice.split('\n').find((l) => l.includes('>div:not(:first-child)') && l.includes('>div.flex{')) || '';
   const gapMatch = rightGroupLine.match(/gap:(\d+(?:\.\d+)?)px/);
   assert.ok(gapMatch && Number(gapMatch[1]) >= 7, `composer footer right button group gap must be >= 7px, got ${rightGroupLine}`);
+
+  // Bilibili /btw narrow-window clipping guard: side-question-toolbar-button safeguard + narrow icon-only collapse + shrinking model-selector
+  assert.ok(
+    footerSlice.includes('& [data-testid="side-question-toolbar-button"]{flex:0 0 auto !important;height:26px !important;'),
+    'composer footer must protect [data-testid="side-question-toolbar-button"] with flex:0 0 auto and height:26px'
+  );
+  assert.ok(
+    footerSlice.includes('&[data-t~="2"] [data-testid="side-question-toolbar-button"]{'),
+    'composer footer narrow tier must collapse side-question-toolbar-button text label to icon-only to avoid horizontal clipping'
+  );
+  const leftFlexLine = footerSlice.split('\n').find((l) => l.startsWith('&>div:nth-child(1)>div.flex,')) || '';
+  assert.ok(leftFlexLine.includes('flex:0 1 auto !important;'), 'left footer flex wrappers must allow shrinking for /btw button');
+  const modelTrigLine = footerSlice.split('\n').find((l) => l.startsWith('& [data-testid="model-selector-trigger"]{')) || '';
+  assert.ok(modelTrigLine.includes('flex:0 1 auto !important;'), 'model-selector-trigger must shrink first to yield space for /btw button');
+
+  // Issue #80 anti-flicker CSS hardening:
+  // 1) Keep legacy z-index:65 rule AND elevate nested positioning containers to z-index:6010 above host z-[6000]
+  assert.ok(
+    css.includes('html[data-ag-cs-model-menu="1"] :is([data-ag-cs-model-submenu="1"],[data-testid="context-menu-submenu-popup"]){z-index:65 !important;}'),
+    'must retain legacy z-index:65 model submenu rule'
+  );
+  assert.ok(
+    css.includes('html[data-ag-cs-model-menu="1"] :is([role="presentation"],[data-nested],[data-side]):is([data-ag-cs-model-submenu="1"],[data-testid="context-menu-submenu-popup"]){z-index:6010 !important;}'),
+    'must elevate v2.35+ nested model submenu positioning containers above host z-[6000]'
+  );
+  // 2) Disable scale(.965) & ag-cs-lens-in zoom jitter on L2 / nested model submenus (opacity-only transition)
+  assert.ok(
+    css.includes('html[data-ag-cs-style][data-ag-cs-model-menu="1"] :is([data-ag-cs-model-submenu="1"],[data-ag-cs-model-submenu="1"] .agy-overlay,[data-ag-cs-orch-l2="1"],[data-testid="context-menu-submenu-popup"]):not(#_){animation:none !important;transition:opacity 100ms ease-out !important;&:is([data-starting-style],[data-ending-style]){opacity:0 !important;transform:none !important;}}'),
+    'must disable lens-in / scale(.965) hitbox shrinkage on L2 / nested model submenus'
+  );
+  // 3) All 4 :not([data-ces-orch-row="1"]) menu-item rules must also exclude [data-testid="orchestrator-picker-row"] against frame-0 height jump
+  const orchExclMatches = css.match(/:not\(\[data-ces-orch-row="1"\]\):not\(\[data-testid="orchestrator-picker-row"\]\)/g) || [];
+  assert.equal(orchExclMatches.length, 4, 'all 4 menu-item overlay rules must exclude [data-testid="orchestrator-picker-row"] on frame 0');
 });
 
 test('Issue #58 Bug 4: crystal-prism-core anti-aliasing (aaPx >= 1/dpr), inset rimLine avoiding rimD<1px halo, and single-layer canvas clipping', () => {

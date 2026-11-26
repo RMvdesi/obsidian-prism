@@ -405,14 +405,18 @@ test('v1.0.1 i18n keys cover all 8 languages for scene presets, 6 new config key
 });
 
 test('settings-panel schema, scene presets, strict apiKey-stripping JSON export, and allowlist-validated JSON import', () => {
-  // Verify all 37 global config keys (including convRipple, effortMemory, periodicModelPicker, contextMenu, sidebarNavFold, scrollBottomMotion, hostLocalization, omniModule, linkTarget, sidebarStudio, autoUpdate, updateChannel & autoArchiveOnExit) match exact contract
+  // Verify all 39 global config keys (including darkAura, darkAuraStyle, convRipple, effortMemory, periodicModelPicker, contextMenu, sidebarNavFold, scrollBottomMotion, hostLocalization, omniModule, linkTarget, sidebarStudio, autoUpdate, updateChannel & autoArchiveOnExit) match exact contract
   const { PRISM_SETTINGS_SCHEMA, SCENE_PRESETS, buildSanitizedConfigExport, validateImportedConfigJson, getDefaultSettingsPatch } =
     settingsPanel;
-  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 37);
+  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 39);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.homeRipple.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.homeRipple.default, true);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.convRipple.allowed, ['off', 'subtle', 'medium', 'full']);
   assert.equal(PRISM_SETTINGS_SCHEMA.convRipple.default, 'off');
+  assert.deepEqual(PRISM_SETTINGS_SCHEMA.darkAura.allowed, ['subtle', 'balanced', 'vivid']);
+  assert.equal(PRISM_SETTINGS_SCHEMA.darkAura.default, 'balanced');
+  assert.deepEqual(PRISM_SETTINGS_SCHEMA.darkAuraStyle.allowed, ['prism', 'neon']);
+  assert.equal(PRISM_SETTINGS_SCHEMA.darkAuraStyle.default, 'prism');
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.autoArchiveOnExit.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.autoArchiveOnExit.default, false);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.effortMemory.allowed, ['on', 'off']);
@@ -526,19 +530,25 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   assert.equal(validateImportedConfigJson('not-json').ok, false);
   assert.equal(validateImportedConfigJson('{"unknownOnly": 1}').ok, false);
   const defaultPatch = getDefaultSettingsPatch();
-  assert.equal(Object.keys(defaultPatch).length, 37);
+  assert.equal(Object.keys(defaultPatch).length, 39);
   assert.equal(defaultPatch.homeRipple, true);
   assert.equal(defaultPatch.convRipple, 'off');
+  assert.equal(defaultPatch.darkAura, 'balanced');
+  assert.equal(defaultPatch.darkAuraStyle, 'prism');
   assert.equal(defaultPatch.autoArchiveOnExit, false);
   assert.equal(defaultPatch.effortMemory, 'on');
   assert.equal(defaultPatch.periodicModelPicker, 'on');
   assert.equal(defaultPatch.sidebarNavFold, 'off');
   assert.equal(defaultPatch.scrollBottomMotion, 'smooth');
 
-  // convRipple 8-language i18n coverage (0 CJK in en/es/fr/de, 0 runtime slice leak) + 4-tier export/import/preset & legacy bool compatibility
+  // convRipple & darkAura/darkAuraStyle 8-language i18n coverage (0 CJK in en/es/fr/de, 0 runtime slice leak)
   const CJK_RE_CR = /[\u3000-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]/;
   const runtimeKeySetCr = new Set(i18nLocales.RUNTIME_UI_KEYS);
-  const convI18nKeys = ['setConvRippleTitle', 'setConvRippleDesc', 'optConvRippleOff', 'optConvRippleSubtle', 'optConvRippleMedium', 'optConvRippleFull'];
+  const convI18nKeys = [
+    'setConvRippleTitle', 'setConvRippleDesc', 'optConvRippleOff', 'optConvRippleSubtle', 'optConvRippleMedium', 'optConvRippleFull',
+    'setDarkAuraStyleLabel', 'setDarkAuraStyleDesc', 'optDarkAuraPrism', 'optDarkAuraNeon',
+    'setDarkAuraLabel', 'setDarkAuraDesc', 'darkAuraHintLight', 'optDarkAuraSubtle', 'optDarkAuraBalanced', 'optDarkAuraVivid',
+  ];
   for (const ck of convI18nKeys) {
     assert.equal(runtimeKeySetCr.has(ck), false, `${ck} must NOT be in RUNTIME_UI_KEYS`);
   }

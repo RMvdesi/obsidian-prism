@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const rig = require('../dual-mascot-rig.js');
@@ -2338,8 +2339,8 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
   const sp = require('../settings-panel.js');
   const i18nLocales = require('../i18n-locales.js');
 
-  // 1. Strict 37 schema keys & 4 mascot presets
-  assert.equal(Object.keys(sp.PRISM_SETTINGS_SCHEMA).length, 37, 'PRISM_SETTINGS_SCHEMA must remain strictly 37 keys');
+  // 1. Strict 39 schema keys (37 baseline + darkAura + darkAuraStyle) & 4 mascot presets
+  assert.equal(Object.keys(sp.PRISM_SETTINGS_SCHEMA).length, 39, 'PRISM_SETTINGS_SCHEMA must remain strictly 39 keys');
   assert.deepEqual([...sp.PRISM_SETTINGS_SCHEMA.mascot.allowed], ['crab', 'quad', 'quad-minis', 'off']);
 
   // 2. 8-language coverage (including all stage keys), /4 cap copy, zero CJK in en/es/fr/de, and 0 new keys leaked into RUNTIME_UI_KEYS
@@ -2368,7 +2369,7 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
   }
 
   // 3. Credits & third-party MIT attribution for wp3171216237/dsh-TUI
-  const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+  const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const noticeTxt = fs.readFileSync(path.join(rootDir, 'NOTICE'), 'utf8');
   const thirdPartyTxt = fs.readFileSync(path.join(rootDir, 'THIRD_PARTY_NOTICES.md'), 'utf8');
   assert.ok(noticeTxt.includes('wp3171216237/dsh-TUI'), 'NOTICE must credit wp3171216237/dsh-TUI');
@@ -2717,7 +2718,7 @@ test('Octopath WebGL2 HD-2D engine: 4-FBO MRT pipeline, GL_NEAREST pixel filteri
   // Hot-swap external tavern-atlas-data.js if present (seamless Image decode -> gl.NEAREST upgrade)
   const fs = require('node:fs');
   const path = require('node:path');
-  const atlasFile = path.join(path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..'), 'vendor', 'clawd-mascot', 'tavern-atlas-data.js');
+  const atlasFile = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'vendor', 'clawd-mascot', 'tavern-atlas-data.js');
   if (fs.existsSync(atlasFile)) {
     const prevAtlas = globalThis.__agOctopathTavernAtlas;
     const prevImg = globalThis.Image;
@@ -3070,5 +3071,27 @@ test('PR #51 queued-messages-card roof-perch: zero bottom gap, interactive roof 
   } finally {
     try { sandbox.__agPrism?.destroy?.(); } catch {}
     for (const id of timers) clearTimeout(id);
+  }
+});
+
+test('subtle motion [role="button"] rules exclude .ag-v2-mascot-actor and [data-no-press-spring="1"] so transform positioning is preserved on hover/active', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { fileURLToPath } = require('node:url');
+  const cssPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'style.css');
+  const css = fs.readFileSync(cssPath, 'utf8');
+  const subtleStart = css.indexOf('&[data-ag-cs-motion="subtle"]{');
+  assert.ok(subtleStart >= 0, 'style.css must define &[data-ag-cs-motion="subtle"]');
+  const subtleEnd = css.indexOf('\n}', subtleStart);
+  assert.ok(subtleEnd > subtleStart, 'subtle motion block must close cleanly');
+  const subtleBlock = css.slice(subtleStart, subtleEnd);
+
+  const lines = subtleBlock.split('\n').filter((line) => line.includes('[role="button"]'));
+  assert.equal(lines.length, 2, 'expected transition override and :hover/:active transform:none rules for [role="button"] in subtle block');
+  for (const line of lines) {
+    assert.ok(
+      line.includes('[role="button"]:not(.ag-v2-mascot-actor):not([data-no-press-spring="1"])'),
+      `subtle rule must exclude mascot actors so inline translate3d is never clobbered: ${line}`
+    );
   }
 });

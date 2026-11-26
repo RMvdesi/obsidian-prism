@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
-using System.Management;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -1296,49 +1295,45 @@ namespace AgyClaudeStyle.Installer
 
             try
             {
-                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(
-                    "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'node.exe'"))
+                int selfPid = Process.GetCurrentProcess().Id;
+                Process[] nodeProcs = Process.GetProcessesByName("node");
+                for (int i = 0; i < nodeProcs.Length; i++)
                 {
-                    foreach (ManagementObject obj in searcher.Get())
+                    Process p = nodeProcs[i];
+                    try
                     {
-                        try
+                        int pid = p.Id;
+                        if (pid <= 0 || pid == selfPid) continue;
+                        bool exited = false;
+                        try { exited = p.HasExited; } catch { continue; }
+                        if (exited) continue;
+
+                        bool accessDenied;
+                        string cmd = CdpHelper.QueryProcessCommandLineFast(pid, out accessDenied);
+                        if (accessDenied || string.IsNullOrEmpty(cmd)) continue;
+                        if (cmd.IndexOf("agy-claude-style", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                            cmd.IndexOf("inject.js", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                            cmd.IndexOf("--watch", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            string cmd = obj["CommandLine"] as string;
-                            if (string.IsNullOrEmpty(cmd)) continue;
-                            if (cmd.IndexOf("agy-claude-style", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                cmd.IndexOf("inject.js", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                cmd.IndexOf("--watch", StringComparison.OrdinalIgnoreCase) >= 0)
+                            if (!p.HasExited && string.Equals(p.ProcessName, "node", StringComparison.OrdinalIgnoreCase))
                             {
-                                int pid = Convert.ToInt32(obj["ProcessId"]);
-                                if (pid > 0 && pid != Process.GetCurrentProcess().Id)
+                                p.Kill();
+                                p.WaitForExit(1500);
+                                if (log != null)
                                 {
-                                    try
-                                    {
-                                        using (Process p = Process.GetProcessById(pid))
-                                        {
-                                            if (!p.HasExited && string.Equals(p.ProcessName, "node", StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                p.Kill();
-                                                p.WaitForExit(1500);
-                                                if (log != null)
-                                                {
-                                                    log(InstallerI18n.TrFormat(
-                                                        "已替换旧版 Node 守护进程 (PID {0})",
-                                                        "Replaced legacy Node watcher (PID {0})",
-                                                        pid
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                    }
-                                    catch { }
+                                    log(InstallerI18n.TrFormat(
+                                        "已替换旧版 Node 守护进程 (PID {0})",
+                                        "Replaced legacy Node watcher (PID {0})",
+                                        pid
+                                    ));
                                 }
                             }
                         }
-                        finally
-                        {
-                            obj.Dispose();
-                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { p.Dispose(); } catch { }
                     }
                 }
             }
@@ -1349,10 +1344,8 @@ namespace AgyClaudeStyle.Installer
         {
             try
             {
-                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-                object shell = Activator.CreateInstance(shellType);
-                object lnk = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { lnkPath });
-                return lnk.GetType().InvokeMember("WorkingDirectory", BindingFlags.GetProperty, null, lnk, null) as string;
+                WindowsLnkInfo info = WindowsLnkCodec.ReadFile(lnkPath);
+                return info != null ? info.WorkingDir : null;
             }
             catch
             {
@@ -1406,38 +1399,13 @@ namespace AgyClaudeStyle.Installer
             {
                 shortcutArgs += " --lang " + explicitLang;
             }
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType == null)
-            {
-                throw new InvalidOperationException(InstallerI18n.Tr(
-                    "系统未注册 WScript.Shell COM 组件，无法创建开机自启快捷方式",
-                    "WScript.Shell COM component is not registered; unable to create startup shortcut"
-                ));
-            }
-            object shell = null;
-            object lnk = null;
-            try
-            {
-                shell = Activator.CreateInstance(shellType);
-                lnk = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { lnkPath });
-                Type lnkType = lnk.GetType();
-                lnkType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, lnk, new object[] { targetExe });
-                lnkType.InvokeMember("Arguments", BindingFlags.SetProperty, null, lnk, new object[] { shortcutArgs });
-                lnkType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, lnk, new object[] { NormalizeDirPath(installDir) });
-                lnkType.InvokeMember("Description", BindingFlags.SetProperty, null, lnk, new object[] { "Obsidian Prism (obsidian-prism) watcher" });
-                lnkType.InvokeMember("Save", BindingFlags.InvokeMethod, null, lnk, null);
-            }
-            finally
-            {
-                if (lnk != null && Marshal.IsComObject(lnk))
-                {
-                    try { Marshal.FinalReleaseComObject(lnk); } catch { }
-                }
-                if (shell != null && Marshal.IsComObject(shell))
-                {
-                    try { Marshal.FinalReleaseComObject(shell); } catch { }
-                }
-            }
+            WindowsLnkCodec.SaveNewShortcut(
+                lnkPath,
+                targetExe,
+                shortcutArgs,
+                NormalizeDirPath(installDir),
+                "Obsidian Prism (obsidian-prism) watcher"
+            );
         }
 
         public static void RegisterUninstallEntry(string installDir, string version)
@@ -1454,7 +1422,7 @@ namespace AgyClaudeStyle.Installer
                     ),
                     RegistryValueKind.String
                 );
-                key.SetValue("DisplayVersion", version ?? "1.0.8-beta.2", RegistryValueKind.String);
+                key.SetValue("DisplayVersion", version ?? "1.0.8-beta.3", RegistryValueKind.String);
                 key.SetValue("Publisher", "Obsidian Prism Contributors", RegistryValueKind.String);
                 key.SetValue("InstallLocation", installDir, RegistryValueKind.String);
                 key.SetValue("DisplayIcon", exePath + ",0", RegistryValueKind.String);
@@ -1551,6 +1519,16 @@ namespace AgyClaudeStyle.Installer
                                 destPath
                             ));
                         }
+                        if (!File.Exists(destPath))
+                        {
+                            // 全新文件以 CreateNew 一次原子落盘，避免先写 .tmp 再改名触发实时防护双重扫描与抢锁重试
+                            using (FileStream directStream = new FileStream(destPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                            {
+                                directStream.Write(payloadBytes, 0, payloadBytes.Length);
+                            }
+                            return;
+                        }
+
                         if (IsReparsePoint(tmpPath))
                         {
                             throw new InvalidOperationException(InstallerI18n.TrFormat(
@@ -1574,7 +1552,7 @@ namespace AgyClaudeStyle.Installer
                         CdpHelper.ClearReadOnlyAndHiddenAttributes(destPath);
                         try
                         {
-                            File.Replace(tmpPath, destPath, null, true);
+                            CdpHelper.AtomicReplaceFile(tmpPath, destPath);
                             return;
                         }
                         catch (Exception replaceEx)
@@ -2069,6 +2047,7 @@ namespace AgyClaudeStyle.Installer
                 }
                 CleanupStaleOldFiles(installDir);
                 CleanupStaleOldFiles(pluginDir);
+                CleanupStaleRemovedSelfTempFiles();
 
                 if (hadInstallCfg && !string.IsNullOrEmpty(pluginCfgPath) && File.Exists(installCfgPath))
                 {
@@ -2778,55 +2757,211 @@ namespace AgyClaudeStyle.Installer
             return result;
         }
 
+        private const uint MOVEFILE_DELAY_UNTIL_REBOOT = 0x00000004;
+        private const string RemovedSelfTempPrefix = "obsidian-prism-removed-";
+        private const string HiddenRemovedSelfTempPrefix = ".obsidian-prism-removed-";
+        private const string PendingCleanupManifestName = "obsidian-prism-pending-cleanup.txt";
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool MoveFileExW(string lpExistingFileName, string lpNewFileName, uint dwFlags);
+
+        private static bool IsSafeRemovedSelfTempFilePath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return false;
+            try
+            {
+                string name = Path.GetFileName(filePath);
+                if (string.IsNullOrEmpty(name) || name.Length > 128) return false;
+                if (!name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return false;
+                bool hasPrefix = name.StartsWith(RemovedSelfTempPrefix, StringComparison.OrdinalIgnoreCase) ||
+                                 name.StartsWith(HiddenRemovedSelfTempPrefix, StringComparison.OrdinalIgnoreCase);
+                if (!hasPrefix) return false;
+                return !IsReparsePoint(filePath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static string ResolveSameVolumeMoveTarget(string selfExeFullPath, string safeInstallDir, string tempDir)
+        {
+            if (string.IsNullOrEmpty(selfExeFullPath) || string.IsNullOrEmpty(safeInstallDir)) return null;
+            string selfRoot = Path.GetPathRoot(selfExeFullPath);
+            if (string.IsNullOrEmpty(selfRoot)) return null;
+
+            string token = Process.GetCurrentProcess().Id + "-" + Guid.NewGuid().ToString("N") + ".tmp";
+            if (!string.IsNullOrEmpty(tempDir) && Directory.Exists(tempDir) && !IsReparsePoint(tempDir))
+            {
+                string tempRoot = Path.GetPathRoot(Path.GetFullPath(tempDir));
+                if (!string.IsNullOrEmpty(tempRoot) &&
+                    string.Equals(selfRoot, tempRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.Combine(tempDir, RemovedSelfTempPrefix + token);
+                }
+            }
+
+            // 跨盘符降级：移至同卷父目录隐藏临时文件，确保普通用户权限下也能立即同步删净安装目录
+            string parentDir = Path.GetDirectoryName(safeInstallDir.TrimEnd('\\', '/'));
+            if (!string.IsNullOrEmpty(parentDir) && Directory.Exists(parentDir) && !IsReparsePoint(parentDir))
+            {
+                string parentRoot = Path.GetPathRoot(Path.GetFullPath(parentDir));
+                if (!string.IsNullOrEmpty(parentRoot) &&
+                    string.Equals(selfRoot, parentRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.Combine(parentDir, HiddenRemovedSelfTempPrefix + token);
+                }
+            }
+            return null;
+        }
+
+        private static void RecordPendingRemovedSelfTempFile(string tempDir, string movedPath)
+        {
+            if (string.IsNullOrEmpty(tempDir) || string.IsNullOrEmpty(movedPath)) return;
+            try
+            {
+                if (!Directory.Exists(tempDir) || IsReparsePoint(tempDir)) return;
+                string manifestPath = Path.Combine(tempDir, PendingCleanupManifestName);
+                if (IsReparsePoint(manifestPath)) return;
+                File.AppendAllText(manifestPath, movedPath + "\n", new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        private static void CleanupStaleRemovedSelfTempFiles()
+        {
+            try
+            {
+                string tempDir = Path.GetTempPath();
+                if (string.IsNullOrEmpty(tempDir) || !Directory.Exists(tempDir) || IsReparsePoint(tempDir)) return;
+                string[] staleFiles = Directory.GetFiles(tempDir, RemovedSelfTempPrefix + "*.tmp", SearchOption.TopDirectoryOnly);
+                for (int i = 0; i < staleFiles.Length; i++)
+                {
+                    string fp = staleFiles[i];
+                    if (!IsSafeRemovedSelfTempFilePath(fp)) continue;
+                    try
+                    {
+                        CdpHelper.ClearReadOnlyAndHiddenAttributes(fp);
+                        File.Delete(fp);
+                    }
+                    catch { }
+                }
+
+                string manifestPath = Path.Combine(tempDir, PendingCleanupManifestName);
+                if (File.Exists(manifestPath) && !IsReparsePoint(manifestPath))
+                {
+                    string[] lines = File.ReadAllLines(manifestPath, Encoding.UTF8);
+                    List<string> remaining = new List<string>();
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string fp = (lines[i] ?? "").Trim();
+                        if (fp.Length == 0 || !IsSafeRemovedSelfTempFilePath(fp)) continue;
+                        if (!File.Exists(fp)) continue;
+                        try
+                        {
+                            CdpHelper.ClearReadOnlyAndHiddenAttributes(fp);
+                            File.Delete(fp);
+                        }
+                        catch
+                        {
+                            if (File.Exists(fp)) remaining.Add(fp);
+                        }
+                    }
+                    if (remaining.Count == 0)
+                    {
+                        try { File.Delete(manifestPath); } catch { }
+                    }
+                    else
+                    {
+                        try { File.WriteAllLines(manifestPath, remaining.ToArray(), new UTF8Encoding(false)); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
         public static void ScheduleSelfDeleteIfNeeded(string installDir)
         {
             string selfExe = Assembly.GetExecutingAssembly().Location;
-            if (string.IsNullOrEmpty(selfExe)) return;
+            if (string.IsNullOrEmpty(selfExe) || !File.Exists(selfExe) || IsReparsePoint(selfExe)) return;
             string safeInstallDir = (!string.IsNullOrEmpty(installDir) && !IsDangerousRootPath(installDir))
                 ? NormalizeDirPath(installDir)
                 : string.Empty;
+            if (string.IsNullOrEmpty(safeInstallDir) || IsReparsePoint(safeInstallDir)) return;
 
-            // 通过环境变量 + -LiteralPath 传递路径，彻底消除命令拼接与元字符注入风险（不使用 cmd.exe /c）
-            string ps =
-                "$exe = $env:OBSIDIAN_PRISM_SELF_DELETE_EXE; " +
-                "$dir = $env:OBSIDIAN_PRISM_SELF_DELETE_DIR; " +
-                "for ($i = 0; $i -lt 10; $i++) { " +
-                "Start-Sleep -Milliseconds 900; " +
-                "if ($exe) { Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue }; " +
-                "if ($dir) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }; " +
-                "if ((-not $dir) -or (-not (Test-Path -LiteralPath $dir))) { break } " +
-                "}";
-            string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
-            string[] psCandidates = new string[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe"),
-                "powershell.exe",
-                "pwsh.exe"
-            };
+            string selfFull = Path.GetFullPath(selfExe);
+            string installPrefix = safeInstallDir.TrimEnd('\\', '/') + "\\";
+            if (!selfFull.StartsWith(installPrefix, StringComparison.OrdinalIgnoreCase)) return;
 
-            for (int i = 0; i < psCandidates.Length; i++)
+            // 纯原生无子进程清理：先切离安装目录并把运行中的自身同卷移至临时文件，再立即同步删空安装目录（零脚本宿主）
+            string tempDir = Path.GetTempPath();
+            try
             {
-                string candidate = psCandidates[i];
-                if (string.IsNullOrEmpty(candidate)) continue;
+                if (!string.IsNullOrEmpty(tempDir) && Directory.Exists(tempDir))
+                {
+                    Environment.CurrentDirectory = tempDir;
+                }
+            }
+            catch { }
+
+            CleanupStaleRemovedSelfTempFiles();
+
+            bool movedOut = false;
+            bool movedOutsideTemp = false;
+            string movedTemp = null;
+            try
+            {
+                movedTemp = ResolveSameVolumeMoveTarget(selfFull, safeInstallDir, tempDir);
+                if (!string.IsNullOrEmpty(movedTemp) && !File.Exists(movedTemp) && !IsReparsePoint(movedTemp))
+                {
+                    CdpHelper.ClearReadOnlyAndHiddenAttributes(selfFull);
+                    File.Move(selfFull, movedTemp);
+                    movedOut = true;
+                    string movedDir = Path.GetDirectoryName(movedTemp) ?? "";
+                    movedOutsideTemp = string.IsNullOrEmpty(tempDir) ||
+                        !string.Equals(
+                            NormalizeDirPath(movedDir),
+                            NormalizeDirPath(tempDir),
+                            StringComparison.OrdinalIgnoreCase
+                        );
+                    if (movedOutsideTemp)
+                    {
+                        try
+                        {
+                            File.SetAttributes(movedTemp, FileAttributes.Hidden | FileAttributes.Temporary);
+                        }
+                        catch { }
+                        RecordPendingRemovedSelfTempFile(tempDir, movedTemp);
+                    }
+                }
+            }
+            catch { }
+
+            if (movedOut)
+            {
                 try
                 {
-                    ProcessStartInfo psi = new ProcessStartInfo(
-                        candidate,
-                        "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + encoded
-                    );
-                    psi.WorkingDirectory = Path.GetTempPath();
-                    psi.CreateNoWindow = true;
-                    psi.UseShellExecute = false;
-                    psi.WindowStyle = ProcessWindowStyle.Hidden;
-                    psi.EnvironmentVariables["OBSIDIAN_PRISM_SELF_DELETE_EXE"] = selfExe;
-                    psi.EnvironmentVariables["OBSIDIAN_PRISM_SELF_DELETE_DIR"] = safeInstallDir;
-                    if (Process.Start(psi) != null)
+                    SafeDeleteDirectory(safeInstallDir);
+                }
+                catch { }
+                try
+                {
+                    if (!string.IsNullOrEmpty(movedTemp) && File.Exists(movedTemp))
                     {
-                        return;
+                        MoveFileExW(movedTemp, null, MOVEFILE_DELAY_UNTIL_REBOOT);
                     }
                 }
                 catch { }
+                return;
             }
+
+            // 极端只读跨卷兜底：标记系统重启清理，绝不派生脚本或命令行子进程
+            try
+            {
+                MoveFileExW(selfFull, null, MOVEFILE_DELAY_UNTIL_REBOOT);
+                MoveFileExW(safeInstallDir, null, MOVEFILE_DELAY_UNTIL_REBOOT);
+            }
+            catch { }
         }
     }
 

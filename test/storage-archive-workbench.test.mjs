@@ -696,7 +696,7 @@ test('settings-panel (Ch9): lazy <details> drawer, 3-way mutually exclusive conf
     'sidecars/daemon/conversation-archive.mjs',
     'sidecars/daemon/main.mjs',
     'settings-panel.js',
-    'CONTRIBUTORS.md',
+    'docs/CONTRIBUTORS.md',
     'test/storage-archive-workbench.test.mjs',
   ]) {
     const buf = fs.readFileSync(path.join(ROOT, rel));
@@ -1089,45 +1089,54 @@ test('Windows tray graceful quit via loopback CDP Browser.close, Antigravity tar
   });
   assert.equal(closeOk, true, 'Socket closing right after Browser.close send must be treated as accepted quit');
 
-  // 4) Timeout without ACK or close MUST return false (fail-closed) and immediately trigger Win32 CloseMainWindow fallback
+  // 4) Timeout without ACK or close MUST return false (fail-closed) on Win32 with ZERO external script/force-kill invocations
   class MockHangingWs extends MockAckWs {
     send(payload) {
       sentMessages.push(JSON.parse(payload));
       // Intentionally neither emits {id:1} message nor closes socket
     }
   }
-  let timeoutFallbackCalls = 0;
+  let unexpectedExecCalls = 0;
   const quitOnCdpTimeout = await arch.requestGracefulHostQuit(1234, 'C:\\Antigravity\\Antigravity.exe', 'win32', {
     cdpPort: 7530,
     timeoutMs: 200,
     fetchImpl: makeCdpFetch(),
     WebSocketCtor: MockHangingWs,
-    execFileSyncFn: () => { timeoutFallbackCalls += 1; },
+    execFileSyncFn: () => { unexpectedExecCalls += 1; },
   });
-  assert.equal(quitOnCdpTimeout, true);
-  assert.equal(timeoutFallbackCalls, 1, 'CDP Browser.close timeout without ACK must return false and immediately fall back to Win32 CloseMainWindow');
+  assert.equal(quitOnCdpTimeout, false, 'CDP Browser.close timeout without ACK must fail closed on win32');
+  assert.equal(unexpectedExecCalls, 0, 'Win32 graceful quit must NEVER spawn powershell or taskkill fallback');
 
-  // 5) requestGracefulHostQuit uses CDP Browser.close first (skipping WM_CLOSE when accepted) and falls back to CloseMainWindow on failure
-  let psFallbackCalls = 0;
+  // 5) requestGracefulHostQuit uses CDP Browser.close first and returns clear manual-quit status on Win32 when CDP is unavailable
   const cdpPortsTried = [];
   const quitViaCdp = await arch.requestGracefulHostQuit(1234, 'C:\\Antigravity\\Antigravity.exe', 'win32', {
     cdpPort: 7530,
     requestCdpClose: async (p) => { cdpPortsTried.push(p); return true; },
-    execFileSyncFn: () => { psFallbackCalls += 1; },
+    execFileSyncFn: () => { unexpectedExecCalls += 1; },
   });
   assert.equal(quitViaCdp, true);
   assert.deepEqual(cdpPortsTried, [7530]);
-  assert.equal(psFallbackCalls, 0, 'When CDP Browser.close succeeds, Win32 WM_CLOSE fallback must not be invoked');
+  assert.equal(unexpectedExecCalls, 0);
 
   const quitFallback = await arch.requestGracefulHostQuit(1234, 'C:\\Antigravity\\Antigravity.exe', 'win32', {
     cdpPort: 7530,
     requestCdpClose: async (p) => { cdpPortsTried.push(p); return false; },
-    execFileSyncFn: () => { psFallbackCalls += 1; },
+    execFileSyncFn: () => { unexpectedExecCalls += 1; },
   });
-  assert.equal(quitFallback, true);
-  assert.equal(psFallbackCalls, 1, 'When CDP Browser.close fails, Win32 CloseMainWindow fallback must run');
+  assert.equal(quitFallback, false, 'When CDP Browser.close fails on win32, requestGracefulHostQuit returns false without spawning PowerShell');
+  assert.equal(unexpectedExecCalls, 0);
 
-  // 6) spawnDetachedArchiveTask persists valid cdpPort/cdpBrowserWsPath & sanitizes invalid inputs, executeArchiveTaskSequence clears cdpPort on nudge, and PrismDaemon forwards cdpPort/browserPort
+  const detailedNoCdp = await arch.requestGracefulHostQuit(1234, 'C:\\Antigravity\\Antigravity.exe', 'win32', {
+    cdpPort: 0,
+    detailed: true,
+    execFileSyncFn: () => { unexpectedExecCalls += 1; },
+  });
+  assert.equal(detailedNoCdp.ok, false);
+  assert.equal(detailedNoCdp.manualQuitRequired, true);
+  assert.equal(detailedNoCdp.code, 'MANUAL_QUIT_REQUIRED');
+  assert.equal(unexpectedExecCalls, 0);
+
+  // 6) spawnDetachedArchiveTask persists valid cdpPort/cdpBrowserWsPath & sanitizes invalid inputs, executeArchiveTaskSequence nudge behavior (Win32 retains CDP, POSIX falls back to OS), and PrismDaemon forwards cdpPort/browserPort
   const tmpRoot = makeTempDir('ag-prism-win-tray-');
   try {
     const convDir = path.join(tmpRoot, 'conversations');
@@ -1148,25 +1157,61 @@ test('Windows tray graceful quit via loopback CDP Browser.close, Antigravity tar
     assert.equal(capturedInvalid.cdpPort, 0);
     assert.equal(capturedInvalid.cdpBrowserWsPath, '');
 
-    const quitTrace = [];
-    let checks = 0;
-    const seqOut = await arch.executeArchiveTaskSequence(
+    const quitTraceWin = [];
+    let checksWin = 0;
+    const seqOutWin = await arch.executeArchiveTaskSequence(
       { action: 'archive-and-restart', convDir, archiveDir, hostPid: 555, cdpPort: 7530, cdpBrowserWsPath: '/devtools/browser/ok-guid', gracefulQuit: true, relaunch: false, waitExitTimeoutMs: 600, pollMs: 50, settleMs: 0, recheckGapMs: 0 },
       {
+        platform: 'win32',
         sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-        checkRunning: () => (++checks < 8),
-        requestGracefulQuit: async (pid, _exe, opts) => { quitTrace.push({ pid, cdpPort: opts?.cdpPort, expectedBrowserWsPath: opts?.expectedBrowserWsPath, attempt: opts?.attempt }); return true; },
+        checkRunning: () => (++checksWin < 8),
+        requestGracefulQuit: async (pid, _exe, opts) => { quitTraceWin.push({ pid, cdpPort: opts?.cdpPort, expectedBrowserWsPath: opts?.expectedBrowserWsPath, attempt: opts?.attempt }); return true; },
         archiveFn: () => ({ ok: true, movedCount: 0, movedMb: 0 }),
       }
     );
-    assert.equal(seqOut.ok, true);
-    assert.equal(quitTrace[0].cdpPort, 7530);
-    assert.equal(quitTrace[0].expectedBrowserWsPath, '/devtools/browser/ok-guid');
-    assert.equal(quitTrace[0].attempt, 1);
-    if (quitTrace.length > 1) {
-      assert.equal(quitTrace[1].cdpPort, 0, 'Nudge retry must fall back to OS-level graceful quit');
-      assert.equal(quitTrace[1].attempt, 2);
+    assert.equal(seqOutWin.ok, true);
+    assert.equal(quitTraceWin[0].cdpPort, 7530);
+    assert.equal(quitTraceWin[0].expectedBrowserWsPath, '/devtools/browser/ok-guid');
+    assert.equal(quitTraceWin[0].attempt, 1);
+    if (quitTraceWin.length > 1) {
+      assert.equal(quitTraceWin[1].cdpPort, 7530, 'Win32 nudge retry must keep verified loopback CDP port (zero PowerShell fallback)');
+      assert.equal(quitTraceWin[1].expectedBrowserWsPath, '/devtools/browser/ok-guid');
+      assert.equal(quitTraceWin[1].attempt, 2);
     }
+
+    const quitTraceMac = [];
+    let checksMac = 0;
+    const seqOutMac = await arch.executeArchiveTaskSequence(
+      { action: 'archive-and-restart', convDir, archiveDir, hostPid: 556, cdpPort: 7530, cdpBrowserWsPath: '/devtools/browser/ok-guid', gracefulQuit: true, relaunch: false, waitExitTimeoutMs: 600, pollMs: 50, settleMs: 0, recheckGapMs: 0 },
+      {
+        platform: 'darwin',
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        checkRunning: () => (++checksMac < 8),
+        requestGracefulQuit: async (pid, _exe, opts) => { quitTraceMac.push({ pid, cdpPort: opts?.cdpPort, attempt: opts?.attempt }); return true; },
+        archiveFn: () => ({ ok: true, movedCount: 0, movedMb: 0 }),
+      }
+    );
+    assert.equal(seqOutMac.ok, true);
+    if (quitTraceMac.length > 1) {
+      assert.equal(quitTraceMac[1].cdpPort, 0, 'POSIX nudge retry falls back to OS-level graceful quit');
+      assert.equal(quitTraceMac[1].attempt, 2);
+    }
+
+    // Win32 without CDP port returns clear MANUAL_QUIT_REQUIRED guidance when host does not exit
+    const manualQuitRes = await arch.executeArchiveTaskSequence(
+      { action: 'archive-and-restart', convDir, archiveDir, hostPid: 557, cdpPort: 0, gracefulQuit: true, relaunch: true, waitExitTimeoutMs: 500, pollMs: 50, settleMs: 0, recheckGapMs: 0 },
+      {
+        platform: 'win32',
+        sleep: async () => {},
+        checkRunning: () => true,
+        requestGracefulQuit: async () => false,
+        launchHost: async () => { throw new Error('must not relaunch when manual quit is required'); },
+      }
+    );
+    assert.equal(manualQuitRes.ok, false);
+    assert.equal(manualQuitRes.code, 'MANUAL_QUIT_REQUIRED');
+    assert.equal(manualQuitRes.manualQuitRequired, true);
+    assert.equal(manualQuitRes.relaunched, false);
 
     const daemon = new PrismDaemon({
       rootDir: ROOT,
@@ -1209,4 +1254,308 @@ test('Windows tray graceful quit via loopback CDP Browser.close, Antigravity tar
   assert.ok(bannerSrc.includes('html[data-ag-cs-theme="light"]'), 'light title/button styles must target html[data-ag-cs-theme="light"]');
   assert.ok(bannerSrc.includes('html>body:is(.theme-light,.light-theme,.light)'), 'light styles must support body light-theme classes');
   assert.ok(bannerExpr.includes('html\\u003ebody:is(.theme-light,.light-theme,.light)'), 'serialized banner expression must preserve body light-theme selector with XSS-escaped >');
+});
+
+test('Windows AV-clean archive runtime: pure Node detached spawn (node.exe & ELECTRON_RUN_AS_NODE=1), reg.exe launchHostWithCdpFlag, atomic app_storage.json runInBackground suspend/restore with 3x retry & symlink guard, and 0 PowerShell/WMI hygiene', async () => {
+  const tmpRoot = makeTempDir('ag-prism-win-nops-');
+  try {
+    const convDir = path.join(tmpRoot, 'conversations');
+    const archiveDir = path.join(tmpRoot, 'archive');
+    const fakeNode = path.join(tmpRoot, 'node.exe');
+    const fakeElectron = path.join(tmpRoot, 'Antigravity.exe');
+    const fakeScript = path.join(tmpRoot, 'conversation-archive.mjs');
+    fs.mkdirSync(convDir, { recursive: true });
+    fs.writeFileSync(fakeNode, 'stub', 'utf8');
+    fs.writeFileSync(fakeElectron, 'stub', 'utf8');
+    fs.writeFileSync(fakeScript, '// stub\n', 'utf8');
+
+    // 1) spawnDetachedArchiveTask uses pure Node detached spawn + unref for standalone node.exe
+    const spawnCalls = [];
+    const makeMockSpawn = (pidStart) => {
+      let nextPid = pidStart;
+      return (bin, args, opts) => {
+        const rec = { bin, args, opts, unrefCalled: false, errorBound: false };
+        spawnCalls.push(rec);
+        return {
+          pid: nextPid++,
+          on(ev) {
+            if (ev === 'error') rec.errorBound = true;
+          },
+          unref() {
+            rec.unrefCalled = true;
+          },
+        };
+      };
+    };
+
+    const standaloneRes = arch.spawnDetachedArchiveTask(
+      { action: 'archive-and-restart', convDir, archiveDir, cdpPort: 7530, gracefulQuit: true, relaunch: true },
+      {
+        platform: 'win32',
+        nodeExecPath: fakeNode,
+        scriptPath: fakeScript,
+        env: { PATH: 'C:\\Windows\\System32', ELECTRON_RUN_AS_NODE: '1' },
+        spawnFn: makeMockSpawn(4100),
+      }
+    );
+    assert.equal(standaloneRes.spawned, true);
+    assert.equal(standaloneRes.method, 'detached-spawn');
+    assert.equal(standaloneRes.useElectronAsNode, false);
+    assert.equal(standaloneRes.pid, 4100);
+    assert.equal(spawnCalls[0].bin, path.resolve(fakeNode));
+    assert.equal(spawnCalls[0].args[0], path.resolve(fakeScript));
+    assert.ok(spawnCalls[0].args[1].startsWith('--run-task='));
+    assert.equal(spawnCalls[0].opts.detached, true);
+    assert.equal(spawnCalls[0].opts.windowsHide, true);
+    assert.equal(spawnCalls[0].opts.stdio, 'ignore');
+    assert.equal(spawnCalls[0].opts.cwd, os.tmpdir());
+    assert.equal(spawnCalls[0].opts.env.ELECTRON_RUN_AS_NODE, undefined, 'Standalone node.exe must strip ELECTRON_RUN_AS_NODE');
+    assert.equal(spawnCalls[0].unrefCalled, true);
+
+    // 2) spawnDetachedArchiveTask falls back cleanly to Antigravity.exe + ELECTRON_RUN_AS_NODE=1 when no standalone node exists
+    const electronRes = arch.spawnDetachedArchiveTask(
+      { action: 'archive-and-restart', convDir, archiveDir, gracefulQuit: true, relaunch: true },
+      {
+        platform: 'win32',
+        nodeExecPath: fakeElectron,
+        scriptPath: fakeScript,
+        whichSync: () => '',
+        existsSync: (p) => path.resolve(p) === path.resolve(fakeElectron),
+        env: { PATH: 'C:\\Windows\\System32' },
+        spawnFn: makeMockSpawn(4200),
+      }
+    );
+    assert.equal(electronRes.spawned, true);
+    assert.equal(electronRes.method, 'detached-spawn');
+    assert.equal(electronRes.useElectronAsNode, true);
+    assert.equal(spawnCalls[1].bin, path.resolve(fakeElectron));
+    assert.equal(spawnCalls[1].opts.detached, true);
+    assert.equal(spawnCalls[1].opts.windowsHide, true);
+    assert.equal(spawnCalls[1].opts.stdio, 'ignore');
+    assert.equal(spawnCalls[1].opts.cwd, os.tmpdir());
+    assert.equal(spawnCalls[1].opts.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(spawnCalls[1].unrefCalled, true);
+
+    // 3) launchHostWithCdpFlag (win32) queries GOMEMLIMIT via reg.exe and spawns exe directly via Node spawn + unref
+    const regQueries = [];
+    const hostSpawns = [];
+    const launchedWithGoMem = arch.launchHostWithCdpFlag(fakeElectron, 'win32', {
+      env: { PATH: 'C:\\Windows\\System32', ELECTRON_RUN_AS_NODE: '1' },
+      existsSync: () => true,
+      execFileSyncFn: (bin, args, opts) => {
+        regQueries.push({ bin, args, opts });
+        return '\r\nHKEY_CURRENT_USER\\Environment\r\n    GOMEMLIMIT    REG_SZ    3GiB\r\n';
+      },
+      spawnFn: (bin, args, opts) => {
+        const rec = { bin, args, opts, unrefCalled: false };
+        hostSpawns.push(rec);
+        return { pid: 5100, on() {}, unref() { rec.unrefCalled = true; } };
+      },
+    });
+    assert.equal(launchedWithGoMem, true);
+    assert.equal(regQueries[0].bin, 'reg.exe');
+    assert.deepEqual(regQueries[0].args, ['query', 'HKCU\\Environment', '/v', 'GOMEMLIMIT']);
+    assert.equal(hostSpawns[0].bin, fakeElectron);
+    assert.deepEqual(hostSpawns[0].args, ['--remote-debugging-port=0']);
+    assert.equal(hostSpawns[0].opts.detached, true);
+    assert.equal(hostSpawns[0].opts.windowsHide, false);
+    assert.equal(hostSpawns[0].opts.stdio, 'ignore');
+    assert.equal(hostSpawns[0].opts.env.GOMEMLIMIT, '3GiB');
+    assert.equal(hostSpawns[0].opts.env.ELECTRON_RUN_AS_NODE, undefined);
+    assert.equal(hostSpawns[0].unrefCalled, true);
+
+    // When reg.exe reports GOMEMLIMIT absent, inherited GOMEMLIMIT is stripped cleanly
+    const launchedCleared = arch.launchHostWithCdpFlag(fakeElectron, 'win32', {
+      env: { PATH: 'C:\\Windows\\System32', GOMEMLIMIT: '2GiB' },
+      existsSync: () => true,
+      execFileSyncFn: () => {
+        const err = new Error('ERROR: The system was unable to find the specified registry key or value.');
+        err.status = 1;
+        throw err;
+      },
+      spawnFn: (bin, args, opts) => {
+        hostSpawns.push({ bin, args, opts });
+        return { pid: 5101, on() {}, unref() {} };
+      },
+    });
+    assert.equal(launchedCleared, true);
+    assert.equal(hostSpawns[1].opts.env.GOMEMLIMIT, undefined, 'Cleared HKCU GOMEMLIMIT must remove stale inherited env value');
+
+    // 4) suspendWindowsRunInBackgroundForQuit: atomic suspend -> lossless re-read restore with 3x retry + symlink rejection
+    const appStorageFile = path.join(tmpRoot, 'app_storage.json');
+    fs.writeFileSync(
+      appStorageFile,
+      JSON.stringify({ runInBackground: 'true', keepComputerAwake: 'true', auxPaneWidth: '30' }, null, 2) + '\n',
+      'utf8'
+    );
+    const guard = arch.suspendWindowsRunInBackgroundForQuit(appStorageFile, { platform: 'win32' });
+    assert.equal(guard.suspended, true);
+    const midState = JSON.parse(fs.readFileSync(appStorageFile, 'utf8'));
+    assert.equal(midState.runInBackground, 'false');
+    assert.equal(midState.keepComputerAwake, 'true');
+    assert.equal(fs.readdirSync(tmpRoot).some((f) => f.includes('.tmp.')), false, 'Atomic write must leave 0 temp files');
+
+    // Simulate Antigravity persisting updated layout fields right as it exits
+    fs.writeFileSync(
+      appStorageFile,
+      JSON.stringify({ runInBackground: 'false', keepComputerAwake: 'true', auxPaneWidth: '42.5', lastTab: 'chat-9' }, null, 2) + '\n',
+      'utf8'
+    );
+    let writeAttempts = 0;
+    const retryGuard = arch.suspendWindowsRunInBackgroundForQuit(appStorageFile, { platform: 'win32' });
+    assert.equal(retryGuard.suspended, false, 'Already "false" must not rewrite');
+    const restoredOk = await guard.restore({ retries: 3, retryDelayMs: 0, sleepFn: async () => {} });
+    assert.equal(restoredOk, true);
+    const afterRestore = JSON.parse(fs.readFileSync(appStorageFile, 'utf8'));
+    assert.equal(afterRestore.runInBackground, 'true', 'Restore must restore runInBackground="true"');
+    assert.equal(afterRestore.auxPaneWidth, '42.5', 'Restore must re-read disk and preserve host-written fields');
+    assert.equal(afterRestore.lastTab, 'chat-9');
+
+    // Verify 3-attempt retry when first 2 restore writes throw EBUSY
+    const retryStorageFile = path.join(tmpRoot, 'app_storage_retry.json');
+    fs.writeFileSync(retryStorageFile, JSON.stringify({ runInBackground: 'true', keep: '1' }) + '\n', 'utf8');
+    let restoreSleepCount = 0;
+    const busyGuard = arch.suspendWindowsRunInBackgroundForQuit(retryStorageFile, {
+      platform: 'win32',
+      writeAtomicFn: (fp, txt) => {
+        writeAttempts += 1;
+        // 1st call is suspend; 2nd & 3rd calls (restore attempts 1 & 2) simulate transient EBUSY; 4th call succeeds
+        if (writeAttempts === 2 || writeAttempts === 3) {
+          const e = new Error('EBUSY: resource busy or locked');
+          e.code = 'EBUSY';
+          throw e;
+        }
+        fs.writeFileSync(fp, txt, 'utf8');
+      },
+    });
+    assert.equal(busyGuard.suspended, true);
+    const busyRestored = await busyGuard.restore({
+      retries: 3,
+      retryDelayMs: 10,
+      sleepFn: async () => { restoreSleepCount += 1; },
+    });
+    assert.equal(busyRestored, true, '3rd retry attempt must succeed after 2 transient EBUSY failures');
+    assert.equal(restoreSleepCount, 2);
+    assert.equal(JSON.parse(fs.readFileSync(retryStorageFile, 'utf8')).runInBackground, 'true');
+
+    // Symlink target must be rejected fail-closed without touching victim file
+    const outsideDir = path.join(tmpRoot, 'outside');
+    fs.mkdirSync(outsideDir, { recursive: true });
+    const victimStorage = path.join(outsideDir, 'victim_storage.json');
+    fs.writeFileSync(victimStorage, JSON.stringify({ runInBackground: 'true', secret: 'keep' }) + '\n', 'utf8');
+    const linkedStorage = path.join(tmpRoot, 'linked_app_storage.json');
+    let linkOk = false;
+    try {
+      fs.symlinkSync(victimStorage, linkedStorage, 'file');
+      linkOk = true;
+    } catch {}
+    if (linkOk) {
+      const symRes = arch.suspendWindowsRunInBackgroundForQuit(linkedStorage, { platform: 'win32' });
+      assert.equal(symRes.suspended, false, 'Symlink app_storage.json must be rejected');
+      assert.equal(JSON.parse(fs.readFileSync(victimStorage, 'utf8')).runInBackground, 'true');
+    }
+
+    // 5) executeArchiveTaskSequence integrates runInBackground suspend -> restore BEFORE relaunch, and ALSO restores on timeout
+    const seqStorage = path.join(tmpRoot, 'seq_app_storage.json');
+    fs.writeFileSync(seqStorage, JSON.stringify({ runInBackground: 'true', theme: 'obsidian' }) + '\n', 'utf8');
+    let observedDuringQuit = '';
+    let observedBeforeLaunch = '';
+    let runningSeq = true;
+    const seqWithStorage = await arch.executeArchiveTaskSequence(
+      {
+        action: 'archive-and-restart',
+        convDir,
+        archiveDir,
+        appStoragePath: seqStorage,
+        cdpPort: 7530,
+        gracefulQuit: true,
+        relaunch: true,
+        settleMs: 0,
+        recheckGapMs: 0,
+        relaunchDelayMs: 0,
+      },
+      {
+        platform: 'win32',
+        sleep: async () => {},
+        checkRunning: () => runningSeq,
+        requestGracefulQuit: async () => {
+          observedDuringQuit = JSON.parse(fs.readFileSync(seqStorage, 'utf8')).runInBackground;
+          // Simulate host updating a key before exiting
+          const cur = JSON.parse(fs.readFileSync(seqStorage, 'utf8'));
+          cur.savedOnQuit = 'yes';
+          fs.writeFileSync(seqStorage, JSON.stringify(cur) + '\n', 'utf8');
+          runningSeq = false;
+          return true;
+        },
+        archiveFn: () => ({ ok: true, movedCount: 0, movedMb: 0 }),
+        launchHost: async () => {
+          observedBeforeLaunch = JSON.parse(fs.readFileSync(seqStorage, 'utf8')).runInBackground;
+          return true;
+        },
+      }
+    );
+    assert.equal(seqWithStorage.ok, true);
+    assert.equal(observedDuringQuit, 'false', 'runInBackground must be suspended to "false" before graceful quit');
+    assert.equal(observedBeforeLaunch, 'true', 'runInBackground must be restored to "true" BEFORE relaunching host');
+    const finalSeqStorage = JSON.parse(fs.readFileSync(seqStorage, 'utf8'));
+    assert.equal(finalSeqStorage.runInBackground, 'true');
+    assert.equal(finalSeqStorage.savedOnQuit, 'yes');
+
+    // Timeout path must also restore runInBackground="true" in finally
+    const timeoutStorage = path.join(tmpRoot, 'timeout_app_storage.json');
+    fs.writeFileSync(timeoutStorage, JSON.stringify({ runInBackground: 'true' }) + '\n', 'utf8');
+    const timeoutWithStorage = await arch.executeArchiveTaskSequence(
+      {
+        action: 'archive-and-restart',
+        convDir,
+        archiveDir,
+        appStoragePath: timeoutStorage,
+        cdpPort: 7530,
+        gracefulQuit: true,
+        relaunch: false,
+        waitExitTimeoutMs: 500,
+        pollMs: 50,
+        settleMs: 0,
+        recheckGapMs: 0,
+      },
+      {
+        platform: 'win32',
+        sleep: async () => {},
+        checkRunning: () => true,
+        requestGracefulQuit: async () => true,
+      }
+    );
+    assert.equal(timeoutWithStorage.ok, false);
+    assert.equal(timeoutWithStorage.code, 'HOST_EXIT_TIMEOUT');
+    assert.equal(JSON.parse(fs.readFileSync(timeoutStorage, 'utf8')).runInBackground, 'true', 'Timeout path must still restore runInBackground="true"');
+
+    // 6) Verify zero BOM, zero CRLF, and zero forbidden AV/host patterns in both modified daemon modules
+    const forbiddenRes = [
+      /-EncodedCommand/i,
+      /-WindowStyle\s+Hidden/i,
+      /\bWin32_Process\b/i,
+      /\bInvoke-CimMethod\b/i,
+      /\bGet-CimInstance\b/i,
+      /\bwmic\b/i,
+      /\bpowershell(?:\.exe)?\b/i,
+      /\btaskkill\b/i,
+      /\bStop-Process\b/i,
+      /\bSIGKILL\b/i,
+      /\bTerminateProcess\b/i,
+      /\bOpenProcess\b/i,
+      /app\.asar/i,
+      /(?:fetchTimer|timer)\.unref\s*\(/i,
+    ];
+    for (const rel of ['sidecars/daemon/conversation-archive.mjs', 'sidecars/daemon/gomemlimit-service.mjs']) {
+      const buf = fs.readFileSync(path.join(ROOT, rel));
+      assert.equal(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, false, `${rel} must have 0 BOM`);
+      assert.equal(buf.includes(0x0d), false, `${rel} must have 0 CRLF`);
+      const txt = buf.toString('utf8');
+      for (const re of forbiddenRes) {
+        assert.equal(re.test(txt), false, `${rel} must not contain forbidden pattern ${re}`);
+      }
+    }
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
