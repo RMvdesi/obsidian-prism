@@ -4630,25 +4630,17 @@
         return resolveHabitatMode();
       },
       onUserType(text = '') {
-        const now = nowMs();
-        markActivity();
-        const workers = workingActors();
-        if (!workers.length) return;
-        const s = typeof text === 'string' ? text : '';
-        const tail = (s.length > 16 ? s.slice(-16) : s).trimEnd().slice(-4);
-        if (/[?？]$/.test(tail)) {
-          for (const w of workers) { startClip(w, 'tilt', 750, { rot: -9, sym: 'q' }); applyActorTransform(w, now); }
-        } else if (/[!！]$/.test(tail)) {
-          for (const w of workers) { startClip(w, 'wow', 700, { sym: 'bang' }); applyActorTransform(w, now); }
-        } else {
-          for (const w of workers) { w.nodY = PX; w.nodUntil = now + 140; w.eyeScan = 0; }
+        const now = nowMs(); markActivity();
+        const workers = workingActors(); if (!workers.length) return;
+        const s = typeof text === 'string' ? text : '', tail = (s.length > 16 ? s.slice(-16) : s).trimEnd().slice(-4);
+        if (/[?？]$/.test(tail)) for (const w of workers) { startClip(w, 'tilt', 750, { rot: -9, sym: 'q' }); applyActorTransform(w, now); }
+        else if (/[!！]$/.test(tail)) for (const w of workers) { startClip(w, 'wow', 700, { sym: 'bang' }); applyActorTransform(w, now); }
+        else {
+          const sc=activeMainActors().find(a=>a.kind==='clawd')||workers[0];
+          if(sc&&!sc.dragging&&!sc.stackedOn)sc.clip==='write'?(sc.clipUntil=now+1200):startClip(sc,'write',1200,{face:'left',sym:'note'});
+          for(const w of workers)if(w!==sc){w.nodY=PX;w.nodUntil=now+140;w.eyeScan=0;}
           clearTimeout(pauseTimer);
-          pauseTimer = setTimeout(() => {
-            if (disposed) return;
-            for (const w of workingActors()) w.eyeScan = tickIdx % 2 ? -1 : 1;
-            schedTypeRender();
-            later(500, () => { for (const w of activeMainActors()) w.eyeScan = 0; });
-          }, 450);
+          pauseTimer=setTimeout(()=>{if(!disposed){for(const w of workingActors())w.eyeScan=tickIdx%2?-1:1;schedTypeRender();later(500,()=>{for(const w of activeMainActors())w.eyeScan=0;});}},450);
         }
         schedTypeRender();
       },
