@@ -548,7 +548,7 @@ export function splitOversizedThought(rawText, maxChunkChars = MAX_SINGLE_THOUGH
 
 export const TOOL_SUMMARY_PROMPTS_BY_LANG = Object.freeze({
   'zh-CN':
-    '你是软件工程工具日志摘要翻译器。输入为编号列表（[0] ...、[1] ...）。请仅将每行中的自然语言短句准确译为简明自然的简体中文，保持完全相同的行号前缀与顺序。严禁修改、翻译、删改或重新排版任何 __OPID_N__ 占位符。不要输出任何额外说明。',
+    'Software-engineering tool-log summary translator: input is a numbered list ([0] ...). Translate only each line’s natural-language sentence into concise natural Simplified Chinese, preserving line-number prefixes and order. Never alter/translate/delete/reorder any __OPID_N__ placeholder. Output nothing else.',
   'zh-TW':
     '你是軟體工程工具日誌摘要翻譯器。輸入為編號清單（[0] ...、[1] ...）。請僅將每行中的自然語言短句準確譯為簡明自然的繁體中文，保持完全相同的行號前綴與順序。嚴禁修改、翻譯、刪改或重新排版任何 __OPID_N__ 佔位符。不要輸出任何額外說明。',
   en:
@@ -2553,19 +2553,7 @@ export class ThoughtTranslatorService {
   _resolveSystemPrompt(store, targetLang = 'zh-CN') {
     const tl = normalizeTargetLang(targetLang);
     if (store.stylePreset === 'custom' && store.customPrompt && store.customPrompt.trim()) {
-      const cp = store.customPrompt.trim();
-      if (tl === 'zh-CN') return cp;
-      const langNames = {
-        'zh-TW': 'Traditional Chinese (繁體中文)',
-        en: 'English',
-        ja: 'Japanese (日本語)',
-        ko: 'Korean (한국어)',
-        es: 'Spanish (Español)',
-        fr: 'French (Français)',
-        de: 'German (Deutsch)',
-        tr: 'Turkish (Türkçe)',
-      };
-      return `${cp}\n\n[Output Language Requirement] Target output language MUST be ${langNames[tl] || tl}. When the source mixes languages, preserve already-natural target-language parts and translate all foreign paragraphs completely.`;
+      return store.customPrompt.trim();
     }
     const langSet = SYSTEM_PROMPTS_BY_LANG[tl] || SYSTEM_PROMPTS_BY_LANG['zh-CN'];
     if (store.stylePreset === 'concise') return langSet.concise;
@@ -3692,7 +3680,10 @@ export class ThoughtTranslatorService {
       };
     }
 
-    const sysPrompt = this._resolveSystemPrompt(store, tl) + this._buildBoundaryNote(tl);
+    const useCustomPrompt = store.stylePreset === 'custom' && Boolean(store.customPrompt && store.customPrompt.trim());
+    const sysPrompt = useCustomPrompt
+      ? this._resolveSystemPrompt(store, tl)
+      : this._resolveSystemPrompt(store, tl) + this._buildBoundaryNote(tl);
     const cleanedSource = String(rawText || '')
       .trim()
       .slice(0, 64000)

@@ -13,6 +13,7 @@ import {
   ThoughtTranslatorService,
   SYSTEM_PROMPTS,
   SYSTEM_PROMPTS_BY_LANG,
+  TOOL_SUMMARY_PROMPTS_BY_LANG,
   MAX_CONCURRENCY,
   MAX_STREAM_CHARS,
   MAX_STREAM_BYTES,
@@ -4109,4 +4110,60 @@ test('Issue #99: thought-client + tool-step-verbs translates v2.35 tool steps be
   assert.equal(verbRan.textContent, 'Ran');
   assert.equal(groupTitle.textContent, 'Running inspect Antigravity browser documentation section');
   assert.equal(sumSearched.textContent, 'marketplace for "computer use"');
+});
+
+test('custom system prompt is sent verbatim without boundary/language suffixes & zh-CN tool-summary prompt uses token-saving English', async () => {
+  assert.equal(
+    TOOL_SUMMARY_PROMPTS_BY_LANG['zh-CN'],
+    'Software-engineering tool-log summary translator: input is a numbered list ([0] ...). Translate only each line’s natural-language sentence into concise natural Simplified Chinese, preserving line-number prefixes and order. Never alter/translate/delete/reorder any __OPID_N__ placeholder. Output nothing else.'
+  );
+
+  const tmpDir = mkRealTempDir('prism-thought-custom-raw-');
+  try {
+    const sentPayloads = [];
+    const svc = new ThoughtTranslatorService({
+      configFile: path.join(tmpDir, 'thought.json'),
+      cacheFile: path.join(tmpDir, 'cache.json'),
+      fetchImpl: async (url, init = {}) => {
+        if (String(url).endsWith('/chat/completions')) {
+          sentPayloads.push(JSON.parse(init.body || '{}'));
+          return new Response(
+            JSON.stringify({ choices: [{ message: { content: '自定义翻译结果完成' } }] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response('Not found', { status: 404 });
+      },
+    });
+
+    const rawCustomPrompt = '  My exact system instruction without extra wrappers.  ';
+    svc.saveConfig({
+      activeProfileId: 'custom-test',
+      profiles: [{ id: 'custom-test', name: 'Test', baseUrl: 'https://api.example.com/v1', apiKey: 'sk-test-token-1234', model: 'test-model' }],
+      stylePreset: 'custom',
+      customPrompt: rawCustomPrompt,
+    });
+
+    await svc.translateThought({ text: 'First English reasoning segment.', mode: 'ai', targetLang: 'zh-CN', force: true });
+    await svc.translateThought({ text: '这是一段需要被翻译成英文的中文思考过程内容。', mode: 'ai', targetLang: 'en', force: true });
+    assert.equal(sentPayloads.length, 2);
+    for (const p of sentPayloads) {
+      assert.equal(p.messages[0].content, rawCustomPrompt.trim(), 'Non-empty custom prompt must be sent verbatim without suffixes');
+      assert.equal(p.messages[0].content.includes('[Output Language Requirement]'), false);
+      assert.equal(p.messages[0].content.includes('[输入边界说明]'), false);
+      assert.equal(p.messages[0].content.includes('[Input Boundary]'), false);
+      assert.ok(p.messages[1].content.startsWith('<thought_source>\n') && p.messages[1].content.endsWith('\n</thought_source>'));
+    }
+
+    // Empty custom prompt & built-in preset must keep boundary note intact
+    svc.saveConfig({ stylePreset: 'custom', customPrompt: '   ' });
+    await svc.translateThought({ text: 'Third reasoning segment with empty custom prompt.', mode: 'ai', targetLang: 'zh-CN', force: true });
+    assert.ok(sentPayloads[2].messages[0].content.includes('[输入边界说明]'), 'Empty custom prompt fallback must retain boundary note');
+
+    svc.saveConfig({ stylePreset: 'technical' });
+    await svc.translateThought({ text: '第四段需要按英文技术文风翻译的中文推理内容。', mode: 'ai', targetLang: 'en', force: true });
+    assert.ok(sentPayloads[3].messages[0].content.includes('[Input Boundary]'), 'Built-in preset must retain boundary note');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
