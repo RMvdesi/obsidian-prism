@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const ROOT = path.resolve(import.meta.dirname, '..');
 const rig = require('../dual-mascot-rig.js');
 
 /**
@@ -676,5 +680,160 @@ test('v107 P0-3.5: mini-crab ballistic flight streams 60fps GPU translate3d+rota
     assert.equal(wizEl.style.transform.includes('rotate('), false, 'Settled mini-crab must remove rotate()');
   } finally {
     h.cleanup();
+  }
+});
+
+test('mini-crab fast dash uses smooth .1s linear transition (0 steps()) and chase/scatter states bypass enforceGroundSeparation pullback', () => {
+  // 1) CSS alignment: both style.css and workbench/styles/v2-components.css align mini-crab transition to TICK=100ms (.1s linear) with 0 steps()
+  const styleCss = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  const v2Css = fs.readFileSync(path.join(ROOT, 'workbench', 'styles', 'v2-components.css'), 'utf8');
+  assert.equal(/steps\(/i.test(styleCss), false, 'style.css must have strictly 0 steps() usages');
+  const styleMiniLine = styleCss.split('\n').find((l) => l.includes('.ag-v2-mini-crab-canvas{')) || '';
+  assert.ok(
+    styleMiniLine.includes('transition:transform .1s linear;'),
+    'style.css .ag-v2-mini-crab-canvas must use transition:transform .1s linear'
+  );
+  const v2MiniMatch = v2Css.match(/\.ag-v2-mini-crab-canvas\s*\{[^}]*\}/);
+  assert.ok(v2MiniMatch, 'workbench/styles/v2-components.css must define .ag-v2-mini-crab-canvas');
+  assert.ok(
+    v2MiniMatch[0].includes('transition: transform .1s linear;'),
+    'v2-components.css .ag-v2-mini-crab-canvas must use transition: transform .1s linear'
+  );
+  assert.equal(/steps\(/i.test(v2MiniMatch[0]), false, 'v2-components.css .ag-v2-mini-crab-canvas must not use steps()');
+
+  // 2) Runtime chase: sprinting mini-crab crossing past stationary pets & other mini-crabs suffers 0 enforceGroundSeparation pullback
+  const rigSrc = fs.readFileSync(path.join(ROOT, 'dual-mascot-rig.js'), 'utf8');
+  const scheduledTimers = [];
+  let timerSeq = 1;
+  let vmNow = 20000;
+  const detMath = Object.create(Math);
+  detMath.random = () => 0.05;
+  const vmSandbox = {
+    Math: detMath,
+    performance: { now: () => vmNow },
+    setTimeout(fn, ms = 0) {
+      const id = timerSeq++;
+      scheduledTimers.push({ id, fn, ms, cleared: false });
+      return id;
+    },
+    clearTimeout(id) {
+      const t = scheduledTimers.find((x) => x.id === id);
+      if (t) t.cleared = true;
+    },
+    setInterval: () => 0,
+    clearInterval() {},
+    Number, String, Boolean, Array, Object, Date, Map, Set, WeakMap, WeakSet, RegExp, Error,
+  };
+  vmSandbox.globalThis = vmSandbox;
+  vmSandbox.window = vmSandbox;
+  vm.runInNewContext(rigSrc, vmSandbox);
+  const detRig = vmSandbox.__agDualMascotRig;
+  assert.ok(detRig && typeof detRig.mountDualMascotStage === 'function');
+
+  const hChase = createPhysicsStageHarness({ width: 520, camp: 'gemini', miniPileEnabled: true, reducedMotion: false, manualClock: true });
+  hChase.stage.dispose();
+  // Re-mount using deterministic VM rig on a clean hostEl so pickNextTheater deterministically triggers runCrabChase()
+  const chaseHost = hChase.mockDoc.createElement('div');
+  chaseHost.clientWidth = 520;
+  const chaseStage = detRig.mountDualMascotStage(chaseHost, {
+    camp: 'gemini',
+    miniPileEnabled: true,
+    reducedMotion: false,
+  });
+  try {
+    const snapBefore = chaseStage.getLayoutSnapshot();
+    const clawdBefore = snapBefore.actors.find((a) => a.id === 'clawd');
+    const catBefore = snapBefore.actors.find((a) => a.id === 'cat');
+    assert.ok(clawdBefore && catBefore);
+
+    // Invoke theater timer -> random()=0.05 (<0.18, <0.4) deterministically runs runCrabChase(false)
+    const theaterTimer = scheduledTimers.find((t) => !t.cleared && t.ms >= 3000);
+    assert.ok(theaterTimer, 'Expected theater timer scheduled for pickNextTheater');
+    theaterTimer.fn();
+
+    let chaseTicks = 0;
+    let overlapTicksDuringChase = 0;
+    let chaserId = null;
+    for (let i = 0; i < 90; i++) {
+      chaseStage.stepTick(1);
+      const snap = chaseStage.getLayoutSnapshot();
+      const chaser = snap.minis.find((m) => m.act === 'chase');
+      if (!chaser) {
+        if (chaseTicks > 0) break;
+        continue;
+      }
+      chaserId = chaser.id;
+      chaseTicks += 1;
+      // enforceGroundSeparation must NOT mutate mc.px away from miniActPose's mc.lastX
+      assert.equal(
+        chaser.worldCx,
+        chaser.x + 32,
+        `chase tick ${i} (${chaser.id}): worldCx=${chaser.worldCx} diverged from x+32=${chaser.x + 32} due to ground separation pullback`
+      );
+      const others = [
+        ...snap.actors,
+        ...snap.minis.filter((m) => m.id !== chaser.id),
+      ];
+      if (others.some((o) => Math.abs(o.worldCx - chaser.worldCx) < 44)) {
+        overlapTicksDuringChase += 1;
+      }
+      // Stationary ground main actors must not be shoved aside while mini-crab dashes past
+      const clawdNow = snap.actors.find((a) => a.id === 'clawd');
+      const catNow = snap.actors.find((a) => a.id === 'cat');
+      assert.equal(clawdNow.worldCx, clawdBefore.worldCx, `chase tick ${i}: clawd must not be shoved by dashing mini-crab`);
+      assert.equal(catNow.worldCx, catBefore.worldCx, `chase tick ${i}: cat must not be shoved by dashing mini-crab`);
+    }
+    assert.ok(chaserId && chaseTicks >= 6, `Expected active chase sprint ticks, got ${chaseTicks}`);
+    assert.ok(overlapTicksDuringChase >= 2, `Expected chasing mini-crab to pass through >=2 ground-overlap ticks without pullback, got ${overlapTicksDuringChase}`);
+  } finally {
+    chaseStage.dispose();
+    hChase.cleanup();
+  }
+
+  // 3) Runtime scatter: dragging main actor close to mini-crabs triggers scatter; ground ticks stay free of separation pullback
+  const hScatter = createPhysicsStageHarness({ width: 520, camp: 'gemini', miniPileEnabled: true, reducedMotion: false, manualClock: true });
+  try {
+    const clawdEl = hScatter.findActorEl('clawd');
+    const snap0 = hScatter.stage.getLayoutSnapshot();
+    const clawd0 = snap0.actors.find((a) => a.id === 'clawd');
+    const targetMini = snap0.minis[snap0.minis.length - 1];
+    assert.ok(clawd0 && targetMini);
+
+    // Drag clawd swiftly right next to wizard at ground height (y=0) in one motion so dragCrab triggers scatterCrabsNear(),
+    // sending wizard dashing left into shades' ground zone; then park clawd outside stack-snap range on release
+    clawdEl.dispatch('pointerdown', { clientX: clawd0.worldCx, clientY: 110 });
+    hScatter.advanceClock(16);
+    clawdEl.dispatch('pointermove', { clientX: targetMini.worldCx + 16, clientY: 110 });
+    hScatter.advanceClock(120);
+    clawdEl.dispatch('pointermove', { clientX: targetMini.worldCx + 48, clientY: 110 });
+    hScatter.advanceClock(80);
+    clawdEl.dispatch('pointerup', { clientX: targetMini.worldCx + 48, clientY: 110 });
+    for (let f = 0; f < 60 && hScatter.pendingRafCount() > 0; f++) hScatter.stepRafOnce(16.6667);
+
+    let scatterGroundTicks = 0;
+    let scatterOverlapTicks = 0;
+    for (let i = 0; i < 24; i++) {
+      hScatter.stage.stepTick(1);
+      const snap = hScatter.stage.getLayoutSnapshot();
+      const scatters = snap.minis.filter((m) => m.act === 'scatter');
+      for (const sm of scatters) {
+        if (sm.y === 0) {
+          scatterGroundTicks += 1;
+          assert.equal(
+            sm.worldCx,
+            sm.x + 32,
+            `scatter tick ${i} (${sm.id}): worldCx=${sm.worldCx} diverged from x+32=${sm.x + 32} due to ground separation pullback`
+          );
+          const others = [...snap.actors, ...snap.minis.filter((m) => m.id !== sm.id)];
+          if (others.some((o) => Math.abs(o.worldCx - sm.worldCx) < 48)) {
+            scatterOverlapTicks += 1;
+          }
+        }
+      }
+    }
+    assert.ok(scatterGroundTicks >= 4, `Expected >=4 ground-level scatter ticks, got ${scatterGroundTicks}`);
+    assert.ok(scatterOverlapTicks >= 1, `Expected scattering mini-crab to overlap ground obstacle without pullback, got ${scatterOverlapTicks}`);
+  } finally {
+    hScatter.cleanup();
   }
 });

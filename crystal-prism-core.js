@@ -488,31 +488,24 @@ void main() {
     ctx.restore();
   }
 
-  /**
-   * 2D 降级切面绘制（无 WebGL2 时）：更少更大的斜切长切面 + 全局明暗梯度 + 仅朝光棱亮起。
-   */
+  const GC = new WeakMap();
+  const addSt = (g, s) => { for (let i = 0; i < s.length; i += 2) g.addColorStop(s[i], s[i + 1]); return g; };
+  const cGrad = (ctx, slot, k, fn) => {
+    let c = GC.get(ctx);
+    if (!c) GC.set(ctx, (c = Object.create(null)));
+    const h = c[slot];
+    return h && h.k === k ? h.g : (c[slot] = { k, g: fn() }).g;
+  };
+
   function drawFallback2D(ctx, cssW, cssH, isDark, pointerLocal, proximityFactor, glintIntensities, wakeU, wakeAmp, accentCode = 0, ambientScale = 1, sliderFillRatio = -1) {
-    const r = cssH * 0.5;
+    const r = cssH * 0.5, dKey = `${cssH}|${isDark ? 1 : 0}`;
     ctx.save();
     ctx.beginPath();
     ctx.roundRect(0, 0, cssW, cssH, r);
     ctx.clip();
 
-    // 全局明暗梯度：上冠面亮银白 -> 中部清透 -> 下亭部 TIR 暗渊
-    const baseGrad = ctx.createLinearGradient(0, 0, 0, cssH);
-    if (isDark) {
-      baseGrad.addColorStop(0, '#c4ccd8');
-      baseGrad.addColorStop(0.22, '#dfe5ee');
-      baseGrad.addColorStop(0.55, '#8d97a8');
-      baseGrad.addColorStop(0.85, '#2a2e37');
-      baseGrad.addColorStop(1, '#0b0b0e');
-    } else {
-      baseGrad.addColorStop(0, '#e9eef5');
-      baseGrad.addColorStop(0.22, '#f7f9fc');
-      baseGrad.addColorStop(0.55, '#c9d1dd');
-      baseGrad.addColorStop(1, '#5d6778');
-    }
-    ctx.fillStyle = baseGrad;
+    // 全局明暗梯度（按高度与主题缓存）
+    ctx.fillStyle = cGrad(ctx, 'b', dKey, () => addSt(ctx.createLinearGradient(0, 0, 0, cssH), isDark ? [0, '#c4ccd8', 0.22, '#dfe5ee', 0.55, '#8d97a8', 0.85, '#2a2e37', 1, '#0b0b0e'] : [0, '#e9eef5', 0.22, '#f7f9fc', 0.55, '#c9d1dd', 1, '#5d6778']));
     ctx.fillRect(0, 0, cssW, cssH);
 
     // 确定性斜切长切面：每列一条斜分割线，约 10~12 块
@@ -612,24 +605,25 @@ void main() {
       ctx.globalAlpha = prevAlpha;
     }
 
-    // 近场追光柔斑
+    // 近场追光与唤醒扫光（支持 translate 时复用原点缓存渐变）
+    const hasTr = typeof ctx.translate === 'function';
     if (pointerLocal.x > -2000 && proximityFactor > 0.02) {
-      const g = ctx.createRadialGradient(pointerLocal.x, pointerLocal.y, 0, pointerLocal.x, pointerLocal.y, 70);
-      g.addColorStop(0, `rgba(240, 246, 255, ${(0.28 * proximityFactor).toFixed(3)})`);
-      g.addColorStop(1, 'rgba(240, 246, 255, 0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, cssW, cssH);
+      const a = 0.28 * proximityFactor;
+      if (hasTr) { ctx.save(); ctx.globalAlpha = a; ctx.translate(pointerLocal.x, pointerLocal.y); }
+      ctx.fillStyle = hasTr
+        ? cGrad(ctx, 'p', '70', () => addSt(ctx.createRadialGradient(0, 0, 0, 0, 0, 70), [0, 'rgba(240,246,255,1)', 1, 'rgba(240,246,255,0)']))
+        : addSt(ctx.createRadialGradient(pointerLocal.x, pointerLocal.y, 0, pointerLocal.x, pointerLocal.y, 70), [0, `rgba(240,246,255,${a.toFixed(3)})`, 1, 'rgba(240,246,255,0)']);
+      ctx.fillRect(hasTr ? -pointerLocal.x : 0, hasTr ? -pointerLocal.y : 0, cssW, cssH);
+      if (hasTr) ctx.restore();
     }
-
-    // 唤醒扫光
     if (wakeAmp > 0.001) {
-      const sx = wakeU * cssW;
-      const g = ctx.createLinearGradient(sx - 16, 0, sx + 16, 0);
-      g.addColorStop(0, 'rgba(235, 244, 255, 0)');
-      g.addColorStop(0.5, `rgba(235, 244, 255, ${(0.55 * wakeAmp).toFixed(3)})`);
-      g.addColorStop(1, 'rgba(235, 244, 255, 0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, cssW, cssH);
+      const sx = wakeU * cssW, a = 0.55 * wakeAmp;
+      if (hasTr) { ctx.save(); ctx.globalAlpha = a; ctx.translate(sx, 0); }
+      ctx.fillStyle = hasTr
+        ? cGrad(ctx, 'w', '32', () => addSt(ctx.createLinearGradient(-16, 0, 16, 0), [0, 'rgba(235,244,255,0)', 0.5, 'rgba(235,244,255,1)', 1, 'rgba(235,244,255,0)']))
+        : addSt(ctx.createLinearGradient(sx - 16, 0, sx + 16, 0), [0, 'rgba(235,244,255,0)', 0.5, `rgba(235,244,255,${a.toFixed(3)})`, 1, 'rgba(235,244,255,0)']);
+      ctx.fillRect(hasTr ? -sx : 0, 0, cssW, cssH);
+      if (hasTr) ctx.restore();
     }
 
     // 异步星芒（尖端微分光，受 ambientScale 调制）
@@ -659,31 +653,15 @@ void main() {
       ctx.restore();
     }
 
-    // 2D 降级滑块分区：右侧凹陷暗色空槽 × 左侧顶部镜面高光水晶
+    // 2D 降级滑块分区（按高度与主题缓存空槽与高光渐变）
     if (sliderFillRatio >= 0) {
       const splitX = clamp(sliderFillRatio, 0, 1) * cssW;
       if (splitX < cssW) {
-        const gr = ctx.createLinearGradient(0, 0, 0, cssH);
-        if (isDark) {
-          gr.addColorStop(0, '#07090f');
-          gr.addColorStop(0.45, '#10141f');
-          gr.addColorStop(0.92, '#141a28');
-          gr.addColorStop(1, '#263046');
-        } else {
-          gr.addColorStop(0, '#96a2b6');
-          gr.addColorStop(0.55, '#bcc6d6');
-          gr.addColorStop(1, '#e4eaf4');
-        }
-        ctx.fillStyle = gr;
+        ctx.fillStyle = cGrad(ctx, 's', dKey, () => addSt(ctx.createLinearGradient(0, 0, 0, cssH), isDark ? [0, '#07090f', 0.45, '#10141f', 0.92, '#141a28', 1, '#263046'] : [0, '#96a2b6', 0.55, '#bcc6d6', 1, '#e4eaf4']));
         ctx.fillRect(splitX, 0, cssW - splitX, cssH);
       }
       if (splitX > 1) {
-        const gloss = ctx.createLinearGradient(0, 0, 0, cssH);
-        gloss.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-        gloss.addColorStop(0.22, isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.24)');
-        gloss.addColorStop(0.42, 'rgba(255, 255, 255, 0.02)');
-        gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = gloss;
+        ctx.fillStyle = cGrad(ctx, 'g', dKey, () => addSt(ctx.createLinearGradient(0, 0, 0, cssH), [0, 'rgba(255,255,255,.08)', 0.22, isDark ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.24)', 0.42, 'rgba(255,255,255,.02)', 1, 'rgba(255,255,255,0)']));
         ctx.fillRect(0, 0, splitX, cssH);
       }
     }
@@ -1050,6 +1028,7 @@ void main() {
     return {
       step,
       isIdle,
+      isMotionHot: () => wakeT >= 0 || fillSettleSec > 0 || currentProximity > 0.001 || targetProximity > 0.001 || wasProximityActive || wasWaking || wasLiquidFlow,
       setReduceMotion(flag) {
         const next = Boolean(flag);
         if (reduceMotion !== next) {

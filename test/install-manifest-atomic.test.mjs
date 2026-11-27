@@ -763,6 +763,7 @@ test('DEFAULT_OBSOLETE_PATHS covers retired dead files safely and copyDirRecursi
     'vendor/wallpaper/wallpaper-hud.js',
     'vendor/wallpaper/wallpaper-procedural.js',
     'tools/patch-asar.cjs',
+    'src/channels/inject-runtime-channels.cjs',
   ];
 
   for (const rel of expectedRetired) {
@@ -946,6 +947,76 @@ test('tools/install-plugin.cjs is managed by SYNC_ROOT_FILES and atomic manifest
       computeFileSha256(path.join(ROOT, 'tools', 'install-plugin.cjs')),
       'Deployed tools/install-plugin.cjs SHA-256 must match source repo'
     );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('GAP-2: workbench/app.js, README.en.md, CHANGELOG.md are managed in sync manifest and legacy root CONTRIBUTORS.md is safely purged', async () => {
+  const cdpMod = require(path.join(ROOT, 'cdp.js'));
+
+  // 1) SYNC_ROOT_FILES, collectNativePluginEntries & install-manifest.json include the 3 managed files
+  for (const rel of ['README.en.md', 'CHANGELOG.md', 'workbench/app.js']) {
+    assert.equal(isSafeManagedRelPath(rel), true);
+    assert.equal(isProtectedUserPath(rel, PROTECTED_USER_PATHS), false);
+    assert.equal(shouldExcludeSyncRelPath(rel), false);
+    assert.ok(cdpMod.SYNC_ROOT_FILES.includes(rel), `SYNC_ROOT_FILES must include ${rel}`);
+  }
+  assert.ok(DEFAULT_OBSOLETE_PATHS.includes('CONTRIBUTORS.md'), 'DEFAULT_OBSOLETE_PATHS must include migrated root CONTRIBUTORS.md');
+  assert.equal(isProtectedUserPath('CONTRIBUTORS.md', PROTECTED_USER_PATHS), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'CONTRIBUTORS.md')), false, 'Root CONTRIBUTORS.md must not exist in active repo');
+  assert.equal(fs.existsSync(path.join(ROOT, 'docs', 'CONTRIBUTORS.md')), true, 'Canonical docs/CONTRIBUTORS.md must remain intact');
+
+  const nativeEntries = collectNativePluginEntries();
+  for (const rel of ['README.en.md', 'CHANGELOG.md', 'workbench/app.js']) {
+    assert.ok(
+      nativeEntries.some((e) => e.name === `native-plugin/${rel}`),
+      `collectNativePluginEntries must include native-plugin/${rel}`
+    );
+  }
+  const wbEntries = nativeEntries.filter((e) => e.name.startsWith('native-plugin/workbench/'));
+  assert.deepEqual(
+    wbEntries.map((e) => e.name),
+    ['native-plugin/workbench/app.js'],
+    'Only managed workbench/app.js should be bundled under workbench/'
+  );
+
+  // 2) installPlugin & copyUpdatedRuntimeFromRepo sync all 3 files, purge stale root CONTRIBUTORS.md, and preserve all protected user assets
+  const tmpDir = mkTmp('prism-gap2-sync-');
+  try {
+    const hostCfgDir = path.join(tmpDir, '.gemini', 'config');
+    const pluginTarget = path.join(hostCfgDir, 'plugins', 'obsidian-prism');
+    fs.mkdirSync(path.join(pluginTarget, 'wallpapers'), { recursive: true });
+    fs.mkdirSync(path.join(pluginTarget, 'backups'), { recursive: true });
+    fs.mkdirSync(path.join(pluginTarget, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(pluginTarget, 'CONTRIBUTORS.md'), '# legacy root contributors\n', 'utf8');
+    fs.writeFileSync(path.join(pluginTarget, 'docs', 'CONTRIBUTORS.md'), '# canonical docs contributors\n', 'utf8');
+    fs.writeFileSync(path.join(pluginTarget, 'config.json'), '{"palette":"warm","keep":true}\n', 'utf8');
+    fs.writeFileSync(path.join(pluginTarget, 'custom.css'), '/* keep custom */\n', 'utf8');
+    fs.writeFileSync(path.join(pluginTarget, 'wallpapers', 'bg.webp'), 'WP-BYTES', 'utf8');
+    fs.writeFileSync(path.join(pluginTarget, 'backups', 'snap.json'), '{"snap":1}\n', 'utf8');
+    fs.writeFileSync(path.join(hostCfgDir, 'obsidian-prism-thought.json'), '{"secret":"keep"}\n', 'utf8');
+
+    const res = await installPluginMod.installPlugin({
+      sourceDir: ROOT,
+      targetDir: pluginTarget,
+      hostConfigDir: hostCfgDir,
+      startDaemon: false,
+      syncShortcuts: false,
+    });
+    assert.equal(res.ok, true);
+    for (const rel of ['README.en.md', 'CHANGELOG.md', 'workbench/app.js']) {
+      const dst = path.join(pluginTarget, ...rel.split('/'));
+      assert.equal(fs.existsSync(dst), true, `installPlugin must deploy ${rel}`);
+      assert.equal(computeFileSha256(dst), computeFileSha256(path.join(ROOT, ...rel.split('/'))));
+    }
+    assert.equal(fs.existsSync(path.join(pluginTarget, 'CONTRIBUTORS.md')), false, 'Legacy root CONTRIBUTORS.md must be purged');
+    assert.equal(fs.readFileSync(path.join(pluginTarget, 'docs', 'CONTRIBUTORS.md'), 'utf8'), '# canonical docs contributors\n');
+    assert.equal(fs.readFileSync(path.join(pluginTarget, 'config.json'), 'utf8'), '{"palette":"warm","keep":true}\n');
+    assert.equal(fs.readFileSync(path.join(pluginTarget, 'custom.css'), 'utf8'), '/* keep custom */\n');
+    assert.equal(fs.readFileSync(path.join(pluginTarget, 'wallpapers', 'bg.webp'), 'utf8'), 'WP-BYTES');
+    assert.equal(fs.readFileSync(path.join(pluginTarget, 'backups', 'snap.json'), 'utf8'), '{"snap":1}\n');
+    assert.equal(fs.readFileSync(path.join(hostCfgDir, 'obsidian-prism-thought.json'), 'utf8'), '{"secret":"keep"}\n');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

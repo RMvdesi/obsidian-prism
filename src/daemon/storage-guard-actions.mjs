@@ -2,10 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  buildRendererRpcExpression,
-  normalizeRendererSummaries,
-} from '../../vendor/pulse-dashboard/sidecars/panel/renderer-rpc-adapter.mjs';
+import { normalizeRendererSummaries } from '../../vendor/pulse-dashboard/sidecars/panel/renderer-rpc-adapter.mjs';
 import * as conversationArchive from '../../sidecars/daemon/conversation-archive.mjs';
 import { sanitizeSecretText } from '../../sidecars/daemon/redact.mjs';
 import {
@@ -14,7 +11,7 @@ import {
   discoverActivePort,
 } from './constants.mjs';
 import { assertNotSymlinkSync, writeFileAtomicSync } from './fs-atomic.mjs';
-import { resolveUsageScopeKey, hasRealUsageRecord } from './telemetry-scope.mjs';
+import { resolveUsageScopeKey, hasRealUsageRecord, evalRendererRpcOnEntry } from './telemetry-scope.mjs';
 
 export function getAutoArchiveOnExitSetting(upd) {
   try {
@@ -179,13 +176,7 @@ export async function checkActiveHostIdleState(upd, _testOverrides = null) {
   }
   for (const entry of localEntries) {
     try {
-      const expr = buildRendererRpcExpression('CheckHostIdleState', {});
-      const evalRes = await entry.session.send(
-        'Runtime.evaluate',
-        { expression: expr, awaitPromise: true, returnByValue: true },
-        4000
-      );
-      const val = evalRes?.result?.value;
+      const val = await evalRendererRpcOnEntry(entry, 'CheckHostIdleState', {}, 4000, { useSend: true });
       if (val && val.ok && val.data && val.data.idle === false) {
         return val.data;
       }
@@ -238,6 +229,7 @@ export async function snapshotUsageBeforeArchive(upd, candidateItems = [], { max
       break;
     }
   }
+  await tel.waitPendingUsageFlush?.();
   tel.flushUsageDiskCache();
   return { fetched, flushed: true };
 }
@@ -521,14 +513,13 @@ export async function handleStorageAction(upd, action, _testOverrides = null, ra
             }
           }
           if (localEntry) {
-            const sigExpr = buildRendererRpcExpression('GetAllCascadeTrajectories', {
-              includeVisibleMainIds: true,
-              signalsOnly: true,
-            });
-            const evalRes = await localEntry.session
-              .send('Runtime.evaluate', { expression: sigExpr, awaitPromise: true, returnByValue: true }, 2500)
-              .catch(() => null);
-            const val = evalRes?.result?.value;
+            const val = await evalRendererRpcOnEntry(
+              localEntry,
+              'GetAllCascadeTrajectories',
+              { includeVisibleMainIds: true, signalsOnly: true },
+              2500,
+              { useSend: true }
+            ).catch(() => null);
             if (val && val.ok && val.data) {
               const normSig = normalizeRendererSummaries(val.data);
               if (Array.isArray(normSig?.visibleMainIds) && normSig.visibleMainIds.length > 0) {

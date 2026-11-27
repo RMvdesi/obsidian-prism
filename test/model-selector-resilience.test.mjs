@@ -1792,16 +1792,17 @@ test('Scenario 12 (Issue #80 / v2.35.1 nested Orchestrator L3 inside L2): L2 nev
 
   const agObs = upstreamLib.installAntigravityObserver({ document: env.doc, window: env.win, MutationObserver: env.win.MutationObserver });
 
-  // 1) SLIDER_CSS keeps v108-i18n prefix intact while excluding L2 rows & data-ag-cs-orch-l2 on both [role='menu'] and div[role='presentation']
+  // 1) SLIDER_CSS has 0 :has() selectors and hides L3 via html[data-ces-slider-ready='1']-gated attribute hooks without touching L2
   const css = env.doc.getElementById('ag-codex-effort-slider-styles').textContent;
+  assert.equal(/:has\(/.test(css), false, 'SLIDER_CSS must contain 0 :has() selectors');
   assert.ok(
-    css.includes("html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel'])):not(:has([data-testid='orchestrator-picker-row'])):not([data-ag-cs-orch-l2='1'])"),
-    'SLIDER_CSS [role=menu] L3 rule must preserve prefix and exclude L2 rows/marker'
+    css.includes("html[data-ces-slider-ready='1'] [data-ces-hide-panel='1'],html[data-ces-slider-ready='1'] [data-ag-cs-orch-l3='1']{display:none!important"),
+    'SLIDER_CSS must suppress effort/L3 submenus via data-ces-hide-panel and data-ag-cs-orch-l3'
   );
-  assert.ok(
-    css.includes("html[data-ces-slider-ready='1'] div[role='presentation']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel'])):not(:has([data-testid='orchestrator-picker-row'])):not(:has([data-ag-cs-orch-l2='1']))"),
-    'SLIDER_CSS div[role=presentation] L3 rule must exclude L2 positioner wrapper'
-  );
+  assert.equal(l2Menu.hasAttribute('data-ces-hide-panel'), false, 'L2 menu must NEVER be tagged data-ces-hide-panel');
+  assert.equal(l2Pos.hasAttribute('data-ces-hide-panel'), false, 'Outer L2 positioner must NEVER be tagged data-ces-hide-panel');
+  assert.equal(l3Menu.getAttribute('data-ces-hide-panel'), '1', 'Nested L3 menu must be tagged data-ces-hide-panel=1');
+  assert.equal(l3Pos.getAttribute('data-ces-hide-panel'), '1', 'Nested L3 positioner must be tagged data-ces-hide-panel=1');
 
   // 2) Cold-mounted L2 with 5 nested L3 effort items stays bound as L2 and NEVER gets tagged orch-l3
   assert.equal(l2Menu.getAttribute('data-ag-cs-orch-l2'), '1', 'L2 menu must stay bound despite 5 nested L3 effort items');

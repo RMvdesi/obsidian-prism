@@ -363,6 +363,7 @@ export class DaemonLoop {
       if (canSkipListPoll) {
         rg._noPortSinceMs = 0;
         rg._hasActiveCdpPort = true;
+        rg._hostDetectCache = null;
         rg.maybeSyncShortcuts(false, { hasActivePort: true });
 
         const liveEntries = [];

@@ -4055,20 +4055,25 @@ test('Issue #99: thought-client + tool-step-verbs translates v2.35 tool steps be
 
   vm.runInNewContext(`${verbsSrc};\n${clientSrc}`, sandbox);
 
-  // Verify 7-locale static verb table completeness & 0 CJK leakage in non-CJK locales (ko/es/fr/de)
+  // Verify 8-locale static verb table completeness & 0 CJK leakage in non-CJK locales (ko/es/fr/de/tr)
   const verbsApi = sandbox.window.__agPrismToolStepVerbs;
   assert.ok(verbsApi, 'tool-step-verbs module must expose __agPrismToolStepVerbs');
-  assert.equal(verbsApi.TOOL_STEP_VERB_KEYS.length, 12);
+  assert.equal(verbsApi.TOOL_STEP_VERB_KEYS.length, 17);
   const cjkRe = /[\u3400-\u9FFF\uF900-\uFAFF]/;
-  for (const loc of ['zh-CN', 'zh-TW', 'ja', 'ko', 'es', 'fr', 'de']) {
+  for (const loc of ['zh-CN', 'zh-TW', 'ja', 'ko', 'es', 'fr', 'de', 'tr']) {
     for (const k of verbsApi.TOOL_STEP_VERB_KEYS) {
       const tr = verbsApi.lookupStaticToolVerb(k, loc);
       assert.ok(typeof tr === 'string' && tr.length > 0, `Missing static verb ${k} for ${loc}`);
-      if (['ko', 'es', 'fr', 'de'].includes(loc)) {
+      if (['ko', 'es', 'fr', 'de', 'tr'].includes(loc)) {
         assert.equal(cjkRe.test(tr), false, `CJK leak in ${loc} static verb for ${k}: ${tr}`);
       }
     }
   }
+  assert.equal(verbsApi.lookupStaticToolVerb('Read', 'zh-CN'), '已读取');
+  assert.equal(verbsApi.lookupStaticToolVerb('Killed', 'zh-CN'), '已终止');
+  assert.equal(verbsApi.lookupStaticToolVerb('Posted', 'zh-CN'), '已发布');
+  assert.equal(verbsApi.lookupStaticToolVerb('Waiting', 'zh-CN'), '等待中');
+  assert.equal(verbsApi.lookupStaticToolVerb('Asking', 'zh-CN'), '正在询问');
   assert.equal(verbsApi.lookupStaticToolVerb('Analyzed', 'en'), null);
 
   // Verify Channel 5 builder seamlessly prepends tool-step-verbs.js & packaging manifest includes it

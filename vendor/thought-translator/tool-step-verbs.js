@@ -19,17 +19,22 @@
     'Deleted',
     'Listed',
     'Checked',
+    'Read',
+    'Killed',
+    'Posted',
+    'Waiting',
+    'Asking',
   ]);
 
   const TOOL_STEP_VERB_LOCALES = Object.freeze({
-    'zh-CN': '已分析|已搜索|已运行|正在运行|已编辑|已查看|已浏览|已创建|已更新|已删除|已列出|已检查',
-    'zh-TW': '已分析|已搜尋|已執行|執行中|已編輯|已檢視|已瀏覽|已建立|已更新|已刪除|已列出|已檢查',
-    ja: '分析済み|検索済み|実行済み|実行中|編集済み|閲覧済み|探索済み|作成済み|更新済み|削除済み|一覧取得|確認済み',
-    ko: '분석함|검색함|실행함|실행 중|편집함|조회함|탐색함|생성함|업데이트함|삭제함|목록 조회|확인함',
-    es: 'Analizado|Buscado|Ejecutado|Ejecutando|Editado|Visto|Explorado|Creado|Actualizado|Eliminado|Listado|Verificado',
-    fr: 'Analysé|Recherché|Exécuté|Exécution|Modifié|Consulté|Exploré|Créé|Mis à jour|Supprimé|Listé|Vérifié',
-    de: 'Analysiert|Gesucht|Ausgeführt|Läuft|Bearbeitet|Angesehen|Erkundet|Erstellt|Aktualisiert|Gelöscht|Aufgelistet|Geprüft',
-    tr: 'İncelendi|Arandı|Çalıştırıldı|Çalışıyor|Düzenlendi|Görüntülendi|Keşfedildi|Oluşturuldu|Güncellendi|Silindi|Listelendi|Kontrol edildi',
+    'zh-CN': '已分析|已搜索|已运行|正在运行|已编辑|已查看|已探索|已创建|已更新|已删除|已列出|已检查|已读取|已终止|已发布|等待中|正在询问',
+    'zh-TW': '已分析|已搜尋|已執行|執行中|已編輯|已檢視|已探索|已建立|已更新|已刪除|已列出|已檢查|已讀取|已終止|已發佈|等待中|正在詢問',
+    ja: '分析済み|検索済み|実行済み|実行中|編集済み|閲覧済み|探索済み|作成済み|更新済み|削除済み|一覧取得|確認済み|読込済み|終了済み|投稿済み|待機中|質問中',
+    ko: '분석함|검색함|실행함|실행 중|편집함|조회함|탐색함|생성함|업데이트함|삭제함|목록 조회|확인함|읽음|종료함|게시함|대기 중|질문 중',
+    es: 'Analizado|Buscado|Ejecutado|Ejecutando|Editado|Visto|Explorado|Creado|Actualizado|Eliminado|Listado|Verificado|Leído|Detenido|Publicado|Esperando|Preguntando',
+    fr: 'Analysé|Recherché|Exécuté|Exécution|Modifié|Consulté|Exploré|Créé|Mis à jour|Supprimé|Listé|Vérifié|Lu|Arrêté|Publié|En attente|Demande',
+    de: 'Analysiert|Gesucht|Ausgeführt|Läuft|Bearbeitet|Angesehen|Erkundet|Erstellt|Aktualisiert|Gelöscht|Aufgelistet|Geprüft|Gelesen|Beendet|Gepostet|Wartet|Fragt',
+    tr: 'İncelendi|Arandı|Çalıştırıldı|Çalışıyor|Düzenlendi|Görüntülendi|Keşfedildi|Oluşturuldu|Güncellendi|Silindi|Listelendi|Kontrol edildi|Okundu|Sonlandırıldı|Gönderildi|Bekleniyor|Soruluyor',
   });
 
   const TOOL_STEP_VERB_MAP = Object.create(null);

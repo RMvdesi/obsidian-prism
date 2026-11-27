@@ -38,6 +38,12 @@ export function serializeJsonForEval(val) {
   );
 }
 
+// 大载荷（>4 KiB）改走 V8 C++ JSON.parse 快速路径，避免渲染器主线程编译巨型 JS 对象字面量
+export function formatJsonArgForEval(val) {
+  const safeJson = serializeJsonForEval(val);
+  return safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+}
+
 export function sanitizeGitRemoteUrl(rawUrl) {
   const s = String(rawUrl || '').trim();
   if (!s) return '';
@@ -127,6 +133,110 @@ export function writeFileAtomicSync(targetPath, content, { mode = 0o600 } = {}) 
     try { fs.chmodSync(resolvedTarget, mode); } catch {}
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch {}
+    throw err;
+  }
+}
+
+export async function assertNotSymlinkAsync(targetPath, label = 'path') {
+  try {
+    const st = await fs.promises.lstat(targetPath);
+    if (st.isSymbolicLink()) {
+      throw new Error(`Refusing symbolic link ${label}: ${targetPath}`);
+    }
+    return st;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+export async function writeFileAtomicAsync(targetPath, content, { mode = 0o600, shouldAbort = null } = {}) {
+  const aborted = () => typeof shouldAbort === 'function' && Boolean(shouldAbort());
+  if (aborted()) return false;
+  const resolvedTarget = path.resolve(targetPath);
+  const dir = path.dirname(resolvedTarget);
+  const dirStat = await assertNotSymlinkAsync(dir, 'target directory');
+  if (dirStat && !dirStat.isDirectory()) {
+    throw new Error(`Target parent is not a directory: ${dir}`);
+  }
+  await assertNotSymlinkAsync(resolvedTarget, 'target file');
+  if (aborted()) return false;
+
+  const base = path.basename(resolvedTarget);
+  const tmpName = `.${base}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  const tmpPath = path.join(dir, tmpName);
+  let fh = null;
+  try {
+    fh = await fs.promises.open(tmpPath, 'wx', mode);
+    if (aborted()) {
+      await fh.close();
+      fh = null;
+      try { await fs.promises.unlink(tmpPath); } catch {}
+      return false;
+    }
+    await fh.writeFile(content, 'utf8');
+    if (aborted()) {
+      await fh.close();
+      fh = null;
+      try { await fs.promises.unlink(tmpPath); } catch {}
+      return false;
+    }
+    try { await fh.sync(); } catch {}
+    await fh.close();
+    fh = null;
+    try { await fs.promises.chmod(tmpPath, mode); } catch {}
+  } catch (err) {
+    if (fh !== null) {
+      try { await fh.close(); } catch {}
+    }
+    try { await fs.promises.unlink(tmpPath); } catch {}
+    throw err;
+  }
+
+  try {
+    await assertNotSymlinkAsync(dir, 'target directory');
+    await assertNotSymlinkAsync(resolvedTarget, 'target file');
+    if (aborted()) {
+      try { await fs.promises.unlink(tmpPath); } catch {}
+      return false;
+    }
+    let renamed = false;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (aborted()) {
+        try { await fs.promises.unlink(tmpPath); } catch {}
+        return false;
+      }
+      try {
+        await fs.promises.rename(tmpPath, resolvedTarget);
+        renamed = true;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (process.platform !== 'win32' || !['EBUSY', 'EPERM', 'EACCES', 'EEXIST'].includes(err?.code)) {
+          throw err;
+        }
+      }
+    }
+    if (!renamed) {
+      if (process.platform === 'win32' && ['EBUSY', 'EPERM', 'EACCES', 'EEXIST'].includes(lastErr?.code)) {
+        await assertNotSymlinkAsync(dir, 'target directory');
+        await assertNotSymlinkAsync(resolvedTarget, 'target file');
+        if (aborted()) {
+          try { await fs.promises.unlink(tmpPath); } catch {}
+          return false;
+        }
+        await fs.promises.copyFile(tmpPath, resolvedTarget);
+        try { await fs.promises.unlink(tmpPath); } catch {}
+      } else {
+        throw lastErr;
+      }
+    }
+    await assertNotSymlinkAsync(resolvedTarget, 'target file');
+    try { await fs.promises.chmod(resolvedTarget, mode); } catch {}
+    return true;
+  } catch (err) {
+    try { await fs.promises.unlink(tmpPath); } catch {}
     throw err;
   }
 }

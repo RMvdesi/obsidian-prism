@@ -1,6 +1,7 @@
 // Obsidian Prism 显式分层有限状态机（Host FSM + Per-Window Entry FSM + Per-Channel 熔断器 + 配置 SHA-256 指纹 + 目标事件过滤）
 import crypto from 'node:crypto';
 import { sanitizeLogLine } from '../../sidecars/daemon/redact.mjs';
+import { extractScopeKeyFromUri } from './telemetry-scope.mjs';
 
 export const HOST_FSM_STATES = Object.freeze({
   IDLE: 'IDLE',
@@ -375,6 +376,25 @@ export function extractSignificantTargetUrl(rawUrl) {
     return `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${u.pathname}${u.search}`;
   } catch {
     return withoutHash;
+  }
+}
+
+/**
+ * 判断两次 URL 变化是否仍属于同一 SPA 文档路由（如纯 `?tab=` 查询参数抖动），
+ * 仅在 protocol/host/pathname/hash、remoteAuthority 及解析出的远程 scope 完全一致时返回 true。
+ */
+export function isSameSpaDocumentRoute(prevUrl, nextUrl) {
+  if (!prevUrl || !nextUrl || typeof prevUrl !== 'string' || typeof nextUrl !== 'string') return false;
+  try {
+    const a = new URL(prevUrl);
+    const b = new URL(nextUrl);
+    if (a.protocol !== b.protocol || a.host !== b.host || a.pathname !== b.pathname || a.hash !== b.hash) return false;
+    const raA = a.searchParams.get('remoteAuthority') || '';
+    const raB = b.searchParams.get('remoteAuthority') || '';
+    if (raA !== raB) return false;
+    return extractScopeKeyFromUri(prevUrl) === extractScopeKeyFromUri(nextUrl);
+  } catch {
+    return false;
   }
 }
 

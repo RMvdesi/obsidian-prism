@@ -7,6 +7,7 @@ const path = require('node:path');
 const {
   ATOMIC_UPGRADE_RETRY_BACKOFFS_MS,
   DEFAULT_OBSOLETE_PATHS,
+  DEFAULT_SYNC_SUBDIRS,
   INSTALL_MANIFEST_FILENAME,
   PROTECTED_USER_PATHS,
   USER_OWNED_ASSET_PATHS,
@@ -16,6 +17,7 @@ const {
   isProtectedUserPath,
   isSafeManagedRelPath,
   mergeProtectedUserPaths,
+  normalizeSyncSubdirs,
   readInstallManifestFromDir,
   shouldExcludeSyncRelPath,
 } = require('./install-manifest.cjs');
@@ -326,6 +328,7 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
   const protectedPaths = mergeProtectedUserPaths(repoManifest?.protectedUserPaths);
 
   let resolvedFiles = null;
+  let resolvedSubdirs = null;
   const repoCdpPath = path.join(repoRoot, 'cdp.js');
   try {
     const cdpStat = fs.lstatSync(repoCdpPath);
@@ -337,6 +340,9 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
         if (Array.isArray(freshRepoCdp?.SYNC_ROOT_FILES) && freshRepoCdp.SYNC_ROOT_FILES.length > 0) {
           resolvedFiles = freshRepoCdp.SYNC_ROOT_FILES;
         }
+        if (Array.isArray(freshRepoCdp?.SYNC_SUBDIRS) && freshRepoCdp.SYNC_SUBDIRS.length > 0) {
+          resolvedSubdirs = freshRepoCdp.SYNC_SUBDIRS;
+        }
       }
     }
   } catch {}
@@ -346,7 +352,7 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
     resolvedFiles ||
     (Array.isArray(syncFilesList) && syncFilesList.length > 0
       ? syncFilesList
-      : ['cdp.js', 'style.css', 'ui-runtime.js', 'tools/install-plugin.cjs']);
+      : ['cdp.js', 'style.css', 'ui-runtime.js', 'tools/install-plugin.cjs', 'README.en.md', 'CHANGELOG.md', 'workbench/app.js']);
   for (const rel of files) {
     collectSafeFileIntoStage({
       rel,
@@ -360,7 +366,21 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
     });
   }
 
-  for (const sub of ['assets', 'src', 'vendor', 'sidecars']) {
+  // 优先消费新仓声明的 SYNC_SUBDIRS（其次 install-manifest.json 的 syncSubdirs / 调用方兜底 / 默认清单），
+  // 经严格路径与受保护路径过滤后递归同步，杜绝未来新增顶层目录漏拷与越界风险。
+  let rawSubdirs = resolvedSubdirs;
+  if (!rawSubdirs && Array.isArray(repoManifest?.syncSubdirs) && repoManifest.syncSubdirs.length > 0) {
+    rawSubdirs = repoManifest.syncSubdirs;
+  }
+  if (!rawSubdirs && Array.isArray(opts?.syncSubdirs) && opts.syncSubdirs.length > 0) {
+    rawSubdirs = opts.syncSubdirs;
+  }
+  const syncSubdirs = normalizeSyncSubdirs(rawSubdirs, {
+    fallback: DEFAULT_SYNC_SUBDIRS,
+    isProtectedPath: (p) => isProtectedUserPath(p, protectedPaths),
+  });
+
+  for (const sub of syncSubdirs) {
     collectSafeSubDirIntoStage({
       sub,
       sourceRoot: repoRoot,

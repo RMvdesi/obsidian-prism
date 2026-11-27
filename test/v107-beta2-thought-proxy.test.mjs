@@ -34,6 +34,15 @@ function mkRealTempDir(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
+async function waitFor(predicate, timeoutMs = 3000, intervalMs = 15) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return Boolean(predicate());
+}
+
 // ── Lightweight DOM mock (supports MutationObserver, visibilitychange, classList, nextElementSibling) ──
 function createMockDomEnv(extraGlobals = {}) {
   const listenersByNode = new WeakMap();
@@ -985,6 +994,8 @@ test('4) Issue #27 five root-cause regressions: streaming wakeup without flags.l
   let gtxBatches = 0;
   const mockSvc = new ThoughtTranslatorService({
     configDir: tmpDir,
+    proxyEnv: {},
+    proxyExecFileAsync: async () => '',
     fetchImpl: async (url) => {
       gtxBatches++;
       const q = new URL(String(url)).searchParams.get('q') || '';
@@ -1202,6 +1213,8 @@ test('5) Issue #27 tool execution summaries: default OFF, merged single batch re
   let gtxCalls = 0;
   const svc = new ThoughtTranslatorService({
     configDir: tmpDir,
+    proxyEnv: {},
+    proxyExecFileAsync: async () => '',
     fetchImpl: async (url) => {
       gtxCalls++;
       const q = new URL(String(url)).searchParams.get('q') || '';
@@ -1221,6 +1234,8 @@ test('5) Issue #27 tool execution summaries: default OFF, merged single batch re
   // Verify fail-closed on backend when upstream drops a placeholder
   const svcCorrupt = new ThoughtTranslatorService({
     configDir: tmpDir,
+    proxyEnv: {},
+    proxyExecFileAsync: async () => '',
     fetchImpl: async () =>
       new Response(JSON.stringify([[['[0] 读取 被破坏的占位符', '']]]), {
         status: 200,
@@ -1295,7 +1310,16 @@ test('5) Issue #27 tool execution summaries: default OFF, merged single batch re
     // 2) Turn ON: all 4 rows merge into ONE single batch RPC call & preserve every technical identifier!
     api.setTranslateToolSummaries(true);
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 120));
+    await waitFor(
+      () =>
+        gtxCalls >= 1 &&
+        rowSpans[0].textContent === '已运行 列出工作区根目录' &&
+        rowSpans[1].textContent === '列出关键项目目录 已完成' &&
+        rowSpans[3].textContent.includes('检查实验计划'),
+      3000,
+      15
+    );
+    await new Promise((r) => setTimeout(r, 30));
     assert.equal(batchRpcCalls.length, 1, 'All 4 tool summary rows in one container must merge into 1 single batch request');
     assert.equal(gtxCalls, 1, 'Single merged batch must perform only 1 upstream GTX request');
     assert.equal(rowSpans[0].textContent, '已运行 列出工作区根目录');
@@ -1781,6 +1805,8 @@ test('10) Red-team #192 [P1-2, P1-3 & P2-4]: detached DOM pruning, React TextNod
     let seenGtxQuery = '';
     const svc = new ThoughtTranslatorService({
       configDir: tmpDir,
+      proxyEnv: {},
+      proxyExecFileAsync: async () => '',
       fetchImpl: async (url) => {
         seenGtxQuery = new URL(String(url)).searchParams.get('q') || '';
         const out = seenGtxQuery.replace(/Verify literal/gi, '验证字面量').replace(/\band\b/gi, '与');
@@ -1845,7 +1871,11 @@ test('10) Red-team #192 [P1-2, P1-3 & P2-4]: detached DOM pruning, React TextNod
     api.sync({ thoughtTranslate: 'machine', thoughtTrigger: 'expand' });
     api.setTranslateToolSummaries(true);
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(
+      () => row1.textContent === '译:Running integration tests' && row2.textContent === '译:Inspect temporary build output',
+      3000,
+      15
+    );
 
     // P1-3 client check: __OPID_0__ row skipped and untouched
     assert.equal(opidRow.textContent, 'Check __OPID_0__ placeholder handling');
@@ -1862,7 +1892,7 @@ test('10) Red-team #192 [P1-2, P1-3 & P2-4]: detached DOM pruning, React TextNod
     const reusedTn = row1.firstChild;
     reusedTn.nodeValue = 'Finished compiling workspace bundle';
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(() => reusedTn.nodeValue === '译:Finished compiling workspace bundle', 3000, 15);
     assert.equal(reusedTn.nodeValue, '译:Finished compiling workspace bundle');
 
     // Turning OFF tool summaries must restore the NEW original text, NOT the stale "Running integration tests"
@@ -2185,6 +2215,8 @@ test('14) Conversation titles auto-translation: config persistence, safe filteri
     const gtxBatchCalls = [];
     const svc = new ThoughtTranslatorService({
       configDir: tmpDir,
+      proxyEnv: {},
+      proxyExecFileAsync: async () => '',
       fetchImpl: async (url) => {
         const q = new URL(String(url)).searchParams.get('q') || '';
         gtxBatchCalls.push(q);
@@ -2312,7 +2344,17 @@ test('14) Conversation titles auto-translation: config persistence, safe filteri
     // Enable translateTitles: single merged batch translates eligible titles only
     api.setTranslateTitles(true);
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(
+      () =>
+        batchRpcCalls.length >= 1 &&
+        row1Title.textContent === '优化项目性能' &&
+        bcTitle.textContent === '优化项目性能' &&
+        row2Title.textContent === '重构 ThoughtTranslatorService 代理超时' &&
+        row3Title.textContent === '修复登录重定向流程',
+      3000,
+      15
+    );
+    await new Promise((r) => setTimeout(r, 30));
 
     assert.equal(batchRpcCalls.length, 1, 'All eligible titles must be merged into 1 tool-batch request');
     assert.equal(row1Title.textContent, '优化项目性能');
@@ -2337,7 +2379,7 @@ test('14) Conversation titles auto-translation: config persistence, safe filteri
     const reusedTn = row3Title.childNodes[0];
     reusedTn.nodeValue = 'Debug memory leak in daemon';
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => row3Title.textContent === '调试守护进程内存泄漏', 3000, 15);
     assert.equal(row3Title.textContent, '调试守护进程内存泄漏');
 
     // Detached DOM pruning: remove row2 and rescan -> detached record pruned immediately
@@ -2356,7 +2398,7 @@ test('14) Conversation titles auto-translation: config persistence, safe filteri
     // Re-enable then destroy() -> also 100% lossless restore
     api.setTranslateTitles(true);
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(() => row1Title.textContent === '优化项目性能', 3000, 15);
     assert.equal(row1Title.textContent, '优化项目性能');
     api.destroy();
     assert.equal(row1Title.textContent, 'Optimize project performance');
@@ -2891,7 +2933,13 @@ test('16) Red-team #229 regressions: full secret redaction (URL-encoded/Base64/e
     const t0 = Date.now();
     cApi.sync({ thoughtTranslate: 'ai', thoughtTrigger: 'expand', language: 'zh-CN', translateTitles: true });
     cApi.scanImmediate();
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(
+      () =>
+        paddedTitle.textContent === '  优化项目性能  ' &&
+        Boolean(panel.querySelector('.ag-prism-thought-error-text')),
+      3000,
+      15
+    );
     const elapsed = Date.now() - t0;
     assert.ok(elapsed < 1000, `Zero-ReDoS title scan must stay linear & fast (got ${elapsed}ms)`);
     assert.equal(paddedTitle.textContent, '  优化项目性能  ', 'Zero-regex slicing must preserve leading & trailing whitespace');
@@ -3003,7 +3051,14 @@ test('17) Red-team #230 regressions: sidebarStudio attr, breadcrumb last-segment
     api.sync({ thoughtTranslate: 'machine', thoughtTrigger: 'expand', language: 'zh-CN' });
     api.setTranslateTitles(true);
     api.scanImmediate();
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(
+      () =>
+        bcSeg3.textContent === '[译] Fix login redirect flow' &&
+        sbPrimary.textContent === '[译] Optimize project performance' &&
+        histTitle.textContent === '[译] Debug memory leak in daemon',
+      3000,
+      15
+    );
 
     assert.equal(sbStudioTitle.textContent, 'Sidebar Studio duplicate row', 'data-ag-prism-sidebar-studio="on" must exclude .ag-prism-sb-* rows');
     assert.equal(singleBcSeg.textContent, 'Client Portal', 'Single-segment breadcrumb workspace name must never be translated');
@@ -3056,7 +3111,7 @@ test('17) Red-team #230 regressions: sidebarStudio attr, breadcrumb last-segment
     raceApi.setTranslateTitles(true);
     raceApi.setTranslateToolSummaries(true);
     raceApi.scanImmediate();
-    await new Promise((r) => setTimeout(r, 30));
+    await waitFor(() => raceTitle.textContent === '[译] Refactor proxy timeout handling', 3000, 15);
     assert.equal(raceTitle.textContent, '[译] Refactor proxy timeout handling');
 
     // Now stale get-cache response arrives with old false values

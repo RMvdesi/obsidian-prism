@@ -383,10 +383,10 @@ test('swarm-board-i18n 2: Ch1 zero byte delta, zh-CN.json intact, dictionary & r
     'RUNTIME_PARTS must not contain swarm-i18n files'
   );
 
-  // Layer A zh-CN.json (v3.3.63: exact=4763, patterns=405)
+  // Layer A zh-CN.json (exact=4789, patterns=459)
   const hostDict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'));
-  assert.equal(Object.keys(hostDict.exact).length, 4763);
-  assert.equal(hostDict.patterns.length, 405);
+  assert.equal(Object.keys(hostDict.exact).length, 4789);
+  assert.equal(hostDict.patterns.length, 459);
 
   // UTF-8 no BOM, pure LF, no new Map() in swarm-i18n-runtime.js
   for (const rel of ['vendor/host-i18n/swarm-zh-CN.json', 'vendor/host-i18n/swarm-i18n-runtime.js']) {
@@ -1180,4 +1180,65 @@ test('Turkish (tr) Swarm localization: locale gating, single-dictionary isolatio
   assert.equal(vmBtn.textContent, trSwarmDict.exact.Board);
   vm.runInContext(cdp.SWARM_I18N_REMOVE_EXPRESSION, ctx);
   assert.equal(vmBtn.textContent, 'Board');
+});
+
+test('swarm-board-i18n dirtyNodes incremental queue (PR #120): scans targeted mutations without full-DOM walk, respects skipped ancestors, and falls back at >=128 nodes', () => {
+  const env = createSwarmTestDom();
+  const { win, doc, makeEl, observers } = env;
+
+  const tabs = makeEl('nav', { attrs: { 'data-testid': 'swarm-tabs' } });
+  const tabOverview = makeEl('button', { id: 'tabbtn-overview', text: 'Overview' });
+  const untouchedLate = makeEl('button', { id: 'untouched-late', text: 'Board' });
+  const codeBox = makeEl('code');
+  const dynBox = makeEl('div', { id: 'dyn-box' });
+  tabs.append(tabOverview);
+  doc.body.append(tabs, untouchedLate, codeBox, dynBox);
+
+  const inst = swarmRuntime.mountSwarmI18n({ root: win, doc, dict: swarmDict });
+  assert.equal(inst.status, 'active');
+  assert.equal(tabOverview.textContent, '概览');
+  assert.equal(untouchedLate.textContent, '消息板');
+
+  // Quietly reset untouchedLate without firing MO so any unexpected full-DOM scan would re-translate it
+  untouchedLate.childNodes[0]._val = 'Board';
+
+  // 1) Targeted childList & attribute mutations only walk dirtyNodes (untouchedLate stays 'Board')
+  const addedBtn = makeEl('button', { text: 'Members', attrs: { title: 'Export graph replay as an animated GIF' } });
+  dynBox.append(addedBtn);
+  const codeChild = makeEl('span', { text: 'Board', attrs: { title: 'Export graph replay as an animated GIF' } });
+  codeBox.append(codeChild);
+  observers[0].cb([
+    { type: 'childList', target: dynBox, addedNodes: [addedBtn] },
+    { type: 'childList', target: codeBox, addedNodes: [codeChild] },
+  ]);
+  win.flushRaf();
+
+  assert.equal(addedBtn.textContent, '成员', 'Incremental dirty node must translate');
+  assert.equal(addedBtn.getAttribute('title'), '将图谱回放导出为动态 GIF');
+  assert.equal(untouchedLate.textContent, 'Board', 'Incremental batch must not redundantly full-scan unrelated subtrees');
+  assert.equal(codeChild.textContent, 'Board', 'Node added inside skipped <code> ancestor must stay untouched');
+  assert.equal(codeChild.getAttribute('title'), 'Export graph replay as an animated GIF', 'Attrs inside skipped <code> ancestor must stay untouched');
+
+  // 2) Targeted characterData mutation translates cleanly
+  addedBtn.childNodes[0]._val = 'Graph';
+  observers[0].cb([{ type: 'characterData', target: addedBtn.childNodes[0] }]);
+  win.flushRaf();
+  assert.equal(addedBtn.textContent, '关系图');
+  assert.equal(untouchedLate.textContent, 'Board');
+
+  // 3) >= 128 dirty nodes escalates to full scan so untouchedLate gets caught up
+  const burst = [];
+  for (let i = 0; i < 130; i++) {
+    const sp = makeEl('span', { text: 'Live' });
+    dynBox.append(sp);
+    burst.push(sp);
+  }
+  observers[0].cb([{ type: 'childList', target: dynBox, addedNodes: burst }]);
+  win.flushRaf();
+  assert.equal(untouchedLate.textContent, '消息板', '>=128 dirty nodes must escalate to full scan');
+  assert.equal(burst[129].textContent, '实时');
+
+  inst.destroy();
+  assert.equal(addedBtn.textContent, 'Graph');
+  assert.equal(tabOverview.textContent, 'Overview');
 });

@@ -1966,7 +1966,7 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
     flushRaf();
 
     assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-box'), '1', 'Takeover card popup must mount data-ag-cs-prism-box="1"');
-    assert.equal(takeoverCard.hasAttribute('data-ag-cs-prism-reflect'), false, 'Takeover card popup must use full-perimeter prism rim without bottom-only reflect');
+    assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-reflect'), 'bottom', 'Takeover card popup must mount data-ag-cs-prism-reflect="bottom"');
     assert.equal(subTakeover.hasAttribute('data-ag-cs-prism-box'), false, 'Subagent takeover card must still be excluded');
 
     // Switching to chat mode (data-ag-prism-mode="chat") symmetrically strips prism-box/reflect and cleans --ag-px/--ag-py
@@ -1980,12 +1980,12 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
     assert.equal(takeoverCard.style.getPropertyValue('--ag-px'), '', 'Chat mode teardown must clear --ag-px');
     assert.equal(takeoverCard.style.getPropertyValue('--ag-py'), '', 'Chat mode teardown must clear --ag-py');
 
-    // Returning to code mode restores full-perimeter prism rim; disabling composerRestyle cleans it up again
+    // Returning to code mode restores bottom prism reflection; disabling composerRestyle cleans it up again
     env.html.setAttribute('data-ag-prism-mode', 'code');
     mainMo.cb([{ type: 'attributes', target: env.html, attributeName: 'data-ag-prism-mode' }]);
     flushRaf();
     assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-box'), '1', 'Code mode must restore data-ag-cs-prism-box="1"');
-    assert.equal(takeoverCard.hasAttribute('data-ag-cs-prism-reflect'), false, 'Code mode must keep takeover card on full-perimeter rim');
+    assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-reflect'), 'bottom', 'Code mode must restore data-ag-cs-prism-reflect="bottom"');
 
     takeoverCard.style.setProperty('--ag-px', '64px');
     takeoverCard.style.setProperty('--ag-py', '8px');
@@ -2311,14 +2311,14 @@ test('Dual-pane .agy-scroll-bottom strict local viewport isolation (subagent/sid
     assert.equal(mainVp.scrollTop, 1800, 'Main viewport must glide to its own bottom');
     assert.equal(subVp.scrollTop, 40, 'Scrolling main pane must NEVER move subagent viewport');
 
-    // 4) onWinScrollPassive supports local scrollable containers beyond S_CV without cross-pane bleed
+    // 4) Passive scroll no longer writes useless data-ag-scrolling="1" onto whole scope containers (only button itself marks during glide)
     env.win.dispatchEvent({ type: 'scroll', target: subVp });
-    assert.equal(subTab.getAttribute('data-ag-scrolling'), '1', 'Subagent viewport scroll must mark local subagent container');
+    assert.equal(subTab.hasAttribute('data-ag-scrolling'), false, 'Passive scroll must NOT stamp data-ag-scrolling onto whole subagent scope container');
     assert.equal(mainConv.hasAttribute('data-ag-scrolling'), false, 'Subagent scroll must not mark main conversation');
 
     env.win.dispatchEvent({ type: 'scroll', target: sidePlainScroll });
-    assert.equal(sideQ.getAttribute('data-ag-scrolling'), '1', 'Plain local scrollable container in side-question-panel must mark its local scope');
-    assert.equal(subTab.hasAttribute('data-ag-scrolling'), false, 'Switching active scroll scope must clear previous scope marker');
+    assert.equal(sideQ.hasAttribute('data-ag-scrolling'), false, 'Passive scroll must NOT stamp data-ag-scrolling onto whole side-question scope container');
+    assert.equal(subTab.hasAttribute('data-ag-scrolling'), false);
     assert.equal(mainConv.hasAttribute('data-ag-scrolling'), false);
   } finally {
     ctl.destroy();
@@ -2341,8 +2341,10 @@ test('侧栏出现时 .agy-scroll-bottom 层级/过渡/分屏宽度防裁切与 
   assert.ok(scrollRule.includes('z-index:24!important;'), '.agy-scroll-bottom 必须位于 z-index:24（高于底部渐隐层 10 与桌宠 22，低于输入层 25 不穿透悬浮详卡）');
   assert.equal(scrollRule.includes('position:relative'), false, '.agy-scroll-bottom 严禁覆盖宿主 position:absolute');
   assert.ok(
-    scrollRule.includes('opacity .3s var(--ease-expo-out),transform .3s var(--ease-expo-out),margin-left .5s var(--ease-expo-out)'),
-    '.agy-scroll-bottom 必须保留宿主 opacity / transform / margin-left 侧栏联动过渡'
+    scrollRule.includes('contain:layout style paint;') &&
+      scrollRule.includes('opacity .3s var(--ease-expo-out),transform .3s var(--ease-expo-out)') &&
+      !scrollRule.includes('margin-left'),
+    '.agy-scroll-bottom 必须具备 contain:layout style paint 与安全合成 opacity / transform 过渡且消除非合成 margin-left 过渡'
   );
   const auxRule = css.split('\n').find((l) => l.includes('[data-testid="aux-pane-split"][data-ag-cs-aux-dual="1"]{')) || '';
   assert.ok(

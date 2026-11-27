@@ -8,6 +8,9 @@ const {
   STYLE_ID,
   LEGACY_STYLE_ID,
   SETTING_BINDING,
+  DEFAULT_CONFIG,
+  isPerformanceModeExplicit,
+  wasPerformanceModeAuto,
   reconcileConfigAliases,
 } = require('../config/schema.cjs');
 const { minifySingleSource } = require('./js-string-pool.cjs');
@@ -67,8 +70,73 @@ function createCh1Templates({
   detectSystemUiLocale,
 }) {
   let _localesFreshCache = { sig: '', mod: null };
+  let _diskPerfCache = { sig: '', exists: false, explicit: false, isAuto: false };
   let _configRefreshTemplate = '';
   let _injectWrapperTemplate = null;
+  const DEFAULT_KEY_COUNT = Object.keys(DEFAULT_CONFIG).length;
+
+  function readDiskPerfExplicitState() {
+    const cfgPath = path.join(rootDir, 'config.json');
+    try {
+      const st = fs.statSync(cfgPath);
+      if (!st.isFile()) {
+        _diskPerfCache = { sig: '', exists: false, explicit: false, isAuto: false };
+        return _diskPerfCache;
+      }
+      const sig = `${st.mtimeMs}:${st.size}:${st.ctimeMs}`;
+      if (_diskPerfCache.sig === sig) return _diskPerfCache;
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      const explicit = isPerformanceModeExplicit(raw);
+      const isAuto = Boolean(
+        raw &&
+          typeof raw === 'object' &&
+          !Array.isArray(raw) &&
+          typeof raw.performanceMode === 'string' &&
+          raw.performanceMode.trim().toLowerCase() === 'auto'
+      );
+      _diskPerfCache = { sig, exists: true, explicit, isAuto };
+      return _diskPerfCache;
+    } catch {
+      _diskPerfCache = { sig: '', exists: false, explicit: false, isAuto: false };
+      return _diskPerfCache;
+    }
+  }
+
+  // 返回 0=显式锁定，1=缺省未设置（低配机自动默认 performance，但尊重用户手动偏好），2=显式设为 auto
+  function resolvePerfModeAutoTag(config, rawInput = undefined) {
+    if (rawInput !== undefined) {
+      if (rawInput === null) {
+        const disk = readDiskPerfExplicitState();
+        return disk.explicit ? 0 : disk.isAuto ? 2 : 1;
+      }
+      if (typeof rawInput === 'object' && !Array.isArray(rawInput)) {
+        if (rawInput.perfModeExplicit === true || rawInput.perfModeAuto === false) return 0;
+        if (rawInput.perfModeAuto === true) return 1;
+        if (!Object.prototype.hasOwnProperty.call(rawInput, 'performanceMode')) return 0;
+        if (isPerformanceModeExplicit(rawInput)) return 0;
+        const rv = typeof rawInput.performanceMode === 'string' ? rawInput.performanceMode.trim().toLowerCase() : '';
+        return rv === 'auto' ? 2 : 1;
+      }
+      return 0;
+    }
+    if (!config || typeof config !== 'object') {
+      const disk = readDiskPerfExplicitState();
+      return disk.explicit ? 0 : disk.isAuto ? 2 : 1;
+    }
+    if (config.perfModeExplicit === true || config.perfModeAuto === false) return 0;
+    if (config.perfModeAuto === true) return 1;
+    if (wasPerformanceModeAuto(config)) return 2;
+    if (!Object.prototype.hasOwnProperty.call(config, 'performanceMode')) return 1;
+    const raw = typeof config.performanceMode === 'string' ? config.performanceMode.trim().toLowerCase() : '';
+    if (!raw) return 1;
+    if (raw === 'auto') return 2;
+    if (raw !== 'balanced') return 0;
+    // performanceMode === 'balanced'：区分「磁盘无显式配置由 readConfig() 补全的全量默认对象」与「调用方显式指定 balanced」
+    const keyCount = Object.keys(config).length;
+    if (keyCount < DEFAULT_KEY_COUNT) return 0;
+    const disk = readDiskPerfExplicitState();
+    return disk.explicit ? 0 : disk.isAuto ? 2 : 1;
+  }
 
   function loadLocalesModuleFresh() {
     const locPath = path.join(rootDir, 'i18n-locales.js');
@@ -105,7 +173,8 @@ function createCh1Templates({
     const keys = CH1_RUNTIME_UI_KEYS.filter((k) => typeof pObj[k] === 'string' || typeof enObj?.[k] === 'string');
     const vals = { [primary]: keys.map((k) => pObj[k] ?? '') };
     if (enObj) vals.en = keys.map((k) => enObj[k] ?? '');
-    return { active: primary, keys, vals };
+    const pmAuto = resolvePerfModeAutoTag(config);
+    return pmAuto ? { active: primary, keys, vals, pmAuto } : { active: primary, keys, vals };
   }
 
   function getConfigRefreshTemplate() {
@@ -114,16 +183,17 @@ function createCh1Templates({
       const cfg = __AG_REF_CFG__, W = window, D = document, G = globalThis;
       const api = W.__agPrism || W.__agClaudeStyle;
       if (api && api.version === __AG_REF_VER__ && api.codeHash === __AG_REF_HASH__ && typeof api.refreshConfig === 'function') {
+        const off = (v) => v === 'off' || v === false, T = (f) => { try { f(); } catch {} };
+        if (cfg.__pmAuto) T(() => (W.__agDomBus || G.__agDomBus)?.resolveAutoBootPerfMode?.(cfg, W));
         if (api.refreshConfig(cfg) === false) return { refreshed: true, skippedStale: true, version: api.version };
         const e = api.getState?.()?.cfg || cfg, de = D.documentElement;
-        const T = (f) => { try { f(); } catch {} };
         const qa = (s) => D.querySelectorAll?.(s) || [];
         const rm = (s) => qa(s).forEach((n) => n.remove?.());
         const ra = (s) => de && s.split(',').forEach((a) => de.removeAttribute?.(a));
-        const dw = (s) => s.split(',').forEach((k) => { T(() => delete W[k]); T(() => delete G[k]); });
-        T(() => (e?.telemetryModule === 'off' || e?.telemetryModule === false ? (api.detachTelemetry?.(), W.__agPrismTelemetry?.destroy?.()) : (W.__agPrismTelemetry?.sync?.(e), api.syncTelemetry?.())));
-        T(() => (e?.effortSliderModule === 'off' || e?.effortSliderModule === false ? W.__agPrismEffortSlider?.destroy?.() : W.__agPrismEffortSlider?.sync?.(e)));
-        if (e?.contextMenu === false || e?.contextMenu === 'off') T(() => W.__agPrismContextMenu?.destroy?.());
+        const dw = (s, p = '') => s.split(',').forEach((k) => { T(() => delete W[p + k]); T(() => delete G[p + k]); });
+        T(() => (off(e?.telemetryModule) ? (api.detachTelemetry?.(), W.__agPrismTelemetry?.destroy?.()) : (W.__agPrismTelemetry?.sync?.(e), api.syncTelemetry?.())));
+        T(() => (off(e?.effortSliderModule) ? W.__agPrismEffortSlider?.destroy?.() : W.__agPrismEffortSlider?.sync?.(e)));
+        if (off(e?.contextMenu)) T(() => W.__agPrismContextMenu?.destroy?.());
         T(() => W.__agPrismThought?.sync?.(e));
         T(() => W.__agPrismInlineDiff?.sync?.(e));
         T(() => (e?.omniModule === 'off' ? W.__agPrismOmni?.destroy?.() : W.__agPrismOmni?.sync?.(e, W.__agPrismOmniServerMeta || null)));
@@ -138,14 +208,12 @@ function createCh1Templates({
           else if ((l && l !== 'zh-CN' && l !== 'tr' && l !== 'auto') || ((!l || l === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) W.__agPrismHostI18n?.destroy?.();
           else W.__agPrismHostI18n?.setMode?.('auto');
         });
-        if (e?.mascot === 'off' || e?.mascot === false) {
-          T(() => {
-            T(() => W.__agDualMascotRig?.dispose?.()); T(() => api.sync?.());
-            qa('.ag-cs-crab,.ag-cs-dual-stage,.ag-cs-crab-stage,.ag-cs-mascot-stage,.ag-v2-mascot-stage,.ag-v2-habitat-prop').forEach((n) => { T(() => n.__agMascotApi?.dispose?.()); n.remove?.(); });
-            qa('[data-ag-cs-crab-anchor]').forEach((n) => n.removeAttribute?.('data-ag-cs-crab-anchor'));
-            ra('data-ag-cs-has-crab,data-ag-cs-mascot-drag');
-            dw('__agDualMascotRig,__agPrismMascotArt');
-          });
+        if (off(e?.mascot)) {
+          T(() => W.__agDualMascotRig?.dispose?.()); T(() => api.sync?.());
+          T(() => qa('.ag-cs-crab,.ag-cs-dual-stage,.ag-cs-crab-stage,.ag-cs-mascot-stage,.ag-v2-mascot-stage,.ag-v2-habitat-prop').forEach((n) => { T(() => n.__agMascotApi?.dispose?.()); n.remove?.(); }));
+          T(() => qa('[data-ag-cs-crab-anchor]').forEach((n) => n.removeAttribute?.('data-ag-cs-crab-anchor')));
+          ra('data-ag-cs-has-crab,data-ag-cs-mascot-drag');
+          dw('__agDualMascotRig,__agPrismMascotArt');
         }
         if (e?.homeLayout && e.homeLayout !== 'studio') {
           T(() => {
@@ -154,13 +222,14 @@ function createCh1Templates({
             dw('__agPrismHomeStudioPanel,__agHomeStudioPanel');
           });
         }
-        if (e?.periodicModelPicker === 'off' || e?.periodicModelPicker === false) {
+        if (off(e?.periodicModelPicker)) {
           T(() => {
             W.__agPrismPeriodicStub?.destroy?.();
             W.__agPrismPeriodicPicker?.destroy?.();
             ra('data-ag-prism-periodic-picker,data-ag-pp-open,data-ag-pp-holding');
             rm('#ag-prism-periodic-stub-css,#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap');
-            dw('__agPrismPeriodicStub,__agPrismPeriodicStubFactory,__agPeriodicPendingOpen,__agPeriodicFullLoaded,__agPeriodicStubHash,__agPrismPeriodicPicker,__agPrismPeriodicPickerFactory,__agPrismKeyboard3D,__agPrismPeriodicKeyboard3D,__agPrismOledScreen,__agPrismGrainAssets,__agPeriodicAudioFx,__agPeriodicModelCatalog,__agPeriodicHostBridge,__agPeriodicBentoUi,__agPeriodicPbrGrainAssets,__agPeriodicOledScreen,__agPeriodicKeyboard3D');
+            dw('PeriodicStub,PeriodicStubFactory,PeriodicPicker,PeriodicPickerFactory,Keyboard3D,PeriodicKeyboard3D,OledScreen,GrainAssets', '__agPrism');
+            dw('PendingOpen,FullLoaded,StubHash,AudioFx,ModelCatalog,HostBridge,BentoUi,PbrGrainAssets,OledScreen,Keyboard3D', '__agPeriodic');
           });
         }
         if (de) {
@@ -188,9 +257,11 @@ function createCh1Templates({
     const codeHash = resolveCurrentBundleCodeHash();
     const hasExplicitLang = !customConfig || Object.prototype.hasOwnProperty.call(config, 'language') || Object.prototype.hasOwnProperty.call(config, 'lang');
     const uiSlice = hasExplicitLang ? buildRuntimeUiSlicePayload(config) : null;
+    const pmAuto = resolvePerfModeAutoTag(config, customConfig ? customConfig : null);
     const bootCfg = {
       ...config,
       ...(uiSlice ? { __uiSlice: uiSlice } : {}),
+      ...(pmAuto ? { __pmAuto: pmAuto } : {}),
       ...(extraMeta && typeof extraMeta === 'object' ? extraMeta : {}),
       binding: SETTING_BINDING,
       codeHash,
@@ -206,7 +277,7 @@ function createCh1Templates({
     if (_injectWrapperTemplate) return _injectWrapperTemplate;
     const rawTpl = `(() => {
       const W = window, D = document, G = globalThis;
-      const isF = (v) => typeof v === 'function', isO = (v) => Boolean(v && typeof v === 'object');
+      const isF = (v) => typeof v === 'function', isS = (v) => typeof v === 'string', isO = (v) => !!(v && typeof v === 'object');
       const T = (f) => { try { return f(); } catch {} }, sp = (s) => s.split(',');
       const gid = (i) => D.getElementById?.(i), qa = (s) => D.querySelectorAll?.(s) || [], qs = (s) => T(() => D.querySelector(s));
       const VER = ${JSON.stringify(pluginVersion)}, SID = ${JSON.stringify(STYLE_ID)}, LSID = ${JSON.stringify(LEGACY_STYLE_ID)}, OFF_MSG = 'Sidecar daemon offline';
@@ -219,13 +290,16 @@ function createCh1Templates({
           if (o && (!W.__agPrism || Number(o.version) <= 2)) { if (isF(o.destroy)) o.destroy(); delete W.__agClaudeStyle; }
         });
       };
+      const cM = () => W.__agPrismCssMgr;
       const ensureCssMgr = () => {
-        const fk = __AG_INJ_CSSHASH__, prev = W.__agPrismCssMgr;
+        const fk = __AG_INJ_CSSHASH__, prev = cM();
         if (prev && prev.cssHash === fk && !prev._disposed) return prev;
         T(() => prev?.destroy?.());
         const css = getCss(), SC = W.CSSStyleSheet || (typeof CSSStyleSheet === 'function' ? CSSStyleSheet : null);
-        const canA = () => Boolean(T(() => SC && isF(SC.prototype?.replaceSync) && isF(D.adoptedStyleSheets?.[Symbol.iterator])));
+        const hasAd = () => isF(D.adoptedStyleSheets?.[Symbol.iterator]);
+        const canA = () => !!T(() => SC && isF(SC.prototype?.replaceSync) && hasAd());
         let sh = null;
+        const dropAd = () => { if (sh && hasAd()) T(() => { D.adoptedStyleSheets = Array.from(D.adoptedStyleSheets).filter((s) => s !== sh); }); };
         const setSent = (txt, ad) => {
           const p = D.head || D.documentElement;
           if (!p) return;
@@ -251,7 +325,7 @@ function createCh1Templates({
               if (!cur.includes(sh)) D.adoptedStyleSheets = cur.concat(sh);
               setSent('', true);
             } else {
-              if (sh && isF(D.adoptedStyleSheets?.[Symbol.iterator])) T(() => { D.adoptedStyleSheets = Array.from(D.adoptedStyleSheets).filter((s) => s !== sh); });
+              dropAd();
               setSent(css, false);
             }
             return mgr;
@@ -259,7 +333,7 @@ function createCh1Templates({
           destroy(opts) {
             if (mgr._disposed) return;
             mgr._disposed = true;
-            if (sh && isF(D.adoptedStyleSheets?.[Symbol.iterator])) T(() => { D.adoptedStyleSheets = Array.from(D.adoptedStyleSheets).filter((s) => s !== sh); });
+            dropAd();
             sh = null; mgr.activeKeys = []; mgr.activeBytes = 0;
             T(() => { const s = gid(SID); if (s) { if (opts?.keepStyleNode) s.textContent = ''; else s.remove?.(); } });
           },
@@ -270,13 +344,13 @@ function createCh1Templates({
         if (!(D.head || D.documentElement)) return;
         cleanOld();
         ensureCssMgr().sync();
-        T(() => { if (W.__agPrismCssMgr?.mode !== 'adopted') W.__agPrism?.flattenCss?.(); });
+        T(() => { if (cM()?.mode !== 'adopted') W.__agPrism?.flattenCss?.(); });
       };
       const hookApiCssMgr = (api) => {
         if (!api || api.__agCssMgrHooked) return;
         api.__agCssMgrHooked = true;
-        const d = isF(api.destroy) ? api.destroy.bind(api) : null;
-        if (d) api.destroy = (...a) => { T(() => W.__agPrismCssMgr?.destroy?.()); return d(...a); };
+        const own = cM(), d = isF(api.destroy) && api.destroy.bind(api);
+        if (d) api.destroy = (...a) => { T(() => { const m = cM(); if (m && !m._hold && (!own || m === own)) m.destroy?.(); }); return d(...a); };
       };
 
       const mkRpc = (bk, lim, onTo, onErr, disp) => {
@@ -300,7 +374,7 @@ function createCh1Templates({
         if (W.__agPrismRepoBridge?.__prismBridgeReady) return;
         const c = mkRpc('__agPrismRepoCall', 8, () => ({ ok: false, timeout: true, noRemote: true, hasRemote: false }), (e) => ({ ok: false, error: e }), { ok: false, disposed: true });
         const fn = (inp) => {
-          const p = typeof inp === 'string' ? { action: inp } : isO(inp) ? { ...inp } : { action: 'status' }, a = p.action || 'status';
+          const p = isS(inp) ? { action: inp } : isO(inp) ? { ...inp } : { action: 'status' }, a = p.action || 'status';
           if (!isF(W.__agPrismRepoCall)) return Promise.resolve({ ok: false, offline: true, action: a, isGitRepo: false, noRemote: true, hasRemote: false, branch: 'local', commit: VER, shortHash: VER, remoteUrl: '', hasUpdates: false, upToDate: true, updated: false, message: OFF_MSG });
           return c.send((id) => ({ id, action: a, input: p }), 16000).then((r) => (r && !r.action ? { ...r, action: a } : r));
         };
@@ -329,8 +403,8 @@ function createCh1Templates({
             const it = c.pend.get(id);
             if (!it || !isF(it.onP)) return;
             let txt = null;
-            if (typeof ch === 'string') it.buf = txt = ch;
-            else if (isO(ch) && typeof ch.a === 'string') { const s = typeof it.buf === 'string' ? it.buf : ''; if ((ch.o | 0) === s.length) it.buf = txt = s + ch.a; }
+            if (isS(ch)) it.buf = txt = ch;
+            else if (isO(ch) && isS(ch.a)) { const s = isS(it.buf) ? it.buf : ''; if ((ch.o | 0) === s.length) it.buf = txt = s + ch.a; }
             if (txt !== null) { T(() => it.arm?.(60000)); T(() => it.onP(txt)); }
           },
           resolve: c.resolve, dispose: c.dispose,
@@ -347,7 +421,7 @@ function createCh1Templates({
         const rpc = (q, ms = 18000) => (!isF(W.__agPrismUsageCall) ? Promise.resolve(fu({ offline: true })) : c.send((id) => ({ id, ...q }), ms));
         const b = {
           __prismBridgeReady: true, isOnline: () => isF(W.__agPrismUsageCall),
-          fetchBatch: (o, ms = 18000) => (isO(o) && !Array.isArray(o) ? rpc({ action: o.action || 'fetch-batch', items: Array.isArray(o.items) ? o.items : [], includeSummaries: Boolean(o.includeSummaries) }, ms) : rpc({ action: 'fetch-batch', items: Array.isArray(o) ? o : [] }, ms)),
+          fetchBatch: (o, ms = 18000) => (isO(o) && !Array.isArray(o) ? rpc({ action: o.action || 'fetch-batch', items: Array.isArray(o.items) ? o.items : [], includeSummaries: !!o.includeSummaries }, ms) : rpc({ action: 'fetch-batch', items: Array.isArray(o) ? o : [] }, ms)),
           listSummaries: (ms = 12000) => rpc({ action: 'list-summaries', items: [], includeSummaries: true }, ms),
           resolve: c.resolve, dispose: c.dispose,
         };
@@ -355,6 +429,7 @@ function createCh1Templates({
       });
 
       const destroyMods = (extra) => {
+        T(() => W.__agPrismRippleWorker?.disposeAll?.());
         const ks = sp('__agPrismTelemetry,__agPrismEffortSlider,__agPrismThought,__agPrismOmni,__agPrismContextMenu');
         if (extra) ks.push(...sp(extra));
         for (const k of ks) T(() => W[k]?.destroy?.());
@@ -365,7 +440,7 @@ function createCh1Templates({
         T(() => {
           const de = D.documentElement;
           for (const a of sp('data-ag-prism-host-i18n,data-ag-prism-periodic-picker,data-ag-pp-open,data-ag-cs-model-menu')) de?.removeAttribute?.(a);
-          qa('[data-ag-cs-aux-dual],[data-ag-cs-model-overlay]').forEach((el) => { el.removeAttribute('data-ag-cs-aux-dual'); el.removeAttribute('data-ag-cs-model-overlay'); });
+          for (const a of sp('data-ag-cs-aux-dual,data-ag-cs-model-overlay')) qa('[' + a + ']').forEach((el) => el.removeAttribute(a));
           qa('[data-testid="prism-thought-ai-config"],[data-testid="prism-thought-general-config"],.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-inline-diff-box,.ag-cs-diff-ctx-menu,.ag-pp-hold-ring,.ag-pp-mini-keycap').forEach((el) => el.remove());
         });
         for (const k of sp('__agPrismRepoBridge,__agPrismThoughtBridge,__agPrismUsageBridge,__agPrismOmniBridge')) T(() => W[k]?.dispose?.());
@@ -373,13 +448,13 @@ function createCh1Templates({
         for (const k of sp('__agPrismCssMgr,__agPrismPeriodicStub,__agPrismPeriodicStubFactory,__agPeriodicPendingOpen,__agPeriodicFullLoaded,__agPeriodicStubHash,__agPrismThought,__agPrismThoughtSettingsUi,__agPrismInlineDiff,__agPrismInlineDiffFactory,__agPrismInlineDiffResolve,__agPrismOmni,__agPrismContextMenu,__agPrism,__agClaudeStyle')) { delete W[k]; delete G[k]; }
       };
 
-      const hasMarkers = () => Boolean(T(() => {
+      const hasMarkers = () => !!T(() => {
         const cl = D.body?.classList;
         return (cl && (cl.contains('theme-standalone') || cl.contains('monaco-workbench'))) || qs('.agy-shell,.agy-home,[data-testid="aux-pane-split"],[data-testid="conversation-view"],[data-testid="agent-input-box"],[data-testid="model-selector-trigger"],.monaco-workbench');
-      }));
+      });
 
       const checkHost = () => T(() => {
-        const href = typeof W.location?.href === 'string' ? W.location.href : '';
+        const href = isS(W.location?.href) ? W.location.href : '';
         if (!href) return 'ok';
         const low = href.toLowerCase(), ttl = String(D.title || '');
         if (/^(?:devtools:\\/\\/|data:|chrome:|chrome-extension:|edge:|blob:|plugin:)/.test(low)) return 'reject';
@@ -407,18 +482,24 @@ function createCh1Templates({
           if (D.head) applyStyle();
           else D.addEventListener('DOMContentLoaded', applyStyle, { once: true });
           const cur = W.__agPrism || W.__agClaudeStyle;
-          if (cur && cur.version === VER && cur.codeHash === __AG_INJ_CODEHASH__) cur.refreshConfig(bootCfg);
+          const autoPm = () => T(() => (W.__agDomBus || G.__agDomBus)?.resolveAutoBootPerfMode?.(bootCfg, W));
+          if (cur && cur.version === VER && cur.codeHash === __AG_INJ_CODEHASH__) { autoPm(); cur.refreshConfig(bootCfg); }
           else {
             destroyMods();
             T(() => qa('[data-ag-prism-fallback="1"]').forEach((n) => n.remove()));
             __AG_INJ_BUNDLE__();
-            if (isF(G.__agCsUiMain)) G.__agCsUiMain(bootCfg);
+            autoPm();
+            const km = cM();
+            if (km) km._hold = 1;
+            try { isF(G.__agCsUiMain) && G.__agCsUiMain(bootCfg); } finally { if (km) km._hold = 0; }
+            const cm = cM();
+            if (cm?._disposed || (D.head && !cm)) applyStyle();
           }
           if (W.__agClaudeStyle && !W.__agPrism) W.__agPrism = W.__agClaudeStyle;
           else if (W.__agPrism) W.__agClaudeStyle = W.__agPrism;
           hookApiCssMgr(W.__agPrism);
           const eCfg = (isF(W.__agPrism?.getState) ? W.__agPrism.getState()?.cfg : null) || bootCfg;
-          T(() => W.__agPrismCssMgr?.sync?.());
+          T(() => cM()?.sync?.());
           T(() => (eCfg?.omniModule === 'off' ? W.__agPrismOmni?.destroy?.() : W.__agPrismOmni?.sync?.(eCfg, W.__agPrismOmniServerMeta || null)));
           const de = D.documentElement;
           if (de) {
@@ -450,6 +531,7 @@ function createCh1Templates({
     normalizeLangIdNode,
     resolveSystemLangNode,
     loadLocalesModuleFresh,
+    resolvePerfModeAutoTag,
     buildRuntimeUiSlicePayload,
     getConfigRefreshTemplate,
     buildConfigRefreshExpression,

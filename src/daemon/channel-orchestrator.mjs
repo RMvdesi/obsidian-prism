@@ -57,6 +57,7 @@ export class ChannelOrchestrator {
     this._cdpFileSig = readCdpTreeSig(this._rootDir);
     this._bundleCacheFlushTimer = null;
     this._safeSidebarFileCache = null;
+    this._clientFileExistsCache = new Map();
 
     this._configFingerprintTracker = new ConfigFingerprintTracker();
     this._configSeq = 0;
@@ -127,6 +128,7 @@ export class ChannelOrchestrator {
     this._rootDir = dir;
     this.services.setRootDir(dir);
     this._safeSidebarFileCache = null;
+    this._clientFileExistsCache?.clear?.();
   }
 
   getRegisteredChannel(id) {
@@ -340,7 +342,7 @@ export class ChannelOrchestrator {
     }
   }
 
-  hasChannelFile(specOrId) {
+  hasChannelFile(specOrId, { bypassCache = false } = {}) {
     const id = typeof specOrId === 'string' ? specOrId : specOrId?.id || '';
     if (this._fileCheckOverrides.has(id)) return Boolean(this._fileCheckOverrides.get(id)());
     const cap = id ? id[0].toUpperCase() + id.slice(1) : '';
@@ -350,7 +352,14 @@ export class ChannelOrchestrator {
       this._deps.getMethodOverride?.(`_has${cap}File`);
     if (ov) return Boolean(ov());
     if (id === 'sidebar') return this.hasSafeV2SidebarClientFile();
-    return hasChannelAssetFile(this._rootDir, this.getCdp(), id);
+    if (!bypassCache && this._clientFileExistsCache instanceof Map && this._clientFileExistsCache.has(id)) {
+      return this._clientFileExistsCache.get(id);
+    }
+    const exists = hasChannelAssetFile(this._rootDir, this.getCdp(), id);
+    if (this._clientFileExistsCache instanceof Map) {
+      this._clientFileExistsCache.set(id, exists);
+    }
+    return exists;
   }
 
   isChannelEnabled(specOrId, cfgOverride = null) {
@@ -458,6 +467,7 @@ export class ChannelOrchestrator {
   }
 
   rebuildBundle({ forceReloadCdp = false, deferDiskCacheWrite = false } = {}) {
+    this._clientFileExistsCache?.clear?.();
     const cdpPath = path.join(this._rootDir, 'cdp.js');
     const nextSig = this.readCdpFileSig();
     if (forceReloadCdp || !this.getCdp() || (nextSig && nextSig !== this._cdpFileSig)) {

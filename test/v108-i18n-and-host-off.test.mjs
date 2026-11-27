@@ -1127,9 +1127,10 @@ test('Pre-release hardening: Ch1->Ch9 brand-mark slimming, Mascot cleanup select
     'wallpaper-client CSS must suppress native plugin-theme-home-wallpaper only while Prism wallpaper is active'
   );
   const upSliderSrc = fs.readFileSync(path.join(ROOT, 'vendor/effort-slider/upstream-client.js'), 'utf8');
+  assert.equal(/:has\(/.test(upSliderSrc), false, 'effort-slider upstream-client.js must contain 0 :has() selectors');
   assert.ok(
-    upSliderSrc.includes("html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel']))"),
-    'effort-slider SLIDER_CSS must suppress v2.35.1 orchestrator-picker-effort submenu while excluding model-selector-panel'
+    upSliderSrc.includes("html[data-ces-slider-ready='1'] [data-ces-hide-panel='1']"),
+    'effort-slider SLIDER_CSS must suppress v2.35.1 effort/orchestrator submenus via data-ces-hide-panel'
   );
   assert.ok(
     upSliderSrc.includes('m.matches(\'[data-testid="orchestrator-picker-effort"]\')'),

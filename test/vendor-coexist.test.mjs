@@ -2828,3 +2828,67 @@ test('Issue #81: inline-fallback TIER_CSS uses --pt-c instead of --c so external
     ctl.destroy();
   }
 });
+
+test('vendor/pulse-dashboard/inline-fallback.js auto-yields to agy-powertools telemetry triggers in auto mode while respecting explicit on and never hiding external triggers', async () => {
+  for (const triggerTestId of ['agy-context-ring-trigger', 'agy-speed-stats-trigger']) {
+    // 1) Immediate auto-yield when trigger is present in composer toolbar
+    const env = createLightweightDom();
+    const ptTrigger = env.makeEl('button');
+    ptTrigger.setAttribute('data-testid', triggerTestId);
+    env.composerToolbar.appendChild(ptTrigger);
+
+    const ctl = telemetryMod.createTelemetryController({ window: env.win, document: env.doc });
+    try {
+      const stAuto = ctl.sync({ telemetryModule: 'auto', __fallbackDelayMs: 10 });
+      assert.equal(stAuto.yieldedToExternal, true, `auto mode must yield to ${triggerTestId}`);
+      assert.equal(stAuto.hasExternal, true);
+      assert.equal(stAuto.mountedFallback, false);
+      await new Promise((r) => setTimeout(r, 25));
+      assert.equal(env.doc.getElementById('ag-prism-pulse-bar'), null);
+
+      // 2) Explicit mode="on" mounts built-in bar without hiding or mutating agy-powertools trigger
+      const stOn = ctl.sync({ telemetryModule: 'on' });
+      assert.equal(stOn.mountedFallback, true, `mode="on" must honor explicit user override even with ${triggerTestId}`);
+      assert.equal(stOn.yieldedToExternal, false);
+      assert.ok(env.doc.getElementById('ag-prism-pulse-bar'));
+      assert.equal(ptTrigger.getAttribute('data-ag-prism-hidden'), null, `${triggerTestId} must never be hidden in mode="on"`);
+      assert.equal(ptTrigger.style.getPropertyValue('opacity'), '');
+
+      // 3) mode="off" unmounts built-in bar and leaves agy-powertools trigger completely untouched
+      const stOff = ctl.sync({ telemetryModule: 'off' });
+      assert.equal(stOff.mountedFallback, false);
+      assert.equal(env.doc.getElementById('ag-prism-pulse-bar'), null);
+      assert.equal(ptTrigger.getAttribute('data-ag-prism-hidden'), null, `${triggerTestId} must never be hidden in mode="off"`);
+      assert.equal(ptTrigger.style.getPropertyValue('opacity'), '');
+    } finally {
+      ctl.destroy();
+    }
+  }
+
+  // 4) Late-arriving agy-powertools trigger after fallback already mounted yields immediately via seatObs / refresh
+  const envLate = createLightweightDom();
+  const ctlLate = telemetryMod.createTelemetryController({ window: envLate.win, document: envLate.doc });
+  try {
+    ctlLate.sync({ telemetryModule: 'auto', __fallbackDelayMs: 5 });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(ctlLate.getState().mountedFallback, true);
+
+    const lateTrigger = envLate.makeEl('button');
+    lateTrigger.setAttribute('data-testid', 'agy-context-ring-trigger');
+    envLate.composerToolbar.appendChild(lateTrigger);
+    const seatObs = envLate.observers.find((o) => !o.disconnected);
+    seatObs?.trigger([{ type: 'childList', target: envLate.composerToolbar, addedNodes: [lateTrigger], removedNodes: [] }]);
+    await new Promise((r) => setTimeout(r, 70));
+    assert.equal(ctlLate.getState().mountedFallback, false, 'Late-arriving agy-powertools trigger must cause auto-yield unmount');
+    assert.equal(ctlLate.getState().yieldedToExternal, true);
+    assert.equal(envLate.doc.getElementById('ag-prism-pulse-bar'), null);
+
+    // Hidden trigger must NOT block fallback mounting
+    lateTrigger.hidden = true;
+    await ctlLate.refresh();
+    assert.equal(ctlLate.getState().hasExternal, false);
+    assert.equal(ctlLate.getState().mountedFallback, true);
+  } finally {
+    ctlLate.destroy();
+  }
+});

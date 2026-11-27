@@ -349,6 +349,7 @@ function makeBlockedDiffParseResult() {
     deletions: 0,
     truncated: false,
     focusedByHint: false,
+    focusHunk: -1,
     cumulativeDiff: false,
     totalLines: 0,
     lines: [],
@@ -487,7 +488,7 @@ export function parseInlineUnifiedDiff(
   }
 
   if (isBinary) {
-    return { blocked: false, isBinary: true, additions: 0, deletions: 0, truncated: false, focusedByHint: false, cumulativeDiff: false, totalLines: 0, lines: [] };
+    return { blocked: false, isBinary: true, additions: 0, deletions: 0, truncated: false, focusedByHint: false, focusHunk: -1, cumulativeDiff: false, totalLines: 0, lines: [] };
   }
 
   let totalRowCount = 0;
@@ -496,18 +497,23 @@ export function parseInlineUnifiedDiff(
   const hintAdd = Math.max(0, Number(hints?.additions) || 0);
   const hintDel = Math.max(0, Number(hints?.deletions) || 0);
   const hasHints = hintDel > 0 || hintAdd > 0;
-  const cumulativeDiff = isCumulativeDiff(additions, deletions, hints);
-  const useTruncHintFocus = totalRowCount > maxLines && hunks.length > 1 && hasHints;
-  const useCumulativeFocus = !expand && cumulativeDiff && hunks.length > 1 && hasHints;
-  const useHintFocus = useTruncHintFocus || useCumulativeFocus;
+  const diffTotal = additions + deletions;
+  const hintTotal = hintAdd + hintDel;
+  const hasExactStepHunk =
+    hasHints &&
+    hunks.length > 1 &&
+    diffTotal > hintTotal &&
+    hunks.some((h) => h.adds === hintAdd && h.dels === hintDel);
+  const cumulativeDiff = isCumulativeDiff(additions, deletions, hints) || hasExactStepHunk;
+  const needHintScore = hunks.length > 1 && hasHints && (totalRowCount > maxLines || cumulativeDiff);
 
-  if (!useHintFocus) {
+  if (!needHintScore) {
     const lines = [];
     for (let i = 0; i < hunks.length && lines.length < maxLines; i += 1) {
       const rows = hunks[i].rows;
       for (let j = 0; j < rows.length && lines.length < maxLines; j += 1) lines.push(rows[j]);
     }
-    return { blocked: false, isBinary: false, additions, deletions, truncated: totalRowCount > maxLines, focusedByHint: false, cumulativeDiff, totalLines: totalRowCount, lines };
+    return { blocked: false, isBinary: false, additions, deletions, truncated: totalRowCount > maxLines, focusedByHint: false, focusHunk: -1, cumulativeDiff, totalLines: totalRowCount, lines };
   }
 
   const scored = hunks.map((h) => {
@@ -524,22 +530,24 @@ export function parseInlineUnifiedDiff(
     return { h, score };
   });
   scored.sort((a, b) => b.score - a.score);
+  const best = scored[0].h;
 
-  if (useCumulativeFocus && totalRowCount <= maxLines) {
-    const best = scored[0].h;
-    const ordered = [best, ...hunks.filter((h) => h.idx !== best.idx)];
+  // 未截断时严格保持文件内自然行号从小到大顺序，仅通过 focusHunk 标记匹配本步块供前端高亮与自动滚动聚焦
+  if (totalRowCount <= maxLines) {
     const lines = [];
-    for (let i = 0; i < ordered.length && lines.length < maxLines; i += 1) {
-      const rows = ordered[i].rows;
+    for (let i = 0; i < hunks.length && lines.length < maxLines; i += 1) {
+      const rows = hunks[i].rows;
       for (let j = 0; j < rows.length && lines.length < maxLines; j += 1) lines.push(rows[j]);
     }
+    const focusHunk = cumulativeDiff ? best.idx : -1;
     return {
       blocked: false,
       isBinary: false,
       additions,
       deletions,
-      truncated: totalRowCount > lines.length,
-      focusedByHint: best.idx > 0 || (hintDel > 0 && lines.some((r) => r.kind === 'del')),
+      truncated: false,
+      focusedByHint: focusHunk >= 0,
+      focusHunk,
       cumulativeDiff,
       totalLines: totalRowCount,
       lines,
@@ -559,27 +567,24 @@ export function parseInlineUnifiedDiff(
     picked.push({ idx: h.idx, slice: h.rows.slice(0, take) });
     used += take;
   }
-  if (useCumulativeFocus && picked.length > 1) {
-    const [top, ...rest] = picked;
-    rest.sort((a, b) => a.idx - b.idx);
-    picked.length = 0;
-    picked.push(top, ...rest);
-  } else {
-    picked.sort((a, b) => a.idx - b.idx);
-  }
+  // 截断窗口选块后同样严格按自然行号升序输出，禁止倒置重排
+  picked.sort((a, b) => a.idx - b.idx);
 
   const lines = [];
   for (let i = 0; i < picked.length; i += 1) {
     for (let j = 0; j < picked[i].slice.length && lines.length < maxLines; j += 1) lines.push(picked[i].slice[j]);
   }
   const skippedLeading = picked.length > 0 && picked[0].idx > 0;
+  const bestOutIdx = picked.findIndex((p) => p.idx === best.idx);
+  const focusHunk = (cumulativeDiff || skippedLeading) && bestOutIdx >= 0 ? bestOutIdx : -1;
   return {
     blocked: false,
     isBinary: false,
     additions,
     deletions,
     truncated: totalRowCount > lines.length,
-    focusedByHint: skippedLeading || (hintDel > 0 && lines.some((r) => r.kind === 'del')),
+    focusedByHint: skippedLeading || focusHunk >= 0 || (hintDel > 0 && lines.some((r) => r.kind === 'del')),
+    focusHunk,
     cumulativeDiff,
     totalLines: totalRowCount,
     lines,

@@ -196,7 +196,18 @@ function createMockEnv({ reducedMatches = false } = {}) {
         return res;
       },
       querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
-      getElementById(id) { return this.querySelector('#' + id.replace(/\./g, '\\.')); },
+      getElementById(id) {
+        const target = String(id);
+        const find = (n) => {
+          for (const c of n.children) {
+            if (c.id === target) return c;
+            const hit = find(c);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        return find(this);
+      },
       getBoundingClientRect() { return this._rect; },
       get ownerDocument() { return doc; },
       dataset: {},
@@ -886,7 +897,7 @@ test('7) Real Antigravity Split View DOM ([data-main-content-body] > [data-split
   assert.equal(env.timers.size, 0);
 });
 
-test('8) ask_question 问答卡与 side-question-panel 点击焦点转移 + 多 conversation-view 下 peek 与全周棱镜光', () => {
+test('8) ask_question 问答卡与 side-question-panel 点击焦点转移 + 多 conversation-view 下 peek 与底边棱镜反射', () => {
   const env = createMockEnv({ reducedMatches: false });
   const mainBody = env.mkEl('div', { 'data-main-content-body': 'true' });
   const splitPanes = env.mkEl('div', { 'data-split-panes': 'true' });
@@ -968,13 +979,13 @@ test('8) ask_question 问答卡与 side-question-panel 点击焦点转移 + 多 
   assert.ok(pane1.card.querySelector('.ag-cs-crab'), '初始主宠挂载在 pane1');
   assert.equal(lastYieldMode, 'none', '非活跃 pane2 的 takeover 不应干扰 pane1');
 
-  // 点击 pane2 问答选项 -> 切换焦点到 pane2 并立即进入 peek，且问答卡挂全周 prism-box 而无 bottom reflect
+  // 点击 pane2 问答选项 -> 切换焦点到 pane2 并立即进入 peek，且问答卡挂 prism-box 与底边 reflect
   env.doc.dispatch('pointerdown', { target: tkOpt });
   api.sync();
   assert.ok(pane2.card.querySelector('.ag-cs-crab'), '点击 pane2 问答卡后主宠应转移到 pane2');
   assert.equal(lastYieldMode, 'peek', 'pane2 问答卡可见时主宠必须进入 peek');
-  assert.equal(tkCard.getAttribute('data-ag-cs-prism-box'), '1', '问答卡必须启用全周 prism-box');
-  assert.equal(tkCard.hasAttribute('data-ag-cs-prism-reflect'), false, '问答卡不得残留 bottom-only reflect');
+  assert.equal(tkCard.getAttribute('data-ag-cs-prism-box'), '1', '问答卡必须启用 prism-box');
+  assert.equal(tkCard.getAttribute('data-ag-cs-prism-reflect'), 'bottom', '问答卡必须启用底边环境棱镜反射');
 
   // 切回 pane1 且移除 pane2 局部 takeover，挂载全局无 CV 归属的可见 takeover 卡 -> 多 conversation-view 下仍应触发 peek
   tkCard.remove();

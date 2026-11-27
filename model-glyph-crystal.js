@@ -335,9 +335,10 @@
       }
       return false;
     };
+    const cSt = { prismStrength: 1 };
     const stepCrystalLoop = (now) => {
       mRaf = 0; if (isDestroyed() || !mInst || !mPanel?.[K_IC] || !mWasOrch) return;
-      const mg = getMinFrameGapMs();
+      const mg = Math.max(getMinFrameGapMs(), mInst.isMotionHot?.() === false ? 32 : 0);
       if (mg > 0 && mLastMs > 0 && now - mLastMs < mg) { if (!motionReduced() && !isHid()) mRaf = rAF(stepCrystalLoop); return; }
       const dt = mLastMs > 0 ? Math.min(0.05, Math.max(0.002, (now - mLastMs) / 1000)) : 0.016; mLastMs = now;
       mStepFillRatio = mHideLock ? readTrackFillRatio(mTrk) : -1;
@@ -390,7 +391,7 @@
         const kick = () => {
           if (isDestroyed() || isEffortSliderOff() || !mWasOrch || mPanel !== p || !p[K_IC] || !mCv) return;
           const red = motionReduced(), amb = readRootAmbientFloat();
-          if (!mInst && crystalPrismCore?.mountCrystalPrismBar && canMountRealCanvas(mCv)) try { mInst = crystalPrismCore.mountCrystalPrismBar(mCv, { reduceMotion: red, getState: () => { const dk = isDarkTheme(); return { isDark: dk, prismStrength: 1, ambientIntensity: readRootAmbientFloat(), accentTone: resolveCrystalAccentMode(dk), reduceMotion: motionReduced(), hideLock: !!mHideLock, fillRatio: mStepFillRatio !== null ? mStepFillRatio : mHideLock ? readTrackFillRatio(mTrk) : -1 }; } }); } catch { mInst = null; }
+          if (!mInst && crystalPrismCore?.mountCrystalPrismBar && canMountRealCanvas(mCv)) try { mInst = crystalPrismCore.mountCrystalPrismBar(mCv, { reduceMotion: red, getState: () => { const dk = isDarkTheme(); cSt.isDark = dk; cSt.ambientIntensity = readRootAmbientFloat(); cSt.accentTone = resolveCrystalAccentMode(dk); cSt.reduceMotion = motionReduced(); cSt.hideLock = !!mHideLock; cSt.fillRatio = mStepFillRatio !== null ? mStepFillRatio : mHideLock ? readTrackFillRatio(mTrk) : -1; return cSt; } }); } catch { mInst = null; }
           if (!mInst) return;
           mInst.setReduceMotion?.(red); mStepFillRatio = mHideLock ? readTrackFillRatio(mTrk) : -1;
           const ptr = getLastPointerPos?.();

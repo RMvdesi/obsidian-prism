@@ -134,13 +134,9 @@ function isCompoundSelector(s) {
 function computeSelectorSpecificity(sel) {
   if (typeof sel !== 'string' || !sel.trim()) return NaN;
   let n = 0;
-  let s = sel.replace(/\[(?:[^\]"'\\]|\\.|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')*\]/g, () => {
-    n += 1e3;
-    return '.';
-  });
-  if (/["'\\[\]]/.test(s)) return NaN;
+  let s = sel.replace(/\\.|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (m) => (m[0] === '\\' ? '_' : '""'));
 
-  // 由内向外解析多层嵌套的 :is()/:not()/:has()/:where()
+  // 先由内向外解析多层嵌套的 :is()/:not()/:has()/:where()，再统计顶层属性选择器 [...]，避免双重计数或错算 :where([a])
   const fnRe = /:(is|not|has|where)\(([^()]*)\)/g;
   for (let guard = 0; guard < 16 && fnRe.test(s); guard++) {
     fnRe.lastIndex = 0;
@@ -166,6 +162,12 @@ function computeSelectorSpecificity(sel) {
     });
     if (failed) return NaN;
   }
+
+  s = s.replace(/\[[^\]]*\]/g, () => {
+    n += 1e3;
+    return '.';
+  });
+  if (/["'\\[\]]/.test(s)) return NaN;
 
   // :nth-*(An+B) / :lang(...) / :dir(...) 仅在不含 ` of ` 复杂子句时按单个伪类计算
   const stripped = s.replace(/:nth-[\w-]+\((?:[^()](?!\bof\b))*\)|:(?:lang|dir)\([\w-]+\)/gi, ':x');
@@ -376,8 +378,13 @@ function flattenNestedCss(rawCss, options = null) {
 
   const PSEUDO_ELEM_RE = /::|:(?:before|after|first-line|first-letter|-webkit-|-moz-|-ms-|-o-)/i;
   const foldDescendantList = (P, children) => {
-    const groups = new Map();
     const order = [];
+    let curRun = null;
+    const flushRun = () => {
+      if (!curRun) return;
+      order.push(curRun);
+      curRun = null;
+    };
     for (let i = 0; i < children.length; i++) {
       const c = children[i];
       if (c.startsWith('& ')) {
@@ -385,19 +392,20 @@ function flattenNestedCss(rawCss, options = null) {
         if (rest && !rest.includes('&') && !/^[>+~]/.test(rest) && !PSEUDO_ELEM_RE.test(rest) && isOkSel(rest)) {
           const sp = getSpec(rest);
           if (sp === sp) {
-            let bucket = groups.get(sp);
-            if (!bucket) {
-              bucket = [];
-              groups.set(sp, bucket);
-              order.push({ kind: 'grp', sp, bucket });
+            if (curRun && curRun.sp === sp) {
+              curRun.bucket.push(rest);
+            } else {
+              flushRun();
+              curRun = { kind: 'grp', sp, bucket: [rest] };
             }
-            bucket.push(rest);
             continue;
           }
         }
       }
+      flushRun();
       order.push({ kind: 'raw', c });
     }
+    flushRun();
     const plainMode = isCompoundSelector(P) ? 2 : 1;
     const outList = [];
     for (let i = 0; i < order.length; i++) {

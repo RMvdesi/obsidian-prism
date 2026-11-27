@@ -26,6 +26,7 @@
   let triggerTiming = 'preload';
   let currentViewMode = 'immersive';
   let currentLang = '';
+  let currentProxyMode = '';
   let translateToolSummaries = false;
   let translateTitles = false;
   let hasExplicitToolSummaries = false;
@@ -78,17 +79,17 @@
   const SAFE_TRUNCATE_BUDGET = 46000;
   const INFLIGHT_TTL_MS = 185000;
 
-  const ZH_TW_PACK = '原文|收起原文|機翻降級|AI 未就緒，已降級機翻|重新轉譯|轉譯未完成|↻ 重試|機翻中…|AI 轉譯中…|思考輸出中…|收束中…|代理或網路不可達|請求限流冷卻中|金鑰或權限異常|轉譯逾時|後台服務未連線|代理失敗 · 重試|限流冷卻 · 重試|驗證失敗 · 重試|逾時 · 重試|服務離線 · 重試|轉譯失敗 · 重試|已安全分段譯前 {0}k 字（共 {1}k）'.split('|');
+  const ZH_TW_PACK = '原文|收起原文|機翻降級|AI 未就緒，已降級機翻|重新轉譯|轉譯未完成|↻ 重試|機翻中…|AI 轉譯中…|思考輸出中…|收束中…|代理或網路不可達|請求限流冷卻中|金鑰或權限異常|轉譯逾時|後台服務未連線|代理失敗 · 重試|限流冷卻 · 重試|驗證失敗 · 重試|逾時 · 重試|服務離線 · 重試|轉譯失敗 · 重試|已安全分段譯前 {0}k 字（共 {1}k）|免費機翻出口限流（可換節點或切直連）|機翻限流 · 重試'.split('|');
   const CLIENT_I18N = {
-    'zh-CN': '原文|收起原文|机翻降级|AI 未就绪，已降级机翻|重新转译|转译未完成|↻ 重试|机翻中…|AI 转译中…|思考输出中…|收束中…|代理或网络不可达|请求限流冷却中|密钥或权限异常|转译超时|后台服务未连接|代理失败 · 重试|限流冷却 · 重试|鉴权失败 · 重试|超时 · 重试|服务离线 · 重试|转译失败 · 重试|已安全分段译前 {0}k 字（共 {1}k）'.split('|'),
+    'zh-CN': '原文|收起原文|机翻降级|AI 未就绪，已降级机翻|重新转译|转译未完成|↻ 重试|机翻中…|AI 转译中…|思考输出中…|收束中…|代理或网络不可达|请求限流冷却中|密钥或权限异常|转译超时|后台服务未连接|代理失败 · 重试|限流冷却 · 重试|鉴权失败 · 重试|超时 · 重试|服务离线 · 重试|转译失败 · 重试|已安全分段译前 {0}k 字（共 {1}k）|免费机翻出口限流（可换节点或切直连）|机翻限流 · 重试'.split('|'),
     'zh-TW': ZH_TW_PACK,
-    en: 'Raw|Hide Raw|Fallback|AI unavailable; machine fallback|Retranslate|Translation incomplete|↻ Retry|Translating…|AI polishing…|Streaming…|Settling…|Proxy or network unreachable|Rate-limited (cooling down)|API key or auth error|Translation timed out|Daemon service offline|Proxy error · Retry|Rate limit · Retry|Auth error · Retry|Timed out · Retry|Offline · Retry|Failed · Retry|Translated first {0}k / {1}k chars'.split('|'),
-    ja: '原文|原文を隠す|機械翻訳代替|AI未設定・機械翻訳代替|再翻訳|翻訳未完了|↻ 再試行|翻訳中…|AI翻訳中…|出力中…|整理中…|プロキシまたは接続不可|レート制限クールダウン中|APIキーまたは認証エラー|翻訳タイムアウト|バックグラウンド未接続|プロキシ失敗 · 再試行|制限中 · 再試行|認証エラー · 再試行|タイムアウト · 再試行|オフライン · 再試行|失敗 · 再試行|先頭 {0}k 字を翻訳済（全 {1}k 字）'.split('|'),
-    ko: '원문|원문 숨기기|기계 번역 대체|AI 미준비로 기계 번역 사용|재번역|번역 미완료|↻ 재시도|번역 중…|AI 다듬는 중…|출력 중…|정리 중…|프록시 또는 네트워크 연결 불가|요청 제한 대기 중|API 키 또는 인증 오류|번역 시간 초과|백그라운드 서비스 오프라인|프록시 오류 · 재시도|요청 제한 · 재시도|인증 실패 · 재시도|시간 초과 · 재시도|오프라인 · 재시도|번역 실패 · 재시도|앞부분 {0}k / 전체 {1}k자 번역 완료'.split('|'),
-    es: 'Original|Ocultar original|Respaldo MT|IA no disponible; traducción automática|Retraducir|Traducción incompleta|↻ Reintentar|Traduciendo…|Puliendo con IA…|Transmitiendo…|Finalizando…|Proxy o red inaccesible|Límite de tasa (en espera)|Error de clave API o autenticación|Tiempo de espera agotado|Servicio en segundo plano desconectado|Error de proxy · Reintentar|Límite · Reintentar|Error auth · Reintentar|Tiempo agotado · Reintentar|Sin conexión · Reintentar|Error · Reintentar|Primeros {0}k / {1}k caracteres traducidos'.split('|'),
-    fr: 'Original|Masquer l’original|Secours MT|IA indisponible ; traduction auto|Retraduire|Traduction incomplète|↻ Réessayer|Traduction…|Affinage IA…|Diffusion…|Finalisation…|Proxy ou réseau inaccessible|Limite atteinte (refroidissement)|Erreur de clé API ou d’authentification|Délai dépassé|Service d’arrière-plan hors ligne|Erreur proxy · Réessayer|Limite · Réessayer|Erreur auth · Réessayer|Délai · Réessayer|Hors ligne · Réessayer|Échec · Réessayer|Premiers {0}k / {1}k caractères traduits'.split('|'),
-    de: 'Original|Original ausblenden|MT-Fallback|KI nicht verfügbar; maschineller Fallback|Neu übersetzen|Übersetzung unvollständig|↻ Erneut|Übersetze…|KI-Feinschliff…|Streaming…|Abschluss…|Proxy oder Netzwerk nicht erreichbar|Rate-Limit (Abkühlung)|API-Schlüssel- oder Auth-Fehler|Zeitüberschreitung|Hintergrunddienst offline|Proxy-Fehler · Erneut|Rate-Limit · Erneut|Auth-Fehler · Erneut|Zeitlimit · Erneut|Offline · Erneut|Fehlgeschlagen · Erneut|Erste {0}k / {1}k Zeichen übersetzt'.split('|'),
-    tr: 'Ham|Ham Gizle|Yedek|YZ kullanılamıyor; makine yedeği|Yeniden çevir|Çeviri tamamlanmadı|↻ Tekrar|Çevriliyor…|YZ iyileştiriyor…|Akışta…|Sonlanıyor…|Proxy veya ağ erişilemiyor|Hız sınırı (beklemede)|API anahtarı veya kimlik hatası|Çeviri zaman aşımına uğradı|Arka plan servisi çevrimdışı|Proxy hatası · Tekrar|Hız sınırı · Tekrar|Kimlik hatası · Tekrar|Zaman aşımı · Tekrar|Çevrimdışı · Tekrar|Başarısız · Tekrar|İlk {0}k / {1}k karakter çevrildi'.split('|'),
+    en: 'Raw|Hide Raw|Fallback|AI unavailable; machine fallback|Retranslate|Translation incomplete|↻ Retry|Translating…|AI polishing…|Streaming…|Settling…|Proxy or network unreachable|Rate-limited (cooling down)|API key or auth error|Translation timed out|Daemon service offline|Proxy error · Retry|Rate limit · Retry|Auth error · Retry|Timed out · Retry|Offline · Retry|Failed · Retry|Translated first {0}k / {1}k chars|Free MT exit rate-limited (switch proxy or use direct)|MT limit · Retry'.split('|'),
+    ja: '原文|原文を隠す|機械翻訳代替|AI未設定・機械翻訳代替|再翻訳|翻訳未完了|↻ 再試行|翻訳中…|AI翻訳中…|出力中…|整理中…|プロキシまたは接続不可|レート制限クールダウン中|APIキーまたは認証エラー|翻訳タイムアウト|バックグラウンド未接続|プロキシ失敗 · 再試行|制限中 · 再試行|認証エラー · 再試行|タイムアウト · 再試行|オフライン · 再試行|失敗 · 再試行|先頭 {0}k 字を翻訳済（全 {1}k 字）|無料機械翻訳が制限中（ノード変更か直結へ切替）|機翻制限 · 再試行'.split('|'),
+    ko: '원문|원문 숨기기|기계 번역 대체|AI 미준비로 기계 번역 사용|재번역|번역 미완료|↻ 재시도|번역 중…|AI 다듬는 중…|출력 중…|정리 중…|프록시 또는 네트워크 연결 불가|요청 제한 대기 중|API 키 또는 인증 오류|번역 시간 초과|백그라운드 서비스 오프라인|프록시 오류 · 재시도|요청 제한 · 재시도|인증 실패 · 재시도|시간 초과 · 재시도|오프라인 · 재시도|번역 실패 · 재시도|앞부분 {0}k / 전체 {1}k자 번역 완료|무료 기계 번역 속도 제한(노드 변경 또는 직접 연결)|기계 번역 제한 · 재시도'.split('|'),
+    es: 'Original|Ocultar original|Respaldo MT|IA no disponible; traducción automática|Retraducir|Traducción incompleta|↻ Reintentar|Traduciendo…|Puliendo con IA…|Transmitiendo…|Finalizando…|Proxy o red inaccesible|Límite de tasa (en espera)|Error de clave API o autenticación|Tiempo de espera agotado|Servicio en segundo plano desconectado|Error de proxy · Reintentar|Límite · Reintentar|Error auth · Reintentar|Tiempo agotado · Reintentar|Sin conexión · Reintentar|Error · Reintentar|Primeros {0}k / {1}k caracteres traducidos|Límite en MT gratuita (cambia de nodo o usa conexión directa)|Límite MT · Reintentar'.split('|'),
+    fr: 'Original|Masquer l’original|Secours MT|IA indisponible ; traduction auto|Retraduire|Traduction incomplète|↻ Réessayer|Traduction…|Affinage IA…|Diffusion…|Finalisation…|Proxy ou réseau inaccessible|Limite atteinte (refroidissement)|Erreur de clé API ou d’authentification|Délai dépassé|Service d’arrière-plan hors ligne|Erreur proxy · Réessayer|Limite · Réessayer|Erreur auth · Réessayer|Délai · Réessayer|Hors ligne · Réessayer|Échec · Réessayer|Premiers {0}k / {1}k caractères traduits|Limite sur la MT gratuite (changez de nœud ou passez en direct)|Limite MT · Réessayer'.split('|'),
+    de: 'Original|Original ausblenden|MT-Fallback|KI nicht verfügbar; maschineller Fallback|Neu übersetzen|Übersetzung unvollständig|↻ Erneut|Übersetze…|KI-Feinschliff…|Streaming…|Abschluss…|Proxy oder Netzwerk nicht erreichbar|Rate-Limit (Abkühlung)|API-Schlüssel- oder Auth-Fehler|Zeitüberschreitung|Hintergrunddienst offline|Proxy-Fehler · Erneut|Rate-Limit · Erneut|Auth-Fehler · Erneut|Zeitlimit · Erneut|Offline · Erneut|Fehlgeschlagen · Erneut|Erste {0}k / {1}k Zeichen übersetzt|Gratis-MT-Limit erreicht (Proxy wechseln oder Direktverbindung)|MT-Limit · Erneut'.split('|'),
+    tr: 'Ham|Ham Gizle|Yedek|YZ kullanılamıyor; makine yedeği|Yeniden çevir|Çeviri tamamlanmadı|↻ Tekrar|Çevriliyor…|YZ iyileştiriyor…|Akışta…|Sonlanıyor…|Proxy veya ağ erişilemiyor|Hız sınırı (beklemede)|API anahtarı veya kimlik hatası|Çeviri zaman aşımına uğradı|Arka plan servisi çevrimdışı|Proxy hatası · Tekrar|Hız sınırı · Tekrar|Kimlik hatası · Tekrar|Zaman aşımı · Tekrar|Çevrimdışı · Tekrar|Başarısız · Tekrar|İlk {0}k / {1}k karakter çevrildi|Ücretsiz MT hız sınırı (düğümü değiştirin veya doğrudan bağlanın)|MT sınırı · Tekrar'.split('|'),
   };
 
   const memCache = new Map();
@@ -852,17 +853,12 @@ trackedWaitPanels.delete(panel);
     return { ok: true, memEntries: memCache.size, storageEntries: storedCount };
   }
 
+  const clearAllFailCooldowns = () => { failedSigs.clear(); toolSummaryFailedUntil.clear(); titleFailedUntil.clear(); };
   function clearLocalCache() {
     cancelPersistHandles();
-    cacheDirty = false;
-    storedCount = 0;
+    cacheDirty = false; storedCount = 0;
     const cleared = memCache.size;
-    memCache.clear();
-    toolSummaryCache.clear();
-    titleCache.clear();
-    failedSigs.clear();
-    toolSummaryFailedUntil.clear();
-    titleFailedUntil.clear();
+    memCache.clear(); toolSummaryCache.clear(); titleCache.clear(); clearAllFailCooldowns();
     try { getStore()?.removeItem?.(LOCAL_CACHE_KEY); } catch (_) {}
     return { ok: true, cleared, memEntries: 0, storageEntries: 0 };
   }
@@ -878,9 +874,12 @@ trackedWaitPanels.delete(panel);
     if (resOrErr && typeof resOrErr === 'object') {
       if (resOrErr.offline) return 'offline';
       if (resOrErr.timeout) return 'timeout';
+      if (resOrErr.code === 'MT_RATE_LIMITED' || resOrErr.reason === 'mt_ratelimit') return 'mt_ratelimit';
     }
     const msg = String((resOrErr && (resOrErr.error || resOrErr.message)) || resOrErr || '');
-    if (/429|rate.?limit|quota|too many requests/i.test(msg)) return 'ratelimit';
+    const isRate = /429|rate.?limit|too many requests/i.test(msg);
+    if (isRate && (/machine\s*translate|free\s*mt|translate\.googleapis\.com|microsofttranslator|mt_ratelimit|\bgtx\b/i.test(msg) || (currentMode === 'machine' && !/\bAI\s+HTTP\b/i.test(msg)))) return 'mt_ratelimit';
+    if (isRate || /quota/i.test(msg)) return 'ratelimit';
     if (/401|403|api.?key|unauthorized|forbidden|invalid.?key/i.test(msg)) return 'auth';
     if (/timed?\s*out|timeout/i.test(msg)) return 'timeout';
     if (/offline|disconnected/i.test(msg)) return 'offline';
@@ -888,66 +887,34 @@ trackedWaitPanels.delete(panel);
     return 'generic';
   }
 
-  const ERR_REASON_IDX = { proxy: 11, ratelimit: 12, auth: 13, timeout: 14, offline: 15, generic: 5 };
-  const BADGE_REASON_IDX = { proxy: 16, ratelimit: 17, auth: 18, timeout: 19, offline: 20, generic: 21 };
-
-  function getFailureErrorText(reason, pack = getClientPack()) {
-    return pack[ERR_REASON_IDX[reason] || 5] || pack[5];
-  }
-
-  function getTriggerBadgeText(reason, pack = getClientPack()) {
-    return pack[BADGE_REASON_IDX[reason] || 21] || pack[21];
-  }
-
-  function isSigInCooldown(sig) {
-    const rec = failedSigs.get(sig);
-    if (!rec) return false;
-    if (nowMs() >= rec.u) {
-      failedSigs.delete(sig);
-      return false;
-    }
-    return true;
-  }
+  const ERR_REASON_IDX = { proxy: 11, ratelimit: 12, mt_ratelimit: 23, auth: 13, timeout: 14, offline: 15, generic: 5 };
+  const BADGE_REASON_IDX = { proxy: 16, ratelimit: 17, mt_ratelimit: 24, auth: 18, timeout: 19, offline: 20, generic: 21 };
+  const getFailureErrorText = (reason, pack = getClientPack()) => pack[ERR_REASON_IDX[reason] || 5] || pack[5];
+  const getTriggerBadgeText = (reason, pack = getClientPack()) => pack[BADGE_REASON_IDX[reason] || 21] || pack[21];
 
   function getSigFailureMeta(sig) {
     const rec = failedSigs.get(sig);
     if (!rec) return null;
-    if (nowMs() >= rec.u) {
-      failedSigs.delete(sig);
-      return null;
-    }
+    if (nowMs() >= rec.u) { failedSigs.delete(sig); return null; }
     return rec;
   }
+  const isSigInCooldown = (sig) => Boolean(getSigFailureMeta(sig));
 
   function recordSigFailure(sig, errInfo = null) {
     if (!sig) return null;
-    const prev = failedSigs.get(sig);
-    const c = prev ? prev.c + 1 : 1;
+    const prev = failedSigs.get(sig), c = prev ? prev.c + 1 : 1;
     const reason = (errInfo && errInfo.reason) || classifyFailureReason(errInfo);
     const detail = sanitizeClientErrorText((errInfo && (errInfo.detail || errInfo.error || errInfo.message)) || '');
-    const ttl = c === 1 ? 15000 : c === 2 ? 45000 : 120000;
-    const rec = { c, u: nowMs() + ttl, r: reason, d: detail };
-    failedSigs.delete(sig);
-    failedSigs.set(sig, rec);
-    if (failedSigs.size > 512) {
-      const oldest = failedSigs.keys().next().value;
-      if (oldest !== undefined) failedSigs.delete(oldest);
-    }
+    const rec = { c, u: nowMs() + (c === 1 ? 15000 : c === 2 ? 45000 : 120000), r: reason, d: detail };
+    failedSigs.delete(sig); failedSigs.set(sig, rec);
+    if (failedSigs.size > 512) { const oldest = failedSigs.keys().next().value; if (oldest !== undefined) failedSigs.delete(oldest); }
     return rec;
   }
-
-  function clearSigCooldown(sig) {
-    if (sig) failedSigs.delete(sig);
-    else failedSigs.clear();
-  }
+  const clearSigCooldown = (sig) => { if (sig) failedSigs.delete(sig); else failedSigs.clear(); };
 
   function clearTriggerStatusBadge(btnOrPanel) {
-    const btn =
-      btnOrPanel && ga(btnOrPanel, 'data-testid') === 'thinking-collapsible-trigger'
-        ? btnOrPanel
-        : findTriggerForPanel(btnOrPanel);
-    if (!btn) return;
-    const old = findChildByClass(btn, C_TRG);
+    const btn = btnOrPanel && ga(btnOrPanel, 'data-testid') === 'thinking-collapsible-trigger' ? btnOrPanel : findTriggerForPanel(btnOrPanel);
+    const old = btn && findChildByClass(btn, C_TRG);
     if (old) old.remove();
   }
 
@@ -955,48 +922,23 @@ trackedWaitPanels.delete(panel);
     if (!panel) return;
     const btn = findTriggerForPanel(panel);
     if (!btn || !isConn(btn)) return;
-    const doc = docOf(btn);
-    const t = getClientPack();
-    const r = reason || 'generic';
+    const doc = docOf(btn), t = getClientPack(), r = reason || 'generic';
     let badge = findChildByClass(btn, C_TRG);
     if (!badge) {
       badge = markNoTr(ce(doc, 'span', C_TRG));
-      sa(badge, 'role', 'button');
-      sa(badge, 'tabindex', '0');
-      sa(badge, 'data-testid', 'thought-trigger-status-badge');
-      sa(badge, 'data-op-thought', '1');
-      sa(badge, 'data-prism-ignore', '1');
-      sa(badge, 'data-ag-no-i18n', '');
-      sa(badge, 'data-no-press-spring', '1');
-      if (badge[K_ST]) {
-        badge[K_ST].display = 'inline-flex';
-        badge[K_ST].alignItems = 'center';
-        badge[K_ST].padding = '0 6px';
-        badge[K_ST].marginLeft = '4px';
-        badge[K_ST].borderRadius = '999px';
-        badge[K_ST].fontSize = '10.5px';
-        badge[K_ST].lineHeight = '16px';
-        badge[K_ST].fontWeight = '500';
-        badge[K_ST].cursor = 'pointer';
-        badge[K_ST].border = '1px solid color-mix(in srgb,var(--warning,#E5A93B) 36%,var(--ag-cs-border-1,rgba(128,128,128,.28)))';
-        badge[K_ST].background = 'color-mix(in srgb,var(--warning,#E5A93B) 12%,var(--ag-cs-pill-bg,rgba(128,128,128,.1)))';
-        badge[K_ST].color = 'var(--warning,#D97706)';
-      }
-      const doRetry = (ev) => {
-        stopEv(ev);
-        retryPanelNow(panel, rawText, mode, sig);
-      };
+      for (const [k, v] of [['role', 'button'], ['tabindex', '0'], ['data-testid', 'thought-trigger-status-badge'], ['data-op-thought', '1'], ['data-prism-ignore', '1'], ['data-ag-no-i18n', ''], ['data-no-press-spring', '1']]) sa(badge, k, v);
+      if (badge[K_ST]) Object.assign(badge[K_ST], {
+        display: 'inline-flex', alignItems: 'center', padding: '0 6px', marginLeft: '4px', borderRadius: '999px', fontSize: '10.5px', lineHeight: '16px', fontWeight: '500', cursor: 'pointer',
+        border: '1px solid color-mix(in srgb,var(--warning,#E5A93B) 36%,var(--ag-cs-border-1,rgba(128,128,128,.28)))',
+        background: 'color-mix(in srgb,var(--warning,#E5A93B) 12%,var(--ag-cs-pill-bg,rgba(128,128,128,.1)))', color: 'var(--warning,#D97706)',
+      });
+      const doRetry = (ev) => { stopEv(ev); retryPanelNow(panel, rawText, mode, sig); };
       onClk(badge, doRetry);
-      if (typeof badge.addEventListener === 'function') {
-        badge.addEventListener('keydown', (ev) => {
-          if (ev && (ev.key === 'Enter' || ev.key === ' ')) doRetry(ev);
-        });
-      }
+      badge.addEventListener?.('keydown', (ev) => { if (ev && (ev.key === 'Enter' || ev.key === ' ')) doRetry(ev); });
       ap(btn, badge);
     }
     sa(badge, 'data-fail-reason', r);
-    const label = getTriggerBadgeText(r, t);
-    stc(badge, label);
+    stc(badge, getTriggerBadgeText(r, t));
     badge.title = detail ? `${getFailureErrorText(r, t)}: ${detail}` : getFailureErrorText(r, t);
   }
 
@@ -1019,13 +961,12 @@ trackedWaitPanels.delete(panel);
     sa(docRoot(), 'data-ag-prism-thought-view', currentViewMode);
   }
 
-  let hasOffscreenLazyPanels = false;
-  let hasOffscreenTitles = false;
+  let hasOffscreenLazyPanels = false, hasOffscreenTitles = false, hasOffscreenTools = false;
   const onScrollCapture = () => {
-    if (currentMode === 'off' || scrollTimer || (!hasOffscreenLazyPanels && !hasOffscreenTitles)) return;
+    if (currentMode === 'off' || scrollTimer || (!hasOffscreenLazyPanels && !hasOffscreenTitles && !hasOffscreenTools) || hasVisIo()) return;
     scrollTimer = setTimeout(() => {
       scrollTimer = null;
-      if (currentMode !== 'off' && (hasOffscreenLazyPanels || hasOffscreenTitles)) scheduleScan(20);
+      if (currentMode !== 'off' && (hasOffscreenLazyPanels || hasOffscreenTitles || hasOffscreenTools)) scheduleScan(20);
     }, 100);
     scrollTimer?.unref?.();
   };
@@ -1301,40 +1242,17 @@ trackedWaitPanels.delete(panel);
   }
 
   function releasePrismOverlays() {
-    if (scrollTimer) {
-      clearTimeout(scrollTimer);
-      scrollTimer = null;
-    }
-    if (scrollBound && typeof document !== 'undefined' && document.removeEventListener) {
-      document.removeEventListener('scroll', onScrollCapture, { capture: true });
-      scrollBound = false;
-    }
-    if (visBound && typeof document !== 'undefined' && document.removeEventListener) {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      visBound = false;
-    }
-    clearAllStreamingWatchers();
-    stopTitleObserver();
-    restoreAllToolSummaries();
-    restoreAllTitles();
-    clearHydrateQueue();
-    clearPanelHlItems(null);
-    clearAllWaitTimers(false);
+    if (scrollTimer) { clearTimeout(scrollTimer); scrollTimer = null; }
+    if (scrollBound && typeof document !== 'undefined' && document.removeEventListener) { document.removeEventListener('scroll', onScrollCapture, { capture: true }); scrollBound = false; }
+    if (visBound && typeof document !== 'undefined' && document.removeEventListener) { document.removeEventListener('visibilitychange', onVisibilityChange); visBound = false; }
+    clrVis(); clearAllStreamingWatchers(); stopTitleObserver(); restoreAllToolSummaries(); restoreAllTitles(); clearHydrateQueue(); clearPanelHlItems(null); clearAllWaitTimers(false);
     for (const entry of inflightBySig.values()) cancelTranslateRequest(entry);
     inflightBySig.clear();
-    qsa(SEL_OVERLAY).forEach((ov) => {
-      const panel = parEl(ov);
-      ov.remove();
-      if (panel) cleanSinglePanelAttributes(panel);
-    });
-    qsa(SEL_TRIGGER).forEach((btn) => {
-      clearTriggerStatusBadge(btn);
-      cleanSinglePanelAttributes(nextSib(btn));
-    });
+    qsa(SEL_OVERLAY).forEach((ov) => { const p = parEl(ov); ov.remove(); if (p) cleanSinglePanelAttributes(p); });
+    qsa(SEL_TRIGGER).forEach((btn) => { clearTriggerStatusBadge(btn); cleanSinglePanelAttributes(nextSib(btn)); });
     qsa(`.${C_TRG}, [data-testid="prism-thought-general-config"]`).forEach((n) => n.remove());
     const rootEl = docRoot();
-    ra(rootEl, 'data-ag-prism-thought-owner');
-    ra(rootEl, 'data-ag-prism-thought-view');
+    ra(rootEl, 'data-ag-prism-thought-owner'); ra(rootEl, 'data-ag-prism-thought-view');
   }
 
   function isTriggerStreaming(btn) {
@@ -2151,6 +2069,14 @@ trackedWaitPanels.delete(panel);
 
   const findDirectOverlay = (panel) => findChildByClass(panel, C_OV);
 
+  function resetPanelRetryState(panel, sig) {
+    failedSigs.delete(sig);
+    const pm = panelMeta.get(panel);
+    if (pm && pm.skippedSig) { delete pm.skippedSig; panelMeta.set(panel, pm); }
+    const existing = inflightBySig.get(sig);
+    if (existing) { cancelTranslateRequest(existing); inflightBySig.delete(sig); }
+  }
+
   function retryPanelNow(panel, fallbackRawText = '', fallbackMode = '', oldSig = '') {
     if (!panel) return false;
     const activeMode = currentMode === 'off' ? fallbackMode : currentMode;
@@ -2159,31 +2085,13 @@ trackedWaitPanels.delete(panel);
     clearTriggerStatusBadge(panel);
     const ov = findDirectOverlay(panel);
     if (ov) ra(ov, 'data-failed');
-    ra(panel, A_FLD);
-    applyPanelViewMode(panel);
-    const inf = extractPanelInfo(panel);
-    const curRaw = inf.t || fallbackRawText;
+    ra(panel, A_FLD); applyPanelViewMode(panel);
+    const inf = extractPanelInfo(panel), curRaw = inf.t || fallbackRawText;
     if (!curRaw) return false;
-    const activeLang = resolveActiveLang();
-    const kb = inf.t ? inf.k : computeSkelBody(normalizeTextKey(curRaw));
+    const activeLang = resolveActiveLang(), kb = inf.t ? inf.k : computeSkelBody(normalizeTextKey(curRaw));
     const nextSig = sigFromBody(kb, activeMode, activeLang);
-    failedSigs.delete(nextSig);
-    const pm = panelMeta.get(panel);
-    if (pm && pm.skippedSig) {
-      delete pm.skippedSig;
-      panelMeta.set(panel, pm);
-    }
-    const existing = inflightBySig.get(nextSig);
-    if (existing) {
-      cancelTranslateRequest(existing);
-      inflightBySig.delete(nextSig);
-    }
-    const exp = isPanelCurrentlyExpanded(panel);
-    startOrJoinTranslation(panel, curRaw, activeMode, nextSig, `sig${kb}`, exp, {
-      force: true,
-      bypassCache: true,
-      priority: 30000,
-    });
+    resetPanelRetryState(panel, nextSig);
+    startOrJoinTranslation(panel, curRaw, activeMode, nextSig, `sig${kb}`, isPanelCurrentlyExpanded(panel), { force: true, bypassCache: true, priority: 30000 });
     return true;
   }
 
@@ -2191,143 +2099,64 @@ trackedWaitPanels.delete(panel);
     if (!panel || currentMode === 'off') return;
     const inf = extractPanelInfo(panel);
     if (!inf.t) return;
-    const activeLang = resolveActiveLang();
-    const sig = sigFromBody(inf.k, currentMode, activeLang);
-    failedSigs.delete(sig);
+    const activeLang = resolveActiveLang(), sig = sigFromBody(inf.k, currentMode, activeLang);
     clearTriggerStatusBadge(panel);
     memCache.delete(`${withLangSuffix('mt', activeLang)}${inf.k}`);
     memCache.delete(`${withLangSuffix(activeStyleTag || 'ai_technical', activeLang)}${inf.k}`);
-    const pm = panelMeta.get(panel);
-    if (pm && pm.skippedSig) {
-      delete pm.skippedSig;
-      panelMeta.set(panel, pm);
-    }
-    persistLocalStorageCache();
-
-    const existing = inflightBySig.get(sig);
-    if (existing) {
-      cancelTranslateRequest(existing);
-      inflightBySig.delete(sig);
-    }
-    startOrJoinTranslation(panel, inf.t, currentMode, sig, `sig${inf.k}`, true, {
-      force: true,
-      bypassCache: true,
-      priority: 30000,
-    });
+    resetPanelRetryState(panel, sig); persistLocalStorageCache();
+    startOrJoinTranslation(panel, inf.t, currentMode, sig, `sig${inf.k}`, true, { force: true, bypassCache: true, priority: 30000 });
   }
 
   function ensureOverlayShell(panel) {
     const doc = docOf(panel);
     let ov = findDirectOverlay(panel);
     if (ov) return ov;
-
-    const t = getClientPack();
+    const t = getClientPack(), setAttrs = (el, pairs) => { for (const [k, v] of pairs) sa(el, k, v); };
     ov = markNoTr(ce(doc, 'div', C_OV));
-    sa(ov, 'data-op-thought', '1');
-    sa(ov, 'data-prism-ignore', '1');
-    sa(ov, 'data-ag-no-i18n', '');
-
+    setAttrs(ov, [['data-op-thought', '1'], ['data-prism-ignore', '1'], ['data-ag-no-i18n', '']]);
     const body = markNoTr(ce(doc, 'span', C_BD));
-    sa(body, 'data-ag-no-i18n', '');
-    ap(ov, body);
-
+    sa(body, 'data-ag-no-i18n', ''); ap(ov, body);
     const fb = markNoTr(ce(doc, 'span', C_FB));
-    sa(fb, 'data-testid', 'thought-fallback-badge');
-    fb.hidden = true;
-    stc(fb, t[2]);
-    fb.title = t[3];
-    if (fb[K_ST]) fb[K_ST].display = 'none';
-    ap(ov, fb);
-
+    sa(fb, 'data-testid', 'thought-fallback-badge'); fb.hidden = true; stc(fb, t[2]); fb.title = t[3];
+    if (fb[K_ST]) fb[K_ST].display = 'none'; ap(ov, fb);
     const trc = markNoTr(ce(doc, 'span', C_TRC));
-    sa(trc, 'data-testid', 'thought-truncated-badge');
-    sa(trc, 'data-op-thought', '1');
-    sa(trc, 'data-prism-ignore', '1');
-    sa(trc, 'data-ag-no-i18n', '');
+    setAttrs(trc, [['data-testid', 'thought-truncated-badge'], ['data-op-thought', '1'], ['data-prism-ignore', '1'], ['data-ag-no-i18n', '']]);
     trc.hidden = true;
-    if (trc[K_ST]) {
-      trc[K_ST].display = 'none';
-      trc[K_ST].marginLeft = '6px';
-      trc[K_ST].padding = '1px 7px';
-      trc[K_ST].borderRadius = '999px';
-      trc[K_ST].fontSize = '10.5px';
-      trc[K_ST].lineHeight = '16px';
-      trc[K_ST].border = '1px solid var(--ag-cs-border-1,rgba(128,128,128,.28))';
-      trc[K_ST].background = 'var(--ag-cs-pill-bg,rgba(128,128,128,.1))';
-      trc[K_ST].color = 'var(--muted-foreground)';
-    }
+    if (trc[K_ST]) Object.assign(trc[K_ST], {
+      display: 'none', marginLeft: '6px', padding: '1px 7px', borderRadius: '999px', fontSize: '10.5px', lineHeight: '16px',
+      border: '1px solid var(--ag-cs-border-1,rgba(128,128,128,.28))', background: 'var(--ag-cs-pill-bg,rgba(128,128,128,.1))', color: 'var(--muted-foreground)',
+    });
     ap(ov, trc);
-
     const rb = markNoTr(ce(doc, 'button', C_RB));
-    rb.type = 'button';
-    sa(rb, 'data-no-press-spring', '1');
-    sa(rb, 'data-testid', 'thought-retranslate-btn');
-    rb.hidden = true;
-    stc(rb, '↻');
-    rb.title = t[4];
-    sa(rb, 'aria-label', t[4]);
+    rb.type = 'button'; rb.hidden = true; stc(rb, '↻'); rb.title = t[4];
+    setAttrs(rb, [['data-no-press-spring', '1'], ['data-testid', 'thought-retranslate-btn'], ['aria-label', t[4]]]);
     if (rb[K_ST]) rb[K_ST].display = 'none';
-    onClk(rb, (ev) => {
-      stopEv(ev);
-      triggerSingleBlockRetranslate(panel);
-    });
-    ap(ov, rb);
-
-    const tb = markNoTr(ce(doc, 'button', C_TB));
-    tb.type = 'button';
-    sa(tb, 'data-no-press-spring', '1');
-    const showingRaw = ga(panel, A_SRW) === '1';
-    sa(tb, 'aria-pressed', String(showingRaw));
+    onClk(rb, (ev) => { stopEv(ev); triggerSingleBlockRetranslate(panel); }); ap(ov, rb);
+    const tb = markNoTr(ce(doc, 'button', C_TB)), showingRaw = ga(panel, A_SRW) === '1';
+    tb.type = 'button'; setAttrs(tb, [['data-no-press-spring', '1'], ['aria-pressed', String(showingRaw)]]);
     stc(tb, showingRaw ? t[1] : t[0]);
-    onClk(tb, (ev) => {
-      stopEv(ev);
-      sa(panel, A_MRW, ga(panel, A_SRW) === '1' ? '0' : '1');
-      applyPanelViewMode(panel);
-    });
-    ap(ov, tb);
-
-    sa(panel, A_PNL, '1');
-    panel.insertBefore(ov, panel[K_FC]);
+    onClk(tb, (ev) => { stopEv(ev); sa(panel, A_MRW, ga(panel, A_SRW) === '1' ? '0' : '1'); applyPanelViewMode(panel); });
+    ap(ov, tb); sa(panel, A_PNL, '1'); panel.insertBefore(ov, panel[K_FC]);
     return ov;
   }
 
   function syncOverlayBadges(ov, panel, isFallback, isReady, truncInfo = null) {
     if (!ov) return;
-    const t = getClientPack();
-    const fb = findChildByClass(ov, C_FB);
-    if (fb) {
-      fb.hidden = !isFallback;
-      if (fb[K_ST]) fb[K_ST].display = isFallback ? '' : 'none';
-      stc(fb, t[2]);
-      fb.title = t[3];
-    }
-    const trc = findChildByClass(ov, C_TRC);
+    const t = getClientPack(), fb = findChildByClass(ov, C_FB), trc = findChildByClass(ov, C_TRC), rb = findChildByClass(ov, C_RB);
+    if (fb) { fb.hidden = !isFallback; if (fb[K_ST]) fb[K_ST].display = isFallback ? '' : 'none'; stc(fb, t[2]); fb.title = t[3]; }
     if (trc) {
       const showTrc = Boolean(isReady && truncInfo && truncInfo.truncated);
-      trc.hidden = !showTrc;
-      if (trc[K_ST]) trc[K_ST].display = showTrc ? 'inline-flex' : 'none';
+      trc.hidden = !showTrc; if (trc[K_ST]) trc[K_ST].display = showTrc ? 'inline-flex' : 'none';
       if (showTrc) {
         const sK = Math.max(1, Math.round((truncInfo.sentChars || SAFE_TRUNCATE_BUDGET) / 1000));
         const tK = Math.max(sK, Math.round((truncInfo.totalChars || sK * 1000) / 1000));
-        sa(trc, 'data-sent-k', String(sK));
-        sa(trc, 'data-total-k', String(tK));
+        sa(trc, 'data-sent-k', String(sK)); sa(trc, 'data-total-k', String(tK));
         const msg = (t[22] || '').replace('{0}', String(sK)).replace('{1}', String(tK));
-        stc(trc, msg);
-        trc.title = msg;
+        stc(trc, msg); trc.title = msg;
       }
     }
-    if (panel) {
-      if (isFallback) sa(panel, A_FBK, '1');
-      else ra(panel, A_FBK);
-    }
-    const rb = findChildByClass(ov, C_RB);
-    if (rb) {
-      rb.hidden = !isReady;
-      if (rb[K_ST]) rb[K_ST].display = isReady ? '' : 'none';
-      rb.disabled = false;
-      rb.title = t[4];
-      sa(rb, 'aria-label', t[4]);
-    }
+    if (panel) { if (isFallback) sa(panel, A_FBK, '1'); else ra(panel, A_FBK); }
+    if (rb) { rb.hidden = !isReady; if (rb[K_ST]) rb[K_ST].display = isReady ? '' : 'none'; rb.disabled = false; rb.title = t[4]; sa(rb, 'aria-label', t[4]); }
   }
 
   function renderPendingState(panel, message, pendingKind = '') {
@@ -2869,333 +2698,352 @@ trackedWaitPanels.delete(panel);
             entry.tg = finalZh;
             entry.dn = true;
             entry.fn = { z: finalZh, s: sig, e: eng, tr: finalTrunc };
-            ensurePacerLoop();
-            return;
-          }
-          cancelFlushHandle(entry);
-          commitFinalPayloadToPanels({ z: finalZh, s: sig, e: eng, tr: finalTrunc });
-        } else {
-          failEntry(res);
-        }
-      })
-      .catch(failEntry);
-  }
-
-  function isHiddenByAncestor(btn, panel) {
-    return Boolean((btn && typeof btn[K_CV] === 'function' && !btn[K_CV]()) || (panel && typeof panel[K_CV] === 'function' && !panel[K_CV]()));
-  }
-
-  const getDomBus = () => W.__agDomBus || W.__agPrismDomBus || null;
-  let offVis = new WeakSet();
-  const offUnsubs = [], clrVis = () => { while (offUnsubs.length) try { offUnsubs.pop()(); } catch {} offVis = new WeakSet(); };
-  const watchOff = (el) => { const b = getDomBus(); if (el && b?.observeVisibility && !offVis.has(el)) { offVis.add(el); offUnsubs.push(b.observeVisibility(el, (st) => { if (st.visible && currentMode !== 'off') scheduleScan(20); })); } };
-  function readViewportDims() {
-    const r = docRoot();
-    return { vh: W.innerHeight || (r && r.clientHeight) || 0, vw: W.innerWidth || (r && r.clientWidth) || 1440 };
-  }
-  function probeViewportBand(el, vp) {
-    if (getDomBus()?.isSkipped?.(el)) return 0;
-    if (!el || typeof el.getBoundingClientRect !== 'function') return 2;
-    try {
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return typeof el[K_CV] === 'function' ? 0 : 2;
-      const d = vp || readViewportDims(), vh = d.vh, vw = d.vw;
-      if (vh <= 0 || rect.height <= 0) return 2;
-      if (rect.right < 0 || rect.left > vw) return 0;
-      if (rect.bottom >= -120 && rect.top <= vh + 120) return 2;
-      if (rect.bottom >= -800 && rect.top <= vh + 800) return 1;
-      return 0;
-    } catch (_) { return 2; }
-  }
-
-  function enqueueHydrate(panel, cached, sig, engine) {
-    if (!panel || hydrateQueue.some((x) => x.p === panel)) return;
-    hydrateQueue.push({ p: panel, z: cached, s: sig, e: engine });
-    if (hydrateHandle) return;
-    const step = () => {
-      hydrateHandle = null;
-      if (currentMode === 'off') return clearHydrateQueue();
-      // 两阶段读写分离：先批量读取可见性/视口位置，再统一写入 DOM，消除多帧 Layout Thrashing
-      const ready = [];
-      while (hydrateQueue.length && ready.length < 3) {
-        const it = hydrateQueue.shift();
-        if (isConn(it.p) && isPanelCurrentlyExpanded(it.p) && !isHiddenByAncestor(null, it.p) && probeViewportBand(it.p) > 0) {
-          ready.push(it);
-        }
-      }
-      for (let i = 0; i < ready.length; i++) {
-        const it = ready[i];
-        renderTranslatedText(it.p, it.z, false, it.s, it.e);
-      }
-      if (hydrateQueue.length) (hydrateHandle = setTimeout(step, 16))?.unref?.();
-    };
-    (hydrateHandle = setTimeout(step, 16))?.unref?.();
-  }
-
-  function processSingleTrigger(btn, allowPreloadCollapsed, priority = 0) {
-    if (!btn) return;
-    const expanded = ga(btn, A_EXP) === 'true';
-    if (!expanded && !allowPreloadCollapsed) return;
-
-    const panel = nextSib(btn);
-    if (!panel || String(panel.tagName || '').toUpperCase() !== 'DIV') return;
-
-    const streaming = isTriggerStreaming(btn);
-    if (streaming) {
-      const now = nowMs();
-      const prevMeta = panelMeta.get(panel);
-      const alreadyStreamingPending = Boolean(prevMeta && prevMeta.s && ga(panel, A_PND) === '1');
-      const meta = prevMeta || { h: '', c: now, s: true, m: true, f: 0, ds: '', ps: '', rs: '' };
-      meta.s = true;
-      meta.m = true;
-      meta.f = 0;
-      meta.c = now;
-      panelMeta.set(panel, meta);
-      clearPanelWaitTimer(panel);
-      trackStreamingTrigger(btn, panel);
-      if (alreadyStreamingPending) return;
-      if (expanded && !isHiddenByAncestor(btn, panel)) renderPendingState(panel, getClientPack()[9], 'streaming');
-      return;
-    }
-    untrackStreamingTrigger(btn);
-
-    if (expanded && ga(panel, A_RDY) === '1') {
-      const em = panelMeta.get(panel);
-      if (em && em.rs === quickPanelStamp(panel) && em.ds && em.ds === ga(panel, A_SIG)) return;
-    }
-
-    const hiddenAnc = isHiddenByAncestor(btn, panel);
-    if (hiddenAnc && !allowPreloadCollapsed) return;
-    const visExpanded = expanded && !hiddenAnc;
-
-    const inf = extractPanelInfo(panel);
-    if (!inf.t || inf.z) {
-      const prevMeta = panelMeta.get(panel);
-      // 防止 React 重绘期间短暂空文本把正在收束的思考块静默清掉并污染缓存签名
-      if (!inf.t && prevMeta && prevMeta.h && prevMeta.m && nowMs() - prevMeta.c < 2500) {
-        scheduleScan(180);
-        return;
-      }
-      if (ga(panel, A_PND) === '1') clearPendingKeepRaw(panel);
-      if (ga(panel, A_RDY) === '1' || findDirectOverlay(panel)) {
-        cleanOverlayKeepRaw(panel);
-      }
-      const m0 = prevMeta || {};
-      m0.ps = sigFromBody(inf.k, currentMode);
-      m0.rs = inf.s;
-      delete m0.skippedSig;
-      panelMeta.set(panel, m0);
-      return;
-    }
-
-    const srcSkelHash = `sig${inf.k}`;
-    const sig = sigFromBody(inf.k, currentMode);
-
-    if (visExpanded && ga(panel, A_RDY) === '1' && ga(panel, A_SIG) === sig) {
-      const meta = panelMeta.get(panel) || {};
-      meta.ds = sig;
-      meta.rs = inf.s;
-      delete meta.skippedSig;
-      panelMeta.set(panel, meta);
-      return;
-    }
-
-    const curMeta = panelMeta.get(panel);
-    if (curMeta && curMeta.skippedSig === sig && curMeta.rs === inf.s) {
-      return;
-    }
-
-    const now = nowMs();
-    let meta = panelMeta.get(panel);
-    if (!meta) {
-      meta = { h: srcSkelHash, c: now, s: false, m: false, f: now - FINISH_GATE_MS, ds: '', ps: '', rs: '' };
-    } else if (meta.h !== srcSkelHash) {
-      meta.h = srcSkelHash;
-      meta.c = now;
-      meta.m = true;
-    }
-
-    if (meta.s && !meta.f) {
-      meta.s = false;
-      meta.f = now;
-    } else if (!meta.f) {
-      meta.f = now - FINISH_GATE_MS;
-    }
-    panelMeta.set(panel, meta);
-
-    const cached = findCachedByBody(inf.k, currentMode);
-    if (cached) {
-      clearPanelWaitTimer(panel);
-      const eng = currentMode === 'machine' ? 'machine' : 'ai';
-      const sendPlan = sliceThoughtForSafeSend(inf.t);
-      const truncInfo = sendPlan.truncated ? sendPlan : null;
-      if (visExpanded) {
-        if (syncHydrateBudget > 0) {
-          syncHydrateBudget--;
-          renderTranslatedText(panel, cached, false, sig, eng, { truncInfo });
-        } else {
-          enqueueHydrate(panel, cached, sig, eng);
-        }
-      } else {
-        clearTriggerStatusBadge(panel);
-        meta.ps = sig;
-        meta.rs = inf.s;
-        panelMeta.set(panel, meta);
-      }
-      return;
-    }
-
-    const activeFlight = inflightBySig.get(sig);
-    if (activeFlight && !activeFlight.x && now - activeFlight.at <= INFLIGHT_TTL_MS) {
-      bindPanelToInflight(activeFlight, panel, visExpanded);
-      return;
-    }
-
-    if (isSigInCooldown(sig)) {
-      const failMeta = getSigFailureMeta(sig);
-      if (visExpanded && ga(panel, A_FLD) !== '1') {
-        renderFailedState(panel, inf.t, currentMode, sig, failMeta ? { reason: failMeta.r, detail: failMeta.d } : null);
-      } else if (failMeta) {
-        syncTriggerStatusBadge(panel, failMeta.r, failMeta.d, sig, inf.t, currentMode);
-      }
-      return;
-    }
-
-    const waitMs = meta.m ? Math.max(0, FINISH_GATE_MS - (now - meta.f), QUIET_GATE_MS - (now - meta.c)) : 0;
-    if (waitMs > 0) {
-      if (visExpanded) renderPendingState(panel, getClientPack()[10], 'settling');
-      const startedExpanded = expanded;
-      const runWaitCallback = (graceAttempt) => {
-        if (currentMode === 'off') return;
-        if (!isConn(btn)) {
-          // React 可能在静默等待窗口内重建了触发按钮节点，主动补扫而非静默放弃
-          scheduleScan(75);
-          return;
-        }
-        const liveExpanded = ga(btn, A_EXP) === 'true' || isPanelCurrentlyExpanded(panel);
-        let liveAllowPreload = false;
-        if (!liveExpanded && triggerTiming === 'preload') {
-          const allBtns = queryTriggers();
-          liveAllowPreload = Boolean(allBtns.length > 0 && allBtns[allBtns.length - 1] === btn);
-        }
-        if (!liveExpanded && !liveAllowPreload) {
-          // 展开态若在 QUIET_GATE 期间短暂抖动为未展开，给 1 次短宽限复核，避免误清 pending 静默丢翻
-          if (startedExpanded && graceAttempt === 0 && isConn(panel)) {
-            setPanelWaitTimer(panel, btn, () => runWaitCallback(1), 160);
-            return;
-          }
-          return clearPendingKeepRaw(panel);
-        }
-        processSingleTrigger(btn, liveAllowPreload, priority);
-      };
-      setPanelWaitTimer(panel, btn, () => runWaitCallback(0), waitMs + 25);
-      return;
-    }
-
-    startOrJoinTranslation(panel, inf.t, currentMode, sig, srcSkelHash, visExpanded, { priority });
-  }
-
-  function pruneUnneededPendingRequests(activePanelSet) {
-    for (const [sig, entry] of inflightBySig.entries()) {
-      if (entry.lp || entry.x) continue;
-      if (!entry.ps.some((p) => isConn(p) && activePanelSet.has(p))) {
-        cancelTranslateRequest(entry);
-        inflightBySig.delete(sig);
-      }
-    }
-  }
-
-  const TOOL_SKIP_TAGS = new Set('SCRIPT,STYLE,SVG,NOSCRIPT,PRE,CODE,A,INPUT,TEXTAREA,SELECT'.split(','));
-
-  function isExcludedToolAncestor(el, thoughtPanelSet) {
-    if (!el || el.nodeType !== 1) return true;
-    if (thoughtPanelSet && thoughtPanelSet.has(el)) return true;
-    if (isOverlayOrIgnoredElement(el) || W.__agPrismToolStepVerbs?.isProseBoundaryEl?.(el)) return true;
-    const tag = el.tagName ? String(el.tagName).toUpperCase() : '';
-    if (TOOL_SKIP_TAGS.has(tag)) return true;
-    const tid = ga(el, 'data-testid') || '';
-    if (tid === 'thinking-collapsible-trigger' || tid === 'prism-thought-ai-config' || tid === 'prism-thought-general-config') return true;
-    if (hasAttr(el, 'data-file-href') || hasAttr(el, 'data-file-path') || hasAttr(el, 'data-omni-path')) return true;
-    return false;
-  }
-
-  function wrapWithRawWhitespace(rawStr, translatedStr) {
-    const raw = String(rawStr || '');
-    const trimmedStart = raw.trimStart();
-    if (!trimmedStart) return raw;
-    const lead = raw.slice(0, raw.length - trimmedStart.length);
-    const trail = raw.slice(raw.trimEnd().length);
-    return `${lead}${translatedStr}${trail}`;
-  }
-
-  function collectToolSummaryTextNodes(rootNode, outList, visitedNodes, thoughtPanelSet, counts) {
-    const c = counts || { ai: 0, st: 0 };
-    if (!rootNode || (c.ai >= 24 && c.st >= 200)) return;
-    const nt = rootNode.nodeType;
-    if (nt === 3) {
-      if (visitedNodes.has(rootNode)) return;
-      visitedNodes.add(rootNode);
-      const val = getTnStr(rootNode);
-      const activeLang = resolveActiveLang();
-      const prevRec = toolSummaryNodeMap.get(rootNode);
-      if (prevRec && prevRec.trans === val && prevRec.lang === activeLang && prevRec.mode === currentMode) return;
-      if (val.length > 1024) return;
-      const trimmed = trm(val);
-      if (!trimmed) return;
-      const staticTr = W.__agPrismToolStepVerbs?.lookupStaticToolVerb?.(trimmed, activeLang) || null;
-      if (staticTr) {
-        if (c.st < 200) { c.st += 1; outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed, staticTr }); }
-        return;
-      }
-      if (c.ai >= 24 || trimmed.length < 4 || trimmed.length > 280 || !isToolSummaryCandidate(trimmed, activeLang)) return;
-      c.ai += 1;
-      outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed });
-      return;
-    }
-    if (nt !== 1 || isExcludedToolAncestor(rootNode, thoughtPanelSet)) return;
-    const chs = rootNode[K_CN];
-    if (!chs || !chs.length) return;
-    for (let i = 0; i < chs.length && (c.ai < 24 || c.st < 200); i++) collectToolSummaryTextNodes(chs[i], outList, visitedNodes, thoughtPanelSet, c);
-  }
-
-  function applyToolSummaryText(item, translatedStr, activeLang, mode) {
-    if (!item || !item.tn || !isConn(item.tn) || !translatedStr) return;
-    const curVal = getTnStr(item.tn);
-    if (curVal !== item.raw) return;
-    const nextVal = wrapWithRawWhitespace(item.raw, translatedStr);
-    if (nextVal === item.raw) return;
-
-    const oldRec = toolSummaryNodeMap.get(item.tn);
-    const orig = oldRec && item.raw === oldRec.trans ? oldRec.orig : item.raw;
-    if (oldRec) toolSummaryRecords.delete(oldRec);
-
-    setTn(item.tn, nextVal);
-    if (item.el) sa(item.el, 'data-op-tool-tr', '1');
-    const rec = { tn: item.tn, el: item.el, orig, trans: nextVal, lang: activeLang, mode };
-    toolSummaryNodeMap.set(item.tn, rec);
-    toolSummaryRecords.add(rec);
-  }
-
-  function markToolSummaryFailed(key, until) {
-    if (toolSummaryFailedUntil.has(key)) toolSummaryFailedUntil.delete(key);
-    toolSummaryFailedUntil.set(key, until);
-    while (toolSummaryFailedUntil.size > 512) {
-      const oldest = toolSummaryFailedUntil.keys().next().value;
-      if (oldest === undefined) break;
-      toolSummaryFailedUntil.delete(oldest);
-    }
-  }
-
-  function pruneDetachedToolSummaryRecords() {
-    if (!toolSummaryRecords.size) return;
-    for (const rec of Array.from(toolSummaryRecords)) {
-      if (!rec || !rec.tn || !isConn(rec.tn)) {
-        if (rec && rec.tn) toolSummaryNodeMap.delete(rec.tn);
-        toolSummaryRecords.delete(rec);
-      }
-    }
-  }
-
+ ensurePacerLoop();
+ return;
+ }
+ cancelFlushHandle(entry);
+ commitFinalPayloadToPanels({ z: finalZh, s: sig, e: eng, tr: finalTrunc });
+ } else {
+ failEntry(res);
+ }
+ })
+ .catch(failEntry);
+ }
+ function isHiddenByAncestor(btn, panel) {
+ return Boolean((btn && typeof btn[K_CV] === 'function' && !btn[K_CV]()) || (panel && typeof panel[K_CV] === 'function' && !panel[K_CV]()));
+ }
+ const getDomBus = () => W.__agDomBus || W.__agPrismDomBus || null;
+ const hasVisIo = () => Boolean(getDomBus()?.observeVisibility || typeof W.IntersectionObserver === 'function');
+ let offVis = new WeakMap(), ioVis = new WeakMap(), offIo = null, ioFlushT = null;
+ const offUnsubs = new Map(), ioPP = new Set(), ioPT = new Set(), ioPC = new Set();
+ const clrVis = () => {
+ if (ioFlushT) { clearTimeout(ioFlushT); ioFlushT = null; }
+ for (const u of offUnsubs.values()) try { u(); } catch {}
+ offUnsubs.clear();
+ if (offIo) { try { offIo.disconnect(); } catch {} offIo = null; }
+ offVis = new WeakMap(); ioVis = new WeakMap(); ioPP.clear(); ioPT.clear(); ioPC.clear(); hasOffscreenTools = false;
+ };
+ const flushIoRev = () => {
+ ioFlushT = null;
+ if (currentMode === 'off') { ioPP.clear(); ioPT.clear(); ioPC.clear(); return; }
+ if (ioPP.size) {
+ const ps = Array.from(ioPP); ioPP.clear(); syncHydrateBudget = 1;
+ try { for (let i = 0; i < ps.length; i++) if (isConn(ps[i])) processSingleTrigger(ps[i], false, 20000 + i); } finally { syncHydrateBudget = 99; }
+ }
+ if (ioPT.size) {
+ const ts = Array.from(ioPT).filter(isConn); ioPT.clear();
+ if (ts.length && translateToolSummaries) {
+ const tps = new Set(), cs = [];
+ for (let i = 0; i < ts.length; i++) {
+ const c = ts[i], bs = c.querySelectorAll?.(SEL_TRIGGER);
+ if (bs) for (let j = 0; j < bs.length; j++) { const tp = nextSib(bs[j]); if (tp) tps.add(tp); }
+ cs.push(ga(c, 'data-testid') === 'tool-call-row' || ga(c, 'data-ag-tool-row') === '1' ? { __rows: [c] } : c);
+ }
+ scanToolSummaryContainers({ containers: cs, thoughtPanelSet: tps });
+ }
+ }
+ if (ioPC.size) { ioPC.clear(); if (translateTitles) scanConversationTitles(); }
+ };
+ const onIoVis = (el) => {
+ ioVis.set(el, true);
+ const u = offUnsubs.get(el); if (u) { try { u(); } catch {} offUnsubs.delete(el); }
+ const rec = offVis.get(el); offVis.delete(el);
+ if (!rec || currentMode === 'off') return;
+ if (rec.k === 'p') ioPP.add(rec.b || el); else if (rec.k === 't') ioPT.add(el); else ioPC.add(el);
+ if (!ioFlushT) { ioFlushT = setTimeout(flushIoRev, 20); ioFlushT?.unref?.(); }
+ };
+ const watchOff = (el, k = 'p', btn = null) => {
+ if (!el) return;
+ if (hasVisIo()) ioVis.set(el, false);
+ if (offVis.has(el)) return;
+ const b = getDomBus();
+ if (b?.observeVisibility) {
+ offVis.set(el, { k, b: btn });
+ offUnsubs.set(el, b.observeVisibility(el, (st) => { if (st?.visible) onIoVis(el); else ioVis.set(el, false); }, { rootMargin: '800px 0px' }));
+ } else if (typeof W.IntersectionObserver === 'function') {
+ if (!offIo) offIo = new W.IntersectionObserver((es) => { for (let i = 0; es && i < es.length; i++) { const en = es[i], t = en?.target; if (t) { if (en.isIntersecting) onIoVis(t); else ioVis.set(t, false); } } }, { rootMargin: '800px 0px' });
+ offVis.set(el, { k, b: btn }); offUnsubs.set(el, () => { try { offIo?.unobserve?.(el); } catch {} });
+ try { offIo.observe(el); } catch {}
+ }
+ };
+ function readViewportDims() { const r = docRoot(); return { vh: W.innerHeight || (r && r.clientHeight) || 0, vw: W.innerWidth || (r && r.clientWidth) || 1440 }; }
+ function probeViewportBand(el, vp) {
+ if (getDomBus()?.isSkipped?.(el)) return 0;
+ const iv = el ? ioVis.get(el) : undefined;
+ if (iv !== undefined) return iv ? 2 : 0;
+ if (!el || typeof el.getBoundingClientRect !== 'function') return 2;
+ try {
+ const rect = el.getBoundingClientRect();
+ if (rect.width === 0 && rect.height === 0) return typeof el[K_CV] === 'function' ? 0 : 2;
+ const d = vp || readViewportDims(), vh = d.vh, vw = d.vw;
+ if (vh <= 0 || rect.height <= 0) return 2;
+ if (rect.right < 0 || rect.left > vw) return 0;
+ if (rect.bottom >= -120 && rect.top <= vh + 120) return 2;
+ if (rect.bottom >= -800 && rect.top <= vh + 800) return 1;
+ return 0;
+ } catch (_) { return 2; }
+ }
+ function enqueueHydrate(panel, cached, sig, engine) {
+ if (!panel || hydrateQueue.some((x) => x.p === panel)) return;
+ hydrateQueue.push({ p: panel, z: cached, s: sig, e: engine });
+ if (hydrateHandle) return;
+ const step = () => {
+ hydrateHandle = null;
+ if (currentMode === 'off') return clearHydrateQueue();
+ // 两阶段读写分离：先批量读取可见性/视口位置，再统一写入 DOM，消除多帧 Layout Thrashing
+ const ready = [];
+ while (hydrateQueue.length && ready.length < 3) {
+ const it = hydrateQueue.shift();
+ if (isConn(it.p) && isPanelCurrentlyExpanded(it.p) && !isHiddenByAncestor(null, it.p) && probeViewportBand(it.p) > 0) {
+ ready.push(it);
+ }
+ }
+ for (let i = 0; i < ready.length; i++) {
+ const it = ready[i];
+ renderTranslatedText(it.p, it.z, false, it.s, it.e);
+ }
+ if (hydrateQueue.length) (hydrateHandle = setTimeout(step, 16))?.unref?.();
+ };
+ (hydrateHandle = setTimeout(step, 16))?.unref?.();
+ }
+ function processSingleTrigger(btn, allowPreloadCollapsed, priority = 0) {
+ if (!btn) return;
+ const expanded = ga(btn, A_EXP) === 'true';
+ if (!expanded && !allowPreloadCollapsed) return;
+ const panel = nextSib(btn);
+ if (!panel || String(panel.tagName || '').toUpperCase() !== 'DIV') return;
+ const streaming = isTriggerStreaming(btn);
+ if (streaming) {
+ const now = nowMs();
+ const prevMeta = panelMeta.get(panel);
+ const alreadyStreamingPending = Boolean(prevMeta && prevMeta.s && ga(panel, A_PND) === '1');
+ const meta = prevMeta || { h: '', c: now, s: true, m: true, f: 0, ds: '', ps: '', rs: '' };
+ meta.s = true;
+ meta.m = true;
+ meta.f = 0;
+ meta.c = now;
+ panelMeta.set(panel, meta);
+ clearPanelWaitTimer(panel);
+ trackStreamingTrigger(btn, panel);
+ if (alreadyStreamingPending) return;
+ if (expanded && !isHiddenByAncestor(btn, panel)) renderPendingState(panel, getClientPack()[9], 'streaming');
+ return;
+ }
+ untrackStreamingTrigger(btn);
+ if (expanded && ga(panel, A_RDY) === '1') {
+ const em = panelMeta.get(panel);
+ if (em && em.rs === quickPanelStamp(panel) && em.ds && em.ds === ga(panel, A_SIG)) return;
+ }
+ const hiddenAnc = isHiddenByAncestor(btn, panel);
+ if (hiddenAnc && !allowPreloadCollapsed) return;
+ const visExpanded = expanded && !hiddenAnc;
+ const inf = extractPanelInfo(panel);
+ if (!inf.t || inf.z) {
+ const prevMeta = panelMeta.get(panel);
+ // 防止 React 重绘期间短暂空文本把正在收束的思考块静默清掉并污染缓存签名
+ if (!inf.t && prevMeta && prevMeta.h && prevMeta.m && nowMs() - prevMeta.c < 2500) {
+ scheduleScan(180);
+ return;
+ }
+ if (ga(panel, A_PND) === '1') clearPendingKeepRaw(panel);
+ if (ga(panel, A_RDY) === '1' || findDirectOverlay(panel)) {
+ cleanOverlayKeepRaw(panel);
+ }
+ const m0 = prevMeta || {};
+ m0.ps = sigFromBody(inf.k, currentMode);
+ m0.rs = inf.s;
+ delete m0.skippedSig;
+ panelMeta.set(panel, m0);
+ return;
+ }
+ const srcSkelHash = `sig${inf.k}`;
+ const sig = sigFromBody(inf.k, currentMode);
+ if (visExpanded && ga(panel, A_RDY) === '1' && ga(panel, A_SIG) === sig) {
+ const meta = panelMeta.get(panel) || {};
+ meta.ds = sig;
+ meta.rs = inf.s;
+ delete meta.skippedSig;
+ panelMeta.set(panel, meta);
+ return;
+ }
+ const curMeta = panelMeta.get(panel);
+ if (curMeta && curMeta.skippedSig === sig && curMeta.rs === inf.s) {
+ return;
+ }
+ const now = nowMs();
+ let meta = panelMeta.get(panel);
+ if (!meta) {
+ meta = { h: srcSkelHash, c: now, s: false, m: false, f: now - FINISH_GATE_MS, ds: '', ps: '', rs: '' };
+ } else if (meta.h !== srcSkelHash) {
+ meta.h = srcSkelHash;
+ meta.c = now;
+ meta.m = true;
+ }
+ if (meta.s && !meta.f) {
+ meta.s = false;
+ meta.f = now;
+ } else if (!meta.f) {
+ meta.f = now - FINISH_GATE_MS;
+ }
+ panelMeta.set(panel, meta);
+ const cached = findCachedByBody(inf.k, currentMode);
+ if (cached) {
+ clearPanelWaitTimer(panel);
+ const eng = currentMode === 'machine' ? 'machine' : 'ai';
+ const sendPlan = sliceThoughtForSafeSend(inf.t);
+ const truncInfo = sendPlan.truncated ? sendPlan : null;
+ if (visExpanded) {
+ if (syncHydrateBudget > 0) {
+ syncHydrateBudget--;
+ renderTranslatedText(panel, cached, false, sig, eng, { truncInfo });
+ } else {
+ enqueueHydrate(panel, cached, sig, eng);
+ }
+ } else {
+ clearTriggerStatusBadge(panel);
+ meta.ps = sig;
+ meta.rs = inf.s;
+ panelMeta.set(panel, meta);
+ }
+ return;
+ }
+ const activeFlight = inflightBySig.get(sig);
+ if (activeFlight && !activeFlight.x && now - activeFlight.at <= INFLIGHT_TTL_MS) {
+ bindPanelToInflight(activeFlight, panel, visExpanded);
+ return;
+ }
+ if (isSigInCooldown(sig)) {
+ const failMeta = getSigFailureMeta(sig);
+ if (visExpanded && ga(panel, A_FLD) !== '1') {
+ renderFailedState(panel, inf.t, currentMode, sig, failMeta ? { reason: failMeta.r, detail: failMeta.d } : null);
+ } else if (failMeta) {
+ syncTriggerStatusBadge(panel, failMeta.r, failMeta.d, sig, inf.t, currentMode);
+ }
+ return;
+ }
+ const waitMs = meta.m ? Math.max(0, FINISH_GATE_MS - (now - meta.f), QUIET_GATE_MS - (now - meta.c)) : 0;
+ if (waitMs > 0) {
+ if (visExpanded) renderPendingState(panel, getClientPack()[10], 'settling');
+ const startedExpanded = expanded;
+ const runWaitCallback = (graceAttempt) => {
+ if (currentMode === 'off') return;
+ if (!isConn(btn)) {
+ // React 可能在静默等待窗口内重建了触发按钮节点，主动补扫而非静默放弃
+ scheduleScan(75);
+ return;
+ }
+ const liveExpanded = ga(btn, A_EXP) === 'true' || isPanelCurrentlyExpanded(panel);
+ let liveAllowPreload = false;
+ if (!liveExpanded && triggerTiming === 'preload') {
+ const allBtns = queryTriggers();
+ liveAllowPreload = Boolean(allBtns.length > 0 && allBtns[allBtns.length - 1] === btn);
+ }
+ if (!liveExpanded && !liveAllowPreload) {
+ // 展开态若在 QUIET_GATE 期间短暂抖动为未展开，给 1 次短宽限复核，避免误清 pending 静默丢翻
+ if (startedExpanded && graceAttempt === 0 && isConn(panel)) {
+ setPanelWaitTimer(panel, btn, () => runWaitCallback(1), 160);
+ return;
+ }
+ return clearPendingKeepRaw(panel);
+ }
+ processSingleTrigger(btn, liveAllowPreload, priority);
+ };
+ setPanelWaitTimer(panel, btn, () => runWaitCallback(0), waitMs + 25);
+ return;
+ }
+ startOrJoinTranslation(panel, inf.t, currentMode, sig, srcSkelHash, visExpanded, { priority });
+ }
+ function pruneUnneededPendingRequests(activePanelSet) {
+ for (const [sig, entry] of inflightBySig.entries()) {
+ if (entry.lp || entry.x) continue;
+ if (!entry.ps.some((p) => isConn(p) && activePanelSet.has(p))) {
+ cancelTranslateRequest(entry);
+ inflightBySig.delete(sig);
+ }
+ }
+ }
+ const TOOL_SKIP_TAGS = new Set('SCRIPT,STYLE,SVG,NOSCRIPT,PRE,CODE,A,INPUT,TEXTAREA,SELECT'.split(','));
+ function isExcludedToolAncestor(el, thoughtPanelSet) {
+ if (!el || el.nodeType !== 1) return true;
+ if (thoughtPanelSet && thoughtPanelSet.has(el)) return true;
+ if (isOverlayOrIgnoredElement(el) || W.__agPrismToolStepVerbs?.isProseBoundaryEl?.(el)) return true;
+ const tag = el.tagName ? String(el.tagName).toUpperCase() : '';
+ if (TOOL_SKIP_TAGS.has(tag)) return true;
+ const tid = ga(el, 'data-testid') || '';
+ if (tid === 'thinking-collapsible-trigger' || tid === 'prism-thought-ai-config' || tid === 'prism-thought-general-config') return true;
+ if (hasAttr(el, 'data-file-href') || hasAttr(el, 'data-file-path') || hasAttr(el, 'data-omni-path')) return true;
+ return false;
+ }
+ function wrapWithRawWhitespace(rawStr, translatedStr) {
+ const raw = String(rawStr || '');
+ const trimmedStart = raw.trimStart();
+ if (!trimmedStart) return raw;
+ const lead = raw.slice(0, raw.length - trimmedStart.length);
+ const trail = raw.slice(raw.trimEnd().length);
+ return `${lead}${translatedStr}${trail}`;
+ }
+ function collectToolSummaryTextNodes(rootNode, outList, visitedNodes, thoughtPanelSet, counts) {
+ const c = counts || { ai: 0, st: 0 };
+ if (!rootNode || (c.ai >= 24 && c.st >= 200)) return;
+ const nt = rootNode.nodeType;
+ if (nt === 3) {
+ if (visitedNodes.has(rootNode)) return;
+ visitedNodes.add(rootNode);
+ const val = getTnStr(rootNode);
+ const activeLang = resolveActiveLang();
+ const prevRec = toolSummaryNodeMap.get(rootNode);
+ if (prevRec && prevRec.trans === val && prevRec.lang === activeLang && prevRec.mode === currentMode) return;
+ if (val.length > 1024) return;
+ const trimmed = trm(val);
+ if (!trimmed) return;
+ const staticTr = W.__agPrismToolStepVerbs?.lookupStaticToolVerb?.(trimmed, activeLang) || null;
+ if (staticTr) {
+ if (c.st < 200) { c.st += 1; outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed, staticTr }); }
+ return;
+ }
+ if (c.ai >= 24 || trimmed.length < 4 || trimmed.length > 280 || !isToolSummaryCandidate(trimmed, activeLang)) return;
+ c.ai += 1;
+ outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed });
+ return;
+ }
+ if (nt !== 1 || isExcludedToolAncestor(rootNode, thoughtPanelSet)) return;
+ const chs = rootNode[K_CN];
+ if (!chs || !chs.length) return;
+ for (let i = 0; i < chs.length && (c.ai < 24 || c.st < 200); i++) collectToolSummaryTextNodes(chs[i], outList, visitedNodes, thoughtPanelSet, c);
+ }
+ function applyToolSummaryText(item, translatedStr, activeLang, mode) {
+ if (!item || !item.tn || !isConn(item.tn) || !translatedStr) return;
+ const curVal = getTnStr(item.tn);
+ if (curVal !== item.raw) return;
+ const nextVal = wrapWithRawWhitespace(item.raw, translatedStr);
+ if (nextVal === item.raw) return;
+ const oldRec = toolSummaryNodeMap.get(item.tn);
+ const orig = oldRec && item.raw === oldRec.trans ? oldRec.orig : item.raw;
+ if (oldRec) toolSummaryRecords.delete(oldRec);
+ setTn(item.tn, nextVal);
+ if (item.el) sa(item.el, 'data-op-tool-tr', '1');
+ const rec = { tn: item.tn, el: item.el, orig, trans: nextVal, lang: activeLang, mode };
+ toolSummaryNodeMap.set(item.tn, rec);
+ toolSummaryRecords.add(rec);
+ }
+ function markToolSummaryFailed(key, until) {
+ if (toolSummaryFailedUntil.has(key)) toolSummaryFailedUntil.delete(key);
+ toolSummaryFailedUntil.set(key, until);
+ while (toolSummaryFailedUntil.size > 512) {
+ const oldest = toolSummaryFailedUntil.keys().next().value;
+ if (oldest === undefined) break;
+ toolSummaryFailedUntil.delete(oldest);
+ }
+ }
+ function pruneDetachedToolSummaryRecords() {
+ if (!toolSummaryRecords.size) return;
+ for (const rec of Array.from(toolSummaryRecords)) {
+ if (!rec || !rec.tn || !isConn(rec.tn)) {
+ if (rec && rec.tn) toolSummaryNodeMap.delete(rec.tn);
+ toolSummaryRecords.delete(rec);
+ }
+ }
+ }
 function collectToolSummaryTargets(vp) {
 const scope = isConn(cachedConvRoot) && cachedConvRoot.querySelectorAll ? cachedConvRoot : document;
 const thoughtPanelSet = new Set(), tBtns = queryTriggers();
@@ -3211,8 +3059,8 @@ if (ga(trig, A_EXP) !== 'true') continue;
 const bodyDiv = findBody ? findBody(trig) : nextSib(trig);
 if (bodyDiv && (findBody || String(bodyDiv.tagName || '').toUpperCase() === 'DIV')) stage(bodyDiv);
 }
-const visSet = new Set();
-for (let i = 0; i < rawCands.length; i++) if (probeViewportBand(rawCands[i], vp) > 0) { visSet.add(rawCands[i]); containers.push(rawCands[i]); }
+const visSet = new Set(); let sawOffTool = false;
+for (let i = 0; i < rawCands.length; i++) { if (probeViewportBand(rawCands[i], vp) > 0) { visSet.add(rawCands[i]); containers.push(rawCands[i]); } else { sawOffTool = true; watchOff(rawCands[i], 't'); } }
 const rowEls = scope.querySelectorAll ? scope.querySelectorAll(SEL_TOOL_ROWS) : [];
 if (rowEls && rowEls.length) {
 const orphanRaw = [];
@@ -3225,13 +3073,14 @@ if (!insideKnown && !isHiddenByAncestor(null, r)) orphanRaw.push(r);
 const byParent = new Map();
 for (let i = 0; i < orphanRaw.length; i++) {
 const r = orphanRaw[i];
-if (probeViewportBand(r, vp) === 0) continue;
+if (probeViewportBand(r, vp) === 0) { sawOffTool = true; watchOff(r, 't'); continue; }
 const p = parEl(r) || r;
 if (!byParent.has(p)) byParent.set(p, []);
 byParent.get(p).push(r);
 }
 for (const [p, rows] of byParent.entries()) if (!visSet.has(p)) { visSet.add(p); containers.push({ __rows: rows }); }
 }
+hasOffscreenTools = sawOffTool;
 return { containers, thoughtPanelSet };
 }
 function scanToolSummaryContainers(preRead) {
@@ -3240,816 +3089,772 @@ if (!translateToolSummaries || currentMode === 'off' || typeof document === 'und
 const br = getBridge();
 if (!br || typeof br.translateStream !== 'function') return;
 const { containers, thoughtPanelSet } = preRead || collectToolSummaryTargets(readViewportDims());
-
-    if (!containers.length) return;
-    const activeLang = resolveActiveLang();
-    const activeMode = currentMode;
-    const modePrefix = `${activeMode}:${activeLang}:`;
-    const visitedNodes = new Set();
-    const now = nowMs();
-
-    for (let ci = 0; ci < containers.length; ci++) {
-      const c = containers[ci];
-      const candidates = [];
-      if (c && c.__rows) {
-        for (let ri = 0; ri < c.__rows.length; ri++) {
-          collectToolSummaryTextNodes(c.__rows[ri], candidates, visitedNodes, thoughtPanelSet);
-        }
-      } else {
-        collectToolSummaryTextNodes(c, candidates, visitedNodes, thoughtPanelSet);
-      }
-      if (!candidates.length) continue;
-
-      const uncached = [];
-      const uniqueTrimmed = [];
-      const uniqueIdxMap = new Map();
-
-      for (let i = 0; i < candidates.length; i++) {
-        const cand = candidates[i];
-        if (cand.staticTr) { applyToolSummaryText(cand, cand.staticTr, activeLang, activeMode); continue; }
-        const cacheKey = `${modePrefix}${cand.trimmed}`;
-        const hit = toolSummaryCache.get(cacheKey);
-        if (hit) { applyToolSummaryText(cand, hit, activeLang, activeMode); continue; }
-        const failUntil = toolSummaryFailedUntil.get(cacheKey);
-        if (failUntil) {
-          if (now < failUntil) continue;
-          toolSummaryFailedUntil.delete(cacheKey);
-        }
-        uncached.push(cand);
-        if (!uniqueIdxMap.has(cand.trimmed)) {
-          uniqueIdxMap.set(cand.trimmed, uniqueTrimmed.length);
-          uniqueTrimmed.push(cand.trimmed);
-        }
-      }
-
-      if (!uniqueTrimmed.length) continue;
-      const batchKey = `${modePrefix}${uniqueTrimmed.join('\x1f')}`;
-      if (toolBatchInflight.has(batchKey)) continue;
-
-      const requestId = `op_ts_${nowMs().toString(36)}_${++reqSeq}`;
-      toolBatchInflight.set(batchKey, requestId);
-
-      br.translateStream(
-        {
-          text: JSON.stringify({ v: 1, items: uniqueTrimmed }),
-          mode: activeMode === 'machine' ? 'tool-batch:machine' : 'tool-batch:ai',
-          priority: 8000,
-          requestId,
-          targetLang: activeLang,
-        },
-        null
-      )
-        .then((res) => {
-          toolBatchInflight.delete(batchKey);
-          if (!translateToolSummaries || currentMode !== activeMode || resolveActiveLang() !== activeLang) return;
-          let outItems = null;
-          if (res && res.ok) {
-            if (Array.isArray(res.items)) {
-              outItems = res.items;
-            } else if (typeof res.text === 'string' && res.text.trim()) {
-              try {
-                const parsed = JSON.parse(res.text);
-                if (Array.isArray(parsed?.items)) outItems = parsed.items;
-              } catch (_) {}
-            }
-          }
-          if (!outItems || outItems.length !== uniqueTrimmed.length) {
-            const until = nowMs() + 20000;
-            for (let k = 0; k < uniqueTrimmed.length; k++) {
-              markToolSummaryFailed(`${modePrefix}${uniqueTrimmed[k]}`, until);
-            }
-            return;
-          }
-          for (let k = 0; k < uniqueTrimmed.length; k++) {
-            const trText = typeof outItems[k] === 'string' ? outItems[k].trim() : '';
-            if (trText && trText !== uniqueTrimmed[k]) {
-              if (toolSummaryCache.size >= 600) {
-                const oldest = toolSummaryCache.keys().next().value;
-                if (oldest !== undefined) toolSummaryCache.delete(oldest);
-              }
-              toolSummaryCache.set(`${modePrefix}${uniqueTrimmed[k]}`, trText);
-            }
-          }
-          for (let i = 0; i < uncached.length; i++) {
-            const cand = uncached[i];
-            const idx = uniqueIdxMap.get(cand.trimmed);
-            const trText = idx !== undefined && typeof outItems[idx] === 'string' ? outItems[idx].trim() : '';
-            if (trText && trText !== cand.trimmed) {
-              applyToolSummaryText(cand, trText, activeLang, activeMode);
-            }
-          }
-        })
-        .catch(() => {
-          toolBatchInflight.delete(batchKey);
-          const until = nowMs() + 20000;
-          for (let k = 0; k < uniqueTrimmed.length; k++) {
-            markToolSummaryFailed(`${modePrefix}${uniqueTrimmed[k]}`, until);
-          }
-        });
-    }
-  }
-
-  const TITLE_SKIP_TAGS = new Set('SCRIPT,STYLE,SVG,NOSCRIPT,PRE,CODE,INPUT,TEXTAREA,SELECT,TIME,KBD,SAMP'.split(','));
-  const TITLE_HEADING_TAGS = new Set('H1,H2,H3,H4,H5,H6'.split(','));
-  const TITLE_CHILD_BADGE_CLS_RE =
-    /\b(?:badge|pill|chip|timestamp|time|meta|metadata|count|counter|hotkey|shortcut|avatar|icon|spinner|status|actions?|subtitle|sub-title|subtext|preview|excerpt|snippet|description|desc|caption|footnote|workspace|folder|repo|branch|ag-prism-sb-)\b/i;
-  const TITLE_CHILD_BADGE_TID_RE =
-    /badge|time|date|action|menu|delete|pin|archive|count|status|icon|subtitle|sub-title|preview|excerpt|summary|desc|meta|workspace|folder|repo|branch|pill|chip|avatar|spinner/i;
-  const TITLE_PRIMARY_TID_RE = /(?:^|[-_])title(?:$|[-_])/i;
-  const TITLE_STATUS_WORD_RE =
-    /^(?:new|active|running|working|thinking|generating|pending|queued|idle|done|completed|finished|failed|error|paused|stopped|draft|pinned|unread|archived|updated|edited|in\s+progress|waiting)$/i;
-
-  function isSidebarStudioActive() {
-    try {
-      const rootEl = docRoot();
-      if (rootEl && ga(rootEl, 'data-ag-prism-sidebar-studio') === 'on') {
-        return true;
-      }
-      return W.__agPrism?.getState?.()?.cfg?.sidebarStudio === 'on';
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function isTitleContainerExcluded(container, sidebarOn) {
-    let cur = container;
-    while (cur && cur.nodeType === 1) {
-      if (isOverlayOrIgnoredElement(cur)) return true;
-      if (hasAttr(cur, 'data-ag-prism-sidebar-owned')) return true;
-      const cls = String(ga(cur, 'class') || cur.className || '');
-      if (cls.includes('ag-prism-sb-native-hidden') || cls.includes('ag-prism-chat-row-hidden')) return true;
-      if (sidebarOn && (cls.includes('ag-prism-sb-') || cls.includes('ag-sb-'))) return true;
-      const tid = ga(cur, 'data-testid') || '';
-      if (tid === 'prism-thought-ai-config' || tid === 'prism-thought-general-config') return true;
-      cur = parEl(cur);
-    }
-    return false;
-  }
-
-  function isExcludedTitleChild(el, containerRoot, sidebarOn) {
-    if (!el || el.nodeType !== 1) return true;
-    if (isOverlayOrIgnoredElement(el)) return true;
-    if (
-      hasAttr(el, 'data-ag-prism-sidebar-owned') ||
-      hasAttr(el, 'data-ag-no-i18n') ||
-      hasAttr(el, 'data-file-href') ||
-      hasAttr(el, 'data-file-path') ||
-      hasAttr(el, 'data-omni-path') ||
-      hasAttr(el, 'data-badge')
-    ) {
-      return true;
-    }
-    const tag = el.tagName ? String(el.tagName).toUpperCase() : '';
-    if (TITLE_SKIP_TAGS.has(tag)) return true;
-    const cls = String(ga(el, 'class') || el.className || '');
-    if (sidebarOn && (cls.includes('ag-prism-sb-') || cls.includes('ag-sb-'))) return true;
-    if (el !== containerRoot) {
-      if (tag === 'BUTTON') return true;
-      if (ga(el, 'aria-hidden') === 'true') return true;
-      const role = low(ga(el, 'role'));
-      if (role === 'button' || role === 'status' || role === 'badge') return true;
-      if (TITLE_CHILD_BADGE_CLS_RE.test(cls)) return true;
-      const tid = ga(el, 'data-testid') || '';
-      if (tid && TITLE_CHILD_BADGE_TID_RE.test(tid)) return true;
-    }
-    return false;
-  }
-
-  function findExplicitPrimaryTitleEl(rootEl, containerRoot, sidebarOn) {
-    if (!rootEl || rootEl.nodeType !== 1) return null;
-    const chs = rootEl[K_CN];
-    if (!chs || !chs.length) return null;
-    for (let i = 0; i < chs.length; i++) {
-      const ch = chs[i];
-      if (!ch || ch.nodeType !== 1) continue;
-      if (isExcludedTitleChild(ch, containerRoot, sidebarOn)) continue;
-      const tid = ga(ch, 'data-testid') || '';
-      if (tid && TITLE_PRIMARY_TID_RE.test(tid) && !/subtitle|sub-title/i.test(tid)) return ch;
-      const tag = ch.tagName ? String(ch.tagName).toUpperCase() : '';
-      if (TITLE_HEADING_TAGS.has(tag)) return ch;
-      const nested = findExplicitPrimaryTitleEl(ch, containerRoot, sidebarOn);
-      if (nested) return nested;
-    }
-    return null;
-  }
-
-  function findBreadcrumbGroupRoot(el) {
-    let cur = parEl(el);
-    while (cur && cur.nodeType === 1) {
-      const tag = cur.tagName ? String(cur.tagName).toUpperCase() : '';
-      if (tag === 'NAV' || tag === 'HEADER' || tag === 'OL' || tag === 'UL') return cur;
-      const role = low(ga(cur, 'role'));
-      if (role === 'navigation' || role === 'banner' || role === 'list') return cur;
-      const aria = low(ga(cur, 'aria-label'));
-      if (aria.includes('breadcrumb')) return cur;
-      const tid = low(ga(cur, 'data-testid'));
-      if (tid.includes('breadcrumb') && tid !== 'breadcrumb-segment') return cur;
-      const cls = low(ga(cur, 'class') || cur.className || '');
-      if (cls.includes('breadcrumb')) return cur;
-      cur = parEl(cur);
-    }
-    return document.body || docRoot() || '__default_bc__';
-  }
-
-  function unbindStaleTitleRec(tn, prevRec, curVal) {
-    if (prevRec && prevRec.trans !== curVal) {
-      titleNodeMap.delete(tn);
-      titleRecords.delete(prevRec);
-      if (prevRec.el) ra(prevRec.el, 'data-op-title-tr');
-    }
-  }
-
-  function isIgnorableTitlePrefixText(trimmed) {
-    if (!trimmed || trimmed.length < 2) return true;
-    return TITLE_TIME_RE.test(trimmed) || TITLE_NUM_SYM_RE.test(trimmed) || TITLE_STATUS_WORD_RE.test(trimmed);
-  }
-
-  function collectTitleTextNodes(rootNode, containerRoot, outList, visitedNodes, sidebarOn, activeLang, primaryOnly = false) {
-    if (!rootNode || outList.length >= 40) return false;
-    const nt = rootNode.nodeType;
-    if (nt === 3) {
-      if (visitedNodes.has(rootNode)) return false;
-      visitedNodes.add(rootNode);
-      const val = getTnStr(rootNode);
-      const prevRec = titleNodeMap.get(rootNode);
-      if (prevRec && prevRec.trans === val && prevRec.lang === activeLang && prevRec.mode === currentMode) {
-        return primaryOnly;
-      }
-      if (val.length > 1024) {
-        unbindStaleTitleRec(rootNode, prevRec, val);
-        return primaryOnly;
-      }
-      const trimmed = trm(val);
-      if (!trimmed) {
-        unbindStaleTitleRec(rootNode, prevRec, val);
-        return false;
-      }
-      if (primaryOnly && isIgnorableTitlePrefixText(trimmed)) {
-        unbindStaleTitleRec(rootNode, prevRec, val);
-        return false;
-      }
-      if (!isTitleCandidate(trimmed, activeLang)) {
-        unbindStaleTitleRec(rootNode, prevRec, val);
-        return primaryOnly;
-      }
-      outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed });
-      return primaryOnly;
-    }
-    if (nt !== 1 || isExcludedTitleChild(rootNode, containerRoot, sidebarOn)) return false;
-    const chs = rootNode[K_CN];
-    if (!chs || !chs.length) return false;
-    for (let i = 0; i < chs.length && outList.length < 40; i++) {
-      if (collectTitleTextNodes(chs[i], containerRoot, outList, visitedNodes, sidebarOn, activeLang, primaryOnly)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function applyTitleText(item, translatedStr, activeLang, mode) {
-    if (!item || !item.tn || !isConn(item.tn) || !translatedStr) return;
-    const curVal = getTnStr(item.tn);
-    if (curVal !== item.raw) return;
-    const nextVal = wrapWithRawWhitespace(item.raw, translatedStr);
-    if (nextVal === item.raw) return;
-
-    const oldRec = titleNodeMap.get(item.tn);
-    const orig = oldRec && item.raw === oldRec.trans ? oldRec.orig : item.raw;
-    if (oldRec) titleRecords.delete(oldRec);
-
-    titleInternalMutDepth += 1;
-    try {
-      setTn(item.tn, nextVal);
-      if (item.el) sa(item.el, 'data-op-title-tr', '1');
-    } finally {
-      titleInternalMutDepth = Math.max(0, titleInternalMutDepth - 1);
-    }
-    const rec = { tn: item.tn, el: item.el, orig, trans: nextVal, lang: activeLang, mode };
-    titleNodeMap.set(item.tn, rec);
-    titleRecords.add(rec);
-  }
-
-  function clearTitleScanTimer() {
-    if (titleScanTimer) {
-      clearTimeout(titleScanTimer);
-      titleScanTimer = null;
-    }
-  }
-
-  function stopTitleObserver() {
-    clearTitleScanTimer();
-    if (titleObserver) {
-      try { titleObserver.disconnect(); } catch (_) {}
-      titleObserver = null;
-    }
-    observedTitleRoots.clear();
-  }
-
-  function scheduleTitleScan(delayMs = 140) {
-    if (!translateTitles || currentMode === 'off' || isDocHiddenOrSleep()) return;
-    if (titleScanTimer) return;
-    titleScanTimer = setTimeout(() => {
-      titleScanTimer = null;
-      if (!translateTitles || currentMode === 'off' || isDocHiddenOrSleep()) return;
-      const rEl = docRoot();
-      if (rEl && ga(rEl, 'data-ag-pp-open') === '1') {
-        scheduleTitleScan(600);
-        return;
-      }
-      scanConversationTitles();
-    }, delayMs);
-    titleScanTimer?.unref?.();
-  }
-
-  function findTitleContainerAncestor(node) {
-    let cur = node && node.nodeType === 1 ? node : parEl(node);
-    while (cur && cur.nodeType === 1) {
-      if (TITLE_CONTAINER_TIDS.has(ga(cur, 'data-testid') || '')) return cur;
-      cur = parEl(cur);
-    }
-    return null;
-  }
-
-  function isSafeTitleObserverRoot(el) {
-    if (!el || el.nodeType !== 1 || !isConn(el)) return false;
-    if (typeof document !== 'undefined' && (el === document.body || el === document.documentElement)) return false;
-    const tid = ga(el, 'data-testid') || '';
-    if (tid === 'conversation-view' || tid === 'autoscroll-viewport') return false;
-    try {
-      if (typeof el.querySelector === 'function' && el.querySelector('[data-testid="conversation-view"], [data-testid="autoscroll-viewport"]')) {
-        return false;
-      }
-    } catch (_) {}
-    return true;
-  }
-
-  function isTitleMutationRelevant(rec) {
-    if (!rec) return false;
-    if (rec.type === 'characterData') {
-      const tn = rec.target;
-      if (!tn || tn.nodeType !== 3) return false;
-      const curVal = getTnStr(tn);
-      const prev = titleNodeMap.get(tn);
-      if (prev && prev.trans === curVal) return false;
-      const p = parEl(tn);
-      if (!p || isOverlayOrIgnoredElement(p)) return false;
-      return Boolean(findTitleContainerAncestor(p));
-    }
-    if (rec.type === 'childList') {
-      const tgt = rec.target;
-      if (tgt && tgt.nodeType === 1 && !isOverlayOrIgnoredElement(tgt) && findTitleContainerAncestor(tgt)) {
-        const added = rec.addedNodes;
-        if (!added || !added.length) return true;
-        for (let i = 0; i < added.length; i++) {
-          const n = added[i];
-          if (!n) continue;
-          if (n.nodeType === 3) {
-            const prev = titleNodeMap.get(n);
-            if (!prev || prev.trans !== getTnStr(n)) return true;
-          } else if (n.nodeType === 1 && !isOverlayOrIgnoredElement(n)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      const added = rec.addedNodes;
-      if (added && added.length) {
-        for (let i = 0; i < added.length; i++) {
-          const n = added[i];
-          if (!n || n.nodeType !== 1 || isOverlayOrIgnoredElement(n)) continue;
-          if (TITLE_CONTAINER_TIDS.has(ga(n, 'data-testid') || '')) return true;
-          try {
-            if (typeof n.querySelector === 'function' && n.querySelector(SEL_TITLE_CONTAINERS)) return true;
-          } catch (_) {}
-        }
-      }
-    }
-    return false;
-  }
-
-  function syncTitleObserverTargets() {
-    if (!translateTitles || currentMode === 'off' || typeof document === 'undefined') {
-      stopTitleObserver();
-      return;
-    }
-    const MO = W.MutationObserver || (typeof MutationObserver === 'function' ? MutationObserver : null);
-    if (typeof MO !== 'function') return;
-
-    const desired = new Set();
-    const listNodes = qsa('[data-testid="conversation-list-sidebar"]');
-    for (let i = 0; i < listNodes.length; i++) {
-      if (isSafeTitleObserverRoot(listNodes[i])) desired.add(listNodes[i]);
-    }
-    const titleNodes = qsa(SEL_TITLE_CONTAINERS);
-    for (let i = 0; i < titleNodes.length; i++) {
-      const el = titleNodes[i];
-      if (!el || !isConn(el)) continue;
-      const tid = ga(el, 'data-testid') || '';
-      if (tid === 'breadcrumb-segment') {
-        const grp = findBreadcrumbGroupRoot(el);
-        if (isSafeTitleObserverRoot(grp)) desired.add(grp);
-        else if (isSafeTitleObserverRoot(parEl(el))) desired.add(parEl(el));
-        else if (isSafeTitleObserverRoot(el)) desired.add(el);
-      } else {
-        // 如果已在 conversation-list-sidebar 内就无需重复挂到行级
-        let covered = false;
-        for (const root of desired) {
-          try {
-            if (root === el || (typeof root.contains === 'function' && root.contains(el))) { covered = true; break; }
-          } catch (_) {}
-        }
-        if (!covered) {
-          const p = parEl(el);
-          if (isSafeTitleObserverRoot(p)) desired.add(p);
-          else if (isSafeTitleObserverRoot(el)) desired.add(el);
-        }
-      }
-    }
-
-    if (!desired.size) {
-      stopTitleObserver();
-      return;
-    }
-
-    let needRebuild = !titleObserver;
-    if (!needRebuild) {
-      for (const cur of observedTitleRoots) {
-        if (!isConn(cur) || !desired.has(cur)) {
-          needRebuild = true;
-          break;
-        }
-      }
-    }
-    if (needRebuild) {
-      if (titleObserver) {
-        try { titleObserver.disconnect(); } catch (_) {}
-      }
-      observedTitleRoots.clear();
-      titleObserver = new MO((records) => {
-        if (!translateTitles || currentMode === 'off' || titleInternalMutDepth > 0 || isDocHiddenOrSleep()) return;
-        if (!Array.isArray(records) || !records.length) return;
-        for (let i = 0; i < records.length; i++) {
-          if (isTitleMutationRelevant(records[i])) {
-            scheduleTitleScan(140);
-            return;
-          }
-        }
-      });
-    }
-    for (const root of desired) {
-      if (observedTitleRoots.has(root)) continue;
-      try {
-        titleObserver.observe(root, { childList: true, subtree: true, characterData: true });
-        observedTitleRoots.add(root);
-      } catch (_) {}
-    }
-  }
-
-  function markTitleFailed(key, until) {
-    if (titleFailedUntil.has(key)) titleFailedUntil.delete(key);
-    titleFailedUntil.set(key, until);
-    while (titleFailedUntil.size > 512) {
-      const oldest = titleFailedUntil.keys().next().value;
-      if (oldest === undefined) break;
-      titleFailedUntil.delete(oldest);
-    }
-  }
-
-  function pruneDetachedTitleRecords() {
-    if (!titleRecords.size) return;
-    for (const rec of Array.from(titleRecords)) {
-      if (!rec || !rec.tn || !isConn(rec.tn)) {
-        if (rec && rec.tn) titleNodeMap.delete(rec.tn);
-        titleRecords.delete(rec);
-      }
-    }
-  }
-
-  function scanConversationTitles() {
-    pruneDetachedTitleRecords();
-    if (!translateTitles || currentMode === 'off' || typeof document === 'undefined') {
-      stopTitleObserver();
-      return;
-    }
-    syncTitleObserverTargets();
-    const br = getBridge();
-    if (!br || typeof br.translateStream !== 'function') return;
-
-    const nodes = qsa(SEL_TITLE_CONTAINERS);
-    if (!nodes || !nodes.length) {
-      hasOffscreenTitles = false;
-      return;
-    }
-
-    const sidebarOn = isSidebarStudioActive();
-    const activeLang = resolveActiveLang();
-    const activeMode = currentMode;
-    const modePrefix = `${activeMode}:${activeLang}:`;
-    const visitedNodes = new Set();
-    const candidates = [];
-    const bcGroups = new Map();
-    let sawOffscreen = false;
-
-    for (let i = 0; i < nodes.length && candidates.length < 40; i++) {
-      const c = nodes[i];
-      if (!c || !isConn(c) || isHiddenByAncestor(null, c)) continue;
-      if (isTitleContainerExcluded(c, sidebarOn)) continue;
-      const tid = ga(c, 'data-testid') || '';
-      if (tid === 'breadcrumb-segment') {
-        const gRoot = findBreadcrumbGroupRoot(c);
-        let segs = bcGroups.get(gRoot);
-        if (!segs) {
-          segs = [];
-          bcGroups.set(gRoot, segs);
-        }
-        segs.push(c);
-        continue;
-      }
-      if (probeViewportBand(c) === 0) { sawOffscreen = true; watchOff(c); continue; }
-      const explicitTitleEl = findExplicitPrimaryTitleEl(c, c, sidebarOn);
-      collectTitleTextNodes(explicitTitleEl || c, c, candidates, visitedNodes, sidebarOn, activeLang, true);
-    }
-    for (const segs of bcGroups.values()) {
-      if (candidates.length >= 40) break;
-      if (!segs || segs.length < 2) continue;
-      const lastSeg = segs[segs.length - 1];
-      if (probeViewportBand(lastSeg) === 0) { sawOffscreen = true; watchOff(lastSeg); continue; }
-      collectTitleTextNodes(lastSeg, lastSeg, candidates, visitedNodes, sidebarOn, activeLang, true);
-    }
-    hasOffscreenTitles = sawOffscreen;
-    if (!candidates.length) return;
-
-    const now = nowMs();
-    const uncached = [];
-    const uniqueTrimmed = [];
-    const uniqueIdxMap = new Map();
-
-    for (let i = 0; i < candidates.length; i++) {
-      const cand = candidates[i];
-      const cacheKey = `${modePrefix}${cand.trimmed}`;
-      const hit = titleCache.get(cacheKey) || toolSummaryCache.get(cacheKey);
-      if (hit) {
-        applyTitleText(cand, hit, activeLang, activeMode);
-        continue;
-      }
-      const failUntil = titleFailedUntil.get(cacheKey);
-      if (failUntil) {
-        if (now < failUntil) continue;
-        titleFailedUntil.delete(cacheKey);
-      }
-      uncached.push(cand);
-      if (!uniqueIdxMap.has(cand.trimmed)) {
-        uniqueIdxMap.set(cand.trimmed, uniqueTrimmed.length);
-        uniqueTrimmed.push(cand.trimmed);
-      }
-    }
-
-    if (!uniqueTrimmed.length) return;
-
-    for (let start = 0; start < uniqueTrimmed.length; start += 24) {
-      const batchStrings = uniqueTrimmed.slice(start, start + 24);
-      const batchSet = new Set(batchStrings);
-      const batchCands = uncached.filter((c) => batchSet.has(c.trimmed));
-      const batchIdxMap = new Map();
-      for (let k = 0; k < batchStrings.length; k++) batchIdxMap.set(batchStrings[k], k);
-
-      const batchKey = `${modePrefix}${batchStrings.join('\x1f')}`;
-      if (titleBatchInflight.has(batchKey)) continue;
-
-      const requestId = `op_tt_${nowMs().toString(36)}_${++reqSeq}`;
-      titleBatchInflight.set(batchKey, requestId);
-
-      br.translateStream(
-        {
-          text: JSON.stringify({ v: 1, items: batchStrings }),
-          mode: activeMode === 'machine' ? 'tool-batch:machine' : 'tool-batch:ai',
-          priority: 7000,
-          requestId,
-          targetLang: activeLang,
-        },
-        null
-      )
-        .then((res) => {
-          titleBatchInflight.delete(batchKey);
-          if (!translateTitles || currentMode !== activeMode || resolveActiveLang() !== activeLang) return;
-          let outItems = null;
-          if (res && res.ok) {
-            if (Array.isArray(res.items)) {
-              outItems = res.items;
-            } else if (typeof res.text === 'string' && res.text.trim()) {
-              try {
-                const parsed = JSON.parse(res.text);
-                if (Array.isArray(parsed?.items)) outItems = parsed.items;
-              } catch (_) {}
-            }
-          }
-          if (!outItems || outItems.length !== batchStrings.length) {
-            const until = nowMs() + 20000;
-            for (let k = 0; k < batchStrings.length; k++) {
-              markTitleFailed(`${modePrefix}${batchStrings[k]}`, until);
-            }
-            return;
-          }
-          for (let k = 0; k < batchStrings.length; k++) {
-            const trText = typeof outItems[k] === 'string' ? outItems[k].trim() : '';
-            if (trText && trText !== batchStrings[k]) {
-              if (titleCache.size >= 600) {
-                const oldest = titleCache.keys().next().value;
-                if (oldest !== undefined) titleCache.delete(oldest);
-              }
-              titleCache.set(`${modePrefix}${batchStrings[k]}`, trText);
-            }
-          }
-          for (let i = 0; i < batchCands.length; i++) {
-            const cand = batchCands[i];
-            const idx = batchIdxMap.get(cand.trimmed);
-            const trText = idx !== undefined && typeof outItems[idx] === 'string' ? outItems[idx].trim() : '';
-            if (trText && trText !== cand.trimmed) {
-              applyTitleText(cand, trText, activeLang, activeMode);
-            }
-          }
-        })
-        .catch(() => {
-          titleBatchInflight.delete(batchKey);
-          const until = nowMs() + 20000;
-          for (let k = 0; k < batchStrings.length; k++) {
-            markTitleFailed(`${modePrefix}${batchStrings[k]}`, until);
-          }
-        });
-    }
-  }
-
-  function scanNow() {
-    scanTimer = null;
-    if (currentMode === 'off') return;
-    const triggers = queryTriggers();
-    if (!triggers.length) { if (translateToolSummaries) scanToolSummaryContainers(); if (translateTitles) scanConversationTitles(); return; }
-    const lastIdx = triggers.length - 1, candidates = [], activePanelSet = new Set(), vp = readViewportDims();
-    let sawOffscreenLazy = false;
-    for (let i = 0; i <= lastIdx; i++) {
-      const btn = triggers[i]; if (!btn) continue;
-      const isLatest = i === lastIdx, allowPreload = triggerTiming === 'preload' && isLatest, expanded = ga(btn, A_EXP) === 'true';
-      if (!allowPreload && !expanded) continue;
-      const panel = nextSib(btn);
-      if (panel) {
-        const em = panelMeta.get(panel), streamingNow = isTriggerStreaming(btn);
-        if (streamingNow && expanded && isLatest && em && em.s && ga(panel, A_PND) === '1') { trackStreamingTrigger(btn, panel); activePanelSet.add(panel); continue; }
-        if (em && !streamingNow && em.rs === quickPanelStamp(panel)) {
-          if (expanded && ga(panel, A_RDY) === '1' && em.ds && em.ds === ga(panel, A_SIG)) continue;
-          if (!expanded) { const inf = rawCacheMap.get(panel); if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) continue; }
-        }
-        if (!isLatest && isHiddenByAncestor(btn, panel)) continue;
-        if (em && !streamingNow && em.rs === quickPanelStamp(panel) && isHiddenByAncestor(btn, panel)) {
-          const inf = rawCacheMap.get(panel);
-          if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) { activePanelSet.add(panel); continue; }
-        }
-      }
-      const band = expanded && !isLatest ? probeViewportBand(panel || btn, vp) : 0;
-      if (!isLatest && band === 0) { sawOffscreenLazy = true; watchOff(panel || btn); continue; }
-      if (panel) activePanelSet.add(panel);
-      const tier = isLatest && expanded ? 25 : band === 2 ? 20 : isLatest ? 12 : 10;
-      candidates.push({ b: btn, a: allowPreload, p: tier * 1000 + i });
-    }
-    const preToolTargets = translateToolSummaries && typeof document !== 'undefined' ? collectToolSummaryTargets(vp) : null;
-    hasOffscreenLazyPanels = sawOffscreenLazy;
-    if (inflightBySig.size > 0) pruneUnneededPendingRequests(activePanelSet);
-    if (candidates.length) {
-      candidates.sort((x, y) => y.p - x.p);
-      syncHydrateBudget = 1;
-      try { for (let i = 0; i < candidates.length; i++) processSingleTrigger(candidates[i].b, candidates[i].a, candidates[i].p); }
-      finally { syncHydrateBudget = 99; }
-    }
-    if (translateToolSummaries) scanToolSummaryContainers(preToolTargets);
-    if (translateTitles) scanConversationTitles();
-  }
-
-  function scheduleScan(delayMs = 55) {
-    if (currentMode === 'off') return;
-    const bus = getDomBus();
-    if (bus?.scheduleTask) {
-      if (scanTimer === 'bus') { if (delayMs <= 25) bus.reprioritizeTask?.('conv:thought-scan', 'user-visible'); return; }
-      if (scanTimer) return;
-      scanTimer = 'bus';
-      bus.scheduleTask('conv:thought-scan', scanNow, { priority: delayMs <= 25 ? 'user-visible' : 'background', delay: delayMs });
-      return;
-    }
-    if (!scanTimer) scanTimer = setTimeout(scanNow, delayMs);
-  }
-  const clrScan = () => { if (scanTimer === 'bus') getDomBus()?.cancelTask?.('conv:thought-scan'); else if (scanTimer) clearTimeout(scanTimer); scanTimer = null; };
-  const brCall = (action, inp) => {
-    const br = getBridge();
-    return br ? br.call({ action, ...inp }) : offRes();
-  };
-  const RESET_SIG_ATTRS = [A_SIG, A_FBK, A_FLD];
-
-  let syncedOnce = false;
-
-  const api = {
-    sync(cfg = {}) {
-      const nextMode = cfg.thoughtTranslate === 'machine' || cfg.thoughtTranslate === 'ai' ? cfg.thoughtTranslate : 'off';
-      const prevTrigger = triggerTiming;
-      triggerTiming = cfg.thoughtTrigger === 'expand' ? 'expand' : 'preload';
-      const triggerChanged = prevTrigger !== triggerTiming, prevLang = currentLang;
-      currentLang = resolveActiveLang(cfg.language);
-      const langChanged = prevLang !== currentLang;
-      if (langChanged) refreshAllOverlayLocaleStrings();
-      let toolSummaryChanged = false, titleChanged = false, viewChanged = false;
-      if (typeof cfg.translateToolSummaries === 'boolean') { hasExplicitToolSummaries = true; toolSummaryChanged = setTranslateToolSummariesFlag(cfg.translateToolSummaries, false); }
-      if (typeof cfg.translateTitles === 'boolean') { hasExplicitTitles = true; titleChanged = setTranslateTitlesFlag(cfg.translateTitles, false); }
-      const incomingView = cfg.thoughtView || cfg.thoughtViewMode;
-      if (incomingView === 'bilingual' || incomingView === 'immersive') {
-        hasExplicitHostView = viewModeLoaded = true; viewChanged = currentViewMode !== incomingView; currentViewMode = incomingView;
-        if (viewChanged || !syncedOnce) { persistViewModePreference(currentViewMode); syncDocViewAttribute(); refreshAllPanelViewModes(viewChanged); }
-      }
-      if (nextMode === 'off') { clrScan(); currentMode = 'off'; syncedOnce = false; releasePrismOverlays(); return; }
-      if (triggerTiming === 'expand' && prevTrigger !== 'expand') cancelCollapsedInflightRequests();
-      else if (triggerTiming === 'expand') clearAllWaitTimers(true);
-      const changed = currentMode !== nextMode, hadPrevEngine = currentMode !== 'off';
-      currentMode = nextMode; ensureInitialized();
-      if (changed || langChanged) {
-        clearHydrateQueue(); restoreAllToolSummaries(); restoreAllTitles();
-        if (hadPrevEngine) { clearAllWaitTimers(false); for (const entry of inflightBySig.values()) cancelTranslateRequest(entry); inflightBySig.clear(); }
-        const resetPanelSig = (p) => {
-          if (!p) return;
-          clearTriggerStatusBadge(p); raList(p, RESET_SIG_ATTRS);
-          const m = panelMeta.get(p);
-          if (m && (m.s || m.m)) { m.ds = m.ps = ''; delete m.skippedSig; } else panelMeta.delete(p);
-        };
-        qsa(SEL_TRIGGER).forEach((b) => resetPanelSig(nextSib(b)));
-        qsa(SEL_OVERLAY).forEach((ov) => resetPanelSig(parEl(ov)));
-      }
-      const needScan = !syncedOnce || changed || langChanged || viewChanged || triggerChanged || toolSummaryChanged || titleChanged;
-      syncedOnce = true;
-      if (needScan) scheduleScan(25);
-    },
-    scan() { scheduleScan(45); },
-    scanImmediate() { clrScan(); scanNow(); },
-    getViewMode() { loadViewModePreference(); return currentViewMode; },
-    setViewMode(nextViewMode, opts = {}) {
-      const normalized = nextViewMode === 'bilingual' ? 'bilingual' : 'immersive';
-      hasExplicitHostView = viewModeLoaded = true;
-      const changed = currentViewMode !== normalized;
-      currentViewMode = normalized; persistViewModePreference(normalized); syncDocViewAttribute(); refreshAllPanelViewModes(true);
-      if (changed && opts.persistDaemon !== false) void callDaemonRpc({ action: 'save-config', viewMode: normalized }).catch(() => {});
-      return currentViewMode;
-    },
-    getTranslateToolSummaries: () => Boolean(translateToolSummaries),
-    setTranslateToolSummaries(enabled, opts = {}) {
-      const next = Boolean(enabled); hasExplicitToolSummaries = true;
-      const changed = setTranslateToolSummariesFlag(next, true);
-      if (changed && opts.persistDaemon === true) void callDaemonRpc({ action: 'save-config', translateToolSummaries: next }).catch(() => {});
-      return translateToolSummaries;
-    },
-    getTranslateTitles: () => Boolean(translateTitles),
-    setTranslateTitles(enabled, opts = {}) {
-      const next = Boolean(enabled); hasExplicitTitles = true;
-      const changed = setTranslateTitlesFlag(next, true);
-      if (changed && opts.persistDaemon === true) void callDaemonRpc({ action: 'save-config', translateTitles: next }).catch(() => {});
-      return translateTitles;
-    },
-    retryBlock: (panel) => retryPanelNow(panel),
-    clearCooldown: (sig) => clearSigCooldown(sig),
-    getLocalCacheStats, clearLocalCache,
-    getCacheStats() {
-      const local = getLocalCacheStats();
-      const mk = (localOnly, dEntries, dBytes) => ({ ok: true, localOnly, localEntries: local.memEntries, storageEntries: local.storageEntries, daemonEntries: dEntries, diskBytes: dBytes, totalEntries: Math.max(local.memEntries, dEntries) });
-      return callDaemonRpc({ action: 'cache-stats' }).then((res) => (res && res.ok && typeof res.entries === 'number' ? mk(false, res.entries, res.diskBytes || 0) : mk(true, 0, 0))).catch(() => mk(true, 0, 0));
-    },
-    clearCache() {
-      const localRes = clearLocalCache();
-      const mk = (localOnly, dc) => ({ ok: true, localOnly, localCleared: localRes.cleared, daemonCleared: dc });
-      return callDaemonRpc({ action: 'clear-cache' }).then((res) => (res && res.ok ? mk(false, typeof res.cleared === 'number' ? res.cleared : 0) : mk(true, 0))).catch(() => mk(true, 0));
-    },
-    getConfig: () => brCall('get-config').then((res) => (syncRemoteCfgMeta(res), res)),
-    saveConfig(input) {
-      if (typeof input?.translateToolSummaries === 'boolean') hasExplicitToolSummaries = true;
-      if (typeof input?.translateTitles === 'boolean') hasExplicitTitles = true;
-      return brCall('save-config', input).then((res) => {
-        const tagChanged = setActiveStyleTag(res?.styleTag || (res?.stylePreset ? `ai_${res.stylePreset}` : ''));
-        if (typeof res?.translateToolSummaries === 'boolean') setTranslateToolSummariesFlag(res.translateToolSummaries, false);
-        else if (typeof input?.translateToolSummaries === 'boolean') setTranslateToolSummariesFlag(input.translateToolSummaries, false);
-        if (typeof res?.translateTitles === 'boolean') setTranslateTitlesFlag(res.translateTitles, false);
-        else if (typeof input?.translateTitles === 'boolean') setTranslateTitlesFlag(input.translateTitles, false);
-        qsa(SEL_TRIGGER).forEach((b) => {
-          const p = nextSib(b);
-          if (p && (tagChanged || ga(p, A_FBK) === '1' || ga(p, A_FLD) === '1' || findChildByClass(b, C_TRG))) { clearTriggerStatusBadge(b); raList(p, RESET_SIG_ATTRS); panelMeta.delete(p); }
-        });
-        failedSigs.clear(); toolSummaryFailedUntil.clear(); titleFailedUntil.clear(); scheduleScan(25);
-        return res;
-      });
-    },
-    fetchModels: (input) => brCall('fetch-models', input),
-    testConnection: (input) => brCall('test-connection', input),
-    diagnose: (input) => brCall('diagnose', input),
-    __memCache: memCache, __toolSummaryRecords: toolSummaryRecords, __toolSummaryFailedUntil: toolSummaryFailedUntil,
-    __titleRecords: titleRecords, __titleFailedUntil: titleFailedUntil, __observedTitleRoots: observedTitleRoots,
-    destroy() {
-      currentMode = 'off'; syncedOnce = hasOffscreenLazyPanels = hasOffscreenTitles = false;
-      clrScan(); getDomBus()?.cancelGroup?.('conv:thought'); clrVis(); stopTitleObserver();
-      if (cacheDirty || persistTimer || persistIdle || memCache.size > storedCount) flushLocalStorageCacheNow();
-      releasePrismOverlays(); hlBks = null;
-    },
-  };
-
-  W.__agPrismThought = api;
+ if (!containers.length) return;
+ const activeLang = resolveActiveLang();
+ const activeMode = currentMode;
+ const modePrefix = `${activeMode}:${activeLang}:`;
+ const visitedNodes = new Set();
+ const now = nowMs();
+ for (let ci = 0; ci < containers.length; ci++) {
+ const c = containers[ci];
+ const candidates = [];
+ if (c && c.__rows) {
+ for (let ri = 0; ri < c.__rows.length; ri++) {
+ collectToolSummaryTextNodes(c.__rows[ri], candidates, visitedNodes, thoughtPanelSet);
+ }
+ } else {
+ collectToolSummaryTextNodes(c, candidates, visitedNodes, thoughtPanelSet);
+ }
+ if (!candidates.length) continue;
+ const uncached = [];
+ const uniqueTrimmed = [];
+ const uniqueIdxMap = new Map();
+ for (let i = 0; i < candidates.length; i++) {
+ const cand = candidates[i];
+ if (cand.staticTr) { applyToolSummaryText(cand, cand.staticTr, activeLang, activeMode); continue; }
+ const cacheKey = `${modePrefix}${cand.trimmed}`;
+ const hit = toolSummaryCache.get(cacheKey);
+ if (hit) { applyToolSummaryText(cand, hit, activeLang, activeMode); continue; }
+ const failUntil = toolSummaryFailedUntil.get(cacheKey);
+ if (failUntil) {
+ if (now < failUntil) continue;
+ toolSummaryFailedUntil.delete(cacheKey);
+ }
+ uncached.push(cand);
+ if (!uniqueIdxMap.has(cand.trimmed)) {
+ uniqueIdxMap.set(cand.trimmed, uniqueTrimmed.length);
+ uniqueTrimmed.push(cand.trimmed);
+ }
+ }
+ if (!uniqueTrimmed.length) continue;
+ const batchKey = `${modePrefix}${uniqueTrimmed.join('\x1f')}`;
+ if (toolBatchInflight.has(batchKey)) continue;
+ const requestId = `op_ts_${nowMs().toString(36)}_${++reqSeq}`;
+ toolBatchInflight.set(batchKey, requestId);
+ br.translateStream(
+ {
+ text: JSON.stringify({ v: 1, items: uniqueTrimmed }),
+ mode: activeMode === 'machine' ? 'tool-batch:machine' : 'tool-batch:ai',
+ priority: 8000,
+ requestId,
+ targetLang: activeLang,
+ },
+ null
+ )
+ .then((res) => {
+ toolBatchInflight.delete(batchKey);
+ if (!translateToolSummaries || currentMode !== activeMode || resolveActiveLang() !== activeLang) return;
+ let outItems = null;
+ if (res && res.ok) {
+ if (Array.isArray(res.items)) {
+ outItems = res.items;
+ } else if (typeof res.text === 'string' && res.text.trim()) {
+ try {
+ const parsed = JSON.parse(res.text);
+ if (Array.isArray(parsed?.items)) outItems = parsed.items;
+ } catch (_) {}
+ }
+ }
+ if (!outItems || outItems.length !== uniqueTrimmed.length) {
+ const until = nowMs() + 20000;
+ for (let k = 0; k < uniqueTrimmed.length; k++) {
+ markToolSummaryFailed(`${modePrefix}${uniqueTrimmed[k]}`, until);
+ }
+ return;
+ }
+ for (let k = 0; k < uniqueTrimmed.length; k++) {
+ const trText = typeof outItems[k] === 'string' ? outItems[k].trim() : '';
+ if (trText && trText !== uniqueTrimmed[k]) {
+ if (toolSummaryCache.size >= 600) {
+ const oldest = toolSummaryCache.keys().next().value;
+ if (oldest !== undefined) toolSummaryCache.delete(oldest);
+ }
+ toolSummaryCache.set(`${modePrefix}${uniqueTrimmed[k]}`, trText);
+ }
+ }
+ for (let i = 0; i < uncached.length; i++) {
+ const cand = uncached[i];
+ const idx = uniqueIdxMap.get(cand.trimmed);
+ const trText = idx !== undefined && typeof outItems[idx] === 'string' ? outItems[idx].trim() : '';
+ if (trText && trText !== cand.trimmed) {
+ applyToolSummaryText(cand, trText, activeLang, activeMode);
+ }
+ }
+ })
+ .catch(() => {
+ toolBatchInflight.delete(batchKey);
+ const until = nowMs() + 20000;
+ for (let k = 0; k < uniqueTrimmed.length; k++) {
+ markToolSummaryFailed(`${modePrefix}${uniqueTrimmed[k]}`, until);
+ }
+ });
+ }
+ }
+ const TITLE_SKIP_TAGS = new Set('SCRIPT,STYLE,SVG,NOSCRIPT,PRE,CODE,INPUT,TEXTAREA,SELECT,TIME,KBD,SAMP'.split(','));
+ const TITLE_HEADING_TAGS = new Set('H1,H2,H3,H4,H5,H6'.split(','));
+ const TITLE_CHILD_BADGE_CLS_RE =
+ /\b(?:badge|pill|chip|timestamp|time|meta|metadata|count|counter|hotkey|shortcut|avatar|icon|spinner|status|actions?|subtitle|sub-title|subtext|preview|excerpt|snippet|description|desc|caption|footnote|workspace|folder|repo|branch|ag-prism-sb-)\b/i;
+ const TITLE_CHILD_BADGE_TID_RE =
+ /badge|time|date|action|menu|delete|pin|archive|count|status|icon|subtitle|sub-title|preview|excerpt|summary|desc|meta|workspace|folder|repo|branch|pill|chip|avatar|spinner/i;
+ const TITLE_PRIMARY_TID_RE = /(?:^|[-_])title(?:$|[-_])/i;
+ const TITLE_STATUS_WORD_RE =
+ /^(?:new|active|running|working|thinking|generating|pending|queued|idle|done|completed|finished|failed|error|paused|stopped|draft|pinned|unread|archived|updated|edited|in\s+progress|waiting)$/i;
+ function isSidebarStudioActive() {
+ try {
+ const rootEl = docRoot();
+ if (rootEl && ga(rootEl, 'data-ag-prism-sidebar-studio') === 'on') {
+ return true;
+ }
+ return W.__agPrism?.getState?.()?.cfg?.sidebarStudio === 'on';
+ } catch (_) {
+ return false;
+ }
+ }
+ function isTitleContainerExcluded(container, sidebarOn) {
+ let cur = container;
+ while (cur && cur.nodeType === 1) {
+ if (isOverlayOrIgnoredElement(cur)) return true;
+ if (hasAttr(cur, 'data-ag-prism-sidebar-owned')) return true;
+ const cls = String(ga(cur, 'class') || cur.className || '');
+ if (cls.includes('ag-prism-sb-native-hidden') || cls.includes('ag-prism-chat-row-hidden')) return true;
+ if (sidebarOn && (cls.includes('ag-prism-sb-') || cls.includes('ag-sb-'))) return true;
+ const tid = ga(cur, 'data-testid') || '';
+ if (tid === 'prism-thought-ai-config' || tid === 'prism-thought-general-config') return true;
+ cur = parEl(cur);
+ }
+ return false;
+ }
+ function isExcludedTitleChild(el, containerRoot, sidebarOn) {
+ if (!el || el.nodeType !== 1) return true;
+ if (isOverlayOrIgnoredElement(el)) return true;
+ if (
+ hasAttr(el, 'data-ag-prism-sidebar-owned') ||
+ hasAttr(el, 'data-ag-no-i18n') ||
+ hasAttr(el, 'data-file-href') ||
+ hasAttr(el, 'data-file-path') ||
+ hasAttr(el, 'data-omni-path') ||
+ hasAttr(el, 'data-badge')
+ ) {
+ return true;
+ }
+ const tag = el.tagName ? String(el.tagName).toUpperCase() : '';
+ if (TITLE_SKIP_TAGS.has(tag)) return true;
+ const cls = String(ga(el, 'class') || el.className || '');
+ if (sidebarOn && (cls.includes('ag-prism-sb-') || cls.includes('ag-sb-'))) return true;
+ if (el !== containerRoot) {
+ if (tag === 'BUTTON') return true;
+ if (ga(el, 'aria-hidden') === 'true') return true;
+ const role = low(ga(el, 'role'));
+ if (role === 'button' || role === 'status' || role === 'badge') return true;
+ if (TITLE_CHILD_BADGE_CLS_RE.test(cls)) return true;
+ const tid = ga(el, 'data-testid') || '';
+ if (tid && TITLE_CHILD_BADGE_TID_RE.test(tid)) return true;
+ }
+ return false;
+ }
+ function findExplicitPrimaryTitleEl(rootEl, containerRoot, sidebarOn) {
+ if (!rootEl || rootEl.nodeType !== 1) return null;
+ const chs = rootEl[K_CN];
+ if (!chs || !chs.length) return null;
+ for (let i = 0; i < chs.length; i++) {
+ const ch = chs[i];
+ if (!ch || ch.nodeType !== 1) continue;
+ if (isExcludedTitleChild(ch, containerRoot, sidebarOn)) continue;
+ const tid = ga(ch, 'data-testid') || '';
+ if (tid && TITLE_PRIMARY_TID_RE.test(tid) && !/subtitle|sub-title/i.test(tid)) return ch;
+ const tag = ch.tagName ? String(ch.tagName).toUpperCase() : '';
+ if (TITLE_HEADING_TAGS.has(tag)) return ch;
+ const nested = findExplicitPrimaryTitleEl(ch, containerRoot, sidebarOn);
+ if (nested) return nested;
+ }
+ return null;
+ }
+ function findBreadcrumbGroupRoot(el) {
+ let cur = parEl(el);
+ while (cur && cur.nodeType === 1) {
+ const tag = cur.tagName ? String(cur.tagName).toUpperCase() : '';
+ if (tag === 'NAV' || tag === 'HEADER' || tag === 'OL' || tag === 'UL') return cur;
+ const role = low(ga(cur, 'role'));
+ if (role === 'navigation' || role === 'banner' || role === 'list') return cur;
+ const aria = low(ga(cur, 'aria-label'));
+ if (aria.includes('breadcrumb')) return cur;
+ const tid = low(ga(cur, 'data-testid'));
+ if (tid.includes('breadcrumb') && tid !== 'breadcrumb-segment') return cur;
+ const cls = low(ga(cur, 'class') || cur.className || '');
+ if (cls.includes('breadcrumb')) return cur;
+ cur = parEl(cur);
+ }
+ return document.body || docRoot() || '__default_bc__';
+ }
+ function unbindStaleTitleRec(tn, prevRec, curVal) {
+ if (prevRec && prevRec.trans !== curVal) {
+ titleNodeMap.delete(tn);
+ titleRecords.delete(prevRec);
+ if (prevRec.el) ra(prevRec.el, 'data-op-title-tr');
+ }
+ }
+ function isIgnorableTitlePrefixText(trimmed) {
+ if (!trimmed || trimmed.length < 2) return true;
+ return TITLE_TIME_RE.test(trimmed) || TITLE_NUM_SYM_RE.test(trimmed) || TITLE_STATUS_WORD_RE.test(trimmed);
+ }
+ function collectTitleTextNodes(rootNode, containerRoot, outList, visitedNodes, sidebarOn, activeLang, primaryOnly = false) {
+ if (!rootNode || outList.length >= 40) return false;
+ const nt = rootNode.nodeType;
+ if (nt === 3) {
+ if (visitedNodes.has(rootNode)) return false;
+ visitedNodes.add(rootNode);
+ const val = getTnStr(rootNode);
+ const prevRec = titleNodeMap.get(rootNode);
+ if (prevRec && prevRec.trans === val && prevRec.lang === activeLang && prevRec.mode === currentMode) {
+ return primaryOnly;
+ }
+ if (val.length > 1024) {
+ unbindStaleTitleRec(rootNode, prevRec, val);
+ return primaryOnly;
+ }
+ const trimmed = trm(val);
+ if (!trimmed) {
+ unbindStaleTitleRec(rootNode, prevRec, val);
+ return false;
+ }
+ if (primaryOnly && isIgnorableTitlePrefixText(trimmed)) {
+ unbindStaleTitleRec(rootNode, prevRec, val);
+ return false;
+ }
+ if (!isTitleCandidate(trimmed, activeLang)) {
+ unbindStaleTitleRec(rootNode, prevRec, val);
+ return primaryOnly;
+ }
+ outList.push({ tn: rootNode, el: parEl(rootNode), raw: val, trimmed });
+ return primaryOnly;
+ }
+ if (nt !== 1 || isExcludedTitleChild(rootNode, containerRoot, sidebarOn)) return false;
+ const chs = rootNode[K_CN];
+ if (!chs || !chs.length) return false;
+ for (let i = 0; i < chs.length && outList.length < 40; i++) {
+ if (collectTitleTextNodes(chs[i], containerRoot, outList, visitedNodes, sidebarOn, activeLang, primaryOnly)) {
+ return true;
+ }
+ }
+ return false;
+ }
+ function applyTitleText(item, translatedStr, activeLang, mode) {
+ if (!item || !item.tn || !isConn(item.tn) || !translatedStr) return;
+ const curVal = getTnStr(item.tn);
+ if (curVal !== item.raw) return;
+ const nextVal = wrapWithRawWhitespace(item.raw, translatedStr);
+ if (nextVal === item.raw) return;
+ const oldRec = titleNodeMap.get(item.tn);
+ const orig = oldRec && item.raw === oldRec.trans ? oldRec.orig : item.raw;
+ if (oldRec) titleRecords.delete(oldRec);
+ titleInternalMutDepth += 1;
+ try {
+ setTn(item.tn, nextVal);
+ if (item.el) sa(item.el, 'data-op-title-tr', '1');
+ } finally {
+ titleInternalMutDepth = Math.max(0, titleInternalMutDepth - 1);
+ }
+ const rec = { tn: item.tn, el: item.el, orig, trans: nextVal, lang: activeLang, mode };
+ titleNodeMap.set(item.tn, rec);
+ titleRecords.add(rec);
+ }
+ function clearTitleScanTimer() {
+ if (titleScanTimer) {
+ clearTimeout(titleScanTimer);
+ titleScanTimer = null;
+ }
+ }
+ function stopTitleObserver() {
+ clearTitleScanTimer();
+ if (titleObserver) {
+ try { titleObserver.disconnect(); } catch (_) {}
+ titleObserver = null;
+ }
+ observedTitleRoots.clear();
+ }
+ function scheduleTitleScan(delayMs = 140) {
+ if (!translateTitles || currentMode === 'off' || isDocHiddenOrSleep()) return;
+ if (titleScanTimer) return;
+ titleScanTimer = setTimeout(() => {
+ titleScanTimer = null;
+ if (!translateTitles || currentMode === 'off' || isDocHiddenOrSleep()) return;
+ const rEl = docRoot();
+ if (rEl && ga(rEl, 'data-ag-pp-open') === '1') {
+ scheduleTitleScan(600);
+ return;
+ }
+ scanConversationTitles();
+ }, delayMs);
+ titleScanTimer?.unref?.();
+ }
+ function findTitleContainerAncestor(node) {
+ let cur = node && node.nodeType === 1 ? node : parEl(node);
+ while (cur && cur.nodeType === 1) {
+ if (TITLE_CONTAINER_TIDS.has(ga(cur, 'data-testid') || '')) return cur;
+ cur = parEl(cur);
+ }
+ return null;
+ }
+ function isSafeTitleObserverRoot(el) {
+ if (!el || el.nodeType !== 1 || !isConn(el)) return false;
+ if (typeof document !== 'undefined' && (el === document.body || el === document.documentElement)) return false;
+ const tid = ga(el, 'data-testid') || '';
+ if (tid === 'conversation-view' || tid === 'autoscroll-viewport') return false;
+ try {
+ if (typeof el.querySelector === 'function' && el.querySelector('[data-testid="conversation-view"], [data-testid="autoscroll-viewport"]')) {
+ return false;
+ }
+ } catch (_) {}
+ return true;
+ }
+ function isTitleMutationRelevant(rec) {
+ if (!rec) return false;
+ if (rec.type === 'characterData') {
+ const tn = rec.target;
+ if (!tn || tn.nodeType !== 3) return false;
+ const curVal = getTnStr(tn);
+ const prev = titleNodeMap.get(tn);
+ if (prev && prev.trans === curVal) return false;
+ const p = parEl(tn);
+ if (!p || isOverlayOrIgnoredElement(p)) return false;
+ return Boolean(findTitleContainerAncestor(p));
+ }
+ if (rec.type === 'childList') {
+ const tgt = rec.target;
+ if (tgt && tgt.nodeType === 1 && !isOverlayOrIgnoredElement(tgt) && findTitleContainerAncestor(tgt)) {
+ const added = rec.addedNodes;
+ if (!added || !added.length) return true;
+ for (let i = 0; i < added.length; i++) {
+ const n = added[i];
+ if (!n) continue;
+ if (n.nodeType === 3) {
+ const prev = titleNodeMap.get(n);
+ if (!prev || prev.trans !== getTnStr(n)) return true;
+ } else if (n.nodeType === 1 && !isOverlayOrIgnoredElement(n)) {
+ return true;
+ }
+ }
+ return false;
+ }
+ const added = rec.addedNodes;
+ if (added && added.length) {
+ for (let i = 0; i < added.length; i++) {
+ const n = added[i];
+ if (!n || n.nodeType !== 1 || isOverlayOrIgnoredElement(n)) continue;
+ if (TITLE_CONTAINER_TIDS.has(ga(n, 'data-testid') || '')) return true;
+ try {
+ if (typeof n.querySelector === 'function' && n.querySelector(SEL_TITLE_CONTAINERS)) return true;
+ } catch (_) {}
+ }
+ }
+ }
+ return false;
+ }
+ function syncTitleObserverTargets() {
+ if (!translateTitles || currentMode === 'off' || typeof document === 'undefined') {
+ stopTitleObserver();
+ return;
+ }
+ const MO = W.MutationObserver || (typeof MutationObserver === 'function' ? MutationObserver : null);
+ if (typeof MO !== 'function') return;
+ const desired = new Set();
+ const listNodes = qsa('[data-testid="conversation-list-sidebar"]');
+ for (let i = 0; i < listNodes.length; i++) {
+ if (isSafeTitleObserverRoot(listNodes[i])) desired.add(listNodes[i]);
+ }
+ const titleNodes = qsa(SEL_TITLE_CONTAINERS);
+ for (let i = 0; i < titleNodes.length; i++) {
+ const el = titleNodes[i];
+ if (!el || !isConn(el)) continue;
+ const tid = ga(el, 'data-testid') || '';
+ if (tid === 'breadcrumb-segment') {
+ const grp = findBreadcrumbGroupRoot(el);
+ if (isSafeTitleObserverRoot(grp)) desired.add(grp);
+ else if (isSafeTitleObserverRoot(parEl(el))) desired.add(parEl(el));
+ else if (isSafeTitleObserverRoot(el)) desired.add(el);
+ } else {
+ // 如果已在 conversation-list-sidebar 内就无需重复挂到行级
+ let covered = false;
+ for (const root of desired) {
+ try {
+ if (root === el || (typeof root.contains === 'function' && root.contains(el))) { covered = true; break; }
+ } catch (_) {}
+ }
+ if (!covered) {
+ const p = parEl(el);
+ if (isSafeTitleObserverRoot(p)) desired.add(p);
+ else if (isSafeTitleObserverRoot(el)) desired.add(el);
+ }
+ }
+ }
+ if (!desired.size) {
+ stopTitleObserver();
+ return;
+ }
+ let needRebuild = !titleObserver;
+ if (!needRebuild) {
+ for (const cur of observedTitleRoots) {
+ if (!isConn(cur) || !desired.has(cur)) {
+ needRebuild = true;
+ break;
+ }
+ }
+ }
+ if (needRebuild) {
+ if (titleObserver) {
+ try { titleObserver.disconnect(); } catch (_) {}
+ }
+ observedTitleRoots.clear();
+ titleObserver = new MO((records) => {
+ if (!translateTitles || currentMode === 'off' || titleInternalMutDepth > 0 || isDocHiddenOrSleep()) return;
+ if (!Array.isArray(records) || !records.length) return;
+ for (let i = 0; i < records.length; i++) {
+ if (isTitleMutationRelevant(records[i])) {
+ scheduleTitleScan(140);
+ return;
+ }
+ }
+ });
+ }
+ for (const root of desired) {
+ if (observedTitleRoots.has(root)) continue;
+ try {
+ titleObserver.observe(root, { childList: true, subtree: true, characterData: true });
+ observedTitleRoots.add(root);
+ } catch (_) {}
+ }
+ }
+ function markTitleFailed(key, until) {
+ if (titleFailedUntil.has(key)) titleFailedUntil.delete(key);
+ titleFailedUntil.set(key, until);
+ while (titleFailedUntil.size > 512) {
+ const oldest = titleFailedUntil.keys().next().value;
+ if (oldest === undefined) break;
+ titleFailedUntil.delete(oldest);
+ }
+ }
+ function pruneDetachedTitleRecords() {
+ if (!titleRecords.size) return;
+ for (const rec of Array.from(titleRecords)) {
+ if (!rec || !rec.tn || !isConn(rec.tn)) {
+ if (rec && rec.tn) titleNodeMap.delete(rec.tn);
+ titleRecords.delete(rec);
+ }
+ }
+ }
+ function scanConversationTitles() {
+ pruneDetachedTitleRecords();
+ if (!translateTitles || currentMode === 'off' || typeof document === 'undefined') {
+ stopTitleObserver();
+ return;
+ }
+ syncTitleObserverTargets();
+ const br = getBridge();
+ if (!br || typeof br.translateStream !== 'function') return;
+ const nodes = qsa(SEL_TITLE_CONTAINERS);
+ if (!nodes || !nodes.length) {
+ hasOffscreenTitles = false;
+ return;
+ }
+ const sidebarOn = isSidebarStudioActive();
+ const activeLang = resolveActiveLang();
+ const activeMode = currentMode;
+ const modePrefix = `${activeMode}:${activeLang}:`;
+ const visitedNodes = new Set();
+ const candidates = [];
+ const bcGroups = new Map();
+ let sawOffscreen = false;
+ for (let i = 0; i < nodes.length && candidates.length < 40; i++) {
+ const c = nodes[i];
+ if (!c || !isConn(c) || isHiddenByAncestor(null, c)) continue;
+ if (isTitleContainerExcluded(c, sidebarOn)) continue;
+ const tid = ga(c, 'data-testid') || '';
+ if (tid === 'breadcrumb-segment') {
+ const gRoot = findBreadcrumbGroupRoot(c);
+ let segs = bcGroups.get(gRoot);
+ if (!segs) {
+ segs = [];
+ bcGroups.set(gRoot, segs);
+ }
+ segs.push(c);
+ continue;
+ }
+ if (probeViewportBand(c) === 0) { sawOffscreen = true; watchOff(c, 'c'); continue; }
+ const explicitTitleEl = findExplicitPrimaryTitleEl(c, c, sidebarOn);
+ collectTitleTextNodes(explicitTitleEl || c, c, candidates, visitedNodes, sidebarOn, activeLang, true);
+ }
+ for (const segs of bcGroups.values()) {
+ if (candidates.length >= 40) break;
+ if (!segs || segs.length < 2) continue;
+ const lastSeg = segs[segs.length - 1];
+ if (probeViewportBand(lastSeg) === 0) { sawOffscreen = true; watchOff(lastSeg, 'c'); continue; }
+ collectTitleTextNodes(lastSeg, lastSeg, candidates, visitedNodes, sidebarOn, activeLang, true);
+ }
+ hasOffscreenTitles = sawOffscreen;
+ if (!candidates.length) return;
+ const now = nowMs();
+ const uncached = [];
+ const uniqueTrimmed = [];
+ const uniqueIdxMap = new Map();
+ for (let i = 0; i < candidates.length; i++) {
+ const cand = candidates[i];
+ const cacheKey = `${modePrefix}${cand.trimmed}`;
+ const hit = titleCache.get(cacheKey) || toolSummaryCache.get(cacheKey);
+ if (hit) {
+ applyTitleText(cand, hit, activeLang, activeMode);
+ continue;
+ }
+ const failUntil = titleFailedUntil.get(cacheKey);
+ if (failUntil) {
+ if (now < failUntil) continue;
+ titleFailedUntil.delete(cacheKey);
+ }
+ uncached.push(cand);
+ if (!uniqueIdxMap.has(cand.trimmed)) {
+ uniqueIdxMap.set(cand.trimmed, uniqueTrimmed.length);
+ uniqueTrimmed.push(cand.trimmed);
+ }
+ }
+ if (!uniqueTrimmed.length) return;
+ for (let start = 0; start < uniqueTrimmed.length; start += 24) {
+ const batchStrings = uniqueTrimmed.slice(start, start + 24);
+ const batchSet = new Set(batchStrings);
+ const batchCands = uncached.filter((c) => batchSet.has(c.trimmed));
+ const batchIdxMap = new Map();
+ for (let k = 0; k < batchStrings.length; k++) batchIdxMap.set(batchStrings[k], k);
+ const batchKey = `${modePrefix}${batchStrings.join('\x1f')}`;
+ if (titleBatchInflight.has(batchKey)) continue;
+ const requestId = `op_tt_${nowMs().toString(36)}_${++reqSeq}`;
+ titleBatchInflight.set(batchKey, requestId);
+ br.translateStream(
+ {
+ text: JSON.stringify({ v: 1, items: batchStrings }),
+ mode: activeMode === 'machine' ? 'tool-batch:machine' : 'tool-batch:ai',
+ priority: 7000,
+ requestId,
+ targetLang: activeLang,
+ },
+ null
+ )
+ .then((res) => {
+ titleBatchInflight.delete(batchKey);
+ if (!translateTitles || currentMode !== activeMode || resolveActiveLang() !== activeLang) return;
+ let outItems = null;
+ if (res && res.ok) {
+ if (Array.isArray(res.items)) {
+ outItems = res.items;
+ } else if (typeof res.text === 'string' && res.text.trim()) {
+ try {
+ const parsed = JSON.parse(res.text);
+ if (Array.isArray(parsed?.items)) outItems = parsed.items;
+ } catch (_) {}
+ }
+ }
+ if (!outItems || outItems.length !== batchStrings.length) {
+ const until = nowMs() + 20000;
+ for (let k = 0; k < batchStrings.length; k++) {
+ markTitleFailed(`${modePrefix}${batchStrings[k]}`, until);
+ }
+ return;
+ }
+ for (let k = 0; k < batchStrings.length; k++) {
+ const trText = typeof outItems[k] === 'string' ? outItems[k].trim() : '';
+ if (trText && trText !== batchStrings[k]) {
+ if (titleCache.size >= 600) {
+ const oldest = titleCache.keys().next().value;
+ if (oldest !== undefined) titleCache.delete(oldest);
+ }
+ titleCache.set(`${modePrefix}${batchStrings[k]}`, trText);
+ }
+ }
+ for (let i = 0; i < batchCands.length; i++) {
+ const cand = batchCands[i];
+ const idx = batchIdxMap.get(cand.trimmed);
+ const trText = idx !== undefined && typeof outItems[idx] === 'string' ? outItems[idx].trim() : '';
+ if (trText && trText !== cand.trimmed) {
+ applyTitleText(cand, trText, activeLang, activeMode);
+ }
+ }
+ })
+ .catch(() => {
+ titleBatchInflight.delete(batchKey);
+ const until = nowMs() + 20000;
+ for (let k = 0; k < batchStrings.length; k++) {
+ markTitleFailed(`${modePrefix}${batchStrings[k]}`, until);
+ }
+ });
+ }
+ }
+ function scanNow() {
+ scanTimer = null;
+ if (currentMode === 'off') return;
+ const triggers = queryTriggers();
+ if (!triggers.length) { if (translateToolSummaries) scanToolSummaryContainers(); if (translateTitles) scanConversationTitles(); return; }
+ const lastIdx = triggers.length - 1, candidates = [], activePanelSet = new Set(), vp = readViewportDims();
+ let sawOffscreenLazy = false;
+ for (let i = 0; i <= lastIdx; i++) {
+ const btn = triggers[i]; if (!btn) continue;
+ const isLatest = i === lastIdx, allowPreload = triggerTiming === 'preload' && isLatest, expanded = ga(btn, A_EXP) === 'true';
+ if (!allowPreload && !expanded) continue;
+ const panel = nextSib(btn);
+ if (panel) {
+ const em = panelMeta.get(panel), streamingNow = isTriggerStreaming(btn);
+ if (streamingNow && expanded && isLatest && em && em.s && ga(panel, A_PND) === '1') { trackStreamingTrigger(btn, panel); activePanelSet.add(panel); continue; }
+ if (em && !streamingNow && em.rs === quickPanelStamp(panel)) {
+ if (expanded && ga(panel, A_RDY) === '1' && em.ds && em.ds === ga(panel, A_SIG)) continue;
+ if (!expanded) { const inf = rawCacheMap.get(panel); if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) continue; }
+ }
+ if (!isLatest && isHiddenByAncestor(btn, panel)) continue;
+ if (em && !streamingNow && em.rs === quickPanelStamp(panel) && isHiddenByAncestor(btn, panel)) {
+ const inf = rawCacheMap.get(panel);
+ if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) { activePanelSet.add(panel); continue; }
+ }
+ }
+ const band = expanded && !isLatest ? probeViewportBand(panel || btn, vp) : 0;
+ if (!isLatest && band === 0) { sawOffscreenLazy = true; watchOff(panel || btn, 'p', btn); continue; }
+ if (panel) activePanelSet.add(panel);
+ const tier = isLatest && expanded ? 25 : band === 2 ? 20 : isLatest ? 12 : 10;
+ candidates.push({ b: btn, a: allowPreload, p: tier * 1000 + i });
+ }
+ const preToolTargets = translateToolSummaries && typeof document !== 'undefined' ? collectToolSummaryTargets(vp) : null;
+ hasOffscreenLazyPanels = sawOffscreenLazy;
+ if (inflightBySig.size > 0) pruneUnneededPendingRequests(activePanelSet);
+ if (candidates.length) {
+ candidates.sort((x, y) => y.p - x.p);
+ syncHydrateBudget = 1;
+ try { for (let i = 0; i < candidates.length; i++) processSingleTrigger(candidates[i].b, candidates[i].a, candidates[i].p); }
+ finally { syncHydrateBudget = 99; }
+ }
+ if (translateToolSummaries) scanToolSummaryContainers(preToolTargets);
+ if (translateTitles) scanConversationTitles();
+ }
+ function scheduleScan(delayMs = 55) {
+ if (currentMode === 'off') return;
+ const bus = getDomBus();
+ if (bus?.scheduleTask) {
+ if (scanTimer === 'bus') { if (delayMs <= 25) bus.reprioritizeTask?.('conv:thought-scan', 'user-visible'); return; }
+ if (scanTimer) return;
+ scanTimer = 'bus';
+ bus.scheduleTask('conv:thought-scan', scanNow, { priority: delayMs <= 25 ? 'user-visible' : 'background', delay: delayMs });
+ return;
+ }
+ if (!scanTimer) scanTimer = setTimeout(scanNow, delayMs);
+ }
+ const clrScan = () => { if (scanTimer === 'bus') getDomBus()?.cancelTask?.('conv:thought-scan'); else if (scanTimer) clearTimeout(scanTimer); scanTimer = null; };
+ const brCall = (action, inp) => {
+ const br = getBridge();
+ return br ? br.call({ action, ...inp }) : offRes();
+ };
+ const RESET_SIG_ATTRS = [A_SIG, A_FBK, A_FLD];
+ let syncedOnce = false;
+ const api = {
+ sync(cfg = {}) {
+ const nextMode = cfg.thoughtTranslate === 'machine' || cfg.thoughtTranslate === 'ai' ? cfg.thoughtTranslate : 'off';
+ const prevTrigger = triggerTiming;
+ triggerTiming = cfg.thoughtTrigger === 'expand' ? 'expand' : 'preload';
+ const triggerChanged = prevTrigger !== triggerTiming, prevLang = currentLang;
+ currentLang = resolveActiveLang(cfg.language);
+ const langChanged = prevLang !== currentLang;
+ if (langChanged) refreshAllOverlayLocaleStrings();
+ let toolSummaryChanged = false, titleChanged = false, viewChanged = false;
+ if (typeof cfg.translateToolSummaries === 'boolean') { hasExplicitToolSummaries = true; toolSummaryChanged = setTranslateToolSummariesFlag(cfg.translateToolSummaries, false); }
+ if (typeof cfg.translateTitles === 'boolean') { hasExplicitTitles = true; titleChanged = setTranslateTitlesFlag(cfg.translateTitles, false); }
+ const incomingView = cfg.thoughtView || cfg.thoughtViewMode;
+ if (incomingView === 'bilingual' || incomingView === 'immersive') {
+ hasExplicitHostView = viewModeLoaded = true; viewChanged = currentViewMode !== incomingView; currentViewMode = incomingView;
+ if (viewChanged || !syncedOnce) { persistViewModePreference(currentViewMode); syncDocViewAttribute(); refreshAllPanelViewModes(viewChanged); }
+ }
+ const nextProxyMode = typeof cfg.proxyMode === 'string' ? cfg.proxyMode.trim().toLowerCase() : '';
+ const proxyModeChanged = Boolean(nextProxyMode && nextProxyMode !== currentProxyMode && syncedOnce);
+ if (nextProxyMode) currentProxyMode = nextProxyMode;
+ if (nextMode === 'off') { clrScan(); clearAllFailCooldowns(); currentMode = 'off'; syncedOnce = false; releasePrismOverlays(); return; }
+ if (triggerTiming === 'expand' && prevTrigger !== 'expand') cancelCollapsedInflightRequests();
+ else if (triggerTiming === 'expand') clearAllWaitTimers(true);
+ const changed = currentMode !== nextMode, hadPrevEngine = currentMode !== 'off';
+ currentMode = nextMode; ensureInitialized();
+ if (changed || langChanged || proxyModeChanged) {
+ clearAllFailCooldowns(); clearHydrateQueue(); restoreAllToolSummaries(); restoreAllTitles();
+ if (hadPrevEngine) { clearAllWaitTimers(false); for (const entry of inflightBySig.values()) cancelTranslateRequest(entry); inflightBySig.clear(); }
+ const resetPanelSig = (p) => {
+ if (!p) return;
+ clearTriggerStatusBadge(p); raList(p, RESET_SIG_ATTRS);
+ const m = panelMeta.get(p);
+ if (m && (m.s || m.m)) { m.ds = m.ps = ''; delete m.skippedSig; } else panelMeta.delete(p);
+ };
+ qsa(SEL_TRIGGER).forEach((b) => resetPanelSig(nextSib(b)));
+ qsa(SEL_OVERLAY).forEach((ov) => resetPanelSig(parEl(ov)));
+ }
+ const needScan = !syncedOnce || changed || langChanged || proxyModeChanged || viewChanged || triggerChanged || toolSummaryChanged || titleChanged;
+ syncedOnce = true;
+ if (needScan) scheduleScan(25);
+ },
+ scan() { scheduleScan(45); },
+ scanImmediate() { clrScan(); scanNow(); },
+ getViewMode() { loadViewModePreference(); return currentViewMode; },
+ setViewMode(nextViewMode, opts = {}) {
+ const normalized = nextViewMode === 'bilingual' ? 'bilingual' : 'immersive';
+ hasExplicitHostView = viewModeLoaded = true;
+ const changed = currentViewMode !== normalized;
+ currentViewMode = normalized; persistViewModePreference(normalized); syncDocViewAttribute(); refreshAllPanelViewModes(true);
+ if (changed && opts.persistDaemon !== false) void callDaemonRpc({ action: 'save-config', viewMode: normalized }).catch(() => {});
+ return currentViewMode;
+ },
+ getTranslateToolSummaries: () => Boolean(translateToolSummaries),
+ setTranslateToolSummaries(enabled, opts = {}) {
+ const next = Boolean(enabled); hasExplicitToolSummaries = true;
+ const changed = setTranslateToolSummariesFlag(next, true);
+ if (changed && opts.persistDaemon === true) void callDaemonRpc({ action: 'save-config', translateToolSummaries: next }).catch(() => {});
+ return translateToolSummaries;
+ },
+ getTranslateTitles: () => Boolean(translateTitles),
+ setTranslateTitles(enabled, opts = {}) {
+ const next = Boolean(enabled); hasExplicitTitles = true;
+ const changed = setTranslateTitlesFlag(next, true);
+ if (changed && opts.persistDaemon === true) void callDaemonRpc({ action: 'save-config', translateTitles: next }).catch(() => {});
+ return translateTitles;
+ },
+ retryBlock: (panel) => retryPanelNow(panel),
+ clearCooldown: (sig) => clearSigCooldown(sig),
+ getLocalCacheStats, clearLocalCache,
+ getCacheStats() {
+ const local = getLocalCacheStats();
+ const mk = (localOnly, dEntries, dBytes) => ({ ok: true, localOnly, localEntries: local.memEntries, storageEntries: local.storageEntries, daemonEntries: dEntries, diskBytes: dBytes, totalEntries: Math.max(local.memEntries, dEntries) });
+ return callDaemonRpc({ action: 'cache-stats' }).then((res) => (res && res.ok && typeof res.entries === 'number' ? mk(false, res.entries, res.diskBytes || 0) : mk(true, 0, 0))).catch(() => mk(true, 0, 0));
+ },
+ clearCache() {
+ const localRes = clearLocalCache();
+ const mk = (localOnly, dc) => ({ ok: true, localOnly, localCleared: localRes.cleared, daemonCleared: dc });
+ return callDaemonRpc({ action: 'clear-cache' }).then((res) => (res && res.ok ? mk(false, typeof res.cleared === 'number' ? res.cleared : 0) : mk(true, 0))).catch(() => mk(true, 0));
+ },
+ getConfig: () => brCall('get-config').then((res) => (syncRemoteCfgMeta(res), res)),
+ saveConfig(input) {
+ if (typeof input?.translateToolSummaries === 'boolean') hasExplicitToolSummaries = true;
+ if (typeof input?.translateTitles === 'boolean') hasExplicitTitles = true;
+ return brCall('save-config', input).then((res) => {
+ const tagChanged = setActiveStyleTag(res?.styleTag || (res?.stylePreset ? `ai_${res.stylePreset}` : ''));
+ if (typeof res?.translateToolSummaries === 'boolean') setTranslateToolSummariesFlag(res.translateToolSummaries, false);
+ else if (typeof input?.translateToolSummaries === 'boolean') setTranslateToolSummariesFlag(input.translateToolSummaries, false);
+ if (typeof res?.translateTitles === 'boolean') setTranslateTitlesFlag(res.translateTitles, false);
+ else if (typeof input?.translateTitles === 'boolean') setTranslateTitlesFlag(input.translateTitles, false);
+ qsa(SEL_TRIGGER).forEach((b) => {
+ const p = nextSib(b);
+ if (p && (tagChanged || ga(p, A_FBK) === '1' || ga(p, A_FLD) === '1' || findChildByClass(b, C_TRG))) { clearTriggerStatusBadge(b); raList(p, RESET_SIG_ATTRS); panelMeta.delete(p); }
+ });
+ clearAllFailCooldowns(); scheduleScan(25);
+ return res;
+ });
+ },
+ fetchModels: (input) => brCall('fetch-models', input),
+ testConnection: (input) => brCall('test-connection', input),
+ diagnose: (input) => brCall('diagnose', input),
+ __memCache: memCache, __toolSummaryRecords: toolSummaryRecords, __toolSummaryFailedUntil: toolSummaryFailedUntil,
+ __titleRecords: titleRecords, __titleFailedUntil: titleFailedUntil, __observedTitleRoots: observedTitleRoots,
+ destroy() {
+ currentMode = 'off'; syncedOnce = hasOffscreenLazyPanels = hasOffscreenTitles = false;
+ clrScan(); getDomBus()?.cancelGroup?.('conv:thought'); clrVis(); stopTitleObserver();
+ if (cacheDirty || persistTimer || persistIdle || memCache.size > storedCount) flushLocalStorageCacheNow();
+ releasePrismOverlays(); hlBks = null;
+ },
+ };
+ W.__agPrismThought = api;
 })(typeof globalThis !== 'undefined' ? globalThis : window);

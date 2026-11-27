@@ -193,7 +193,18 @@ function createQaDomEnv({ reducedMatches = false } = {}) {
         return out;
       },
       querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
-      getElementById(id) { return this.querySelector('#' + id.replace(/\./g, '\\.')); },
+      getElementById(id) {
+        const target = String(id);
+        const find = (n) => {
+          for (const c of n.children) {
+            if (c.id === target) return c;
+            const hit = find(c);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        return find(this);
+      },
       getBoundingClientRect() { return this._rect; },
       get ownerDocument() { return doc; },
       getContext: tag.toLowerCase() === 'canvas'
@@ -454,7 +465,7 @@ test('2) PR #114 home top-toolbar clearance + ask_question frame-0 peek/pointer-
     assert.equal(convStage.style.pointerEvents, 'none', 'Mascot host must enforce pointer-events: none during ask_question peek');
     assert.equal(convStage.style.zIndex, '8', 'Mascot host must drop to z-index: 8 during ask_question peek');
     assert.equal(tkFrame.getAttribute('data-ag-cs-prism-box'), '1', 'Frame-0 takeover card must receive data-ag-cs-prism-box="1"');
-    assert.equal(tkFrame.hasAttribute('data-ag-cs-prism-reflect'), false, 'Frame-0 takeover card must use full-perimeter prism rim instead of bottom-only reflection');
+    assert.equal(tkFrame.getAttribute('data-ag-cs-prism-reflect'), 'bottom', 'Frame-0 takeover card must receive bottom prism reflection');
     const rimCv = tkFrame.querySelector('.ag-cs-prism-rim-cv');
     assert.ok(rimCv, 'Frame-0 takeover card must mount .ag-cs-prism-rim-cv canvas immediately');
     assert.equal(rimCv.style.getPropertyValue('position'), 'absolute', '.ag-cs-prism-rim-cv must carry inline position:absolute double-guard');

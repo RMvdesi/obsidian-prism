@@ -2534,3 +2534,112 @@ test('HORIZON_FRAGMENT_SHADER eliminates direct AMBER->SKY_BLUE mixing, decouple
   assert.equal(rippleCore.resolveHorizonSpectrumCode(6), 6);
   assert.equal(rippleCore.resolveHorizonSpectrumCode('neon'), 6);
 });
+
+test('wave field separable drive matches 2D Gaussian, caps substeps per frame, and uniforms stay isolated without shared mutable return buffers', () => {
+  const wf = rippleCore.createWaveField(60, 40, () => 0.5);
+  wf.disturb(30, 20, { amplitudeScale: 1, radiusScale: 1 });
+  // Step 1 starts at source.time=0 (sin=0); advancing 2/600s runs step 2 with non-zero drive
+  wf.advance(2 / 600);
+  const center = wf.height[20 * 60 + 30];
+  assert.ok(center !== 0, 'center height should move after 2 steps');
+  assert.ok(Math.abs(wf.height[20 * 60 + 29] - wf.height[20 * 60 + 31]) < 1e-6, 'horizontal Gaussian symmetry');
+  assert.ok(Math.abs(wf.height[19 * 60 + 30] - wf.height[21 * 60 + 30]) < 1e-6, 'vertical Gaussian symmetry');
+
+  // Verify optional substep cap: advance(0.05, 12) runs at most 12 substeps, while uncapped advance(0.05) runs all 30
+  const wfCap = rippleCore.createWaveField(40, 30, () => 0.5);
+  wfCap.disturb(20, 15, { amplitudeScale: 1, radiusScale: 1 });
+  wfCap.advance(0.05, 12);
+  const hAfterOne = wfCap.height[15 * 40 + 20];
+  const wfRef = rippleCore.createWaveField(40, 30, () => 0.5);
+  wfRef.disturb(20, 15, { amplitudeScale: 1, radiusScale: 1 });
+  for (let i = 0; i < 12; i++) wfRef.advance(1 / 600);
+  assert.ok(Math.abs(hAfterOne - wfRef.height[15 * 40 + 20]) < 1e-6, 'optional maxSteps=12 must run at most 12 substeps');
+
+  // Calls stay isolated (no shared global mutable return buffer that could clobber dual-instance warmup)
+  const pal = {
+    dark: true,
+    ink: [100, 110, 120],
+    wave: [200, 210, 220],
+    prismStrength: 0.7,
+    aura: { active: true, x: 10, y: 20, radius: 180, strength: 0.8 },
+    nebula: [{ x: 1, y: 2, radius: 50, strength: 0.5, hue: 0.2 }],
+  };
+  const p1 = rippleCore.packFieldDrawParams(pal, 1.5);
+  const p2 = rippleCore.packFieldDrawParams(pal, 2.0);
+  assert.notEqual(p1, p2, 'packFieldDrawParams must not alias a shared global buffer');
+  assert.notEqual(p1.ink, p2.ink);
+  assert.notEqual(p1.n0, p2.n0);
+  assert.equal(p1.dpr, 1.5);
+  assert.equal(p2.dpr, 2.0);
+
+  const u1 = rippleCore.computeHorizonUniforms(true, 1, 0.5, 0.2, 1, 0, 0);
+  const u2 = rippleCore.computeHorizonUniforms(false, 0.8, 0.4, -0.3, 1.2, 1, 1);
+  assert.notEqual(u1, u2, 'computeHorizonUniforms must not alias a shared global buffer');
+  assert.notEqual(u1.pre0, u2.pre0);
+  assert.notEqual(u1.pre1, u2.pre1);
+  assert.notEqual(u1.modes, u2.modes);
+  assert.ok(u1.pre0[3] > u2.pre0[3], 'First warmup snapshot must remain uncorrupted by subsequent calls');
+
+  // ch1-templates destroyMods disposes __agPrismRippleWorker to avoid orphan threads on reinject
+  const ch1TplSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'compiler', 'ch1-templates.cjs'), 'utf8');
+  assert.ok(ch1TplSrc.includes('__agPrismRippleWorker?.disposeAll?.()') || ch1TplSrc.includes('__agPrismRippleWorker)?.disposeAll?.()'));
+});
+
+test('ripple-worker reports probe-ready/probe-ack timeout phase diagnostics and avoids double-counting fallbacks', async () => {
+  const vm = require('node:vm');
+  const workerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'runtime', 'ripple-worker.js'), 'utf8');
+  const runProbeCase = async (phase) => {
+    class MockOffscreenCanvas { constructor(w, h) { this.width = w; this.height = h; } }
+    class MockWorker {
+      constructor() { this.terminated = false; this.onmessage = null; this.onerror = null; }
+      postMessage(msg) {
+        if (msg.type === 'probe') {
+          if (phase === 'no-ack' || phase === 'gpu-hang') {
+            queueMicrotask(() => { if (!this.terminated) this.onmessage?.({ data: { type: 'probe-ready' } }); });
+          }
+          if (phase === 'gpu-hang') {
+            queueMicrotask(() => { if (!this.terminated) this.onmessage?.({ data: { type: 'probe-ack' } }); });
+          }
+          if (phase === 'webgl-null') {
+            queueMicrotask(() => { if (!this.terminated) this.onmessage?.({ data: { type: 'probe', ok: false, reason: 'webgl2-null' } }); });
+          }
+        }
+      }
+      terminate() { this.terminated = true; }
+    }
+    const sb = {
+      document: { hidden: false, documentElement: { dataset: {}, getAttribute: () => null } },
+      OffscreenCanvas: MockOffscreenCanvas,
+      Worker: MockWorker,
+      Blob: class { constructor(parts) { this.parts = parts; } },
+      URL: { createObjectURL: () => 'blob:diag', revokeObjectURL() {} },
+      setTimeout, clearTimeout, queueMicrotask, Promise, Math, Number, String, Boolean, Array, Object, Date, Set, Map, Error,
+    };
+    sb.window = sb; sb.globalThis = sb;
+    vm.runInNewContext(workerSrc, sb);
+    const api = sb.__agPrismRippleWorker;
+    const res = await api.probeWorkerWebGL2({ timeoutMs: 25, retryDelayMs: 10 });
+    return { api, res };
+  };
+
+  const c1 = await runProbeCase('no-ready');
+  assert.equal(c1.api.PROBE_TIMEOUT_MS, 1500);
+  assert.equal(c1.api.PROBE_RETRY_DELAY_MS, 2500);
+  assert.equal(c1.res.detail, 'no-ready');
+  assert.equal(c1.api.getProbeStatus().detail, 'no-ready');
+
+  const c2 = await runProbeCase('no-ack');
+  assert.equal(c2.res.detail, 'no-ack');
+
+  const c3 = await runProbeCase('gpu-hang');
+  assert.equal(c3.res.detail, 'gpu-hang');
+
+  // Permanent non-timeout probe failure increments totalFallbacks exactly once across mountGlowWorkerWithProbe
+  const c4 = await runProbeCase('webgl-null');
+  assert.equal(c4.res.ok, false);
+  assert.equal(c4.res.retryable, false);
+  assert.equal(c4.api.getStats().totalFallbacks, 1);
+  const mounted = await c4.api.mountGlowWorkerWithProbe({}, { rippleCore });
+  assert.equal(mounted, null);
+  assert.equal(c4.api.getStats().totalFallbacks, 1, 'Permanent probe failure must not double-count fallbacks');
+});

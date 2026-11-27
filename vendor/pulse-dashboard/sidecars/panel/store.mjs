@@ -447,8 +447,22 @@ export class MetricsStore {
         this.startBackground(scope, id, entry, current);
         return entry.data || null;
       }
-      const raw = await this.client.trajectory(id, { force, freshContext, isCurrent: current });
+      const useIncremental = !force && Boolean(entry.data && entry.lastStepSig && Number.isInteger(entry.lastStepCount));
+      const raw = await this.client.trajectory(id, {
+        force,
+        freshContext,
+        isCurrent: current,
+        ...(useIncremental ? { lastStepCount: entry.lastStepCount, lastStepSig: entry.lastStepSig } : {}),
+      });
       if (!current()) throw new Error('后台已重新连接，请等待刷新');
+      if (raw && raw.unchanged === true && entry.data) {
+        entry.collection = null;
+        entry.updatedAt = Date.now();
+        entry.lastSuccessAt = new Date().toISOString();
+        if (Number.isInteger(raw.numTotalSteps) && raw.numTotalSteps >= 0) entry.lastStepCount = raw.numTotalSteps;
+        if (typeof raw.lastStepSig === 'string' && raw.lastStepSig) entry.lastStepSig = raw.lastStepSig;
+        return entry.data;
+      }
       if (this.onTrajectory) {
         try {
           const result = await this.onTrajectory(scope, id, raw, { isCurrent: current, guardKey: entry });
@@ -460,6 +474,9 @@ export class MetricsStore {
       if (!current()) throw new Error('后台已重新连接，请等待刷新');
       entry.collection = null;
       entry.lastSuccessAt = new Date().toISOString();
+      const rawStepsCount = Number(raw?.numTotalSteps ?? raw?.trajectory?.steps?.length);
+      if (Number.isSafeInteger(rawStepsCount) && rawStepsCount >= 0) entry.lastStepCount = rawStepsCount;
+      if (typeof raw?.lastStepSig === 'string' && raw.lastStepSig) entry.lastStepSig = raw.lastStepSig;
       const fresh = trajectoryMetrics(raw);
       fresh.delegatedConversations = [...new Set([...delegatedIds(id, raw, this.client.reader?.summaries || {}), ...(entry.data?.delegatedConversations || [])])].slice(0, 128);
       fresh.taskUsage = this.delegated.request(scope, id, raw, { saved: entry.data?.taskUsage, knownIds: fresh.delegatedConversations, force, isCurrent: current });
@@ -494,7 +511,7 @@ export class MetricsStore {
     return entry.pending;
   }
 
-  async snapshot({ conversationId, force = false, freshContext = false, quotaRefresh = false, selectLatest = true, cdpPort = null } = {}) {
+  async snapshot({ conversationId, force = false, freshContext = false, quotaRefresh = false, selectLatest = true, cdpPort = null, includeConversations = true } = {}) {
     if (cdpPort) this.setCdpPort(cdpPort);
     let connection = 'live', error = null, speed = null, sessionError = null, collection = null;
     try {
@@ -562,7 +579,7 @@ export class MetricsStore {
       quotaUpdatedAt: this.quotaAt ? new Date(this.quotaAt).toISOString() : null,
       groups: this.quota || [],
       speed,
-      conversations: this.summaries,
+      conversations: includeConversations === false ? [] : this.summaries,
       persistenceError: this.persistenceError,
       source: 'Antigravity local API',
     };

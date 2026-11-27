@@ -7,15 +7,17 @@
   const STUDIO_STYLE_ID = 'ag-prism-studio-v101-css';
   const isFn = (v) => typeof v === 'function';
   const isFin = (v) => typeof v === 'number' && Number.isFinite(v);
-  const toNum = (v) => { const n = typeof v === 'number' || typeof v === 'bigint' || typeof v === 'string' ? Number(v) : 0; return Number.isFinite(n) ? n : 0; };
+  const toNum = (v) => { const t = typeof v, n = t === 'number' || t === 'bigint' || t === 'string' ? Number(v) : 0; return isFin(n) ? n : 0; };
   function markNoTr(e) {
     if (e?.setAttribute) for (const s of 'translate=no,data-no-translate=true,data-ag-localization-skip=true,data-agy-no-translate=true,data-antigravity-zh-skip=1,data-ag-no-i18n='.split(',')) { const p = s.split('='); e.setAttribute(p[0], p[1]); }
     return e;
   }
 
-  const STUDIO_HEAD_CSS = '.ag-cs-home-panel-head{flex-wrap:wrap;row-gap:8px}';
-  const STUDIO_MODEL_COLOR_CSS = 'html :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc]{background-color:var(--_mc-d);}html[data-ag-cs-theme="light"] :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc],html>body:is(.theme-light,.light-theme,.light) :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc]{background-color:var(--_mc-l);}';
-  const STUDIO_EXTRA_CSS = STUDIO_HEAD_CSS + '.ag-cs-home-tab,.ag-cs-home-range{white-space:nowrap}.ag-cs-home-ws-select{color-scheme:inherit}.ag-cs-home-ws-select option{background:var(--card,#141418);color:var(--foreground,#F2F2F5);}.agy-home{--_a:var(--ag-cs-accent);--_b:1px solid var(--_kb)}.ag-cs-hs-tg,.ag-cs-home-local-note{font-size:11px}.ag-cs-hs-tg{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:var(--_b);border-radius:6px;background:var(--_tb);color:var(--foreground);font-family:inherit;font-weight:500;white-space:nowrap;cursor:pointer;&:hover{background:var(--ag-cs-hover-wash)}&[aria-pressed="true"]{color:var(--_a);border-color:color-mix(in srgb,currentColor 32%,#0000);background:color-mix(in srgb,currentColor 11%,#0000)}& svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}}:is(.ag-cs-home-ws-select,.ag-cs-hs-tg,.ag-cs-quota-refresh):focus-visible{outline:2px solid var(--_a);outline-offset:1px}.ag-cs-home-local-note{line-height:1.4;color:var(--muted-foreground);opacity:.86;padding-top:8px;border-top:var(--_b)}' + STUDIO_MODEL_COLOR_CSS;
+  const STUDIO_EXTRA_CSS =
+    '.ag-cs-home-panel-body{display:flex;flex-direction:column;gap:12px;box-sizing:border-box;flex:auto;min-height:0;padding:14px;overflow:hidden auto}' +
+    '.ag-cs-home-panel-head{flex-wrap:wrap;row-gap:8px}' +
+    '.ag-cs-home-tab,.ag-cs-home-range{white-space:nowrap}.ag-cs-home-ws-select{color-scheme:inherit}.ag-cs-home-ws-select option{background:var(--card,#141418);color:var(--foreground,#F2F2F5);}.agy-home{--_a:var(--ag-cs-accent);--_b:1px solid var(--_kb)}.ag-cs-hs-tg,.ag-cs-home-local-note{font-size:11px}.ag-cs-hs-tg{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:var(--_b);border-radius:6px;background:var(--_tb);color:var(--foreground);font-family:inherit;font-weight:500;white-space:nowrap;cursor:pointer;&:hover{background:var(--ag-cs-hover-wash)}&[aria-pressed="true"]{color:var(--_a);border-color:color-mix(in srgb,currentColor 32%,#0000);background:color-mix(in srgb,currentColor 11%,#0000)}& svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}}:is(.ag-cs-home-ws-select,.ag-cs-hs-tg,.ag-cs-quota-refresh):focus-visible{outline:2px solid var(--_a);outline-offset:1px}.ag-cs-home-local-note{line-height:1.4;color:var(--muted-foreground);opacity:.86;padding-top:8px;border-top:var(--_b)}' +
+    'html :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc]{background-color:var(--_mc-d);}:is(html[data-ag-cs-theme="light"],html>body:is(.theme-light,.light-theme,.light)) :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc]{background-color:var(--_mc-l);}';
 
   const MODEL_CAMP_PALETTES = {
     gemini: [['#4F8BFF', '#2563EB'], ['#22D3EE', '#0891B2'], ['#818CF8', '#4F46E5'], ['#2DD4BF', '#0D9488'], ['#93C5FD', '#1E40AF']],
@@ -24,7 +26,7 @@
     deepseek: [['#A78BFA', '#7C3AED'], ['#E879F9', '#C026D3'], ['#C084FC', '#9333EA'], ['#F472B6', '#DB2777']],
   };
   const MODEL_OVERFLOW_PALETTE = [['#38BDF8', '#0284C7'], ['#EC4899', '#BE185D'], ['#84CC16', '#4D7C0F'], ['#FB923C', '#EA580C'], ['#C4B5FD', '#6D28D9'], ['#FACC15', '#CA8A04'], ['#14B8A6', '#115E59'], ['#94A3B8', '#475569']];
-  const MODEL_ALL_FALLBACKS = [...MODEL_OVERFLOW_PALETTE, ...MODEL_CAMP_PALETTES.gemini, ...MODEL_CAMP_PALETTES.claude, ...MODEL_CAMP_PALETTES.gpt, ...MODEL_CAMP_PALETTES.deepseek];
+  const MODEL_ALL_FALLBACKS = [...MODEL_OVERFLOW_PALETTE, ...Object.values(MODEL_CAMP_PALETTES).flat()];
   const detectModelCamp = (id) => { const s = String(id || '').toLowerCase(); return /gemini|palm|bard/.test(s) ? 'gemini' : /claude|anthropic|opus|sonnet|haiku/.test(s) ? 'claude' : /gpt|openai|codex|chatgpt|\bo[134](?:-|\b)/.test(s) ? 'gpt' : /deepseek/.test(s) ? 'deepseek' : 'other'; };
   const hslToHex = (hDeg, sPct, lPct) => {
     const h = (((hDeg % 360) + 360) % 360) / 360, s = sPct / 100, l = lPct / 100;
@@ -64,6 +66,7 @@
   };
 
   const REMOTE_TITLE_RE = /\[(SSH|WSL|Dev Container|Codespaces|Tunnel|Remote):\s*([^\]]+)\]/i;
+  const LOCAL_URI_RE = /^(?:file:\/\/|[a-z]:[\\/])/i;
   const decUri = (v) => { const s = String(v || '').trim(); if (!s) return ''; try { return decodeURIComponent(s); } catch { return s; } };
   const packScope = (pfx, v) => {
     const c = decUri(v).toLowerCase().replace(/[^a-z0-9._:@-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
@@ -130,45 +133,11 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
     const isDestroyed = () => disposed || Boolean(isHostDestroyed?.());
     const usageRecords = new Map();
     const replacedGreetings = new Map();
-    let usageLoading = false;
-    let quotaLoading = false;
-    let usageHasData = false;
-    let cacheHealed = false;
-    let modelsExpanded = false;
-    let wasHero = false;
-    let localSaveBlocked = false;
-    let lastUsageFetchAt = 0;
-    let lastQuotaFetchAt = 0;
-    let lastQuotaFailAt = 0;
-    let lastQuotaTabTriggerAt = 0;
-    let lastManualRefreshAt = 0;
-    let lastOfflineWaitAt = 0;
-    let quotaEpoch = 0;
-    let quotaBindingSeq = 0;
-    let usageDataEpoch = 0;
-    let deferredUsageTimer = 0;
-    let saveUsageTimer = 0;
-    let saveUsageIdle = 0;
-    let heatTipRaf = 0;
-    let liveQuotaSnap = null;
-    let quotaPending = null;
-    let cachedAggData = null;
-    let panelSeat = null;
-    let panelEl = null;
-    let heatTipEl = null;
-    let shownHeatCell = null;
-    let pendingHeatCell = null;
-    let pendingHeatGrid = null;
-    let bookPick = 0.07;
-    let activeTab = 'overview';
-    let activeRange = 'all';
-    let activeWorkspace = 'all';
-    let includeArchived = true;
+    let usageLoading = false, quotaLoading = false, usageHasData = false, cacheHealed = false, modelsExpanded = false, wasHero = false, localSaveBlocked = false;
+    let lastUsageFetchAt = 0, lastQuotaFetchAt = 0, lastQuotaFailAt = 0, lastQuotaTabTriggerAt = 0, lastManualRefreshAt = 0, lastOfflineWaitAt = 0, quotaEpoch = 0, quotaBindingSeq = 0, usageDataEpoch = 0, deferredUsageTimer = 0, saveUsageTimer = 0, saveUsageIdle = 0, heatTipRaf = 0;
+    let liveQuotaSnap = null, quotaPending = null, cachedAggData = null, panelSeat = null, panelEl = null, panelBody = null, heatTipEl = null, shownHeatCell = null, pendingHeatCell = null, pendingHeatGrid = null;
+    let bookPick = 0.07, activeTab = 'overview', activeRange = 'all', activeWorkspace = 'all', includeArchived = true, detectedCurrentWorkspace = '', lastPanelRenderKey = '', cachedAggKey = '', curScope = 'local';
     const scopePrefKey = 'ag-prism:homeSessionScope.v1';
-    let detectedCurrentWorkspace = '';
-    let lastPanelRenderKey = '';
-    let cachedAggKey = '';
-    let curScope = 'local';
     const modelColours = usageCore?.createHomeModelColours ? usageCore.createHomeModelColours() : () => ({});
     const mk = (tag, cls, txt, attrs) => {
       if (txt && typeof txt === 'object') { attrs = txt; txt = null; }
@@ -218,7 +187,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
         for (const u of wsUrisOf(sum)) {
           const sc = extractScopeFromUri(u);
           if (sc) { rh = sc; break; }
-          if (/^(?:file:\/\/|[a-z]:[\\/])/i.test(u)) lh = true;
+          if (LOCAL_URI_RE.test(u)) lh = true;
         }
         if (rh) { if (!rem) rem = rh; rc++; } else if (lh) lc++;
       }
@@ -478,7 +447,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
       const entries = [...sumsMap];
       const canPrune = bridgeOnline;
       const rawTitle = String((getDoc() || win?.document)?.title || '').trim();
-      localSaveBlocked = curScope === 'local' && !!(usageBridge && !bridgeOnline) && (!rawTitle || /^antigravity$/i.test(rawTitle)) && !normalizeScopeKey(scOpt) && !normalizeScopeKey(win?.__agPrismScopeKey) && !bridgeScopeKey && !entries.some(([, s]) => wsUrisOf(s).some((u) => /^(?:file:\/\/|[a-z]:[\\/])/i.test(u)));
+      localSaveBlocked = curScope === 'local' && !!(usageBridge && !bridgeOnline) && (!rawTitle || /^antigravity$/i.test(rawTitle)) && !normalizeScopeKey(scOpt) && !normalizeScopeKey(win?.__agPrismScopeKey) && !bridgeScopeKey && !entries.some(([, s]) => wsUrisOf(s).some((u) => LOCAL_URI_RE.test(u)));
       detectedCurrentWorkspace = detectCurrentWorkspaceName(entries) || detectedCurrentWorkspace;
       if (entries.length === 0) { usageHasData = true; if (seededCache || cacheHealed) { cacheHealed = false; usageDataEpoch += 1; saveUsageCache(); } if (canPrune) lastUsageFetchAt = now; renderHomePanel(); return; }
 
@@ -680,7 +649,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
     const unmountPanelSeat = () => {
       if (deferredUsageTimer) { clearTimeout(deferredUsageTimer); deferredUsageTimer = 0; }
       parkPanelSeat();
-      panelSeat = panelEl = heatTipEl = null;
+      panelSeat = panelEl = panelBody = heatTipEl = null;
       lastPanelRenderKey = '';
     };
 
@@ -698,15 +667,17 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
       if (!home) { parkPanelSeat(); return null; }
       const greeting = home.querySelector('[data-testid="home-greeting"]');
       if (!greeting?.parentElement) return null;
-      if (!panelSeat || !panelEl) {
-        panelSeat = markNoTr(dv(HC + 'panel-seat', { 'data-ag-no-i18n': '', 'data-ag-owned': '1' }));
+      if (!panelSeat || !panelEl || !panelBody) {
+        panelSeat = markNoTr(dv(HC + 'panel-seat', { 'data-ag-owned': '1' }));
         panelEl = mk('section', HC + 'panel');
+        panelBody = dv(HC + 'panel-body');
         ap(panelSeat, panelEl);
       }
+      if (panelBody.parentElement !== panelEl) ap(panelEl, panelBody);
       if (!panelSeat.isConnected || panelSeat.parentElement !== greeting.parentElement || panelSeat.previousSibling !== greeting) {
         greeting.parentElement.insertBefore(panelSeat, greeting.nextSibling);
       }
-      return panelEl;
+      return panelBody;
     };
 
     const dAct = (k, v, on) => (on ? { [k]: v, 'data-active': '' } : { [k]: v });
@@ -785,7 +756,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
         }
       }
 
-      const clrEl = (e) => G.__agPrismSvgUtil ? G.__agPrismSvgUtil.mount(e) : e.replaceChildren ? e.replaceChildren() : (() => { for (let c; (c = e.firstChild || e.children?.[0]); ) e.removeChild ? e.removeChild(c) : (e.children.length = 0); })();
+      const clrEl = (e) => { if (G.__agPrismSvgUtil) G.__agPrismSvgUtil.mount(e); else if (e.replaceChildren) e.replaceChildren(); else for (let c; (c = e.firstChild || e.children?.[0]); ) e.removeChild ? e.removeChild(c) : (e.children.length = 0); };
       runGuardedMut(() => { clrEl(panel);
 
         const headLeft = dv(HC + 'head-left');
@@ -803,7 +774,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
         ap(headLeft, tabs);
         const scopeLabel = formatScopeBadge(curScope);
         if (scopeLabel) {
-          const badge = markNoTr(sp('ag-cs-home-scope-badge', scopeLabel, { 'data-ag-no-i18n': '', 'data-scope': curScope, 'data-scope-kind': curScope.startsWith('ssh:') ? 'ssh' : 'remote' }));
+          const badge = markNoTr(sp('ag-cs-home-scope-badge', scopeLabel, { 'data-scope': curScope, 'data-scope-kind': curScope.startsWith('ssh:') ? 'ssh' : 'remote' }));
           badge.title = scopeLabel;
           ap(headLeft, badge);
         }
@@ -894,6 +865,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
           for (const col of columns) for (const id of Object.keys(col.models || {})) ids.push(id);
           const baseColours = modelColours(ids);
           const colourSpecs = resolveHomeModelColours(ids, baseColours);
+          const mcOf = (id) => colourSpecs[id] || { idx: baseColours[id] ?? 0, dark: '#4F8BFF', light: '#2563EB' };
           const lightNow = isLightHomeTheme(d);
 
           if (columns.length > 0) {
@@ -921,7 +893,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
               colEl.title = `${usageCore.homeShortDate(fmt, col.date)} · ${fmtTok(dayTotal)}`;
               colEl.style.height = `${top > 0 ? (dayTotal / top) * 100 : 0}%`;
               for (const [mId, tok] of Object.entries(col.models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
-                const seg = applyModelSwatchColor(sp(cC + 'seg'), colourSpecs[mId] || { idx: baseColours[mId] ?? 0, dark: '#4F8BFF', light: '#2563EB' }, lightNow);
+                const seg = applyModelSwatchColor(sp(cC + 'seg'), mcOf(mId), lightNow);
                 seg.style.height = `${dayTotal > 0 ? (tok / dayTotal) * 100 : 0}%`;
                 ap(colEl, seg);
               }
@@ -978,7 +950,7 @@ tr|alt ajan|token||giriş|çıkış|Düşük Kota|Azalıyor|Yeterli|Sırada ne v
             row.title = `${m.id} · ${m.sessions} ${ui.sessionsUnit || 'sessions'}${subShare}`;
             const inp = (m.input || 0) + (m.cacheRead || 0) + (m.cacheWrite || 0);
             const cacheTag = isFin(m.cacheHitRate) ? ` · ${Math.round(m.cacheHitRate * 100)}% ${ui.cacheShort || 'Cache'}` : '';
-            ap(listEl, ap(row, applyModelSwatchColor(sp(mC + '-swatch'), colourSpecs[m.id] || { idx: baseColours[m.id] ?? 0, dark: '#4F8BFF', light: '#2563EB' }, lightNow), sp(mC + '-name', m.id), sp(mC + '-split', `${fmtTok(inp)} ${inUnit} · ${fmtTok(m.output || 0)} ${outUnit}${cacheTag}`), sp(mC + '-share', totalAll > 0 ? (Math.round((m.tokens / totalAll) * 1000) / 10).toFixed(1) + '%' : '—')));
+            ap(listEl, ap(row, applyModelSwatchColor(sp(mC + '-swatch'), mcOf(m.id), lightNow), sp(mC + '-name', m.id), sp(mC + '-split', `${fmtTok(inp)} ${inUnit} · ${fmtTok(m.output || 0)} ${outUnit}${cacheTag}`), sp(mC + '-share', totalAll > 0 ? (Math.round((m.tokens / totalAll) * 1000) / 10).toFixed(1) + '%' : '—')));
           }
           if (models.length > rowCap) {
             const hc = models.length - shown.length;
