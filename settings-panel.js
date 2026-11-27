@@ -865,18 +865,33 @@
       }
     };
 
-    // Canvas 鼠标归一化坐标映射（WebGL2 3D 精确射线拾取 + 2.5D 区域拾取双兼容）
-    const pointerToNdc = (ev) => {
-      if (!ev || !isFn(canvas.getBoundingClientRect)) return null;
+    // Canvas 鼠标归一化坐标映射（WebGL2 3D 精确射线拾取 + 2.5D 区域拾取双兼容；250ms 矩形缓存避免高频 pointermove 强制回流）
+    let cachedCanvasRect = null;
+    let cachedCanvasRectAt = 0;
+    const invalidateCanvasRect = () => { cachedCanvasRect = null; cachedCanvasRectAt = 0; };
+    const getCanvasRect = () => {
+      if (!isFn(canvas.getBoundingClientRect)) return null;
+      const now = nowMs();
+      if (cachedCanvasRect && now - cachedCanvasRectAt < 250 && cachedCanvasRect.width > 0 && cachedCanvasRect.height > 0) {
+        return cachedCanvasRect;
+      }
       const rect = canvas.getBoundingClientRect();
       if (!rect || !rect.width || !rect.height) return null;
+      cachedCanvasRect = rect;
+      cachedCanvasRectAt = now;
+      return rect;
+    };
+    const pointerToNdc = (ev) => {
+      if (!ev) return null;
+      const rect = getCanvasRect();
+      if (!rect) return null;
       const u = (ev.clientX - rect.left) / rect.width;
       const v = (ev.clientY - rect.top) / rect.height;
       if (u < 0 || u > 1 || v < 0 || v > 1) return null;
       return { u, v, nx: u * 2 - 1, ny: 1 - v * 2 };
     };
-    const hitSlotFromEvent = (ev) => {
-      const pt = pointerToNdc(ev);
+    const hitSlotFromEvent = (ev, prePt = null) => {
+      const pt = prePt || pointerToNdc(ev);
       if (!pt) return -1;
       if (webglStage && isFn(webglStage.pickSlot)) {
         const hit3d = webglStage.pickSlot(pt.nx, pt.ny);
@@ -894,7 +909,7 @@
         ptrInside = true;
         webglStage?.setPointer?.(pt.nx, pt.ny, true);
       }
-      const hit = hitSlotFromEvent(ev);
+      const hit = pt ? hitSlotFromEvent(ev, pt) : -1;
       if (hit !== hoveredSlot) {
         hoveredSlot = hit;
         if (isReducedMotion()) drawStageFrame(nowMs(), true);
@@ -911,12 +926,13 @@
     const onCanvasClick = (ev) => {
       ev?.stopPropagation?.();
       if (!isOpen) return;
+      invalidateCanvasRect();
       const hit = hitSlotFromEvent(ev);
       if (hit >= 0) toggleStageSlot(hit, ev);
     };
     const bindCanvasEvents = (cv) => {
-      cv.addEventListener('pointermove', onCanvasPointerMove);
-      cv.addEventListener('pointerleave', onCanvasPointerLeave);
+      cv.addEventListener('pointermove', onCanvasPointerMove, { passive: true });
+      cv.addEventListener('pointerleave', onCanvasPointerLeave, { passive: true });
       cv.addEventListener('click', onCanvasClick);
     };
     const unbindCanvasEvents = (cv) => {
@@ -927,6 +943,7 @@
     bindCanvasEvents(canvas);
 
     const swapToFreshCanvas = () => {
+      invalidateCanvasRect();
       unbindCanvasEvents(canvas);
       const nextCv = createStageCanvas();
       if (canvas.parentNode) {
@@ -1426,30 +1443,45 @@
       }
     };
 
-    let detachMo = null;
+    let detachMos = [];
     const stopDetachObserver = () => {
-      if (!detachMo) return;
-      try { detachMo.disconnect(); } catch {}
-      detachMo = null;
+      if (!detachMos.length) return;
+      const list = detachMos;
+      detachMos = [];
+      for (let i = 0; i < list.length; i++) {
+        try { list[i].disconnect(); } catch {}
+      }
     };
     const startDetachObserver = () => {
       stopDetachObserver();
       const MO = win?.MutationObserver || (typeof MutationObserver === 'function' ? MutationObserver : null);
-      const watchRoot = doc.body || sec.closest?.('[role="dialog"]')?.parentNode || sec.parentNode;
-      if (!MO || !watchRoot) return;
-      try {
-        detachMo = new MO(() => {
-          if (isOpen && view.isConnected === false) closeStage();
-        });
-        detachMo.observe(watchRoot, { childList: true, subtree: true });
-      } catch {
-        detachMo = null;
+      if (!MO) return;
+      // Avoid subtree:true on doc.body (which fires on every background streaming token);
+      // observe direct childList along the modal ancestor spine up to doc.body (catches any intermediate portal/dialog unmount with 0 streaming callbacks).
+      const targets = new Set();
+      for (let cur = view.parentNode || sec.parentNode, depth = 0; cur && depth < 24; cur = cur.parentNode, depth++) {
+        if (cur.nodeType === 1 || cur === doc.body) targets.add(cur);
+        if (cur === doc.body) break;
+      }
+      if (doc.body) targets.add(doc.body);
+      if (!targets.size) return;
+      const onDetachMut = () => {
+        if (isOpen && view.isConnected === false) closeStage();
+      };
+      for (const t of targets) {
+        try {
+          const mo = new MO(onDetachMut);
+          mo.observe(t, { childList: true });
+          detachMos.push(mo);
+        } catch {}
       }
     };
 
     const openStage = () => {
       if (disposed || isOpen) return;
       isOpen = true;
+      invalidateCanvasRect();
+      win?.addEventListener?.('resize', invalidateCanvasRect, { passive: true });
       for (const blk of getMainBlocks()) {
         if (!blk) continue;
         blk.hidden = true;
@@ -1480,6 +1512,8 @@
       isOpen = false;
       hoveredSlot = -1;
       ptrInside = false;
+      invalidateCanvasRect();
+      win?.removeEventListener?.('resize', invalidateCanvasRect);
       stopDetachObserver();
       reclaimStageVram();
       doc.removeEventListener?.('keydown', onDocKeyDown, true);

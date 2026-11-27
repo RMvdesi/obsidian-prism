@@ -97,6 +97,7 @@
         el.setAttribute(NO_TR_ATTRS[i][0], NO_TR_ATTRS[i][1]);
       }
       el.setAttribute('data-ag-owned', '1');
+      el.setAttribute('data-ag-prism-suggester-owned', '1');
     }
     return el;
   }
@@ -289,30 +290,36 @@
     ).filter((el) => !isExcludedPaneNode(el));
     if (rawNodes.length === 0) return [];
 
-    const filtered = rawNodes.filter((node) => {
-      for (let i = 0; i < rawNodes.length; i++) {
-        const other = rawNodes[i];
-        if (other !== node && typeof node.contains === 'function' && node.contains(other)) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    const turns = [];
-    for (const el of filtered) {
-      const tid = String(el.getAttribute('data-testid') || '');
-      const role = tid.startsWith('user-') ? 'user' : 'assistant';
-      const text = extractCleanNodeText(el);
-      if (!text) continue;
-      const prev = turns[turns.length - 1];
-      if (prev && prev.role === role) {
-        prev.text = `${prev.text}\n\n${text}`.slice(-2400);
-      } else {
-        turns.push({ role, text });
+    // O(N * depth) container pruning instead of O(N^2) node.contains(other)
+    const rawSet = new Set(rawNodes);
+    const hasNestedRaw = new Set();
+    for (let i = 0; i < rawNodes.length; i++) {
+      let cur = rawNodes[i].parentElement;
+      while (cur && cur !== viewEl) {
+        if (rawSet.has(cur)) hasNestedRaw.add(cur);
+        cur = cur.parentElement;
       }
     }
-    return turns.slice(-6);
+    const filtered = rawNodes.filter((node) => !hasNestedRaw.has(node));
+
+    // Walk backwards from the tail until 6 merged role turns are collected (avoids scanning hundreds of historical turns)
+    const revTurns = [];
+    for (let i = filtered.length - 1; i >= 0; i--) {
+      const el = filtered[i];
+      const tid = String(el.getAttribute('data-testid') || '');
+      const role = tid.startsWith('user-') ? 'user' : 'assistant';
+      const prev = revTurns[revTurns.length - 1];
+      if (revTurns.length >= 6 && (!prev || prev.role !== role)) break;
+      const text = extractCleanNodeText(el);
+      if (!text) continue;
+      if (prev && prev.role === role) {
+        prev.text = `${text}\n\n${prev.text}`.slice(-2400);
+      } else {
+        revTurns.push({ role, text });
+      }
+    }
+    revTurns.reverse();
+    return revTurns;
   }
 
   function hasScopedIndicator(scopeEl, selector) {
@@ -454,6 +461,9 @@
     let composerSyncTimer = null;
     let isComposing = false;
     let suppressUntilMs = 0;
+    let lastOverlayHost = null;
+    let lastOverlaySig = '';
+    let pendingHiddenCheck = false;
 
     const getTtlMs = () => {
       const m = Number(config.ttlMinutes);
@@ -655,13 +665,25 @@
       return edEl.closest?.('[data-ag-cs-caret-host]') || edEl.parentElement || null;
     };
 
+    const drainMutObserver = () => {
+      if (mutObserver && typeof mutObserver.takeRecords === 'function') {
+        try { mutObserver.takeRecords(); } catch {}
+      }
+    };
+
     const removeOverlayDom = () => {
+      lastOverlayHost = null;
+      lastOverlaySig = '';
       if (!doc.querySelectorAll) return;
-      doc.querySelectorAll(`[data-testid="${OVERLAY_TESTID}"]`).forEach((n) => n.remove());
-      doc.querySelectorAll(`[${GHOST_ACTIVE_ATTR}]`).forEach((el) => {
+      const overlays = doc.querySelectorAll(`[data-testid="${OVERLAY_TESTID}"]`);
+      const hosts = doc.querySelectorAll(`[${GHOST_ACTIVE_ATTR}]`);
+      if (overlays.length === 0 && hosts.length === 0) return;
+      overlays.forEach((n) => n.remove());
+      hosts.forEach((el) => {
         el.removeAttribute(GHOST_ACTIVE_ATTR);
         el.style?.removeProperty?.('--ag-prism-ghost-min-h');
       });
+      drainMutObserver();
     };
 
     // 仅解析严格属于当前可见 cascadeId 且对应最新轮次的建议
@@ -708,13 +730,26 @@
       }, Math.min(2147483600, offered.remainMs + 60));
       if (ttlExpiryTimer && typeof ttlExpiryTimer.unref === 'function') ttlExpiryTimer.unref();
 
+      // Steady-state fast path: skip DOM teardown/rebuild & forced offsetHeight reflow when overlay content is unchanged
+      const ariaAccept = getAria().accept;
+      const nextSig = `${offered.cascadeId}\x1f${offered.suggestion}\x1f${ariaAccept}`;
+      let overlay = host.querySelector?.(`[data-testid="${OVERLAY_TESTID}"]`);
+      if (
+        overlay &&
+        overlay.isConnected !== false &&
+        lastOverlayHost === host &&
+        lastOverlaySig === nextSig &&
+        host.getAttribute?.(GHOST_ACTIVE_ATTR) === '1'
+      ) {
+        return true;
+      }
+
       // 清除挂载在非当前宿主上的残留浮层
       doc.querySelectorAll?.(`[data-testid="${OVERLAY_TESTID}"]`)?.forEach?.((n) => {
         if (n.parentElement !== host) n.remove();
       });
 
       ensureStyle();
-      let overlay = host.querySelector?.(`[data-testid="${OVERLAY_TESTID}"]`);
       if (!overlay) {
         overlay = doc.createElement('div');
         overlay.className = 'ag-prism-ghost-overlay';
@@ -737,7 +772,7 @@
       tabBtn.tabIndex = -1;
       tabBtn.className = 'ag-prism-ghost-tab-btn';
       tabBtn.setAttribute('data-testid', ACCEPT_BTN_TESTID);
-      tabBtn.setAttribute('aria-label', getAria().accept);
+      tabBtn.setAttribute('aria-label', ariaAccept);
       tabBtn.addEventListener('pointerdown', (ev) => ev.preventDefault());
       tabBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
       tabBtn.addEventListener('click', (ev) => {
@@ -757,6 +792,9 @@
         const neededH = Math.min(104, Math.max(40, (overlay.offsetHeight || 22) + 14));
         host.style?.setProperty?.('--ag-prism-ghost-min-h', `${neededH}px`);
       } catch {}
+      lastOverlayHost = host;
+      lastOverlaySig = nextSig;
+      drainMutObserver();
       return true;
     };
 
@@ -1193,67 +1231,102 @@
       on(doc, 'compositionstart', onComposerCompositionStart, true);
       on(doc, 'compositionend', onComposerCompositionEnd, true);
       on(doc, 'keyup', onComposerKeyUp, true);
+      on(doc, 'visibilitychange', () => {
+        if (!destroyed && config.enabled && !doc.hidden && pendingHiddenCheck) {
+          pendingHiddenCheck = false;
+          scheduleMountCheck();
+        }
+      });
 
       if (typeof win?.MutationObserver === 'function' && doc.documentElement) {
+        const hasAnyNodeMatch = (list, pred) => {
+          if (!list || !list.length) return false;
+          for (let i = 0; i < list.length; i++) if (pred(list[i])) return true;
+          return false;
+        };
+        const allNodesMatch = (list, pred) => {
+          if (!list || !list.length) return true;
+          for (let i = 0; i < list.length; i++) if (!pred(list[i])) return false;
+          return true;
+        };
         const isHcPortal = (n) => {
           if (!n || n.nodeType !== 1 || n === doc.body || n === doc.documentElement) return false;
           const f = n.firstElementChild;
           if (n.hasAttribute?.('data-hover-card-popup') || f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup')) return true;
           return Boolean(n.hasAttribute?.('data-base-ui-portal') && n.querySelector?.('[data-hover-card-popup]'));
         };
+        const isOwnedSuggesterNode = (n) =>
+          Boolean(
+            n &&
+              n.nodeType === 1 &&
+              (n.id === 'ag-prism-prompt-suggester-root' ||
+                n.id === SUGGESTER_STYLE_ID ||
+                n.hasAttribute?.('data-ag-prism-suggester-owned') ||
+                n.getAttribute?.('data-testid') === OVERLAY_TESTID)
+          );
         const isSuggesterNoise = (m) => {
           const t = m?.target;
           const el = t && (t.nodeType === 1 ? t : t.parentElement);
           if (!el) return true;
-          if (el.id === 'ag-prism-prompt-suggester-root' || el.hasAttribute?.('data-ag-prism-suggester-owned') || isHcPortal(el)) return true;
-          if (m.type === 'childList' && el === doc.body) {
-            const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
-            if (nodes.length > 0 && nodes.every(isHcPortal)) return true;
+          if (isOwnedSuggesterNode(el) || isHcPortal(el)) return true;
+          const added = m.addedNodes;
+          const removed = m.removedNodes;
+          if (m.type === 'childList') {
+            const hasMut = (added && added.length > 0) || (removed && removed.length > 0);
+            if (hasMut && allNodesMatch(added, isOwnedSuggesterNode) && allNodesMatch(removed, isOwnedSuggesterNode)) return true;
+            if (el === doc.body && hasMut && allNodesMatch(added, isHcPortal) && allNodesMatch(removed, isHcPortal)) return true;
           }
           if (typeof el.closest === 'function') {
-            if (el.closest('[data-ag-prism-suggester-owned],[data-hover-card-popup],.toast-viewport')) return true;
+            if (el.closest(`[data-ag-prism-suggester-owned],[data-testid="${OVERLAY_TESTID}"],[data-hover-card-popup],.toast-viewport`)) return true;
             if (m.type === 'attributes' && m.attributeName === 'class') {
               const tid = el.getAttribute?.('data-testid') || '';
               if (tid !== 'conversation-view' && tid !== 'agent-input-box' && tid !== 'conversation-row-sidebar' && !el.hasAttribute?.('data-cascade-id') && !el.classList?.contains?.('agy-home')) {
                 return true;
               }
             }
-            if (m.type === 'childList' && el.closest('aside,[data-testid="sidebar-split"]>div:first-child,[data-testid="conversation-list-sidebar"],[data-testid="project-header"]')) {
-              const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
-              const touchesRowOrRun = nodes.some((n) => {
-                if (!n || n.nodeType !== 1) return false;
-                const ntid = n.getAttribute?.('data-testid') || '';
-                if (ntid === 'conversation-row-sidebar' || ntid === 'status-loading-spinner' || n.hasAttribute?.('data-ag-cs-row-running')) return true;
-                return Boolean(n.querySelector?.('[data-testid="conversation-row-sidebar"],[data-testid="status-loading-spinner"],[data-ag-cs-row-running]'));
-              });
-              if (!touchesRowOrRun) return true;
-            }
-            if (m.type === 'childList' && el.closest('[data-testid="autoscroll-viewport"]')) {
-              const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
-              const touchesState = nodes.some((n) => {
-                if (!n || n.nodeType !== 1) return false;
-                const ntid = n.getAttribute?.('data-testid') || '';
-                if (ntid === 'stop-button' || ntid === 'cancel-button' || ntid === 'input-cancel-button' || ntid === 'agent-loading' || ntid === 'thinking-collapsible-trigger') return true;
-                return Boolean(n.querySelector?.('[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="input-cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"]'));
-              });
-              if (!touchesState) return true;
+            if (m.type === 'childList') {
+              if (el.closest('[data-testid="autoscroll-viewport"]')) {
+                const isStateNode = (n) => {
+                  if (!n || n.nodeType !== 1) return false;
+                  const ntid = n.getAttribute?.('data-testid') || '';
+                  if (ntid === 'stop-button' || ntid === 'cancel-button' || ntid === 'input-cancel-button' || ntid === 'agent-loading' || ntid === 'thinking-collapsible-trigger') return true;
+                  if (!n.firstElementChild) return false;
+                  return Boolean(n.querySelector?.('[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="input-cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"]'));
+                };
+                if (!hasAnyNodeMatch(added, isStateNode) && !hasAnyNodeMatch(removed, isStateNode)) return true;
+              } else if (el.closest('aside,[data-testid="sidebar-split"]>div:first-child,[data-testid="conversation-list-sidebar"],[data-testid="project-header"]')) {
+                const isRowOrRun = (n) => {
+                  if (!n || n.nodeType !== 1) return false;
+                  const ntid = n.getAttribute?.('data-testid') || '';
+                  if (ntid === 'conversation-row-sidebar' || ntid === 'status-loading-spinner' || n.hasAttribute?.('data-ag-cs-row-running')) return true;
+                  if (!n.firstElementChild) return false;
+                  return Boolean(n.querySelector?.('[data-testid="conversation-row-sidebar"],[data-testid="status-loading-spinner"],[data-ag-cs-row-running]'));
+                };
+                if (!hasAnyNodeMatch(added, isRowOrRun) && !hasAnyNodeMatch(removed, isRowOrRun)) return true;
+              }
             }
           }
           return false;
         };
         mutObserver = new win.MutationObserver((muts) => {
           if (destroyed || !config.enabled) return;
+          if (doc.hidden) {
+            pendingHiddenCheck = true;
+            return;
+          }
+          let sawRootAttr = false;
           for (let i = 0; i < muts.length; i++) {
             const m = muts[i];
             if (m.type === 'attributes' && m.target === doc.documentElement) {
-              syncOverlayForActiveCascade();
+              sawRootAttr = true;
               continue;
             }
             if ((m.type === 'childList' || m.type === 'attributes') && !isSuggesterNoise(m)) {
               scheduleMountCheck();
-              break;
+              return;
             }
           }
+          if (sawRootAttr) syncOverlayForActiveCascade();
         });
         mutObserver.observe(doc.documentElement, {
           childList: true,
@@ -1283,6 +1356,9 @@
       cancelMountRaf();
       isComposing = false;
       suppressUntilMs = 0;
+      lastOverlayHost = null;
+      lastOverlaySig = '';
+      pendingHiddenCheck = false;
       if (mutObserver) {
         try {
           mutObserver.disconnect();

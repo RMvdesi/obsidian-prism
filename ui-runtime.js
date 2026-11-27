@@ -1996,6 +1996,10 @@
     'artifact-view',
   ]);
 
+  const T_AP = '[data-testid="aux-pane-split"]', T_QMC = '[data-testid="queued-messages-card"]', T_BGC = '[data-testid="background-task-command"]', T_SP = '[data-testid="step-plan"]', T_TKT = '[data-testid="thinking-collapsible-trigger"]', T_CFH = '[data-testid="changed-files-card-header"]';
+  const COLL_SUB_SEL = `[data-testid="worked-for-collapsible"],${T_TKT},${T_CFH},[data-testid="sidecar-iframe"],[data-testid="sidecar-iframe-slot"],[data-testid="artifact-view"],pre`;
+  const IN_CONV_SUBTREE_PROBE = `${TK_SEL},${T_QMC},${S_RP},${T_BGC},${T_SP},.md-table-host,${COLL_SUB_SEL},${HOST_BTN_QUERY},${T_AP}`;
+
   const classifyDirtySubtree = (el, isAdded, parentCtx = null) => {
     if (!isElementLike(el)) return;
     const tid = tidOf(el);
@@ -2004,15 +2008,12 @@
     const tg = tagU(el);
     const hasChildEl =
       el.firstElementChild !== undefined ? !!(el.firstElementChild) : !!(el.children && el.children.length > 0);
-    const q = (s) => hasChildEl && !!qs(el, s);
 
     if (!tid && !role && !el.id && !cls.includes('agy-') && !cls.includes('surface-') && FAST_PRUNE_LEAF_TAGS.has(tg) && !hasChildEl) {
       return;
     };
 
     if (isHcEl(el) || (!parentCtx && cl(el, HC_S))) return;
-
-    if (tid === 'aux-pane-split' || q('[data-testid="aux-pane-split"]')) dirtyFlags.a = true;
 
     if (tid === 'background-task-command') {
       if (isAdded) {
@@ -2030,6 +2031,11 @@
 
     let touchedButtons = false, inPlainDialog = false, inSbR = false;
     const inConvStream = tid !== 'conversation-view' && tid !== 'agent-input-box' && !cls.includes('agy-home') && ancConv && !ancComp;
+    // Collapse up to 7 streaming subtree querySelector calls into 1 fast probe for non-leaf prose blocks
+    const convSubHit = !inConvStream || ancDlg || (hasChildEl && !!qs(el, IN_CONV_SUBTREE_PROBE));
+    const q = (s) => hasChildEl && convSubHit && !!qs(el, s);
+
+    if (tid === 'aux-pane-split' || q(T_AP)) dirtyFlags.a = true;
     const chkDlg = (rootHit) => {
       inPlainDialog = true;
       if (rootHit || (isAdded && (tg === 'H2' || cls.includes('space-y-2') || q('h2, div.space-y-2')))) dirtyFlags.g = true;
@@ -2058,7 +2064,7 @@
         }
       }
 
-      if (COMP_TIDS.has(tid) || cls.includes('surface-composer-card') || ancComp || q(`${S_IB}, [data-testid="input-cancel-button"], ${TK_SEL}, [data-testid="queued-messages-card"], .surface-composer-card`)) {
+      if (COMP_TIDS.has(tid) || cls.includes('surface-composer-card') || ancComp || q(`${S_IB},[data-testid="input-cancel-button"],${TK_SEL},${T_QMC},.surface-composer-card`)) {
         dirtyFlags.c = dirtyFlags.r = true;
         if (isAdded) touchedButtons = true;
       }
@@ -2088,14 +2094,14 @@
         dirtyFlags.o = true;
       }
     } else {
-      if (tid === T_TK || tid === 'queued-messages-card' || tid === 'side-question-panel' || tid === T_RP || tid === 'agent-loading' || q(`${TK_SEL}, [data-testid="queued-messages-card"], ${S_RP}`)) {
+      if (tid === T_TK || tid === 'queued-messages-card' || tid === 'side-question-panel' || tid === T_RP || tid === 'agent-loading' || q(`${TK_SEL},${T_QMC},${S_RP}`)) {
         dirtyFlags.c = true;
       }
       if (role === 'dialog' || ancDlg) chkDlg(role === 'dialog');
       else if (tid === 'overview-panel' || cls.includes('agy-overlay')) dirtyFlags.o = true;
     }
 
-    if (isAdded && q('[data-testid="background-task-command"]')) {
+    if (isAdded && q(T_BGC)) {
       dirtyFlags.m = true;
       dirtyBgCmds.add(el);
     }
@@ -2108,13 +2114,13 @@
           if (el.getElementsByTagName('img').length > 0 || el.getElementsByTagName('style').length > 0) {
             dirtyTurboRoots.add(el);
           }
-        } else if (q(`style:not([id]):not([${TS_A}]),img:not([${TI_A}])`)) {
+        } else if (qs(el, `style:not([id]):not([${TS_A}]),img:not([${TI_A}])`)) {
           dirtyTurboRoots.add(el);
         }
       }
     }
 
-    if (tid === 'step-plan' || q('[data-testid="step-plan"]')) dirtyFlags.o = true;
+    if (tid === 'step-plan' || q(T_SP)) dirtyFlags.o = true;
     if (cls.includes('md-table-host') || q('.md-table-host')) dirtyFlags.l = true;
 
     if (tid === 'thinking-collapsible-trigger') {
@@ -2126,21 +2132,14 @@
     } else if (tg === 'PRE' || COLL_TIDS.has(tid)) {
       dirtyFlags.l = true;
       if (isAdded) dirtyCollapsibleTargets.add(el);
-    } else if (hasChildEl) {
-      const collHit = qs(
-        el,
-        '[data-testid="worked-for-collapsible"], [data-testid="thinking-collapsible-trigger"], [data-testid="changed-files-card-header"], [data-testid="sidecar-iframe"], [data-testid="sidecar-iframe-slot"], [data-testid="artifact-view"], pre'
-      );
+    } else if (hasChildEl && convSubHit) {
+      const collHit = qs(el, COLL_SUB_SEL);
       if (collHit) {
         dirtyFlags.l = true;
         if (isAdded) dirtyCollapsibleTargets.add(el);
         const hitTid = tidOf(collHit);
-        if (hitTid === 'thinking-collapsible-trigger' || qs(el, '[data-testid="thinking-collapsible-trigger"]')) {
-          dirtyFlags.tk = true;
-        }
-        if (hitTid === 'changed-files-card-header' || qs(el, '[data-testid="changed-files-card-header"]')) {
-          dirtyFlags.cf = true;
-        }
+        if (hitTid === 'thinking-collapsible-trigger' || qs(el, T_TKT)) dirtyFlags.tk = true;
+        if (hitTid === 'changed-files-card-header' || qs(el, T_CFH)) dirtyFlags.cf = true;
       }
     }
 

@@ -1113,6 +1113,7 @@
 
   let hasOffscreenLazyPanels = false;
   let hasOffscreenTitles = false;
+  let pendingScanOnWake = false;
   const onScrollCapture = () => {
     if (currentMode === 'off' || scrollTimer || (!hasOffscreenLazyPanels && !hasOffscreenTitles)) return;
     scrollTimer = setTimeout(() => {
@@ -1130,6 +1131,10 @@
       }
       clearTitleScanTimer();
       return;
+    }
+    if (currentMode !== 'off' && pendingScanOnWake) {
+      pendingScanOnWake = false;
+      scheduleScan(30);
     }
     if (currentMode !== 'off' && trackedStreamingTriggers.size > 0) {
       checkTrackedStreamingTriggers();
@@ -2977,18 +2982,24 @@
     return Boolean((btn && typeof btn[K_CV] === 'function' && !btn[K_CV]()) || (panel && typeof panel[K_CV] === 'function' && !panel[K_CV]()));
   }
 
-  function probeViewportBand(el) {
+  function getViewportBox() {
+    const rootEl = docRoot();
+    const vh = W.innerHeight || (rootEl && rootEl.clientHeight) || 0;
+    const vw = W.innerWidth || (rootEl && rootEl.clientWidth) || 1440;
+    return { vw, vh };
+  }
+
+  function probeViewportBand(el, vp = null, outDir = null) {
     if (!el || typeof el.getBoundingClientRect !== 'function') return 2;
     try {
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) return typeof el[K_CV] === 'function' ? 0 : 2;
-      const rootEl = docRoot();
-      const vh = W.innerHeight || (rootEl && rootEl.clientHeight) || 0;
-      if (vh <= 0 || rect.height <= 0) return 2;
-      const vw = W.innerWidth || (rootEl && rootEl.clientWidth) || 1440;
-      if (rect.right < 0 || rect.left > vw) return 0;
-      if (rect.bottom >= -120 && rect.top <= vh + 120) return 2;
-      if (rect.bottom >= -800 && rect.top <= vh + 800) return 1;
+      const box = vp || getViewportBox();
+      if (box.vh <= 0 || rect.height <= 0) return 2;
+      if (rect.right < 0 || rect.left > box.vw) return 0;
+      if (rect.bottom >= -120 && rect.top <= box.vh + 120) return 2;
+      if (rect.bottom >= -800 && rect.top <= box.vh + 800) return 1;
+      if (outDir) outDir.below = rect.top > box.vh + 800;
       return 0;
     } catch (_) {
       return 2;
@@ -3003,10 +3014,11 @@
       hydrateHandle = null;
       if (currentMode === 'off') return clearHydrateQueue();
       // 两阶段读写分离：先批量读取可见性/视口位置，再统一写入 DOM，消除多帧 Layout Thrashing
+      const vp = getViewportBox();
       const ready = [];
       while (hydrateQueue.length && ready.length < 3) {
         const it = hydrateQueue.shift();
-        if (isConn(it.p) && isPanelCurrentlyExpanded(it.p) && !isHiddenByAncestor(null, it.p) && probeViewportBand(it.p) > 0) {
+        if (isConn(it.p) && isPanelCurrentlyExpanded(it.p) && !isHiddenByAncestor(null, it.p) && probeViewportBand(it.p, vp) > 0) {
           ready.push(it);
         }
       }
@@ -3019,7 +3031,7 @@
     (hydrateHandle = setTimeout(step, 16))?.unref?.();
   }
 
-  function processSingleTrigger(btn, allowPreloadCollapsed, priority = 0) {
+  function processSingleTrigger(btn, allowPreloadCollapsed, priority = 0, preHidden = null) {
     if (!btn) return;
     const expanded = ga(btn, A_EXP) === 'true';
     if (!expanded && !allowPreloadCollapsed) return;
@@ -3041,7 +3053,8 @@
       clearPanelWaitTimer(panel);
       trackStreamingTrigger(btn, panel);
       if (alreadyStreamingPending) return;
-      if (expanded && !isHiddenByAncestor(btn, panel)) renderPendingState(panel, getClientPack()[9], 'streaming');
+      const isHid = preHidden !== null ? preHidden : isHiddenByAncestor(btn, panel);
+      if (expanded && !isHid) renderPendingState(panel, getClientPack()[9], 'streaming');
       return;
     }
     untrackStreamingTrigger(btn);
@@ -3051,7 +3064,7 @@
       if (em && em.rs === quickPanelStamp(panel) && em.ds && em.ds === ga(panel, A_SIG)) return;
     }
 
-    const hiddenAnc = isHiddenByAncestor(btn, panel);
+    const hiddenAnc = preHidden !== null ? preHidden : isHiddenByAncestor(btn, panel);
     if (hiddenAnc && !allowPreloadCollapsed) return;
     const visExpanded = expanded && !hiddenAnc;
 
@@ -3279,7 +3292,7 @@
     }
   }
 
-  function scanToolSummaryContainers() {
+  function scanToolSummaryContainers(vpOpt = null) {
     pruneDetachedToolSummaryRecords();
     if (!translateToolSummaries || currentMode === 'off' || typeof document === 'undefined') return;
     const br = getBridge();
@@ -3293,13 +3306,19 @@
       if (tp) thoughtPanelSet.add(tp);
     }
 
+    const vp = vpOpt || getViewportBox();
     const containers = [];
     const seenContainer = new Set();
+    const visitedNodes = new Set();
     const pushContainer = (c) => {
-      if (!c || seenContainer.has(c) || !isConn(c) || isHiddenByAncestor(null, c)) return;
-      if (probeViewportBand(c) === 0) return;
+      if (!c || seenContainer.has(c) || !isConn(c)) return;
+      // Pure JS text/WeakMap pre-check BEFORE layout-forcing checkVisibility/getBoundingClientRect
+      const localCands = [];
+      collectToolSummaryTextNodes(c, localCands, visitedNodes, thoughtPanelSet);
       seenContainer.add(c);
-      containers.push(c);
+      if (!localCands.length) return;
+      if (isHiddenByAncestor(null, c) || probeViewportBand(c, vp) === 0) return;
+      containers.push({ __cands: localCands });
     };
 
     const groupTrigs = scope.querySelectorAll ? scope.querySelectorAll(SEL_TOOL_TRIGGERS) : [];
@@ -3326,21 +3345,26 @@
           }
           cur = parEl(cur);
         }
-        if (!insideKnown && !isHiddenByAncestor(null, r) && probeViewportBand(r) > 0) {
-          orphanRows.push(r);
+        if (insideKnown) continue;
+        const rowCands = [];
+        collectToolSummaryTextNodes(r, rowCands, visitedNodes, thoughtPanelSet);
+        if (!rowCands.length) continue;
+        if (!isHiddenByAncestor(null, r) && probeViewportBand(r, vp) > 0) {
+          orphanRows.push({ r, cands: rowCands });
         }
       }
       if (orphanRows.length) {
         const byParent = new Map();
         for (let i = 0; i < orphanRows.length; i++) {
-          const p = parEl(orphanRows[i]) || orphanRows[i];
+          const p = parEl(orphanRows[i].r) || orphanRows[i].r;
           if (!byParent.has(p)) byParent.set(p, []);
-          byParent.get(p).push(orphanRows[i]);
+          const arr = byParent.get(p);
+          for (let j = 0; j < orphanRows[i].cands.length && arr.length < 24; j++) arr.push(orphanRows[i].cands[j]);
         }
-        for (const [p, rows] of byParent.entries()) {
-          if (!seenContainer.has(p)) {
+        for (const [p, cands] of byParent.entries()) {
+          if (!seenContainer.has(p) && cands.length) {
             seenContainer.add(p);
-            containers.push({ __rows: rows });
+            containers.push({ __cands: cands });
           }
         }
       }
@@ -3350,20 +3374,11 @@
     const activeLang = resolveActiveLang();
     const activeMode = currentMode;
     const modePrefix = `${activeMode}:${activeLang}:`;
-    const visitedNodes = new Set();
     const now = nowMs();
 
     for (let ci = 0; ci < containers.length; ci++) {
-      const c = containers[ci];
-      const candidates = [];
-      if (c && c.__rows) {
-        for (let ri = 0; ri < c.__rows.length; ri++) {
-          collectToolSummaryTextNodes(c.__rows[ri], candidates, visitedNodes, thoughtPanelSet);
-        }
-      } else {
-        collectToolSummaryTextNodes(c, candidates, visitedNodes, thoughtPanelSet);
-      }
-      if (!candidates.length) continue;
+      const candidates = containers[ci].__cands;
+      if (!candidates || !candidates.length) continue;
 
       const uncached = [];
       const uniqueTrimmed = [];
@@ -3678,16 +3693,19 @@
     return null;
   }
 
+  const safeTitleRootCache = new WeakMap();
   function isSafeTitleObserverRoot(el) {
     if (!el || el.nodeType !== 1 || !isConn(el)) return false;
     if (typeof document !== 'undefined' && (el === document.body || el === document.documentElement)) return false;
     const tid = ga(el, 'data-testid') || '';
     if (tid === 'conversation-view' || tid === 'autoscroll-viewport') return false;
+    if (safeTitleRootCache.get(el) === true) return true;
     try {
       if (typeof el.querySelector === 'function' && el.querySelector('[data-testid="conversation-view"], [data-testid="autoscroll-viewport"]')) {
         return false;
       }
     } catch (_) {}
+    safeTitleRootCache.set(el, true);
     return true;
   }
 
@@ -3735,7 +3753,7 @@
     return false;
   }
 
-  function syncTitleObserverTargets() {
+  function syncTitleObserverTargets(preTitleNodes = null) {
     if (!translateTitles || currentMode === 'off' || typeof document === 'undefined') {
       stopTitleObserver();
       return;
@@ -3748,7 +3766,7 @@
     for (let i = 0; i < listNodes.length; i++) {
       if (isSafeTitleObserverRoot(listNodes[i])) desired.add(listNodes[i]);
     }
-    const titleNodes = qsa(SEL_TITLE_CONTAINERS);
+    const titleNodes = preTitleNodes || qsa(SEL_TITLE_CONTAINERS);
     for (let i = 0; i < titleNodes.length; i++) {
       const el = titleNodes[i];
       if (!el || !isConn(el)) continue;
@@ -3833,22 +3851,23 @@
     }
   }
 
-  function scanConversationTitles() {
+  function scanConversationTitles(vpOpt = null) {
     pruneDetachedTitleRecords();
     if (!translateTitles || currentMode === 'off' || typeof document === 'undefined') {
       stopTitleObserver();
       return;
     }
-    syncTitleObserverTargets();
+    const nodes = qsa(SEL_TITLE_CONTAINERS);
+    syncTitleObserverTargets(nodes);
     const br = getBridge();
     if (!br || typeof br.translateStream !== 'function') return;
 
-    const nodes = qsa(SEL_TITLE_CONTAINERS);
     if (!nodes || !nodes.length) {
       hasOffscreenTitles = false;
       return;
     }
 
+    const vp = vpOpt || getViewportBox();
     const sidebarOn = isSidebarStudioActive();
     const activeLang = resolveActiveLang();
     const activeMode = currentMode;
@@ -3857,12 +3876,18 @@
     const candidates = [];
     const bcGroups = new Map();
     let sawOffscreen = false;
+    let sbBelowStreak = 0;
+    const bandDir = { below: false };
 
     for (let i = 0; i < nodes.length && candidates.length < 40; i++) {
       const c = nodes[i];
-      if (!c || !isConn(c) || isHiddenByAncestor(null, c)) continue;
-      if (isTitleContainerExcluded(c, sidebarOn)) continue;
+      if (!c || !isConn(c)) continue;
       const tid = ga(c, 'data-testid') || '';
+      if (tid === 'conversation-row-sidebar' && sbBelowStreak >= 6) {
+        sawOffscreen = true;
+        continue;
+      }
+      if (isTitleContainerExcluded(c, sidebarOn)) continue;
       if (tid === 'breadcrumb-segment') {
         const gRoot = findBreadcrumbGroupRoot(c);
         let segs = bcGroups.get(gRoot);
@@ -3873,23 +3898,35 @@
         segs.push(c);
         continue;
       }
-      if (probeViewportBand(c) === 0) {
+      // Pure JS text/WeakMap pre-check BEFORE layout-forcing checkVisibility/getBoundingClientRect
+      const localCands = [];
+      const explicitTitleEl = findExplicitPrimaryTitleEl(c, c, sidebarOn);
+      collectTitleTextNodes(explicitTitleEl || c, c, localCands, visitedNodes, sidebarOn, activeLang, true);
+      if (!localCands.length) continue;
+      if (isHiddenByAncestor(null, c)) continue;
+      bandDir.below = false;
+      if (probeViewportBand(c, vp, bandDir) === 0) {
         sawOffscreen = true;
+        if (tid === 'conversation-row-sidebar' && bandDir.below) sbBelowStreak++;
         continue;
       }
-      const explicitTitleEl = findExplicitPrimaryTitleEl(c, c, sidebarOn);
-      collectTitleTextNodes(explicitTitleEl || c, c, candidates, visitedNodes, sidebarOn, activeLang, true);
+      if (tid === 'conversation-row-sidebar') sbBelowStreak = 0;
+      for (let k = 0; k < localCands.length && candidates.length < 40; k++) candidates.push(localCands[k]);
     }
 
     for (const segs of bcGroups.values()) {
       if (candidates.length >= 40) break;
       if (!segs || segs.length < 2) continue;
       const lastSeg = segs[segs.length - 1];
-      if (probeViewportBand(lastSeg) === 0) {
+      const localCands = [];
+      collectTitleTextNodes(lastSeg, lastSeg, localCands, visitedNodes, sidebarOn, activeLang, true);
+      if (!localCands.length) continue;
+      if (isHiddenByAncestor(null, lastSeg)) continue;
+      if (probeViewportBand(lastSeg, vp) === 0) {
         sawOffscreen = true;
         continue;
       }
-      collectTitleTextNodes(lastSeg, lastSeg, candidates, visitedNodes, sidebarOn, activeLang, true);
+      for (let k = 0; k < localCands.length && candidates.length < 40; k++) candidates.push(localCands[k]);
     }
     hasOffscreenTitles = sawOffscreen;
     if (!candidates.length) return;
@@ -3997,10 +4034,11 @@
   function scanNow() {
     scanTimer = null;
     if (currentMode === 'off') return;
+    const vp = getViewportBox();
     const triggers = queryTriggers();
     if (!triggers.length) {
-      if (translateToolSummaries) scanToolSummaryContainers();
-      if (translateTitles) scanConversationTitles();
+      if (translateToolSummaries) scanToolSummaryContainers(vp);
+      if (translateTitles) scanConversationTitles(vp);
       return;
     }
 
@@ -4018,6 +4056,7 @@
       if (!allowPreload && !expanded) continue;
 
       const panel = nextSib(btn);
+      let preHidden = null;
       if (panel) {
         const em = panelMeta.get(panel);
         const streamingNow = isTriggerStreaming(btn);
@@ -4027,18 +4066,15 @@
           continue;
         }
         if (em && !streamingNow && em.rs === quickPanelStamp(panel)) {
-          if (expanded && ga(panel, A_RDY) === '1' && em.ds && em.ds === ga(panel, A_SIG)) {
-            continue;
-          }
+          if (expanded && ga(panel, A_RDY) === '1' && em.ds && em.ds === ga(panel, A_SIG)) continue;
           if (!expanded) {
             const inf = rawCacheMap.get(panel);
-            if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) {
-              continue;
-            }
+            if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) continue;
           }
         }
-        if (!isLatest && isHiddenByAncestor(btn, panel)) continue;
-        if (em && !streamingNow && em.rs === quickPanelStamp(panel) && isHiddenByAncestor(btn, panel)) {
+        preHidden = isHiddenByAncestor(btn, panel);
+        if (!isLatest && preHidden) continue;
+        if (em && !streamingNow && em.rs === quickPanelStamp(panel) && preHidden) {
           const inf = rawCacheMap.get(panel);
           if (inf && inf.s === em.rs && em.ps && em.ps === sigFromBody(inf.k, currentMode)) {
             activePanelSet.add(panel);
@@ -4047,7 +4083,7 @@
         }
       }
 
-      const band = expanded && !isLatest ? probeViewportBand(panel || btn) : 0;
+      const band = expanded && !isLatest ? probeViewportBand(panel || btn, vp) : 0;
       if (!isLatest && band === 0) {
         sawOffscreenLazy = true;
         continue;
@@ -4055,7 +4091,7 @@
       if (panel) activePanelSet.add(panel);
 
       const tier = isLatest && expanded ? 25 : band === 2 ? 20 : isLatest ? 12 : 10;
-      candidates.push({ b: btn, a: allowPreload, p: tier * 1000 + i });
+      candidates.push({ b: btn, a: allowPreload, p: tier * 1000 + i, h: preHidden });
     }
     hasOffscreenLazyPanels = sawOffscreenLazy;
 
@@ -4065,22 +4101,43 @@
       syncHydrateBudget = 1;
       try {
         for (let i = 0; i < candidates.length; i++) {
-          processSingleTrigger(candidates[i].b, candidates[i].a, candidates[i].p);
+          processSingleTrigger(candidates[i].b, candidates[i].a, candidates[i].p, candidates[i].h);
         }
       } finally {
         syncHydrateBudget = 99;
       }
     }
-    if (translateToolSummaries) scanToolSummaryContainers();
-    if (translateTitles) scanConversationTitles();
+    if (translateToolSummaries) scanToolSummaryContainers(vp);
+    if (translateTitles) scanConversationTitles(vp);
   }
 
   function scheduleScan(delayMs = 55) {
     if (currentMode === 'off' || scanTimer) return;
-    scanTimer = setTimeout(scanNow, delayMs);
+    if (isDocHiddenOrSleep()) {
+      pendingScanOnWake = true;
+      return;
+    }
+    const rEl = docRoot();
+    const effDelay = rEl && ga(rEl, 'data-ag-pp-open') === '1' ? Math.max(delayMs, 480) : delayMs;
+    scanTimer = setTimeout(() => {
+      scanTimer = null;
+      if (currentMode === 'off') return;
+      if (isDocHiddenOrSleep()) {
+        pendingScanOnWake = true;
+        return;
+      }
+      const rootNow = docRoot();
+      if (rootNow && ga(rootNow, 'data-ag-pp-open') === '1') {
+        scheduleScan(480);
+        return;
+      }
+      scanNow();
+    }, effDelay);
+    scanTimer?.unref?.();
   }
 
   const clrScan = () => {
+    pendingScanOnWake = false;
     if (scanTimer) {
       clearTimeout(scanTimer);
       scanTimer = null;

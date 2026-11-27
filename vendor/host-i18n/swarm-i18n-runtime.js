@@ -718,6 +718,37 @@
       return Boolean((doc && doc.hidden === true) || winBlurred);
     }
 
+    var dirtyNodes = [];
+    var dirtyNodeSet = new Set();
+    var dirtyFullScan = false;
+    var lastExtCheckAt = 0;
+
+    function clearDirtyQueue() {
+      dirtyNodes.length = 0;
+      dirtyNodeSet.clear();
+      dirtyFullScan = false;
+    }
+
+    function enqueueDirtyNode(n) {
+      if (dirtyFullScan || !n || n.isConnected === false) return;
+      if (n.nodeType !== 1 && n.nodeType !== 3) return;
+      if (n === doc.body || n === doc.documentElement) {
+        dirtyFullScan = true;
+        dirtyNodes.length = 0;
+        dirtyNodeSet.clear();
+        return;
+      }
+      if (dirtyNodeSet.has(n)) return;
+      if (dirtyNodes.length >= 128) {
+        dirtyFullScan = true;
+        dirtyNodes.length = 0;
+        dirtyNodeSet.clear();
+        return;
+      }
+      dirtyNodeSet.add(n);
+      dirtyNodes.push(n);
+    }
+
     function disconnectObserver() {
       if (observer && observerConnected) {
         try {
@@ -857,20 +888,28 @@
       }
     }
 
-    function scan(rootNode) {
-      if (destroyed || status !== 'active') return;
-      // 再次动态检查是否出现外部汉化
+    function checkLateExternalYield(force) {
+      var now = Date.now();
+      if (!force && now - lastExtCheckAt < 1500) return false;
+      lastExtCheckAt = now;
       var lateExt = detectExternalSwarmI18n(win, doc);
       if (lateExt) {
         restoreAllDom();
         status = 'yielded';
         yieldReason = lateExt;
+        clearDirtyQueue();
         disconnectObserver();
         try {
           doc.documentElement.removeAttribute(ROOT_ATTR);
         } catch (_) {}
-        return;
+        return true;
       }
+      return false;
+    }
+
+    function scan(rootNode) {
+      if (destroyed || status !== 'active') return;
+      if (checkLateExternalYield(true)) return;
       var target = rootNode || doc.body || doc.documentElement;
       if (!target) return;
       if (isApplying) return;
@@ -880,6 +919,42 @@
       try {
         var customUi = getCustomViewCopyUi(win);
         walkSubtree(target, customUi);
+        pruneDisconnected();
+      } finally {
+        isApplying = false;
+        if (!destroyed && status === 'active') {
+          connectObserver();
+        }
+      }
+    }
+
+    function scanDirtyBatch(nodes) {
+      if (destroyed || status !== 'active') return;
+      if (checkLateExternalYield(false)) return;
+      if (isApplying) return;
+
+      isApplying = true;
+      disconnectObserver();
+      try {
+        var customUi = getCustomViewCopyUi(win);
+        var rootSet = nodes.length > 1 ? new Set(nodes) : null;
+        for (var i = 0; i < nodes.length; i++) {
+          var n = nodes[i];
+          if (!n || n.isConnected === false) continue;
+          if (rootSet) {
+            var covered = false;
+            var cur = n.parentElement || n.parentNode;
+            while (cur) {
+              if (rootSet.has(cur)) {
+                covered = true;
+                break;
+              }
+              cur = cur.parentElement || cur.parentNode;
+            }
+            if (covered) continue;
+          }
+          walkSubtree(n, customUi);
+        }
         pruneDisconnected();
       } finally {
         isApplying = false;
@@ -915,10 +990,17 @@
       var run = function () {
         rafId = null;
         timerId = null;
-        pendingWhileHidden = false;
-        if (!destroyed && status === 'active' && !isHibernating()) {
-          scan();
+        if (destroyed || status !== 'active') return;
+        if (isHibernating()) {
+          pendingWhileHidden = true;
+          return;
         }
+        pendingWhileHidden = false;
+        var doFull = dirtyFullScan || dirtyNodes.length === 0;
+        var batch = doFull ? null : dirtyNodes.slice();
+        clearDirtyQueue();
+        if (doFull) scan();
+        else scanDirtyBatch(batch);
       };
       if (typeof win.requestAnimationFrame === 'function') {
         rafId = win.requestAnimationFrame(run);
@@ -1000,6 +1082,7 @@
       if (destroyed) return;
       destroyed = true;
       status = 'destroyed';
+      clearDirtyQueue();
       cancelPendingFrame();
       if (domReadyListener && typeof doc.removeEventListener === 'function') {
         try {
@@ -1047,9 +1130,31 @@
 
       var MO = win.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
       if (typeof MO === 'function') {
-        observer = new MO(function () {
+        observer = new MO(function (records) {
           if (destroyed || isApplying || status !== 'active') return;
-          scheduleScan();
+          if (!Array.isArray(records) || records.length === 0) {
+            dirtyFullScan = true;
+            scheduleScan();
+            return;
+          }
+          var enqueued = false;
+          for (var i = 0; i < records.length; i++) {
+            var r = records[i];
+            if (!r) continue;
+            if (r.type === 'childList') {
+              var added = r.addedNodes;
+              if (added && added.length) {
+                for (var j = 0; j < added.length; j++) {
+                  enqueueDirtyNode(added[j]);
+                  enqueued = true;
+                }
+              }
+            } else if ((r.type === 'characterData' || r.type === 'attributes') && r.target) {
+              enqueueDirtyNode(r.target);
+              enqueued = true;
+            }
+          }
+          if (enqueued || dirtyFullScan) scheduleScan();
         });
       }
 

@@ -31,7 +31,33 @@
   const S_NT = '[data-testid="conversation-navigator-turn"]';
   const S_NG = '[data-testid="conversation-navigator-group"]';
   const S_TRIG = '.ag-cs-nav-outline-trigger';
+  const S_NAV = '[data-testid="conversation-navigator"]';
+  const S_OVP = '[data-testid="overview-panel"]';
+  const S_OVS = '[data-ag-cs-overview-shell="1"]';
+  const S_AR = '[data-testid="agent-response"]';
+  const S_PR = '[data-testid="planner-response-text"]';
+  const S_UMB = '[data-testid="user-message-bubble"]';
+  const S_QME = '[data-testid="queued-messages-expand-button"]';
+  const S_RP1 = '[data-testid="running-items-panel"].grid-rows-\\[1fr\\]';
+  const Q_PRM = '(prefers-reduced-motion: reduce)';
+  const C_SMW = '.ag-cs-sb-more-wrap';
+  const C_CFB = '.ag-cs-code-fold-btn';
   const A_OVC = 'data-ag-ov-sec-closing';
+  const A_TID = 'data-testid';
+  const A_AE = 'aria-expanded';
+  const A_NPS = 'data-no-press-spring';
+  const A_OWN = 'data-ag-owned';
+  const A_NI = 'data-ag-no-i18n';
+  const A_CID = 'data-cascade-id';
+  const A_CF = 'data-ag-cs-code-folded';
+  const A_OVA = 'data-ag-ov-sec-anim';
+  const A_OVR = 'data-ag-overview-running';
+  const A_SR = 'data-ag-sub-running';
+  const A_SSR = 'data-ag-sub-sec-running';
+  const A_SPR = 'data-ag-sp-running';
+  const A_PS = 'data-ag-perm-selected';
+  const A_QA = 'data-ag-queued-act';
+  const P_NO = 'ag-cs-nav-outline-';
 
   const UI_RAW = {
     'zh-CN': '折叠|展开|行|提问导航| 轮|收起步骤|已收起 | 项|已是最简|过滤本会话提问...|无匹配提问|章节|',
@@ -102,7 +128,8 @@
 
   const A_DLG = 'data-ag-cs-settings-dlg',
     A_NAV = 'data-ag-cs-settings-nav',
-    A_ACT = 'data-ag-cs-nav-active';
+    A_ACT = 'data-ag-cs-nav-active',
+    S_SS = '#ag-cs-settings-sec';
   const S_NAV_KW =
     /\b(?:general|appearance|shortcuts?|keybindings?|account|models?|agent|browser|mcp|notifications?|about|theme|editor|privacy|extensions?|plugins?|rules|workflows?|customiz|keyboard|billing|usage|terminal|voice|audio|skills?)\b|通用|常规|常規|一般|外观|外觀|外観|快捷键|快捷鍵|ショートカット|账户|帳戶|模型|智能体|浏览器|瀏覽器|通知|关于|關於|主题|主題|编辑器|編輯器|隐私|隱私|扩展|擴展|插件|规则|規則|工作流|键盘|鍵盤|用量|终端|終端|语音|語音|技能/i;
   const S_ACT_BG = /^(?:(?:dark|light):)?(?:bg-secondary|bg-sidebar-secondary|bg-sidebar-accent|bg-accent|bg-muted)(?:\/\d+)?$/;
@@ -137,11 +164,11 @@
           ga(b, 'aria-hidden') === 'true' ||
           ga(b, 'role') === 'switch' ||
           b.classList?.contains?.('agy-select-trigger') ||
-          cl(b, '[data-slot="toggle-group"], .agy-card, #ag-cs-settings-sec')
+          cl(b, `[data-slot="toggle-group"],.agy-card,${S_SS}`)
         ) {
           continue;
         }
-        if (/\b(?:close|dismiss)\b|关闭|關閉|閉じる/i.test(`${ga(b, 'aria-label') || ''} ${ga(b, 'data-testid') || ''}`)) continue;
+        if (/\b(?:close|dismiss)\b|关闭|關閉|閉じる/i.test(`${ga(b, 'aria-label') || ''} ${ga(b, A_TID) || ''}`)) continue;
         const t = normLbl(b.textContent);
         if (t.length >= 1 && t.length <= 48) out.push(b);
       }
@@ -152,13 +179,13 @@
       for (const dlg of dlgs) {
         if (!dlg || tagU(dlg) !== 'DIV' || dlg.classList?.contains?.('agy-overlay') || ha(dlg, 'data-hover-card-popup')) continue;
         const cards = Array.from(qa(dlg, '.agy-card')).filter((c) => c.classList?.contains?.('divide-y'));
-        const pSec = qs(dlg, '#ag-cs-settings-sec');
+        const pSec = qs(dlg, S_SS);
         let panel = null;
         for (const p of qa(dlg, 'div.p-6')) {
           if (p.hidden) continue;
-          if (qs(p, '#ag-cs-settings-sec') || qs(p, '.agy-card') || qs(p, 'h2') || qs(p, 'div.space-y-2')) {
+          if (qs(p, S_SS) || qs(p, '.agy-card') || qs(p, 'h2') || qs(p, 'div.space-y-2')) {
             panel = p;
-            if (qs(p, '#ag-cs-settings-sec') || qs(p, '.agy-card')) break;
+            if (qs(p, S_SS) || qs(p, '.agy-card')) break;
           }
         }
         if (!panel && cards.length) panel = cl(cards[0], 'div.p-6') || cards[0].parentElement;
@@ -166,7 +193,7 @@
         if (!panel) {
           const hs = qa(dlg, 'h2');
           for (let j = hs.length - 1; j >= 0; j--) {
-            if (!hs[j].hidden && !cl(hs[j], 'nav, aside, #ag-cs-settings-sec')) {
+            if (!hs[j].hidden && !cl(hs[j], `nav,aside,${S_SS}`)) {
               panel = hs[j].parentElement;
               break;
             }
@@ -198,7 +225,7 @@
         if (!navCol) for (const c of qa(dlg, 'nav, aside')) if (tryNav(c)) break;
 
         const hs = Array.from(qa(rBranch || panel || dlg, 'h2')).filter(
-          (h) => !h.hidden && !cl(h, '#ag-cs-settings-sec') && (!navCol || !isDescOf(navCol, h))
+          (h) => !h.hidden && !cl(h, S_SS) && (!navCol || !isDescOf(navCol, h))
         );
         const hTxt = normLbl(hs[0]?.textContent);
         const isSet = Boolean(
@@ -380,15 +407,7 @@
         return sp;
       }
       const svg = doc.createElementNS(SVG_NS, 'svg');
-      svg.setAttribute('width', String(size));
-      svg.setAttribute('height', String(size));
-      svg.setAttribute('viewBox', '0 0 24 24');
-      svg.setAttribute('fill', 'none');
-      svg.setAttribute('stroke', 'currentColor');
-      svg.setAttribute('stroke-width', '1.6');
-      svg.setAttribute('stroke-linecap', 'round');
-      svg.setAttribute('stroke-linejoin', 'round');
-      svg.setAttribute('aria-hidden', 'true');
+      for (const [k, v] of [['width', size], ['height', size], ['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '1.6'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']]) sa(svg, k, v);
       const addNode = (tag, attrs) => {
         const n = doc.createElementNS(SVG_NS, tag);
         for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
@@ -764,7 +783,7 @@
     function toggleCodeCardFold(card, btn) {
       if (!card || !btn) return;
       const lineCount = parseInt(ga(btn, 'data-lines') || '0', 10) || MIN_CODE_FOLD_LINES;
-      const isCurrentlyFolded = ga(card, 'data-ag-cs-code-folded') === '1';
+      const isCurrentlyFolded = ga(card, A_CF) === '1';
 
       if (!isCurrentlyFolded) {
         const vp = findScrollViewport(card);
@@ -772,8 +791,8 @@
         const vpRect = vp && typeof vp.getBoundingClientRect === 'function' ? vp.getBoundingClientRect() : null;
 
         mut(() => {
-          sa(card, 'data-ag-cs-code-folded', '1');
-          sa(btn, 'aria-expanded', 'false');
+          sa(card, A_CF, '1');
+          sa(btn, A_AE, 'false');
           btn.textContent = formatFoldBtnLabel(true, lineCount);
         });
         stats.foldedCodeBlocks += 1;
@@ -784,8 +803,8 @@
         }
       } else {
         mut(() => {
-          ra(card, 'data-ag-cs-code-folded');
-          sa(btn, 'aria-expanded', 'true');
+          ra(card, A_CF);
+          sa(btn, A_AE, 'true');
           btn.textContent = formatFoldBtnLabel(false, lineCount);
         });
       }
@@ -829,7 +848,7 @@
       let defaultLastResp = null;
       for (let v = 0; v < convScopes.length; v++) {
         const cv = convScopes[v];
-        const responses = qa(cv, '[data-testid="planner-response-text"], [data-testid="agent-response"]');
+        const responses = qa(cv, `${S_PR},${S_AR}`);
         const lr = responses.length > 0 ? responses[responses.length - 1] : null;
         if (lr) {
           lastRespByConv.set(cv, lr);
@@ -842,10 +861,10 @@
         }
       }
 
-      const pres = qa(doc, '[data-testid="planner-response-text"] pre, [data-testid="agent-response"] pre, [data-testid="artifact-view"] pre');
+      const pres = qa(doc, `${S_PR} pre,${S_AR} pre,[data-testid="artifact-view"] pre`);
       if (!pres.length) return;
       const curLang = lastSyncedLang || String(getLang() || '');
-      const AF = 'data-ag-cs-code-folded',
+      const AF = A_CF,
         AS = 'data-ag-cs-code-sticky',
         AR = 'data-ag-cs-rich-pre';
 
@@ -894,7 +913,7 @@
           setA(header, AS, '1');
 
           const lineCount = countCodeLines(body);
-          let btn = prevRec?.btn?.parentElement ? prevRec.btn : qs(header, '.ag-cs-code-fold-btn');
+          let btn = prevRec?.btn?.parentElement ? prevRec.btn : qs(header, C_CFB);
           if (lineCount < MIN_CODE_FOLD_LINES) {
             btn?.remove();
             if (ha(card, AF)) ra(card, AF);
@@ -914,16 +933,16 @@
           const lbl = formatFoldBtnLabel(folded, lineCount);
           if (btn) {
             setA(btn, 'data-lines', String(lineCount));
-            setA(btn, 'aria-expanded', folded ? 'false' : 'true');
+            setA(btn, A_AE, folded ? 'false' : 'true');
             if (btn.textContent !== lbl) btn.textContent = lbl;
           } else {
             btn = markNoTr(mk('button', 'ag-cs-code-fold-btn', lbl));
             btn.type = 'button';
-            sa(btn, 'data-ag-no-i18n', '');
-            sa(btn, 'data-ag-owned', '1');
-            sa(btn, 'data-no-press-spring', '1');
+            sa(btn, A_NI, '');
+            sa(btn, A_OWN, '1');
+            sa(btn, A_NPS, '1');
             sa(btn, 'data-lines', lineCount);
-            sa(btn, 'aria-expanded', folded ? 'false' : 'true');
+            sa(btn, A_AE, folded ? 'false' : 'true');
             btn.addEventListener('click', (ev) => {
               ev?.preventDefault?.();
               ev?.stopPropagation?.();
@@ -947,12 +966,12 @@
     }
 
     function refreshCodeFoldLabels() {
-      const btns = qa(doc, '.ag-cs-code-fold-btn');
+      const btns = qa(doc, C_CFB);
       if (!btns.length) return;
       mut(() => {
         for (const b of btns) {
           const n = parseInt(ga(b, 'data-lines') || '0', 10) || MIN_CODE_FOLD_LINES;
-          b.textContent = formatFoldBtnLabel(ga(b, 'aria-expanded') === 'false', n);
+          b.textContent = formatFoldBtnLabel(ga(b, A_AE) === 'false', n);
         }
       });
     }
@@ -986,7 +1005,7 @@
       const root = convView || findPrimaryConvView();
       if (!root?.querySelectorAll) return [];
       const steps = Array.from(qa(root, '[data-testid="user-input-step"]'));
-      return steps.length ? steps : Array.from(qa(root, '[data-testid="user-message-bubble"]'));
+      return steps.length ? steps : Array.from(qa(root, S_UMB));
     }
 
     function jumpUserTurn(delta, targetEl = null) {
@@ -1037,7 +1056,7 @@
       if (!conv?.querySelectorAll) return 0;
       const uSteps = getMountedUserTurns(conv),
         lastU = uSteps[uSteps.length - 1] || null;
-      const aResps = Array.from(qa(conv, '[data-testid="agent-response"]')),
+      const aResps = Array.from(qa(conv, S_AR)),
         lastA = aResps[aResps.length - 1] || null;
       const multi = aResps.length >= 2 || uSteps.length >= 2;
       const cols = Array.from(
@@ -1048,12 +1067,12 @@
         const b = cols[i];
         if (multi && (lastA?.contains?.(b) || (lastU?.compareDocumentPosition?.(b) & 4))) continue;
         if (!multi && i === cols.length - 1) continue;
-        if (ga(b, 'aria-expanded') === 'true' && typeof b.click === 'function') tgts.push(b);
+        if (ga(b, A_AE) === 'true' && typeof b.click === 'function') tgts.push(b);
       }
       const clickPair = (s) => {
         for (let k = s; k < Math.min(tgts.length, s + 2); k++) {
           const b = tgts[k];
-          if (b && b.isConnected !== false && ga(b, 'aria-expanded') === 'true') {
+          if (b && b.isConnected !== false && ga(b, A_AE) === 'true') {
             try {
               b.click();
             } catch {}
@@ -1083,7 +1102,7 @@
       if (!stepEl) return '';
       const contentEl =
         qs(stepEl, '[data-testid="user-message-content"]') ||
-        qs(stepEl, '[data-testid="user-message-bubble"]') ||
+        qs(stepEl, S_UMB) ||
         stepEl;
       const raw = String(contentEl.textContent || '')
         .replace(/\s+/g, ' ')
@@ -1181,10 +1200,10 @@
       if (!doc || !hostParent) return null;
 
       const ui = getStrings();
-      const title = mk('span', 'ag-cs-nav-outline-title');
+      const title = mk('span', `${P_NO}title`);
       const foldBtn = mk('button', 'ag-cs-nav-fold-steps-btn', ui.foldSteps);
       foldBtn.type = 'button';
-      sa(foldBtn, 'data-no-press-spring', '1');
+      sa(foldBtn, A_NPS, '1');
       foldBtn.addEventListener('click', (ev) => {
         ev?.preventDefault?.();
         ev?.stopPropagation?.();
@@ -1195,7 +1214,7 @@
           if (!isDead() && outlineFoldBtn) outlineFoldBtn.textContent = getStrings().foldSteps;
         }, 1200);
       });
-      const search = mk('input', 'ag-cs-nav-outline-search');
+      const search = mk('input', `${P_NO}search`);
       search.type = 'search';
       search.placeholder = ui.searchPlaceholder;
       search.addEventListener('input', () => {
@@ -1207,23 +1226,23 @@
           ev.stopPropagation();
           closeNavOutline();
         } else if (ev.key === 'Enter') {
-          qs(outlineListEl, 'button.ag-cs-nav-outline-item, button.ag-cs-nav-outline-chapter')?.click?.();
+          qs(outlineListEl, `button.${P_NO}item,button.${P_NO}chapter`)?.click?.();
         }
       });
-      const list = mk('div', 'ag-cs-nav-outline-list');
+      const list = mk('div', `${P_NO}list`);
       const pop = markNoTr(
         mk(
           'div',
-          'ag-cs-nav-outline-popover',
+          `${P_NO}popover`,
           null,
-          mk('div', 'ag-cs-nav-outline-head', null, title, foldBtn),
-          mk('div', 'ag-cs-nav-outline-search-wrap', null, search),
+          mk('div', `${P_NO}head`, null, title, foldBtn),
+          mk('div', `${P_NO}search-wrap`, null, search),
           list
         )
       );
       sa(pop, 'role', 'region');
-      sa(pop, 'data-ag-no-i18n', '');
-      sa(pop, 'data-ag-owned', '1');
+      sa(pop, A_NI, '');
+      sa(pop, A_OWN, '1');
       pop.hidden = true;
       pop.addEventListener('pointerenter', cancelHideOutlineTimer);
       pop.addEventListener('pointerleave', () => {
@@ -1244,11 +1263,12 @@
 
     function readCurrentCascadeId(convOverride = null) {
       const cv = convOverride || cl(activeNavRail, S_CV) || findPrimaryConvView();
+      const sCid = `[${A_CID}]`;
       const id =
-        ga(cv, 'data-cascade-id') ||
-        ga(cl(cv, '[data-cascade-id]'), 'data-cascade-id') ||
-        ga(qs(cv, '[data-cascade-id]'), 'data-cascade-id') ||
-        ga(qs(doc, '[data-cascade-id]'), 'data-cascade-id') ||
+        ga(cv, A_CID) ||
+        ga(cl(cv, sCid), A_CID) ||
+        ga(qs(cv, sCid), A_CID) ||
+        ga(qs(doc, sCid), A_CID) ||
         '';
       return String(id).trim();
     }
@@ -1313,13 +1333,13 @@
           if (q && !ch.label.toLowerCase().includes(q)) continue;
           const row = mk(
             'button',
-            'ag-cs-nav-outline-chapter',
+            `${P_NO}chapter`,
             null,
-            mk('span', 'ag-cs-nav-outline-badge', ui.chapterBadge),
-            mk('span', 'ag-cs-nav-outline-text', ch.label)
+            mk('span', `${P_NO}badge`, ui.chapterBadge),
+            mk('span', `${P_NO}text`, ch.label)
           );
           row.type = 'button';
-          sa(row, 'data-no-press-spring', '1');
+          sa(row, A_NPS, '1');
           row.addEventListener('click', (ev) => {
             ev?.preventDefault?.();
             ev?.stopPropagation?.();
@@ -1336,13 +1356,13 @@
           if (q && !it.text.toLowerCase().includes(q) && !numStr.includes(q)) continue;
           const row = mk(
             'button',
-            'ag-cs-nav-outline-item',
+            `${P_NO}item`,
             null,
-            mk('span', 'ag-cs-nav-outline-num', numStr),
-            mk('span', 'ag-cs-nav-outline-text', it.text)
+            mk('span', `${P_NO}num`, numStr),
+            mk('span', `${P_NO}text`, it.text)
           );
           row.type = 'button';
-          sa(row, 'data-no-press-spring', '1');
+          sa(row, A_NPS, '1');
           sa(row, 'data-turn-num', it.turnNum);
           row.__agTurnEl = it.el;
           if (it.active) {
@@ -1361,15 +1381,15 @@
           outlineListEl.appendChild(row);
           renderedCount++;
         }
-        if (!renderedCount) outlineListEl.appendChild(mk('div', 'ag-cs-nav-outline-empty', ui.emptyMatch));
+        if (!renderedCount) outlineListEl.appendChild(mk('div', `${P_NO}empty`, ui.emptyMatch));
       });
     }
 
     function renderOutlinePopover() {
-      const navRail = activeNavRail || qs(doc, '[data-testid="conversation-navigator"]');
+      const navRail = activeNavRail || qs(doc, S_NAV);
       if (!navRail) return null;
       activeNavRail = navRail;
-      const hp = cl(navRail, '[data-testid="conversation-view"]') || navRail.parentElement || doc?.body;
+      const hp = cl(navRail, S_CV) || navRail.parentElement || doc?.body;
       if (!hp) return null;
       let pop = null;
       mut(() => {
@@ -1387,7 +1407,7 @@
     function openNavOutline(railOverride = null) {
       if (isDead() || !doc || isHostGroupCardVisible()) return false;
       cancelHideOutlineTimer();
-      const navRail = railOverride || qs(doc, '[data-testid="conversation-navigator"]');
+      const navRail = railOverride || qs(doc, S_NAV);
       if (!navRail) return false;
       activeNavRail = navRail;
       const pop = renderOutlinePopover();
@@ -1413,7 +1433,7 @@
     function syncNavRails() {
       if (isDead() || !doc?.querySelectorAll) return;
       pruneUnsubs(navRailUnsubscribers, false, boundNavRails);
-      const rails = qa(doc, '[data-testid="conversation-navigator"]');
+      const rails = qa(doc, S_NAV);
       const PASSIVE_OPT = { passive: true };
       for (let i = 0; i < rails.length; i++) {
         const rail = rails[i];
@@ -1423,9 +1443,9 @@
         if (!trigBtn && doc.createElement && rail.appendChild) {
           trigBtn = markNoTr(mk('button', 'ag-cs-nav-outline-trigger', '☰'));
           trigBtn.type = 'button';
-          sa(trigBtn, 'data-ag-owned', '1');
+          sa(trigBtn, A_OWN, '1');
           sa(trigBtn, 'aria-label', getStrings().outlineBtn || 'Outline');
-          sa(trigBtn, 'data-no-press-spring', '1');
+          sa(trigBtn, A_NPS, '1');
           trigBtn.addEventListener('pointerenter', () => openNavOutline(rail), PASSIVE_OPT);
           trigBtn.addEventListener('click', (ev) => {
             ev?.stopPropagation?.();
@@ -1519,11 +1539,11 @@
           const opts = qa(menu, '[data-testid^="permissions-preset-option-"]'),
             hint = qs(menu, '[data-testid="permissions-sandbox-hint"]');
           for (const o of opts) {
-            if (isPermOptionSelected(o)) setA(o, 'data-ag-perm-selected', '1');
-            else if (ha(o, 'data-ag-perm-selected')) ra(o, 'data-ag-perm-selected');
+            if (isPermOptionSelected(o)) setA(o, A_PS, '1');
+            else if (ha(o, A_PS)) ra(o, A_PS);
           }
           const prev = hint?.previousElementSibling;
-          if (prev && (ga(prev, 'role') === 'separator' || !ha(prev, 'data-testid'))) setA(prev, 'data-ag-perm-sandbox-sep', '1');
+          if (prev && (ga(prev, 'role') === 'separator' || !ha(prev, A_TID))) setA(prev, 'data-ag-perm-sandbox-sep', '1');
         }
       });
     }
@@ -1548,30 +1568,30 @@
       const SP = '[data-testid="status-loading-spinner"], [data-testid="status-task-running"]';
       const rows = qa(doc, '[data-testid="subagent-node"], [data-testid="running-row"], [data-testid="background-task-row"]');
       const sps = qa(doc, '[data-testid="step-plan"]');
-      const ovPanels = qa(doc, '[data-testid="overview-panel"]');
-      const ovShells = qa(doc, '[data-ag-cs-overview-shell="1"]');
-      const runPanels = qa(doc, '[data-testid="running-items-panel"].grid-rows-\\[1fr\\]');
+      const ovPanels = qa(doc, S_OVP);
+      const ovShells = qa(doc, S_OVS);
+      const runPanels = qa(doc, S_RP1);
       let anyInRun = false;
       for (const rp of runPanels) {
         if (qs(rp, SP)) { anyInRun = true; break; }
       }
       mut(() => {
         for (const r of rows) {
-          if (qs(r, SP)) setA(r, 'data-ag-sub-running', '1');
-          else if (ha(r, 'data-ag-sub-running')) ra(r, 'data-ag-sub-running');
+          if (qs(r, SP)) setA(r, A_SR, '1');
+          else if (ha(r, A_SR)) ra(r, A_SR);
         }
         for (const sp of sps) {
-          if (qs(sp, '[data-testid="step-plan-item"][data-status="in_progress"] [data-testid="status-loading-spinner"]')) setA(sp, 'data-ag-sp-running', '1');
-          else if (ha(sp, 'data-ag-sp-running')) ra(sp, 'data-ag-sp-running');
+          if (qs(sp, '[data-testid="step-plan-item"][data-status="in_progress"] [data-testid="status-loading-spinner"]')) setA(sp, A_SPR, '1');
+          else if (ha(sp, A_SPR)) ra(sp, A_SPR);
         }
         if (!ovPanels.length) {
-          for (const sh of ovShells) if (ha(sh, 'data-ag-overview-running')) ra(sh, 'data-ag-overview-running');
+          for (const sh of ovShells) if (ha(sh, A_OVR)) ra(sh, A_OVR);
           return;
         }
         for (const ovPanel of ovPanels) {
           const ovCv = cl(ovPanel, S_CV);
           const localRun = ovCv
-            ? Boolean(qs(qs(ovCv, '[data-testid="running-items-panel"].grid-rows-\\[1fr\\]'), SP))
+            ? Boolean(qs(qs(ovCv, S_RP1), SP))
             : anyInRun;
           let ovRun = localRun || Boolean(qs(ovPanel, SP));
           for (const sec of qa(ovPanel, '.p-1')) {
@@ -1579,21 +1599,22 @@
             if (!hb) continue;
             const sp = Boolean(qs(sec, SP));
             if (sp || hasActiveFiberSubagents(sec)) {
-              setA(hb, 'data-ag-sub-sec-running', '1');
+              setA(hb, A_SSR, '1');
               ovRun = true;
-            } else if (ha(hb, 'data-ag-sub-sec-running')) {
-              ra(hb, 'data-ag-sub-sec-running');
+            } else if (ha(hb, A_SSR)) {
+              ra(hb, A_SSR);
             }
           }
-          const ovShell = cl(ovPanel, '[data-ag-cs-overview-shell="1"]') || ovPanel.parentElement || null;
+          const ovShell = cl(ovPanel, S_OVS) || ovPanel.parentElement || null;
           if (ovShell) {
-            if (ovRun) setA(ovShell, 'data-ag-overview-running', '1');
-            else if (ha(ovShell, 'data-ag-overview-running')) ra(ovShell, 'data-ag-overview-running');
+            if (ovRun) setA(ovShell, A_OVR, '1');
+            else if (ha(ovShell, A_OVR)) ra(ovShell, A_OVR);
           }
         }
       });
     }
 
+    let sgBtn = null;
     function cancelScrollGlide() {
       if (scrollGlideRaf && win?.cancelAnimationFrame) {
         try {
@@ -1601,6 +1622,7 @@
         } catch {}
       }
       scrollGlideRaf = 0;
+      sgBtn = null;
       if (typeof scrollGlideCleanup === 'function') {
         try {
           scrollGlideCleanup();
@@ -1609,10 +1631,45 @@
       }
     }
 
+    const A_SC = 'data-ag-scrolling', SC_G = `.agy-scroll-bottom,${S_OVS},[data-testid="side-question-panel"]`;
+    let vpST = 0, vpAt = 0;
+    const vpSE = new Set();
+    const clrVpSc = () => {
+      if (vpST) { clearTimeout(vpST); vpST = 0; }
+      vpAt = 0;
+      if (!vpSE.size) return;
+      const e = Array.from(vpSE);
+      vpSE.clear();
+      mut(() => { for (const x of e) if (x && x !== sgBtn && ha(x, A_SC)) ra(x, A_SC); });
+    };
+    const onSc = (ev) => {
+      try {
+        const t = ev?.target;
+        if (isDead() || !t || t.nodeType !== 1) return;
+        if (ga(t, A_TID) !== 'autoscroll-viewport' && !(t.classList?.contains?.('overflow-y-auto') && cl(t, S_VP))) return;
+        const now = Date.now();
+        if (!vpST || now - vpAt >= 160) {
+          vpAt = now;
+          const found = qa(doc, SC_G);
+          if (found.length) {
+            mut(() => {
+              for (const x of found) {
+                vpSE.add(x);
+                setA(x, A_SC, '1');
+              }
+            });
+          }
+        }
+        if (vpST) clearTimeout(vpST);
+        vpST = setTimeout(clrVpSc, 140);
+        vpST?.unref?.();
+      } catch {}
+    };
+
     function runFastScrollToBottom(btnEl) {
       if (isDead() || !doc || !win) return false;
       const cfg = getConfig() || {};
-      if (cfg.scrollBottomMotion === 'instant' || cfg.motionLevel === 'off' || win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      if (cfg.scrollBottomMotion === 'instant' || cfg.motionLevel === 'off' || win.matchMedia?.(Q_PRM)?.matches) {
         return false;
       }
       const vp = qs(cl(btnEl, S_CV) || doc, S_VP) || qs(doc, S_VP);
@@ -1628,12 +1685,13 @@
       const dur = Math.max(340, Math.min(540, Math.round(250 + Math.sqrt(dist) * 6.5)));
       const nowFn = typeof win.performance?.now === 'function' ? () => win.performance.now() : () => Date.now();
       const t0 = nowFn();
-      sa(btnEl, 'data-ag-scrolling', '1');
+      sgBtn = btnEl;
+      sa(btnEl, A_SC, '1');
       const stop = () => cancelScrollGlide();
       for (const ev of ['wheel', 'pointerdown', 'touchstart']) vp.addEventListener?.(ev, stop, { passive: true, once: true });
       win.addEventListener?.('keydown', stop, { passive: true, once: true });
       scrollGlideCleanup = () => {
-        ra(btnEl, 'data-ag-scrolling');
+        ra(btnEl, A_SC);
         for (const ev of ['wheel', 'pointerdown', 'touchstart']) vp.removeEventListener?.(ev, stop);
         win.removeEventListener?.('keydown', stop);
       };
@@ -1661,7 +1719,7 @@
       const AH = 'data-ag-sb-more-hidden',
         AI = 'data-ag-sb-more-item';
       if (!on || !ov.length) {
-        const old = qs(nav, '.ag-cs-sb-more-wrap');
+        const old = qs(nav, C_SMW);
         if (old || items.some((x) => ha(x, AH) || ha(x, AI))) {
           mut(() => {
             for (const x of items) {
@@ -1689,7 +1747,7 @@
             if (ha(x, AI)) ra(x, AI);
           }
         }
-        let wrap = qs(nav, '.ag-cs-sb-more-wrap');
+        let wrap = qs(nav, C_SMW);
         if (!wrap) {
           const btn = mk(
             'button',
@@ -1699,7 +1757,7 @@
             mk('span', 'ag-cs-sb-more-chev', null, mkSvgIcon('chevDown', 13))
           );
           btn.type = 'button';
-          sa(btn, 'data-testid', 'ag-sidebar-more-toggle');
+          sa(btn, A_TID, 'ag-sidebar-more-toggle');
           btn.addEventListener('click', (e) => {
             e.preventDefault?.();
             e.stopPropagation?.();
@@ -1707,15 +1765,15 @@
             syncSidebarOverflowTools();
           });
           wrap = markNoTr(mk('div', 'ag-cs-sb-more-wrap', null, btn));
-          sa(wrap, 'data-ag-no-i18n', '');
-          sa(wrap, 'data-ag-owned', '1');
+          sa(wrap, A_NI, '');
+          sa(wrap, A_OWN, '1');
           nav.appendChild(wrap);
           sidebarMoreBtn = btn;
         } else {
           sidebarMoreBtn = qs(wrap, '.ag-cs-sb-more-btn');
         }
         if (sidebarMoreBtn) {
-          setA(sidebarMoreBtn, 'aria-expanded', sidebarMoreExpanded ? 'true' : 'false');
+          setA(sidebarMoreBtn, A_AE, sidebarMoreExpanded ? 'true' : 'false');
           const lbl = qs(sidebarMoreBtn, '.ag-cs-sb-more-lbl');
           if (lbl) {
             const txt = sidebarMoreExpanded ? getUiText('sidebarLessLabel', 'Less') : `${getUiText('sidebarMoreLabel', 'More')} (${ov.length})`;
@@ -1729,33 +1787,33 @@
       if (!win?.requestAnimationFrame || !doc?.getElementById) return false;
       if (!doc.getElementById('ag-prism-css') && !doc.getElementById('prism-style')) return false;
       if ((getConfig() || {}).motionLevel === 'off' || ga(doc.documentElement, 'data-ag-cs-motion') === 'off') return false;
-      return !win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      return !win.matchMedia?.(Q_PRM)?.matches;
     }
 
     function findQueuedMessageRow(btn, card) {
       let cur = btn?.parentElement;
       for (let d = 0; d < 6 && cur && cur !== card; d++, cur = cur.parentElement) {
-        if (qs(cur, '[data-testid="queued-messages-expand-button"]')) return null;
-        const tid = ga(cur, 'data-testid') || '';
+        if (qs(cur, S_QME)) return null;
+        const tid = ga(cur, A_TID) || '';
         if (tagU(cur) === 'LI' || (tid.includes('queued-message') && tid !== 'queued-messages-card')) return cur;
         if (Array.from(cur.children || []).some((k) => isElementLike(k) && k !== btn && !k.contains?.(btn) && tagU(k) !== 'BUTTON')) {
           return cur;
         }
       }
       const fb = btn?.parentElement;
-      return fb && fb !== card && !qs(fb, '[data-testid="queued-messages-expand-button"]') ? fb : null;
+      return fb && fb !== card && !qs(fb, S_QME) ? fb : null;
     }
 
     function triggerQueuedRowActionFeedback(btn, card) {
-      if (isDead() || !btn || !card || ga(btn, 'data-testid') === 'queued-messages-expand-button') return false;
-      const meta = `${ga(btn, 'data-testid') || ''} ${ga(btn, 'aria-label') || ''} ${ga(btn, 'title') || ''}`;
+      if (isDead() || !btn || !card || ga(btn, A_TID) === 'queued-messages-expand-button') return false;
+      const meta = `${ga(btn, A_TID) || ''} ${ga(btn, 'aria-label') || ''} ${ga(btn, 'title') || ''}`;
       if (!/send|delete|remove|trash|发送|發送|删除|刪除|送信|削除|전송|삭제/i.test(meta) && /\bedit\b|编辑|編輯|編集|수정/i.test(meta)) {
         return false;
       }
       if (
         (getConfig() || {}).motionLevel === 'off' ||
         ga(doc?.documentElement, 'data-ag-cs-motion') === 'off' ||
-        win?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+        win?.matchMedia?.(Q_PRM)?.matches
       ) {
         return false;
       }
@@ -1765,11 +1823,11 @@
         clearTimeout(row._agQueuedActTimer);
         nonDiffAnimTimers.delete(row._agQueuedActTimer);
       }
-      mut(() => setA(row, 'data-ag-queued-act', '1'));
+      mut(() => setA(row, A_QA, '1'));
       const tid = setTimeout(() => {
         nonDiffAnimTimers.delete(tid);
         row._agQueuedActTimer = 0;
-        if (!isDead() && row.isConnected !== false && ha(row, 'data-ag-queued-act')) mut(() => ra(row, 'data-ag-queued-act'));
+        if (!isDead() && row.isConnected !== false && ha(row, A_QA)) mut(() => ra(row, A_QA));
       }, 220);
       row._agQueuedActTimer = tid;
       nonDiffAnimTimers.add(tid);
@@ -1800,10 +1858,10 @@
         for (const ch of secEl?.children || []) {
           if (!ch || ch === btn) continue;
           if (mode) {
-            sa(ch, 'data-ag-ov-sec-anim', mode);
+            sa(ch, A_OVA, mode);
             applied = true;
-          } else if (ha(ch, 'data-ag-ov-sec-anim')) {
-            ra(ch, 'data-ag-ov-sec-anim');
+          } else if (ha(ch, A_OVA)) {
+            ra(ch, A_OVA);
           }
         }
       });
@@ -1821,7 +1879,7 @@
         if (isDead() || secEl.isConnected === false || ga(secEl, A_OVC) === '1') return;
         mut(() => {
           for (const ch of secEl.children || []) {
-            if (ch && ch !== btn && ga(ch, 'data-ag-ov-sec-anim') === 'open') ra(ch, 'data-ag-ov-sec-anim');
+            if (ch && ch !== btn && ga(ch, A_OVA) === 'open') ra(ch, A_OVA);
           }
         });
       }, 165);
@@ -1831,9 +1889,9 @@
 
     function handleOverviewSectionClick(ev) {
       const btn = cl(ev.target, 'button');
-      if (!btn || ga(btn, 'data-testid') === 'overview-panel-customize-trigger' || ga(btn, 'aria-haspopup') === 'menu') return false;
+      if (!btn || ga(btn, A_TID) === 'overview-panel-customize-trigger' || ga(btn, 'aria-haspopup') === 'menu') return false;
       const secEl = btn.parentElement;
-      if (!secEl?.classList?.contains?.('p-1') || secEl.firstElementChild !== btn || !cl(secEl, '[data-testid="overview-panel"]')) return false;
+      if (!secEl?.classList?.contains?.('p-1') || secEl.firstElementChild !== btn || !cl(secEl, S_OVP)) return false;
 
       if (secEl._agOvBypassClick) {
         secEl._agOvBypassClick = false;
@@ -1939,7 +1997,7 @@
           qc = cl(qb, '[data-testid="queued-messages-card"]');
         if (qb && qc) return triggerQueuedRowActionFeedback(qb, qc);
         const dh = cl(t, '[data-ag-cs-settings-dlg="1"] button, [role="dialog"] button, [role="dialog"] [role="tab"]');
-        if (dh && !cl(dh, '#ag-cs-settings-sec')) {
+        if (dh && !cl(dh, S_SS)) {
           win?.requestAnimationFrame?.(() => {
             if (!isDead()) syncSettingsDialogChrome(doc, mut, setA);
           });
@@ -1972,6 +2030,7 @@
       win.addEventListener('click', onDocClickCapture, true);
       win.addEventListener('keydown', onWinKeyDown);
     }
+    doc?.addEventListener?.('scroll', onSc, { capture: true, passive: true });
 
     // ── Public Lifecycle API ───────────────────────────────────────────────
     function sync(flags = null) {
@@ -2024,6 +2083,7 @@
       cancelFoldRaf();
       cancelHideOutlineTimer();
       cancelScrollGlide();
+      clrVpSc();
       if (foldFeedbackTimer) {
         clearTimeout(foldFeedbackTimer);
         foldFeedbackTimer = 0;
@@ -2051,6 +2111,7 @@
           win.removeEventListener('keydown', onWinKeyDown);
         } catch {}
       }
+      try { doc?.removeEventListener?.('scroll', onSc, true); } catch {}
       pruneUnsubs(iframeUnsubscribers, true, boundIframes);
       iframeSizeCache = new WeakMap();
       try {
@@ -2065,7 +2126,7 @@
 
       if (doc && typeof doc.querySelectorAll === 'function') {
         mut(() => {
-          for (const sel of ['.ag-cs-code-fold-btn', '.ag-cs-nav-outline-popover', '.ag-cs-nav-outline-trigger', '.ag-cs-sb-more-wrap']) {
+          for (const sel of [C_CFB, '.ag-cs-nav-outline-popover', S_TRIG, C_SMW]) {
             qa(doc, sel).forEach((n) => n.remove());
           }
           for (const k of 'cs-code-folded|cs-code-sticky|perm-selected|perm-sandbox-sep|sub-running|sub-sec-running|overview-running|sp-running|sb-more-hidden|sb-more-item|scrolling|ov-sec-anim|cs-settings-dlg|cs-settings-nav|cs-nav-active'.split(
