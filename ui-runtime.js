@@ -2441,7 +2441,7 @@
     }
     syncQueued = true;
     const run = () => { syncTimer = null; syncQueued = false; runSync(false); };
-    if (!D.hidden && (highPri || !isConvRunning()) && typeof requestAnimationFrame === 'function') { syncIsRaf = true; syncTimer = requestAnimationFrame(run); }
+    if (!D.hidden && (highPri || !isConvRunning(true)) && typeof requestAnimationFrame === 'function') { syncIsRaf = true; syncTimer = requestAnimationFrame(run); }
     else { syncIsRaf = false; syncTimer = ST(run, D.hidden ? 50 : 96); }
   }
 
@@ -2797,25 +2797,20 @@
             dirtyFlags.c = anyRelevant = true;
             continue;
           }
-          if (tid === 'conversation-view') {
-            if (m.attributeName === 'data-cascade-id') dirtyFlags.r = dirtyFlags.c = anyRelevant = true;
-          } else if (tid === 'conversation-row-sidebar') {
+          if (tid === 'conversation-view') { if (m.attributeName === 'data-cascade-id') dirtyFlags.r = dirtyFlags.c = anyRelevant = true; }
+          else if (tid === 'conversation-row-sidebar') {
             if (m.attributeName === 'data-selected') {
               if (ga(tgt, 'data-selected') === 'true') streamChoreoCtl.stampSidebarRowRunningImmediate?.(tgt);
               dirtyFlags.s = anyRelevant = true;
             }
           } else if (tid === 'worked-for-collapsible' || tid === 'thinking-collapsible-trigger' || tid === 'changed-files-card-header') {
             dirtyFlags.l = anyRelevant = true;
-            if (tid === 'thinking-collapsible-trigger') dirtyFlags.tk = true;
-            else if (tid === 'changed-files-card-header') dirtyFlags.cf = true;
+            if (tid[0] === 't') dirtyFlags.tk = true;
+            else if (tid[0] === 'c') dirtyFlags.cf = true;
             dirtyCollapsibleTargets.add(tgt);
-          } else if (tid === T_RP || tid === T_TK || tid === T_SQ || tid === T_QM) {
-            dirtyFlags.c = anyRelevant = true;
-          } else if (tid === 'step-plan') {
-            dirtyFlags.o = anyRelevant = true;
-          } else if (tid === 'toggle-aux-sidebar' || tid === 'toggle-maximize-pane') {
-            dirtyFlags.a = anyRelevant = true;
-          }
+          } else if (tid === T_RP || tid === T_TK || tid === T_SQ || tid === T_QM) dirtyFlags.c = anyRelevant = true;
+          else if (tid === 'step-plan') dirtyFlags.o = anyRelevant = true;
+          else if (tid === 'toggle-aux-sidebar' || tid === 'toggle-maximize-pane') dirtyFlags.a = anyRelevant = true;
           continue;
         }
 
@@ -2849,6 +2844,7 @@
             if (tidOf(tgt) === 'aux-pane-split') dirtyFlags.a = anyRelevant = true;
           }
           const inComposerBox = !!(pCtx && pCtx.inComp);
+          let bS = 0;
           const scanList = (list, isAdd) => {
             if (!list || !list.length) return;
             for (let j = 0; j < list.length; j++) {
@@ -2856,6 +2852,12 @@
               if (!isElementLike(node) || isThoughtIsolatedNode(node) || isOwnPluginNode(node) || isHoverCardNode(node)) continue;
               if (isAdd && tidOf(node) === 'conversation-row-sidebar' && ga(node, 'data-selected') === 'true') {
                 streamChoreoCtl.stampSidebarRowRunningImmediate?.(node);
+              }
+              if (bS++ >= 40) {
+                for (const k of 'rclbos') dirtyFlags[k] = true;
+                anyRelevant = true;
+                if (isAdd && isElementLike(tgt)) dirtyTurboRoots.add(tgt);
+                break;
               }
               classifyDirtySubtree(node, isAdd, pCtx);
               if (inComposerBox) dirtyFlags.c = dirtyFlags.r = true;

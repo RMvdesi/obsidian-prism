@@ -846,6 +846,11 @@ color = vec4(rgb * a, a);
       try { free(); } catch {}
       return null;
     }
+    const u1 = (k, v) => gl.uniform1f(uniforms[k], v);
+    const u2 = (k, a, b) => gl.uniform2f(uniforms[k], a, b);
+    const u3 = (k, a) => gl.uniform3f(uniforms[k], a[0] / 255, a[1] / 255, a[2] / 255);
+    const u4 = (k, a, b, c, d) => gl.uniform4f(uniforms[k], a, b, c, d);
+    const sN = (k, n, d, a) => u4(k, n ? n.x * d : 0, n ? n.y * d : 0, n ? n.radius * d : 1, n ? n.strength * a : 0);
     return {
       mode: 'webgl2',
       data,
@@ -854,10 +859,6 @@ color = vec4(rgb * a, a);
       draw(palette, dpr, uploadCells = true) {
         if (!program || gl.isContextLost?.()) return;
         buildAtlas(palette.fontFamily, dpr);
-        const u1 = (k, v) => gl.uniform1f(uniforms[k], v);
-        const u2 = (k, a, b) => gl.uniform2f(uniforms[k], a, b);
-        const u3 = (k, a) => gl.uniform3f(uniforms[k], a[0] / 255, a[1] / 255, a[2] / 255);
-        const u4 = (k, a, b, c, d) => gl.uniform4f(uniforms[k], a, b, c, d);
         gl.viewport(0, 0, canvas.width, canvas.height);
         u2('size', canvas.width, canvas.height);
         u2('grid', columns, rows);
@@ -877,10 +878,9 @@ color = vec4(rgb * a, a);
         const n0 = neb && neb[0];
         const n1 = neb && neb[1];
         const n2 = neb && neb[2];
-        const setNeb = (k, n) => u4(k, n ? n.x * dpr : 0, n ? n.y * dpr : 0, n ? n.radius * dpr : 1, n ? n.strength * amb : 0);
-        setNeb('neb0', n0);
-        setNeb('neb1', n1);
-        setNeb('neb2', n2);
+        sN('neb0', n0, dpr, amb);
+        sN('neb1', n1, dpr, amb);
+        sN('neb2', n2, dpr, amb);
         const nebL = palette.nebulaLiftScale ?? 1;
         u4('nebOpt', n0 ? n0.hue : 0, n1 ? n1.hue : 0, n2 ? n2.hue : 0, RIPPLE.nebulaTint * amb * (specCode === 5 ? 0.45 : 1) * (0.35 + 0.65 * nebL));
         u1('nebulaLift', RIPPLE.nebulaLift * amb * nebL);

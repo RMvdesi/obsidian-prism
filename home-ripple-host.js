@@ -71,17 +71,15 @@
       if (convHost) setAttrIfChanged(convHost, H_ATTR, '1');
     }
 
-    function isConvBlocked() {
-      const d = docOf();
-      const h = d?.documentElement;
-      return Boolean(
-        motionReduced() ||
-          ga(h, 'data-ag-cs-motion') === 'off' ||
-          ga(h, 'data-ag-prism-wallpaper') === 'on' ||
-          hasHole(h) ||
-          hasHole(d?.body) ||
-          d?.querySelector?.('[data-has-browser-hole="true"],[data-has-drawer-browser-hole="true"]')
-      );
+    let hAt = -1, hV = false;
+    const HS = `[${HOLE_A}="true"],[${DHOLE_A}="true"]`;
+    function isConvBlocked(f) {
+      const d = docOf(), h = d?.documentElement;
+      if (motionReduced() || ga(h, 'data-ag-cs-motion') === 'off' || ga(h, 'data-ag-prism-wallpaper') === 'on' || hasHole(h) || hasHole(d?.body)) return true;
+      const n = nowOf();
+      if (!f && hAt >= 0 && M.abs(n - hAt) < 250) return hV;
+      hAt = n;
+      return (hV = Boolean(d?.querySelector?.(HS)));
     }
 
     function convLv() {
@@ -99,7 +97,7 @@
       const home = d.querySelector('.agy-home');
       if (home) return isAllowed() ? { mode: 'home', root: home, level: 'off' } : null;
       const lv = convLv();
-      if (lv === 'off' || isConvBlocked() || !isF(d.querySelectorAll)) return null;
+      if (lv === 'off' || isConvBlocked(true) || !isF(d.querySelectorAll)) return null;
       const views = Array.from(d.querySelectorAll('[data-testid="conversation-view"]')).filter(
         (v) => !v.hidden && v.style?.display !== 'none' && v.style?.visibility !== 'hidden' && !v.closest?.('[data-testid="subagent-tab-conversation"]')
       );
@@ -155,30 +153,16 @@
       return t;
     }
 
+    const aB = { x: 0, y: 0, radius: 230, strength: 0, active: false };
     function buildPal(tok, aSt, now, ambRaw, sp, mode, lv) {
-      const t = tok || defTokens(isDarkTheme(), sp);
-      const amb = cl(Number.isFinite(ambRaw) ? ambRaw : 1, 0, 1);
-      const c = mode === 'conv';
-      const cp = c ? C_P[lv] || C_P.medium : null;
-      const radius = cp ? cp[7] : 230;
-      const fd = aSt?.f ?? 1;
+      const t = tok || defTokens(isDarkTheme(), sp), amb = cl(Number.isFinite(ambRaw) ? ambRaw : 1, 0, 1), c = mode === 'conv', cp = c ? C_P[lv] || C_P.medium : null, fd = aSt?.f ?? 1;
       const on = Boolean(aSt?.active && fd > 0.005 && !motionReduced() && amb > 0.001);
-      const baseP = sp === 'mono' ? 0.45 : 1;
+      aB.x = on ? aSt.x : 0; aB.y = on ? aSt.y : 0; aB.radius = cp ? cp[7] : 230; aB.strength = on ? amb * (cp ? cp[3] : 1) * fd : 0; aB.active = on;
       return {
-        ink: t.ink,
-        wave: t.wave,
-        dark: t.dark,
-        fontFamily: t.fontFamily,
-        conv: c,
-        alphaScale: cp ? (amb <= 0.001 ? 0 : cp[0]) : 1,
-        nebulaLiftScale: cp ? cp[1] : 1,
-        auraLiftScale: cp ? cp[2] : 1,
-        prismStrength: amb * baseP * (cp ? cp[8] : 1),
-        ambientIntensity: amb,
-        spectrum: sp,
-        nebula: amb <= 0.001 ? false : undefined,
-        aura: on ? { x: aSt.x, y: aSt.y, radius, strength: amb * (cp ? cp[3] : 1) * fd, active: true } : { x: 0, y: 0, radius, strength: 0, active: false },
-        auraPhase: (now || 0) * (cp ? 0.00045 + 0.00015 * cp[3] : 0.0006),
+        ink: t.ink, wave: t.wave, dark: t.dark, fontFamily: t.fontFamily, conv: c,
+        alphaScale: cp ? (amb <= 0.001 ? 0 : cp[0]) : 1, nebulaLiftScale: cp ? cp[1] : 1, auraLiftScale: cp ? cp[2] : 1,
+        prismStrength: amb * (sp === 'mono' ? 0.45 : 1) * (cp ? cp[8] : 1), ambientIntensity: amb, spectrum: sp,
+        nebula: amb <= 0.001 ? false : undefined, aura: aB, auraPhase: (now || 0) * (cp ? 0.00045 + 0.00015 * cp[3] : 0.0006),
       };
     }
 
@@ -349,12 +333,11 @@
         field: { mode: 'none', dispose() {}, invalidate() {}, draw() {}, needsDraw: () => false, busy: () => false },
         rafId: 0,
       };
-      const WB = 'data-ag-cs-win-blur';
+      const WB = 'data-ag-cs-win-blur', isC = () => state.mode === 'conv';
       const PP_OPEN = 'data-ag-pp-open';
-      const isAB = () => ga(getHtml(), WB) === '1';
-      const isPp = () => ga(getHtml(), PP_OPEN) === '1';
-      const isStr = () => state.mode === 'conv' && isF(isConvRunning) && Boolean(isConvRunning());
-      const hP = () => Boolean(d.hidden || wb || isAB() || isPp() || (state.mode === 'conv' && isConvBlocked()));
+      const isAB = () => ga(getHtml(), WB) === '1', isPp = () => ga(getHtml(), PP_OPEN) === '1';
+      const isStr = () => isC() && isF(isConvRunning) && Boolean(isConvRunning(true));
+      const hP = () => Boolean(d.hidden || wb || isAB() || isPp() || (isC() && isConvBlocked()));
       const hasSz = (c) => Boolean(c && c.width > 0 && c.height > 0);
       const invAll = () => { state.field?.invalidate?.(); state.glow?.invalidate?.(); };
       const setVis = (el, on) => { if (el?.style) el.style.display = on ? '' : 'none'; };
@@ -503,7 +486,7 @@
         if (d.hidden) return reclaim();
         const w = M.max(0, Number(cur.clientWidth) || 0);
         const h = M.max(0, Number(cur.clientHeight) || 0);
-        const dpr = M.min(window.devicePixelRatio || 1, 2);
+        const dpr = M.min(window.devicePixelRatio || 1, isC() ? 1.25 : 2);
         const gc = state.glowCanvas;
         const lostF = fLost || isLost(canvas, state.field);
         if (w === state.width && h === state.height && dpr === state.dpr && !lostF) {
@@ -551,7 +534,7 @@
         if (timer) { clearTimeout(timer); timer = 0; }
         if (isDestroyed() || state.parked || wanted) return;
         if (d.hidden) return reclaim();
-        if (state.mode === 'conv' && isConvBlocked()) return parkRipple();
+        if (isC() && isConvBlocked()) return parkRipple();
         if (shrunk) layout();
         state.sleeping = false;
         ra(host, 'data-ripple-sleep');
@@ -575,7 +558,7 @@
         wanted = false;
         if (isDestroyed() || state.parked || (rippleMount !== state && rippleMount !== null)) return;
         if (d.hidden) return reclaim();
-        if (state.mode === 'conv' && isConvBlocked()) return parkRipple();
+        if (isC() && isConvBlocked()) return parkRipple();
         const streaming = isStr();
         if (streaming) auraState.active = false;
         const still = motionReduced() || streaming;
@@ -583,8 +566,8 @@
         lastTs = now;
         const rawGap = M.max(0, Number(getMinFrameGapMs?.() ?? 0) || 0);
         const minGap =
-          (state.mode === 'home' || state.convLevel === 'full') && (state.waves?.active?.() || (auraState.active && lsa > 0 && now - lsa < 650) || (tideAt > 0 && now - tideAt < 480))
-            ? rawGap
+          (!isC() || state.convLevel === 'full') && (state.waves?.active?.() || (auraState.active && lsa > 0 && now - lsa < 650) || (tideAt > 0 && now - tideAt < 480))
+            ? (isC() ? M.max(16, rawGap) : rawGap)
             : M.max(33, rawGap);
         if (!still && drawn && !force1 && minGap > 0 && lastDraw > 0 && now - lastDraw < minGap && !hP()) {
           const rem = minGap - (now - lastDraw);
@@ -600,52 +583,32 @@
         wSlp = 0;
         state.waves.advance(still ? 0 : cl(dtMs / 1000, 0, 0.05));
         prev = now;
-        const te = state.mode === 'home' && tideAt > 0 ? now - tideAt : -1;
-        const inT = !still && te >= 0 && te < 480;
-        if (tideAt > 0 && !inT) {
-          tideAt = 0;
-          state.aura.reach = 0.47;
-          state.aura.strength = 1.0;
-          force1 = true;
-        } else if (inT) {
-          const ease = 1 - M.pow(1 - cl(te / 480, 0, 1), 2.2);
-          state.aura.reach = +(0.2 + 0.27 * ease).toFixed(4);
-          state.aura.strength = +(0.32 + 0.68 * ease).toFixed(4);
-        }
-
+        const te = !isC() && tideAt > 0 ? now - tideAt : -1, inT = !still && te >= 0 && te < 480;
+        if (tideAt > 0 && !inT) { tideAt = 0; state.aura.reach = 0.47; state.aura.strength = 1; force1 = true; }
+        else if (inT) { const ez = 1 - M.pow(1 - cl(te / 480, 0, 1), 2.2); state.aura.reach = +(0.2 + 0.27 * ez).toFixed(4); state.aura.strength = +(0.32 + 0.68 * ez).toFixed(4); }
         const amb = ambScale();
         if (amb <= 0.001 && auraState.active) auraState.active = false;
         let aSet = 0;
         if (!streaming && amb > 0.001 && auraState.active && lsa > 0) {
           const age = M.max(0, now - lsa);
           if (age >= IDLE_MS) { auraState.active = false; auraState.f = 0; aSet = 1; }
-          else {
-            const u = age <= 750 ? 1 : (IDLE_MS - age) / 450;
-            auraState.f = u * u * (3 - 2 * u) * (aWk && now - aWk < 180 ? cl((now - aWk) / 180, 0.12, 1) : 1);
-          }
+          else { const u = age <= 750 ? 1 : (IDLE_MS - age) / 450; auraState.f = u * u * (3 - 2 * u) * (aWk && now - aWk < 180 ? cl((now - aWk) / 180, 0.12, 1) : 1); }
         }
         const aRec = !streaming && amb > 0.001 && auraState.active && lsa > 0 && now - lsa < IDLE_MS;
-        const inI = state.mode === 'home' && !still && amb > 0.001 && now - mountedAt < INTRO_MS;
+        const inI = !isC() && !still && amb > 0.001 && now - mountedAt < INTRO_MS;
         const busy = !streaming && Boolean(state.field?.busy?.());
         const need = force1 || !drawn || aSet || (Boolean(state.glowCanvas) && amb <= 0.001 && !gZero) || inT || inI || aRec || (!streaming && Boolean(state.field?.needsDraw(aT, still)));
-
         if (hasSz(canvas) && need) {
           force1 = false;
           if (!tok) tok = sampleTok(canvas);
-          const sp = specMode(tok.dark);
-          const pal = buildPal(tok, auraState, aT, amb, sp, state.mode, state.convLevel);
+          const sp = specMode(tok.dark), pal = buildPal(tok, auraState, aT, amb, sp, state.mode, state.convLevel);
           if (hasSz(state.glowCanvas)) {
-            if (amb <= 0.001) {
-              if (!gZero) { state.glow?.clear?.(); gZero = true; }
-            } else {
-              gZero = false;
-              state.glow?.draw?.(aT, { dark: pal.dark, still, strength: inT ? state.aura.strength : 1, reach: state.aura.reach, ambientIntensity: amb, spectrum: sp });
-            }
+            if (amb <= 0.001) { if (!gZero) { state.glow?.clear?.(); gZero = true; } }
+            else { gZero = false; state.glow?.draw?.(aT, { dark: pal.dark, still, strength: inT ? state.aura.strength : 1, reach: state.aura.reach, ambientIntensity: amb, spectrum: sp }); }
           }
           state.field.draw(aT, pal, still);
           drawn = true;
         }
-
         if (isDestroyed() || hP() || still || !(inT || busy || inI || aRec)) enterIdleSleep();
         else wake();
       }
@@ -768,8 +731,8 @@
 
       const onVis = () => {
         if (d.hidden) return reclaim();
-        if (state.mode === 'conv' || convLv() !== 'off') {
-          if (isConvBlocked()) { if (!state.parked) parkRipple(); return; }
+        if (isC() || convLv() !== 'off') {
+          if (isConvBlocked(true)) { if (!state.parked) parkRipple(); return; }
           if (state.parked) return syncRipple();
         }
         if (state.parked) return;
@@ -780,30 +743,18 @@
         else if (ok && !drawn) drawFrame(nowOf());
         else enterIdleSleep();
       };
-      const onBlur = () => { wb = true; enterIdleSleep(); };
-      const onFocus = () => { wb = false; onVis(); };
-      d.addEventListener('visibilitychange', onVis);
+      const onBlur = () => { wb = true; enterIdleSleep(); }, onFocus = () => { wb = false; onVis(); };
       const wRef = typeof window !== 'undefined' ? window : null;
-      wRef?.addEventListener?.('blur', onBlur);
-      wRef?.addEventListener?.('focus', onFocus);
+      const bW = (m) => { d[m]('visibilitychange', onVis); wRef?.[m]?.('blur', onBlur); wRef?.[m]?.('focus', onFocus); };
+      bW('addEventListener');
       const mos = [];
       if (typeof MutationObserver === 'function') {
         for (const [el, af] of [[getHtml(), [WB, PP_OPEN, 'data-ag-prism-wallpaper', HOLE_A, DHOLE_A, 'data-ag-cs-motion']], [d.body, [HOLE_A, DHOLE_A]]]) {
           if (!el) continue;
-          try {
-            const mo = new MutationObserver(() => { if (!isAB()) wb = false; onVis(); });
-            mo.observe(el, { attributes: true, attributeFilter: af });
-            mos.push(mo);
-          } catch {}
+          try { const mo = new MutationObserver(() => { if (!isAB()) wb = false; onVis(); }); mo.observe(el, { attributes: true, attributeFilter: af }); mos.push(mo); } catch {}
         }
       }
-      unbindWin = () => {
-        rRaf = cAF(rRaf);
-        d.removeEventListener('visibilitychange', onVis);
-        wRef?.removeEventListener?.('blur', onBlur);
-        wRef?.removeEventListener?.('focus', onFocus);
-        for (const mo of mos) mo.disconnect();
-      };
+      unbindWin = () => { rRaf = cAF(rRaf); bW('removeEventListener'); for (const mo of mos) mo.disconnect(); };
 
       if (typeof ResizeObserver === 'function') {
         const doLay = () => { rRaf = 0; if (!isDestroyed() && !state.parked) { layout(); wake(); } };

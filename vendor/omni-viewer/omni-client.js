@@ -2851,18 +2851,15 @@
       return false;
     }
 
-    function scheduleIncrementalScan(node) {
-      if (!enabled || !D) return;
-      const el = node && node.nodeType === 1 ? node : node?.parentElement;
-      if (el) pendingScanRoots.add(el);
-      if (scanTimer) return;
-      const delay = D.documentElement?.hasAttribute?.('data-ag-cs-stream-active') ? 280 : 60;
-      scanTimer = setTimeout(() => {
-        scanTimer = null;
-        if (!enabled) {
-          pendingScanRoots.clear();
-          return;
-        }
+    const queuedScanContainers = [];
+    function drainScanQueue() {
+      scanTimer = null;
+      if (!enabled) {
+        pendingScanRoots.clear();
+        queuedScanContainers.length = 0;
+        return;
+      }
+      if (pendingScanRoots.size > 0) {
         pruneDisconnectedHighlights();
         const rootSet = new Set(pendingScanRoots);
         pendingScanRoots.clear();
@@ -2871,11 +2868,9 @@
           if (!r || !r.isConnected) continue;
           if (rootSet.size > 1 && hasPendingAncestor(r, rootSet)) continue;
           if (findClosest(r, SCAN_CONTAINER_SELECTOR)) {
-            scanContainerForBareTokens(r);
+            queuedScanContainers.push(r);
           } else if (typeof r.querySelectorAll === 'function') {
-            for (const c of r.querySelectorAll(SCAN_CONTAINER_SELECTOR)) {
-              scanContainerForBareTokens(c);
-            }
+            for (const c of r.querySelectorAll(SCAN_CONTAINER_SELECTOR)) queuedScanContainers.push(c);
           }
           decorateMermaidContainers(r);
           if (!findClosest(r, '[data-testid="conversation-view"]')) {
@@ -2891,7 +2886,27 @@
             }
           }
         }
-      }, delay);
+      }
+      const nowFn = typeof performance !== 'undefined' && typeof performance.now === 'function' ? () => performance.now() : () => Date.now();
+      const deadline = nowFn() + 6;
+      while (queuedScanContainers.length > 0) {
+        const c = queuedScanContainers.shift();
+        if (!c || !c.isConnected) continue;
+        scanContainerForBareTokens(c);
+        if (queuedScanContainers.length > 0 && nowFn() >= deadline) {
+          scanTimer = setTimeout(drainScanQueue, 16);
+          return;
+        }
+      }
+    }
+
+    function scheduleIncrementalScan(node) {
+      if (!enabled || !D) return;
+      const el = node && node.nodeType === 1 ? node : node?.parentElement;
+      if (el) pendingScanRoots.add(el);
+      if (scanTimer) return;
+      const delay = D.documentElement?.hasAttribute?.('data-ag-cs-stream-active') ? 280 : 60;
+      scanTimer = setTimeout(drainScanQueue, delay);
     }
 
     // ── Lifecycle & Zero-Residue Teardown ────────────────────────────────────
@@ -2907,6 +2922,12 @@
     }
 
     function unwrapAllModifications() {
+      if (scanTimer) {
+        clearTimeout(scanTimer);
+        scanTimer = null;
+      }
+      pendingScanRoots.clear();
+      queuedScanContainers.length = 0;
       if (textScanTimer) {
         clearTimeout(textScanTimer);
         textScanTimer = null;

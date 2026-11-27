@@ -435,7 +435,7 @@
       ) {
         refreshPrismBoxRectCache(now, allowReadRect);
         lastPrismRectReadAt = now;
-      } else if (allowReadRect && now - lastPrismRectReadAt >= (prismBoxRo ? 1500 : 250)) {
+      } else if (allowReadRect && now - lastPrismRectReadAt >= (prismBoxRo ? 8000 : 500)) {
         lastPrismRectReadAt = now;
         for (const e of pBoxes) if (e.box?.getBoundingClientRect) e.rect = e.box.getBoundingClientRect();
         if (orchE?.box?.getBoundingClientRect) orchE.rect = orchE.box.getBoundingClientRect();
@@ -487,7 +487,7 @@
       }
       if (rimOn && !prismRaf) {
         const far = (e, d) => { const r = e.rect; return e.wasCleared && r && (r.width < 4 || r.height < 4 || x < r.left - d || x > r.right + d || y < r.top - d || y > r.bottom + d); };
-        const farIdle = !pDirty && pBoxes.length > 0 && now - prismBoxCacheAt <= 6000 && now - lastPrismRectReadAt < 1500 && pBoxes.every((e) => far(e, 360)) && (!orchE || far(orchE, 200));
+        const farIdle = !pDirty && pBoxes.length > 0 && now - prismBoxCacheAt <= 6000 && now - lastPrismRectReadAt < 8000 && pBoxes.every((e) => far(e, 360)) && (!orchE || far(orchE, 200));
         if (!farIdle) schedRaf();
       }
       onPointerActivity?.(now);

@@ -536,3 +536,56 @@ test('perf guard 28 (DOM-08): context-menu-btw mounts inside persistent #ag-pris
   assert.ok(css.includes('&>:is(hr,[role="separator"]){'), 'style.css must style [role="separator"] inside .ag-cs-ctx-menu');
   assert.ok(css.includes('pointer-events:auto;contain:layout style;'), '.ag-cs-ctx-menu must isolate layout/style containment');
 });
+
+test('perf guard 29 (DOM-09/GPU-11): multi-scope isConvRunning cache, conv ripple query/60Hz/DPR guards, effort :has() disabled-when-closed, portal veil/pill, and omni scan slicing', () => {
+  // 1. conv-aura WeakMap per-scope cache eliminates document <-> convView ping-pong
+  const caSrc = fs.readFileSync(path.join(ROOT, 'conv-aura.js'), 'utf8');
+  let docQueries = 0;
+  let viewQueries = 0;
+  let now = 1000;
+  const mockDoc = {
+    querySelectorAll() { docQueries++; return []; },
+  };
+  const mockView = {
+    querySelectorAll() { viewQueries++; return []; },
+    contains() { return false; },
+  };
+  const caSb = { document: mockDoc, performance: { now: () => now }, Math, WeakMap, WeakSet, Number, Boolean, String, Array, Object };
+  caSb.globalThis = caSb;
+  vm.runInNewContext(caSrc, caSb);
+  const { isConvRunning } = caSb.__agPrismConvAura;
+  for (let i = 0; i < 6; i++) {
+    isConvRunning(false, mockDoc);
+    isConvRunning(false, mockView);
+    now += 10;
+  }
+  assert.ok(docQueries <= 3, `alternating document/convView calls within 200ms must hit per-scope WeakMap cache (got ${docQueries})`);
+  assert.equal(viewQueries, 1, 'alternating document/convView calls within 200ms must hit per-scope WeakMap cache for convView');
+
+  // 2. stream-choreography mounts liftoff veil & sidebar glide pill inside persistent #ag-prism-overlay-portal
+  const scSrc = fs.readFileSync(path.join(ROOT, 'stream-choreography.js'), 'utf8');
+  assert.ok(scSrc.includes("const PO = 'ag-prism-overlay-portal'"), 'stream-choreography must define persistent overlay portal');
+  assert.equal(scSrc.includes('d.body?.appendChild(veil)'), false, 'liftoff veil must not append directly to document.body');
+  assert.equal(scSrc.includes('d.body?.appendChild(pill)'), false, 'sidebar glide pill must not append directly to document.body');
+
+  // 3. effort-slider disables its :has() stylesheet whenever model menu is closed
+  const esSrc = fs.readFileSync(path.join(ROOT, 'vendor/effort-slider/upstream-client.js'), 'utf8');
+  assert.ok(esSrc.includes('s.disabled = !(active ||'), 'installStyles must start disabled when menu is closed');
+  assert.ok(esSrc.includes('if (st) st.disabled = !on;'), '_setReady must toggle effort-slider stylesheet disabled state');
+
+  // 4. home-ripple-host caches browser-hole query, passes skipSyncVis=true, caps conv DPR <= 1.25 & conv active cadence >= 16ms
+  const hrSrc = fs.readFileSync(path.join(ROOT, 'home-ripple-host.js'), 'utf8');
+  assert.ok(hrSrc.includes('M.abs(n - hAt) < 250'), 'isConvBlocked must cache browser-hole querySelector');
+  assert.ok(hrSrc.includes('isConvRunning(true)'), 'home-ripple-host must pass skipSyncVis=true to isConvRunning');
+  assert.ok(hrSrc.includes("isC() ? 1.25 : 2"), 'conv mode ripple must cap backing DPR to 1.25');
+  assert.ok(hrSrc.includes("isC() ? M.max(16, rawGap) : rawGap"), 'conv mode ripple must cap active frame rate to >=16ms');
+
+  // 5. prism-rim-canvas raises RO fallback rect interval & backs off via timer when minGap > 0, omni-client slices scans with 6ms budget, ui-runtime caps bulk observer scans
+  const prSrc = fs.readFileSync(path.join(ROOT, 'prism-rim-canvas.js'), 'utf8');
+  assert.ok(prSrc.includes('prismBoxRo ? 8000 : 500'), 'prism-rim-canvas must avoid 1500ms rect polling when ResizeObserver is active');
+  const omSrc = fs.readFileSync(path.join(ROOT, 'vendor/omni-viewer/omni-client.js'), 'utf8');
+  assert.ok(omSrc.includes('const deadline = nowFn() + 6;'), 'omni-client drainScanQueue must time-slice scans with a 6ms budget');
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
+  assert.ok(uiSrc.includes('!isConvRunning(true)'), 'ui-runtime scheduleSync must pass skipSyncVis=true to isConvRunning');
+  assert.ok(uiSrc.includes('if (bS++ >= 40)'), 'ui-runtime mainObserver must short-circuit bulk page-switch classifyDirtySubtree storms');
+});

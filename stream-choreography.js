@@ -45,6 +45,13 @@
   };
   const ST = (fn, ms) => setTimeout(fn, ms);
   const CT = (id) => clearTimeout(id), AF = Array.from, isFin = Number.isFinite;
+  const PO = 'ag-prism-overlay-portal';
+  const mkOv = (d, c) => { const e = d.createElement('div'); if (c) { e.className = c; sa(e, 'aria-hidden', 'true'); } sa(e, 'data-ag-owned', '1'); sa(e, 'data-ag-no-i18n', ''); return e; };
+  const portalOf = (d) => {
+    let p = d?.getElementById?.(PO);
+    if (!p && d?.body) { p = mkOv(d); p.id = PO; d.body.appendChild(p); }
+    return p || d?.body;
+  };
 
   const createStreamChoreographyController = ({
     motionEngine,
@@ -693,13 +700,12 @@
       if (isMotionUltra() && rippleCtl) rippleCtl.triggerLiftoffBurst(r);
     };
 
+    const clrA = (el, a, ms) => scheduleTransient(() => { if (isConn(el)) ra(el, a); }, ms);
     const markLiftoffBubble = (conv) => {
       const bubble = qs(conv, '[data-testid="user-message-bubble"]');
       if (!bubble) return false;
       sa(bubble, 'data-ag-cs-liftoff-bubble', '1');
-      scheduleTransient(() => {
-        if (isConn(bubble)) ra(bubble, 'data-ag-cs-liftoff-bubble');
-      }, 500);
+      clrA(bubble, 'data-ag-cs-liftoff-bubble', 500);
       return true;
     };
 
@@ -708,18 +714,14 @@
       if (!isMotionUltra() || !formalConv || !d) return;
       const now = nowOf();
       for (const n of qsa(d, '.ag-cs-liftoff-veil')) n.remove();
-      const veil = d.createElement('div');
-      veil.className = 'ag-cs-liftoff-veil';
-      sa(veil, 'aria-hidden', 'true');
-      sa(veil, 'data-ag-no-i18n', '');
-      sa(veil, 'data-ag-owned', '1');
+      const veil = mkOv(d, 'ag-cs-liftoff-veil');
       const r = lastHomeRect;
       setProp(veil, '--ag-lift-x', r && r.width > 0 ? `${Math.round(r.left + r.width / 2)}px` : '50%');
       setProp(veil, '--ag-lift-y', r && r.height > 0 ? `${Math.round(r.top + r.height / 2)}px` : '58%');
       const ring = d.createElement('div');
       ring.className = 'ag-cs-liftoff-ring';
       veil.appendChild(ring);
-      d.body?.appendChild(veil);
+      portalOf(d)?.appendChild(veil);
       scheduleTransient(() => veil.remove(), 540);
 
       const inputBox = qs(formalConv, '[data-testid="agent-input-box"]') || qs(d, '[data-testid="agent-input-box"]');
@@ -932,25 +934,16 @@
       return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: snap, l: lr, t: stTop, st: states };
     };
 
+    const rstSb = () => { sbInit = sbRunning = false; sbIndex = -1; sbCid = ''; sbRect = null; };
     const syncSidebarSelectionGlide = (snap) => {
       const d = docOf();
       if (!snap || !d) return;
       if (ga(d.documentElement, 'data-ag-cs-sidebar') === 'off') {
         for (const n of qsa(d, '.ag-cs-sidebar-glide-pill')) n.remove();
-        if (snap.st) {
-          for (const [row] of snap.st) if (ha(row, 'data-ag-cs-row-running')) ra(row, 'data-ag-cs-row-running');
-        }
-        if (runHoldTimer) {
-          CT(runHoldTimer);
-          runHoldTimer = 0;
-        }
+        if (snap.st) for (const [row] of snap.st) if (ha(row, 'data-ag-cs-row-running')) ra(row, 'data-ag-cs-row-running');
+        if (runHoldTimer) { CT(runHoldTimer); runHoldTimer = 0; }
         runningCidMap.clear();
-        sbInit = false;
-        sbIndex = -1;
-        sbCid = '';
-        sbRect = null;
-        sbRunning = false;
-        return;
+        return rstSb();
       }
       if (snap.st) {
         for (const [row, run] of snap.st) {
@@ -958,14 +951,7 @@
           else if (ha(row, 'data-ag-cs-row-running')) ra(row, 'data-ag-cs-row-running');
         }
       }
-      if (snap.e) {
-        sbInit = false;
-        sbIndex = -1;
-        sbCid = '';
-        sbRect = null;
-        sbRunning = false;
-        return;
-      }
+      if (snap.e) return rstSb();
       const { i: selIdx, cid: curCid, r: selRow, rn: selRun, s: curSnap, l: listRect, t: scrollTop } = snap;
       if (!selRow) return;
       const targetRun = Boolean(selRun || ha(selRow, 'data-ag-cs-row-running'));
@@ -985,25 +971,12 @@
           : sbRect;
         if (isMotionStandardOrUltra()) {
           for (const n of qsa(d, '.ag-cs-sidebar-glide-pill')) n.remove();
-          const pill = d.createElement('div');
-          pill.className = 'ag-cs-sidebar-glide-pill';
-          sa(pill, 'aria-hidden', 'true');
-          sa(pill, 'data-ag-no-i18n', '');
-          sa(pill, 'data-ag-owned', '1');
+          const pill = mkOv(d, 'ag-cs-sidebar-glide-pill');
           if (targetRun) sa(pill, 'data-ag-cs-glide-running', '1');
           else if (sbRunning) sa(pill, 'data-ag-cs-glide-from-running', '1');
-          for (const [k, v] of [
-            ['position', 'fixed'],
-            ['z-index', '38'],
-            ['pointer-events', 'none'],
-            ['left', `${Math.round(curSnap.left)}px`],
-            ['top', `${Math.round(curSnap.top)}px`],
-            ['width', `${Math.round(curSnap.width)}px`],
-            ['height', `${Math.round(curSnap.height)}px`],
-          ]) {
-            setProp(pill, k, v);
-          }
-          d.body?.appendChild(pill);
+          setProp(pill, 'position', 'fixed'); setProp(pill, 'z-index', '38'); setProp(pill, 'pointer-events', 'none');
+          for (const k of ['left', 'top', 'width', 'height']) setProp(pill, k, `${M.round(curSnap[k])}px`);
+          portalOf(d)?.appendChild(pill);
           try {
             motionEngine?.glideIndicator?.(pill, fromRect, curSnap, { durationMs: 240, stiffness: 390, damping: 32, mass: 0.9 });
           } catch {}
@@ -1042,9 +1015,7 @@
     const applyCaustic = (el) => {
       if (!el || !isMotionUltra()) return;
       sa(el, 'data-ag-cs-caustic', '1');
-      scheduleTransient(() => {
-        if (isConn(el)) ra(el, 'data-ag-cs-caustic');
-      }, 920);
+      clrA(el, 'data-ag-cs-caustic', 920);
     };
 
     const measureVisibleChangedHeaders = () => {
@@ -1081,68 +1052,40 @@
       }
       if (sawNew) notifyMascot('files-changed');
 
-      const PANE_RUN_SEL = '[data-testid="input-cancel-button"],[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
-      const views = findFormalConvViews();
-      let paneCausticHit = false;
-      if (views.length > 1) {
-        for (let i = 0; i < views.length; i++) {
-          const cv = views[i];
-          const runPane = Boolean(qs(cv, PANE_RUN_SEL));
-          const ps = paneRunState.get(cv);
-          if (!ps) {
-            paneRunState.set(cv, { wasRunning: runPane, startAt: runPane ? now : 0 });
-          } else if (runPane && !ps.wasRunning) {
-            ps.wasRunning = true;
-            ps.startAt = now;
-          } else if (!runPane && ps.wasRunning) {
+      const PRS = '[data-testid="input-cancel-button"],[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
+      const vs = findFormalConvViews();
+      let pCh = false;
+      if (vs.length > 1) {
+        for (const cv of vs) {
+          const rP = Boolean(qs(cv, PRS)), ps = paneRunState.get(cv);
+          if (!ps) paneRunState.set(cv, { wasRunning: rP, startAt: rP ? now : 0 });
+          else if (rP && !ps.wasRunning) { ps.wasRunning = true; ps.startAt = now; }
+          else if (!rP && ps.wasRunning) {
             ps.wasRunning = false;
             const dur = ps.startAt > 0 ? now - ps.startAt : 0;
             ps.startAt = 0;
             if (dur >= 6000 && isMotionUltra()) {
-              const card = qs(cv, '[data-testid="agent-input-box"] .surface-composer-card');
-              if (card && !closestOf(card, '[data-testid="subagent-tab-conversation"]')) {
-                applyCaustic(card);
-                paneCausticHit = true;
-              }
+              const c = qs(cv, '[data-testid="agent-input-box"] .surface-composer-card');
+              if (c && !closestOf(c, '[data-testid="subagent-tab-conversation"]')) { applyCaustic(c); pCh = true; }
             }
           }
         }
       }
-
-      const runningNow = isConvRunning();
-      if (!runInit) {
-        runInit = true;
-        wasRunning = runningNow;
-        runStartAt = runningNow ? now : 0;
-      } else if (runningNow && !wasRunning) {
-        wasRunning = true;
-        runStartAt = now;
-      } else if (!runningNow && wasRunning) {
+      const rNow = isConvRunning();
+      if (!runInit) { runInit = true; wasRunning = rNow; runStartAt = rNow ? now : 0; }
+      else if (rNow && !wasRunning) { wasRunning = true; runStartAt = now; }
+      else if (!rNow && wasRunning) {
         wasRunning = false;
-        const elapsed = runStartAt > 0 ? now - runStartAt : 0;
+        const el = runStartAt > 0 ? now - runStartAt : 0;
         runStartAt = 0;
-        const auraPhase = convAuraCtl?.getInstance?.()?.phase || '';
-        const errDom = qs(
-          d,
-          '[data-testid="conversation-view"] [data-testid="agent-error-banner"], [data-testid="conversation-view"] [data-testid="error-message"]'
-        );
-        if (auraPhase === 'error-halted' || !!(errDom)) {
+        if (convAuraCtl?.getInstance?.()?.phase === 'error-halted' || qs(d, '[data-testid="conversation-view"] [data-testid="agent-error-banner"], [data-testid="conversation-view"] [data-testid="error-message"]')) {
           convAuraCtl?.triggerErrorHalted?.(now);
-          notifyMascot('streamDone', { error: true, durationMs: elapsed });
+          notifyMascot('streamDone', { error: true, durationMs: el });
         } else {
-          if (!paneCausticHit && elapsed >= 6000 && isMotionUltra()) {
-            for (const c of qsa(d, '[data-testid="agent-input-box"] .surface-composer-card')) {
-              if (!closestOf(c, '[data-testid="subagent-tab-conversation"]')) applyCaustic(c);
-            }
-          }
-          if (elapsed >= 15000) {
-            convAuraCtl?.triggerLongTaskComplete?.(now);
-            notifyMascot('aura-complete', { durationMs: elapsed });
-          } else {
-            notifyMascot('complete', { durationMs: elapsed });
-          }
-          const warnBar = qs(d, '[data-ag-prism-pulse-bar][data-pv-warn="1"], #ag-prism-pulse-bar[data-pv-warn="1"]');
-          if (warnBar && now - lastVialHighNotifyAt >= 600000) {
+          if (!pCh && el >= 6000 && isMotionUltra()) for (const c of qsa(d, '[data-testid="agent-input-box"] .surface-composer-card')) if (!closestOf(c, '[data-testid="subagent-tab-conversation"]')) applyCaustic(c);
+          if (el >= 15000) { convAuraCtl?.triggerLongTaskComplete?.(now); notifyMascot('aura-complete', { durationMs: el }); }
+          else notifyMascot('complete', { durationMs: el });
+          if (qs(d, '[data-ag-prism-pulse-bar][data-pv-warn="1"], #ag-prism-pulse-bar[data-pv-warn="1"]') && now - lastVialHighNotifyAt >= 600000) {
             lastVialHighNotifyAt = now;
             notifyMascot('vial-high', { fraction: 0.8 });
           }
@@ -1205,9 +1148,7 @@
       const target = idx >= 0 && idx < turns.length ? turns[idx] : null;
       if (!target) return;
       sa(target, 'data-ag-cs-sonar', '1');
-      scheduleTransient(() => {
-        if (isConn(target)) ra(target, 'data-ag-cs-sonar');
-      }, 720);
+      clrA(target, 'data-ag-cs-sonar', 720);
     };
 
     const syncHeroRouteChoreography = (measured) => {
