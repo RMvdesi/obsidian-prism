@@ -9,9 +9,10 @@
   const BINDING_NAME = '__agPrismPromptEnhancerCall';
   const STYLE_ID = 'ag-prism-prompt-enhancer-css';
   const BUTTON_TESTID = 'prism-prompt-enhancer-trigger';
+  const RESTORE_TESTID = 'prism-prompt-enhancer-restore';
   const BUTTON_HOST_TESTID = 'prism-prompt-enhancer-host';
   const PANEL_TESTID = 'prism-prompt-enhancer-panel';
-  const DEFAULT_TIMEOUT = 30000;
+  const DEFAULT_TIMEOUT = 65000;
   const MAX_REQUEST_CHARS = 10000;
 
   const CSS = [
@@ -35,7 +36,7 @@
   ].join('\n');
 
   const FALLBACK_TEXT = {
-    en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', working: 'Enhancing prompt…', done: 'Review the result before replacing your input', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt directly', replaced: 'Prompt replaced automatically', replaceFailed: 'Could not replace input; copy it manually', replaceConflict: 'The input changed, so the current draft was preserved. Enhance again or copy the result manually.', emptyResult: 'The enhanced result is empty. Nothing was replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is no longer available. Nothing was replaced.', cancelled: 'Request cancelled. Original text is preserved.', failed: 'Enhancement failed. Original text is preserved. Retry: ', tooLong: 'Input exceeds the 10,000 character limit' },
+    en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', restore: 'Restore', restored: 'Original draft restored', working: 'Enhancing prompt…', done: 'Review the result before replacing your input', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt directly', replaced: 'Prompt replaced automatically', replaceFailed: 'Could not replace input; copy it manually', replaceConflict: 'The input changed, so the current draft was preserved. Review or copy the result manually.', emptyResult: 'The enhanced result is empty. Nothing was replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is no longer available. Nothing was replaced.', cancelled: 'Request cancelled. Original text is preserved.', failed: 'Enhancement failed. Original text is preserved. Retry: ', tooLong: 'Input exceeds the 10,000 character limit', tokensChanged: 'Protected code, paths, URLs, or identifiers changed. Original draft kept; review before replacing.', languagePrefaceIssue: 'Model returned a meta preface or language note. Original draft kept; review the result.', languageMismatchIssue: 'Enhanced prompt language differs from the original draft. Original draft kept; review the result.', truncated: 'Output was truncated by the token limit; shorten input and retry.', refused: 'The model refused this request; check input or switch models.', analysisOutput: 'Model returned analysis tags instead of a prompt; switch models or retry.' },
   };
 
   function strings(doc) {
@@ -330,17 +331,34 @@
     return { status: attempted ? 'unverified' : 'failed' };
   }
 
-  function extractContext(view) {
+  const CONTEXT_EXCLUDE_SEL = '[data-message-type="reasoning"],[data-testid*="reasoning"],[data-testid*="tool"],[hidden],[inert]';
+  const CONTEXT_STREAM_SEL = '[aria-busy="true"],[data-is-streaming="true"],[data-streaming="true"],[data-message-status="in_progress"],[data-status="streaming"]';
+
+  function extractContext(view, maxRounds = 1) {
     if (!view) return [];
     const nodes = Array.from(view.querySelectorAll?.('[data-testid="user-message-content"], [data-testid="user-message-bubble"], [data-testid="agent-response"], [data-testid="planner-response-text"]') || []);
-    const turns = [];
-    for (const node of nodes.slice(-8)) {
+    const raw = [];
+    for (const node of nodes.slice(-24)) {
+      if (node.closest?.(CONTEXT_EXCLUDE_SEL) || node.matches?.(CONTEXT_STREAM_SEL) || node.querySelector?.(CONTEXT_STREAM_SEL)) continue;
       const text = textOf(node);
       if (!text) continue;
       const isUser = Boolean(node.closest?.('[data-testid="user-message"], [data-message-role="user"], [data-role="user"]')) || /user-message/i.test(String(node.getAttribute?.('data-testid') || ''));
-      turns.push({ role: isUser ? 'user' : 'assistant', text: text.slice(-1800) });
+      raw.push({ role: isUser ? 'user' : 'assistant', text: text.slice(0, 3000) });
     }
-    return turns.slice(-6);
+    const limit = [1, 2, 3, 4].includes(Number(maxRounds)) ? Number(maxRounds) : 1;
+    const paired = [];
+    let total = 0;
+    for (let i = raw.length - 1, rounds = 0; i >= 1 && rounds < limit;) {
+      if (raw[i].role === 'assistant' && raw[i - 1].role === 'user') {
+        const len = raw[i - 1].text.length + raw[i].text.length;
+        if (total + len > 6000) break;
+        total += len;
+        paired.unshift(raw[i - 1], raw[i]);
+        rounds += 1;
+        i -= 2;
+      } else i -= 1;
+    }
+    return paired;
   }
 
   function injectStyle(doc) {
@@ -349,6 +367,17 @@
     style.id = STYLE_ID;
     style.textContent = CSS;
     doc.head?.appendChild(style);
+  }
+
+  function createRestoreButton(doc, labels) {
+    const btn = doc.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ag-prism-prompt-enhancer-btn';
+    btn.setAttribute('data-testid', RESTORE_TESTID);
+    btn.setAttribute('aria-label', labels.restore);
+    btn.textContent = labels.restore;
+    btn.hidden = true;
+    return btn;
   }
 
   function createButton(doc, labels) {
@@ -379,45 +408,35 @@
   }
 
   function createPanel(doc, state, labels) {
-    const panel = doc.createElement('section');
-    panel.className = 'ag-prism-prompt-enhancer-panel';
+    const mk = (tag, cls, text) => {
+      const el = doc.createElement(tag);
+      if (cls) el.className = cls;
+      if (text !== undefined) el.textContent = text;
+      return el;
+    };
+    const panel = mk('section', 'ag-prism-prompt-enhancer-panel');
     panel.setAttribute('data-testid', PANEL_TESTID);
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', labels.title);
-    const head = doc.createElement('div');
-    head.className = 'ag-prism-prompt-enhancer-head';
-    const title = doc.createElement('span');
-    title.textContent = labels.title;
-    const close = doc.createElement('button');
+    const head = mk('div', 'ag-prism-prompt-enhancer-head');
+    const close = mk('button', 'ag-prism-prompt-enhancer-close', '×');
     close.type = 'button';
-    close.className = 'ag-prism-prompt-enhancer-close';
     close.setAttribute('aria-label', labels.close);
-    close.textContent = '×';
-    head.append(title, close);
-    const tabs = doc.createElement('div');
-    tabs.className = 'ag-prism-prompt-enhancer-tabs';
-    const body = doc.createElement('div');
-    body.className = 'ag-prism-prompt-enhancer-body';
-    const editor = doc.createElement('textarea');
-    editor.className = 'ag-prism-prompt-enhancer-editor';
+    head.append(mk('span', '', labels.title), close);
+    const tabs = mk('div', 'ag-prism-prompt-enhancer-tabs');
+    const body = mk('div', 'ag-prism-prompt-enhancer-body');
+    const editor = mk('textarea', 'ag-prism-prompt-enhancer-editor');
     editor.hidden = true;
-    const status = doc.createElement('div');
-    status.className = 'ag-prism-prompt-enhancer-status';
-    const actions = doc.createElement('div');
-    actions.className = 'ag-prism-prompt-enhancer-actions';
+    const status = mk('div', 'ag-prism-prompt-enhancer-status');
+    const actions = mk('div', 'ag-prism-prompt-enhancer-actions');
     const makeAction = (label, primary = false) => {
-      const button = doc.createElement('button');
-      button.type = 'button';
-      button.className = 'ag-prism-prompt-enhancer-action';
-      button.textContent = label;
-      if (primary) button.setAttribute('data-primary', '1');
-      return button;
+      const btn = mk('button', 'ag-prism-prompt-enhancer-action', label);
+      btn.type = 'button';
+      if (primary) btn.setAttribute('data-primary', '1');
+      return btn;
     };
-    const copy = makeAction(labels.copy);
-    const edit = makeAction(labels.edit);
-    const retry = makeAction(labels.retry);
-    const replace = makeAction(labels.replace, true);
-    const cancel = makeAction(labels.cancel);
+    const copy = makeAction(labels.copy), edit = makeAction(labels.edit), retry = makeAction(labels.retry);
+    const replace = makeAction(labels.replace, true), cancel = makeAction(labels.cancel);
     cancel.hidden = true;
     actions.append(copy, edit, retry, replace, cancel);
     panel.append(head, tabs, body, editor, status, actions);
@@ -425,26 +444,17 @@
 
     const setTab = (name) => {
       while (tabs.firstChild) tabs.firstChild.remove();
-      const originalTab = doc.createElement('button');
-      const enhancedTab = doc.createElement('button');
-      for (const [button, label, value] of [[originalTab, labels.original, 'original'], [enhancedTab, labels.result, 'enhanced']]) {
+      for (const [label, value] of [[labels.original, 'original'], [labels.result, 'enhanced']]) {
+        const button = mk('button', 'ag-prism-prompt-enhancer-tab', label);
         button.type = 'button';
-        button.className = 'ag-prism-prompt-enhancer-tab';
-        button.textContent = label;
         button.setAttribute('data-active', name === value ? '1' : '0');
         if (value === 'enhanced') button.disabled = !state.enhanced;
         button.addEventListener('click', () => setTab(value));
         tabs.appendChild(button);
       }
-      if (name === 'original') {
-        body.textContent = state.original;
-        body.hidden = false;
-        editor.hidden = true;
-      } else {
-        body.textContent = state.enhanced;
-        body.hidden = false;
-        editor.hidden = true;
-      }
+      body.textContent = name === 'original' ? state.original : state.enhanced;
+      body.hidden = false;
+      editor.hidden = true;
       state.tab = name;
     };
     close.addEventListener('click', () => { state.cancel?.(); panel.remove(); });
@@ -453,11 +463,7 @@
       try { await doc.defaultView?.navigator?.clipboard?.writeText?.(value); status.textContent = labels.copied; } catch { status.textContent = labels.copyFailed; }
     });
     edit.addEventListener('click', () => {
-      editor.value = state.enhanced;
-      body.hidden = true;
-      editor.hidden = false;
-      editor.focus?.();
-      status.textContent = labels.editHint;
+      editor.value = state.enhanced; body.hidden = true; editor.hidden = false; editor.focus?.(); status.textContent = labels.editHint;
     });
     let replacing = false;
     replace.addEventListener('click', () => {
@@ -469,18 +475,12 @@
         if (result.status === 'applied') {
           status.textContent = labels.replaced;
           panel.remove();
-        } else if (result.status === 'empty') {
-          status.textContent = labels.emptyResult;
-        } else if (result.reason === 'target-missing') {
-          status.textContent = labels.targetMissing;
-        } else if (result.reason === 'target-changed') {
-          status.textContent = labels.replaceConflict;
-        } else {
-          status.textContent = labels.replaceFailed;
-        }
-      } finally {
-        replacing = false;
-      }
+          state.onApplied?.(value);
+        } else if (result.status === 'empty') status.textContent = labels.emptyResult;
+        else if (result.reason === 'target-missing') status.textContent = labels.targetMissing;
+        else if (result.reason === 'target-changed') status.textContent = labels.replaceConflict;
+        else status.textContent = labels.replaceFailed;
+      } finally { replacing = false; }
     });
     retry.addEventListener('click', () => state.retry?.());
     cancel.addEventListener('click', () => state.cancel?.());
@@ -496,80 +496,101 @@
     try { win.__agPrismPromptEnhancerBridge = bridge; G.__agPrismPromptEnhancerBridge = bridge; } catch {}
     const resolvePromptEnhancer = (id, value) => bridge.resolve(id, value);
     try { win.__agPrismPromptEnhancerResolve = resolvePromptEnhancer; G.__agPrismPromptEnhancerResolve = resolvePromptEnhancer; } catch {}
-    let destroyed = false;
-    let active = false;
-    let loading = false;
-    let observer = null;
-    let config = { enabled: false };
-    let panelState = null;
-    let panelView = null;
-    let activeRequestId = '';
-    let activeRequestCancel = null;
-    let activeRequestButton = null;
-    let buttonMessageTimer = null;
-    const mountedEntries = new Map();
+    let destroyed = false, active = false, loading = false, observer = null;
+    let config = { enabled: false, includeRecentContext: false, recentContextCount: 1 };
+    let panelState = null, panelView = null, reqId = '', reqCancel = null, reqBtn = null, msgTimer = null;
+    const entries = new Map();
     const labels = strings(doc);
-    const updateButton = (busy, activeButton = null) => {
-      for (const entry of mountedEntries.values()) {
-        const button = entry.button;
-        if (!button) continue;
-        const isActive = Boolean(busy && activeButton && button === activeButton);
-        button.disabled = Boolean(busy && !isActive);
-        button.setAttribute('aria-busy', isActive ? 'true' : 'false');
-        button.setAttribute('aria-label', isActive ? labels.cancel : labels.button);
-        if (isActive) button.setAttribute('title', labels.cancel);
-        else button.removeAttribute?.('title');
-        if (button.__agPrismPromptEnhancerLabel) button.__agPrismPromptEnhancerLabel.textContent = isActive ? labels.cancel : labels.button;
+    const updateButton = (busy, activeBtn = null) => {
+      for (const entry of entries.values()) {
+        const btn = entry.button;
+        if (!btn) continue;
+        const isActive = Boolean(busy && activeBtn && btn === activeBtn);
+        btn.disabled = Boolean(busy && !isActive);
+        btn.setAttribute('aria-busy', isActive ? 'true' : 'false');
+        btn.setAttribute('aria-label', isActive ? labels.cancel : labels.button);
+        if (isActive) btn.setAttribute('title', labels.cancel);
+        else btn.removeAttribute?.('title');
+        if (btn.__agPrismPromptEnhancerLabel) btn.__agPrismPromptEnhancerLabel.textContent = isActive ? labels.cancel : labels.button;
+        if (entry.restoreBtn) entry.restoreBtn.disabled = Boolean(busy);
       }
     };
     const showButtonMessage = (message, target = null) => {
-      clearTimeout(buttonMessageTimer);
+      clearTimeout(msgTimer);
       updateButton(false);
-      const button = target?.button || mountedEntries.get(target?.root)?.button || doc.querySelector?.(`[data-testid="${BUTTON_TESTID}"]`);
-      if (!button) return;
-      button.setAttribute('aria-label', message);
-      button.setAttribute('title', message);
-      button.setAttribute('data-status', message);
-      if (button.__agPrismPromptEnhancerLabel) button.__agPrismPromptEnhancerLabel.textContent = labels.button;
-      buttonMessageTimer = setTimeout(() => {
-        if (!loading) {
-          button.removeAttribute?.('data-status');
-          button.removeAttribute?.('title');
-          updateButton(false);
-        }
+      const btn = target?.button || entries.get(target?.root)?.button || doc.querySelector?.(`[data-testid="${BUTTON_TESTID}"]`);
+      if (!btn) return;
+      btn.setAttribute('aria-label', message);
+      btn.setAttribute('title', message);
+      btn.setAttribute('data-status', message);
+      if (btn.__agPrismPromptEnhancerLabel) btn.__agPrismPromptEnhancerLabel.textContent = labels.button;
+      msgTimer = setTimeout(() => {
+        if (!loading) { btn.removeAttribute?.('data-status'); btn.removeAttribute?.('title'); updateButton(false); }
       }, 2200);
     };
+    const bindEditorInput = (entry) => {
+      if (!entry?.editor || entry.boundEditor === entry.editor) return;
+      entry.boundEditor = entry.editor;
+      entry.editor.addEventListener?.('input', () => {
+        if (entry.writing || !entry.lastUndo) return;
+        entry.lastUndo = null;
+        if (entry.restoreBtn) entry.restoreBtn.hidden = true;
+      });
+    };
+    const restoreDraft = (entry) => {
+      if (!entry?.lastUndo || !entry.editor || entry.editor.isConnected === false || loading) return;
+      if (!sameEditorText(readEditor(entry.editor), entry.lastUndo.enhanced)) {
+        entry.lastUndo = null;
+        if (entry.restoreBtn) entry.restoreBtn.hidden = true;
+        showButtonMessage(labels.replaceConflict, entry);
+        return;
+      }
+      entry.writing = true;
+      let res;
+      try { res = writeEditor(doc, entry.editor, entry.lastUndo.original); } finally { entry.writing = false; }
+      if (res?.status === 'applied') {
+        entry.lastUndo = null;
+        if (entry.restoreBtn) entry.restoreBtn.hidden = true;
+        showButtonMessage(labels.restored, entry);
+      } else showButtonMessage(labels.replaceFailed, entry);
+    };
+    const showPreviewPanel = (reqState, message) => {
+      panelView?.panel?.remove?.();
+      const owner = entries.get(reqState.root);
+      reqState.retry = () => { panelView?.panel?.remove?.(); panelView = null; triggerEnhancement(reqState); };
+      reqState.cancel = () => { panelView = null; };
+      reqState.onApplied = (applied) => {
+        panelView = null;
+        if (owner) { owner.lastUndo = { original: reqState.editorSnapshot, enhanced: applied }; if (owner.restoreBtn) owner.restoreBtn.hidden = false; }
+        showButtonMessage(labels.replaced, reqState);
+      };
+      panelView = createPanel(doc, reqState, labels);
+      panelView.setTab('enhanced');
+      panelView.status.textContent = message;
+    };
     const cancelActiveRequest = (removePanel = false) => {
-      const requestId = activeRequestId;
-      const cancelRpc = activeRequestCancel;
-      activeRequestId = '';
-      activeRequestCancel = null;
-      activeRequestButton = null;
-      loading = false;
-      clearTimeout(buttonMessageTimer);
-      buttonMessageTimer = null;
+      const id = reqId, cancelRpc = reqCancel;
+      reqId = ''; reqCancel = null; reqBtn = null; loading = false;
+      clearTimeout(msgTimer); msgTimer = null;
       updateButton(false);
       if (panelView) {
         panelView.cancel.hidden = true;
         panelView.status.textContent = labels.cancelled;
         panelState?.setTab?.('original');
-        if (removePanel) {
-          panelView.panel.remove();
-          panelView = null;
-        }
+        if (removePanel) { panelView.panel.remove(); panelView = null; }
       }
       panelState = null;
       cancelRpc?.({ ok: false, cancelled: true, reason: 'cancelled' });
-      if (requestId) void bridge.call('cancel', { requestId }, 5000);
+      if (id) void bridge.call('cancel', { requestId: id }, 5000);
     };
     const removeMountedEntry = (entry) => {
       if (!entry) return;
       entry.host?.remove?.();
       if (entry.root && entry.rootPosition !== null && entry.root.style) entry.root.style.position = entry.rootPosition;
-      if (entry.root) mountedEntries.delete(entry.root);
+      if (entry.root) entries.delete(entry.root);
     };
     const removeMountedButton = () => {
-      for (const entry of mountedEntries.values()) removeMountedEntry(entry);
+      for (const entry of entries.values()) removeMountedEntry(entry);
       doc.querySelectorAll?.(`[data-testid="${BUTTON_TESTID}"]`)?.forEach?.((node) => {
         if (!node.closest?.(`[data-testid="${BUTTON_HOST_TESTID}"]`)) node.remove?.();
       });
@@ -577,135 +598,108 @@
     const mount = () => {
       if (destroyed || !config.enabled) return;
       const candidates = getComposerCandidates(doc);
-      if (candidates.length === 0) {
-        removeMountedButton();
-        return;
-      }
+      if (candidates.length === 0) { removeMountedButton(); return; }
       injectStyle(doc);
-      const activeRoots = new Set(candidates.map((candidate) => candidate.root));
-      for (const [root, entry] of mountedEntries.entries()) {
-        if (!activeRoots.has(root)) removeMountedEntry(entry);
-      }
-      for (const candidate of candidates) {
-        const footer = findComposerFooter(candidate.root, candidate.editor);
-        const parent = footer || candidate.root;
-        let entry = mountedEntries.get(candidate.root);
+      const activeRoots = new Set(candidates.map((c) => c.root));
+      for (const [root, entry] of entries.entries()) if (!activeRoots.has(root)) removeMountedEntry(entry);
+      for (const c of candidates) {
+        const footer = findComposerFooter(c.root, c.editor), parent = footer || c.root;
+        let entry = entries.get(c.root);
         if (!entry || entry.host?.parentNode !== parent) {
           if (entry) removeMountedEntry(entry);
           let rootPosition = null;
-          if (!footer && candidate.root.style) {
-            rootPosition = candidate.root.style.position || '';
-            const computedPosition = doc.defaultView?.getComputedStyle?.(candidate.root)?.position;
-            if (!computedPosition || computedPosition === 'static') candidate.root.style.position = 'relative';
+          if (!footer && c.root.style) {
+            rootPosition = c.root.style.position || '';
+            const pos = doc.defaultView?.getComputedStyle?.(c.root)?.position;
+            if (!pos || pos === 'static') c.root.style.position = 'relative';
           }
           const host = doc.createElement('div');
           host.className = 'ag-prism-prompt-enhancer-host';
           host.setAttribute('data-testid', BUTTON_HOST_TESTID);
           if (!footer) host.setAttribute('data-fallback', '1');
-          const button = createButton(doc, labels);
-          entry = { ...candidate, footer, parent, host, button, rootPosition };
+          const button = createButton(doc, labels), restoreBtn = createRestoreButton(doc, labels);
+          entry = { ...c, footer, parent, host, button, restoreBtn, rootPosition, lastUndo: null, writing: false, boundEditor: null };
           button.addEventListener('click', () => triggerEnhancement(entry));
-          host.appendChild(button);
+          restoreBtn.addEventListener('click', () => restoreDraft(entry));
+          host.append(button, restoreBtn);
           parent.appendChild(host);
-          mountedEntries.set(candidate.root, entry);
+          entries.set(c.root, entry);
         } else {
-          entry.view = candidate.view;
-          entry.editor = candidate.editor;
-          entry.cascadeId = candidate.cascadeId;
-          entry.footer = footer;
-          entry.parent = parent;
+          entry.view = c.view; entry.editor = c.editor; entry.cascadeId = c.cascadeId; entry.footer = footer; entry.parent = parent;
           if (footer) entry.host.removeAttribute?.('data-fallback');
         }
+        bindEditorInput(entry);
         entry.button.hidden = false;
+        if (entry.restoreBtn) entry.restoreBtn.hidden = !entry.lastUndo;
         if (footer && entry.host.parentNode !== footer) footer.prepend?.(entry.host);
       }
-      /*
-       * Each eligible composer owns its own trigger. This keeps split-view
-       * requests and replacements bound to the pane where the user clicked.
-       */
     };
     const triggerEnhancement = async (target = null) => {
       if (destroyed || !config.enabled) return;
-      if (loading) {
-        if (target?.button && target.button === activeRequestButton) cancelActiveRequest(true);
-        return;
-      }
+      if (loading) { if (target?.button && target.button === reqBtn) cancelActiveRequest(true); return; }
       const snap = target?.root && target?.editor?.isConnected !== false ? target : getActiveComposer(doc);
       if (!snap.editor) return;
-      const editorSnapshot = readEditor(snap.editor);
-      const original = editorSnapshot.trim();
-      if (!original) {
-        showButtonMessage(labels.emptyInput, snap);
-        return;
-      }
+      const editorSnapshot = readEditor(snap.editor), original = editorSnapshot.trim();
+      if (!original) { showButtonMessage(labels.emptyInput, snap); return; }
       loading = true;
-      const requestButton = target?.button || mountedEntries.get(snap.root)?.button || null;
-      activeRequestButton = requestButton;
-      updateButton(true, requestButton);
-      const requestId = `pe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      activeRequestId = requestId;
-      const context = extractContext(snap.view);
-      panelState = {
-        original,
-        editorSnapshot,
-        enhanced: '',
-        editor: snap.editor,
-        root: snap.root,
-        cascadeId: snap.cascadeId,
-        button: target?.button || mountedEntries.get(snap.root)?.button || null,
-      };
-      const replacementState = panelState;
+      const entry = entries.get(snap.root) || null;
+      const button = target?.button || entry?.button || null;
+      if (entry) { entry.lastUndo = null; if (entry.restoreBtn) entry.restoreBtn.hidden = true; }
+      reqBtn = button;
+      updateButton(true, button);
+      const id = `pe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      reqId = id;
+      const context = config.includeRecentContext ? extractContext(snap.view, config.recentContextCount) : [];
+      panelState = { original, editorSnapshot, enhanced: '', editor: snap.editor, root: snap.root, cascadeId: snap.cascadeId, button };
+      const rep = panelState;
       panelState.replace = (value) => {
-        const current = replacementState;
-        if (!current.editor || current.editor.isConnected === false) return { status: 'blocked', reason: 'target-missing' };
-        if (current.root !== replacementState.root || current.cascadeId !== replacementState.cascadeId) {
-          return { status: 'blocked', reason: 'target-changed' };
-        }
-        if (!sameEditorText(readEditor(current.editor), replacementState.editorSnapshot)) {
-          return { status: 'blocked', reason: 'target-changed' };
-        }
-        return writeEditor(doc, current.editor, value);
+        if (!rep.editor || rep.editor.isConnected === false) return { status: 'blocked', reason: 'target-missing' };
+        if (rep.root !== panelState?.root && rep !== panelState) return { status: 'blocked', reason: 'target-changed' };
+        if (!sameEditorText(readEditor(rep.editor), rep.editorSnapshot)) return { status: 'blocked', reason: 'target-changed' };
+        const owner = entries.get(rep.root);
+        if (owner) owner.writing = true;
+        try { return writeEditor(doc, rep.editor, value); } finally { if (owner) owner.writing = false; }
       };
       if (original.length > MAX_REQUEST_CHARS) {
-        loading = false;
-        activeRequestId = '';
-        activeRequestButton = null;
-        updateButton(false);
-        showButtonMessage(labels.tooLong, snap);
-        return;
+        loading = false; reqId = ''; reqBtn = null; updateButton(false); showButtonMessage(labels.tooLong, snap); return;
       }
-      const stateAtRequest = panelState;
-      let completionMessage = '';
+      const reqState = panelState;
+      let msg = '';
       try {
-        const request = bridge.callCancelable('enhance', { original, context, profileId: config.profileId, model: config.model, requestId }, DEFAULT_TIMEOUT);
-        activeRequestCancel = request.cancel;
+        const request = bridge.callCancelable('enhance', {
+          original, context, includeRecentContext: config.includeRecentContext, recentContextCount: config.recentContextCount, profileId: config.profileId, model: config.model, requestId: id,
+        }, DEFAULT_TIMEOUT);
+        reqCancel = request.cancel;
         const result = await request.promise;
-        if (destroyed || !config.enabled || activeRequestId !== requestId || panelState !== stateAtRequest) return;
+        if (destroyed || !config.enabled || reqId !== id || panelState !== reqState) return;
         const enhanced = sanitizeEnhancedText(result?.enhanced).trim();
         if (result?.ok && enhanced.trim()) {
-          stateAtRequest.enhanced = enhanced;
-          const replacement = stateAtRequest.replace(enhanced);
-          if (replacement.status === 'applied') completionMessage = labels.replaced;
-          else if (replacement.reason === 'target-missing') completionMessage = labels.targetMissing;
-          else if (replacement.reason === 'target-changed') completionMessage = labels.replaceConflict;
-          else if (replacement.status === 'empty') completionMessage = labels.emptyResult;
-          else completionMessage = labels.replaceFailed;
+          reqState.enhanced = enhanced;
+          const issueMsg = result.outputIssue === 'preface' ? labels.languagePrefaceIssue
+            : result.outputIssue === 'language-mismatch' ? labels.languageMismatchIssue
+            : result.tokensPreserved === false ? labels.tokensChanged : '';
+          if (issueMsg) { showPreviewPanel(reqState, issueMsg); return; }
+          const replacement = reqState.replace(enhanced);
+          if (replacement.status === 'applied') {
+            if (entry) { entry.lastUndo = { original: editorSnapshot, enhanced }; if (entry.restoreBtn) entry.restoreBtn.hidden = false; }
+            msg = labels.replaced;
+          } else if (replacement.reason === 'target-missing') msg = labels.targetMissing;
+          else if (replacement.reason === 'target-changed') showPreviewPanel(reqState, labels.replaceConflict);
+          else if (replacement.status === 'empty') msg = labels.emptyResult;
+          else showPreviewPanel(reqState, labels.replaceFailed);
         } else if (result?.ok) {
-          stateAtRequest.enhanced = '';
-          completionMessage = labels.emptyResult;
+          reqState.enhanced = ''; msg = labels.emptyResult;
         } else {
-          completionMessage = labels.failed;
+          msg = result?.reason === 'truncated' ? labels.truncated
+            : result?.reason === 'refused' ? labels.refused
+            : result?.reason === 'analysis-output' ? labels.analysisOutput : labels.failed;
         }
-      } catch (error) {
-        if (panelState === stateAtRequest) completionMessage = labels.failed;
+      } catch {
+        if (panelState === reqState) msg = labels.failed;
       } finally {
-        if (activeRequestId === requestId) {
-          activeRequestId = '';
-          activeRequestCancel = null;
-          activeRequestButton = null;
-          loading = false;
-          if (completionMessage) showButtonMessage(completionMessage, stateAtRequest);
-          else updateButton(false);
+        if (reqId === id) {
+          reqId = ''; reqCancel = null; reqBtn = null; loading = false;
+          if (msg) showButtonMessage(msg, reqState); else updateButton(false);
         }
       }
     };
@@ -721,24 +715,28 @@
     };
     const deactivate = () => {
       active = false;
-      clearTimeout(buttonMessageTimer);
-      buttonMessageTimer = null;
-      observer?.disconnect?.();
-      observer = null;
+      clearTimeout(msgTimer); msgTimer = null;
+      observer?.disconnect?.(); observer = null;
       win.removeEventListener?.('resize', mount);
       win.removeEventListener?.('scroll', mount, true);
       cancelActiveRequest(true);
       doc.querySelectorAll?.(`[data-testid="${BUTTON_TESTID}"], [data-testid="${PANEL_TESTID}"]`)?.forEach?.((node) => node.remove());
       removeMountedButton();
-      panelView = null;
-      panelState = null;
+      panelView = null; panelState = null;
       doc.getElementById?.(STYLE_ID)?.remove?.();
     };
     const applyConfig = (next = {}) => {
       const enabled = next && Object.prototype.hasOwnProperty.call(next, 'enabled')
         ? Boolean(next.enabled)
         : next?.promptEnhancer === 'on';
-      config = { enabled, profileId: String(next.profileId || ''), model: String(next.model || '') };
+      const count = Number(next.recentContextCount);
+      config = {
+        enabled,
+        profileId: String(next.profileId || ''),
+        model: String(next.model || ''),
+        includeRecentContext: Boolean(next.includeRecentContext),
+        recentContextCount: [1, 2, 3, 4].includes(count) ? count : 1,
+      };
       if (config.enabled) activate(); else deactivate();
     };
     const refresh = async () => {
