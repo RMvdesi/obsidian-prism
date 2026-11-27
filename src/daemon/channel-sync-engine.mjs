@@ -1,4 +1,5 @@
-// Obsidian Prism 全 16 通道表驱动挂载、3 级关键路径流水线、按需 Ch8 下发、配置广播收敛与拆卸引擎（消费 CHANNEL_REGISTRY）
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
+// Obsidian Prism 全 17 通道表驱动挂载、3 级关键路径流水线、按需 Ch8 下发、配置广播收敛与拆卸引擎（消费 CHANNEL_REGISTRY）
 import { OMNI_BINDING } from '../../vendor/omni-viewer/omni-server.mjs';
 import {
   THOUGHT_BINDING,
@@ -6,6 +7,7 @@ import {
   INLINE_DIFF_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
 } from './constants.mjs';
 import {
   ENTRY_FSM_STATES,
@@ -27,6 +29,7 @@ const BINDING_BY_CHANNEL = Object.freeze({
   inlineDiff: { name: () => INLINE_DIFF_BINDING, addedField: 'inlineDiffBindingAdded' },
   wallpaper: { name: (cdp) => cdp?.WALLPAPER_BINDING || WALLPAPER_BINDING, addedField: 'wallpaperBindingAdded' },
   suggester: { name: (cdp) => cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING, addedField: 'suggesterBindingAdded' },
+  promptEnhancer: { name: (cdp) => cdp?.PROMPT_ENHANCER_BINDING || PROMPT_ENHANCER_BINDING, addedField: 'promptEnhancerBindingAdded' },
 });
 
 const PERSISTENT_SPECS = Object.freeze(
@@ -335,7 +338,7 @@ export async function teardownAllEntryChannelScripts(
   }
 
   if (removeBindings) {
-    for (const id of ['sidebar', 'inlineDiff', 'wallpaper', 'suggester']) {
+    for (const id of ['sidebar', 'inlineDiff', 'wallpaper', 'suggester', 'promptEnhancer']) {
       await removeChannelBinding(orch, entry, id);
     }
   }
@@ -353,7 +356,7 @@ export async function healSingleChannelOnEntry(orch, entry, spec, cfg, probe, { 
     await ensureChannelBinding(orch, entry, 'sidebar', 2600, true);
   } else if ((id === 'thought' || id === 'inlineDiff') && !afterCh1Heal) {
     await ensureChannelBinding(orch, entry, id, 2600, true);
-  } else if (id === 'wallpaper' || id === 'suggester') {
+  } else if (id === 'wallpaper' || id === 'suggester' || id === 'promptEnhancer') {
     await ensureChannelBinding(orch, entry, id, 2600, true);
   }
 
@@ -569,6 +572,10 @@ export async function runBroadcastConfigRefresh(orch) {
 
       const cdpPre = orch.getCdp();
       const preCfg = typeof cdpPre?.readConfig === 'function' ? cdpPre.readConfig() : {};
+      if (preCfg?.promptEnhancer !== 'on' && orch.services._lazyPromptEnhancerService) {
+        await orch.services.releasePromptEnhancerService();
+        if (orch._configSeq !== snapSeq) { restoreAllAcks(); orch._broadcastPending = true; continue; }
+      }
       if (orch.isChannelEnabled(orch.getRegisteredChannel('omni'), preCfg)) {
         await orch.ensureOmniServer().catch(() => null);
         if (orch._configSeq !== snapSeq) { restoreAllAcks(); orch._broadcastPending = true; continue; }
@@ -721,7 +728,7 @@ export async function runBroadcastConfigRefresh(orch) {
                   await recordPersistentEvalOutcome(orch, entry, spec, evalRes, { chHash: hash, chSig: sig, scriptId: entry[f.scriptField], stage: 'broadcast' });
                 }
               } else if ((hadBefore || (!spec.tracksSkippedNonHost && id !== 'omni' && id !== 'thought' && !orch.isChannelEnabled(spec, currentCfg))) && !skippedStale && !entry.session.closed) {
-                if (id === 'wallpaper' || id === 'suggester') await removeChannelBinding(orch, entry, id);
+                if (id === 'wallpaper' || id === 'suggester' || id === 'promptEnhancer') await removeChannelBinding(orch, entry, id);
                 if (hadBefore) await evalFireAndForgetSafe(entry.session, buildEffectiveCleanupExpr(orch, spec), 0);
                 resetEntryChannelState(entry, spec, false);
               }

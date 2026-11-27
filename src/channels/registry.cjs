@@ -1,4 +1,5 @@
-// 声明式多通道微内核注册表（全仓 16 通道唯一真相源：CHANNEL_REGISTRY / 磁盘缓存格式 / 探针片段 / 打包清单 / 预算报表）
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
+// 声明式多通道微内核注册表（全仓 17 通道唯一真相源：CHANNEL_REGISTRY / 磁盘缓存格式 / 探针片段 / 打包清单 / 预算报表）
 'use strict';
 
 const { reconcileConfigAliases } = require('../config/schema.cjs');
@@ -74,7 +75,7 @@ function defineSpec(cfg) {
   });
 }
 
-// 静态元数据清单（全部 16 条延迟/按需通道 Ch2~Ch16 唯一真相源）
+// 静态元数据清单（全部 17 条延迟/按需通道 Ch2~Ch17 唯一真相源）
 const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'omni', cacheFormat: 'minCode', channelNumber: 2, order: 20, tier: 'core', topLevelPack: true,
@@ -232,7 +233,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     files: [
       'src/runtime/i18n-tr-locale.js', 'i18n-locales.js', 'assets/brand-mark-svg.js', 'vendor/clawd-mascot/tavern-atlas-data.js',
       'vendor/clawd-mascot/octopath-stage-webgl.js', 'src/runtime/i18n-ext-beta4.js',
-      'settings-panel.js', 'src/runtime/settings-ext-beta4.js',
+      'settings-panel.js', 'src/runtime/settings-ext-beta4.js', 'src/runtime/prompt-enhancer-settings-ext.js',
     ],
     mountGlobal: '__agPrismSettingsPanel', probeKey: 'hasSettingsPanel',
     probeExtraKeys: ['needsSettingsChannel'], budgetBytes: 500 * 1024,
@@ -373,6 +374,24 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     defaultShouldEnable: (cfg) => cfg?.contextMenu !== false && cfg?.contextMenu !== 'off',
     cfgSig: (cfg) => (cfg?.contextMenu === false || cfg?.contextMenu === 'off' ? 'off' : 'on'),
   }),
+  defineSpec({
+    id: 'promptEnhancer', cacheFormat: 'minRuntime', channelNumber: 17, order: 170, tier: 'addon', topLevelPack: true,
+    label: 'Prompt Enhancer', configKeys: ['promptEnhancer', 'language'],
+    files: ['vendor/prompt-enhancer/prompt-enhancer-i18n.js', 'vendor/prompt-enhancer/prompt-enhancer-client.js', 'vendor/prompt-enhancer/prompt-enhancer-settings-ui.js'],
+    mountGlobal: '__agPrismPromptEnhancer', bindingConst: 'PROMPT_ENHANCER_BINDING',
+    probeHashKey: '', probeExtraKeys: ['hasPromptEnhancerUi'], budgetBytes: 96 * 1024,
+    probeLines: [
+      'hasPromptEnhancer: Boolean(window.__agPrismPromptEnhancer && !window.__agPrismPromptEnhancer.getDebugState?.()?.destroyed)',
+      "hasPromptEnhancerUi: Boolean(typeof window.__prismMountPromptEnhancerUi === 'function')",
+    ],
+    fieldOverrides: {
+      sigField: 'lastPromptEnhancerHash', scriptSigField: 'lastPromptEnhancerScriptHash',
+      skippedField: 'promptEnhancerSkipped', bindingAddedField: 'promptEnhancerBindingAdded',
+      probeHashField: '', cdpShouldFn: '', cdpBuildFn: 'buildPromptEnhancerExpression', cdpRemoveConst: 'PROMPT_ENHANCER_REMOVE_EXPRESSION',
+    },
+    defaultShouldEnable: (cfg) => cfg?.promptEnhancer === 'on',
+    cfgSig: (cfg) => (cfg?.promptEnhancer === 'on' ? 'on' : 'off'),
+  }),
 ]);
 
 // 从唯一真相源自动派生：磁盘缓存键清单、缓存格式映射、Runtime 下沉通道 ID 清单
@@ -476,6 +495,7 @@ function createChannelRegistry({ builders, readConfig }) {
     bindEntry('effortSlider', builders.shouldEnableEffortSlider, builders.buildEffortSliderChannelExpression),
     bindEntry('workbenchEnhancer', builders.shouldEnableWorkbenchEnhancer, builders.buildWorkbenchEnhancerChannelExpression),
     bindEntry('contextMenu', builders.shouldEnableContextMenu, builders.buildContextMenuChannelExpression),
+    bindEntry('promptEnhancer', builders.shouldEnablePromptEnhancer, builders.buildPromptEnhancerExpression),
   ]);
 
   const registryById = new Map(CHANNEL_REGISTRY.map((ch) => [ch.id, ch]));

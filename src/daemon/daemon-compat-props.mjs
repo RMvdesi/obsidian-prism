@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism 历史兼容属性访问器基类（纯薄转发至 4 大真组合子系统，零原型 Mixin）
 export class PrismDaemonCompatBase {
   _s() {
@@ -152,7 +153,7 @@ export class PrismDaemonCompatBase {
   get _suggesterStopped() { return this._s().channelOrchestrator.services._suggesterStopped; }
   set _suggesterStopped(v) { this._s().channelOrchestrator.services._suggesterStopped = v; }
 
-  // ---- 16 通道表达式与哈希槽位 ----
+  // ---- 17 通道表达式与哈希槽位 ----
   get omniExpr() { return this._s().channelOrchestrator.getChannelExpr('omni'); }
   set omniExpr(v) { this._s().channelOrchestrator.setChannelExpr('omni', v); }
   get sidebarExpr() { return this._s().channelOrchestrator.getChannelExpr('sidebar'); }

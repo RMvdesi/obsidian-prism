@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // 运行时模块清单常量、GLSL/模板预处理、死函数裁剪与静态 CSS 常量折叠
 'use strict';
 
@@ -52,7 +53,9 @@ const SYNC_ROOT_FILES = [
   'package.json',
   'README.md',
   'LICENSE',
+  'NOTICE',
   'THIRD_PARTY_NOTICES.md',
+  'CITATION.cff',
   'config.example.json',
   'cdp.js',
   'inject.js',

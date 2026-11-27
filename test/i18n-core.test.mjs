@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -412,10 +413,10 @@ test('v1.0.1 i18n keys cover all 8 languages for scene presets, 6 new config key
 });
 
 test('settings-panel schema, scene presets, strict apiKey-stripping JSON export, and allowlist-validated JSON import', () => {
-  // Verify all 39 global config keys (including darkAura, darkAuraStyle, convRipple, effortMemory, periodicModelPicker, contextMenu, sidebarNavFold, scrollBottomMotion, hostLocalization, omniModule, linkTarget, sidebarStudio, autoUpdate, updateChannel & autoArchiveOnExit) match exact contract
+  // Verify all 40 global config keys (including promptEnhancer and the existing appearance/update settings) match exact contract
   const { PRISM_SETTINGS_SCHEMA, SCENE_PRESETS, buildSanitizedConfigExport, validateImportedConfigJson, getDefaultSettingsPatch } =
     settingsPanel;
-  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 39);
+  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 40);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.homeRipple.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.homeRipple.default, true);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.convRipple.allowed, ['off', 'subtle', 'medium', 'full']);
@@ -537,7 +538,7 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   assert.equal(validateImportedConfigJson('not-json').ok, false);
   assert.equal(validateImportedConfigJson('{"unknownOnly": 1}').ok, false);
   const defaultPatch = getDefaultSettingsPatch();
-  assert.equal(Object.keys(defaultPatch).length, 39);
+  assert.equal(Object.keys(defaultPatch).length, 40);
   assert.equal(defaultPatch.homeRipple, true);
   assert.equal(defaultPatch.convRipple, 'off');
   assert.equal(defaultPatch.darkAura, 'balanced');

@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 // Obsidian Prism Phase 3A 守护进程分层 FSM、熔断器、SHA-256 配置指纹、25Hz 抖动防护与兼容 Facade 专项回归单测
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -739,7 +740,7 @@ test('Hot-reload P0: _readCdpTreeSig detects src/**/*.cjs edits, clears src requ
   }
 });
 
-test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 prototype mixins) and drives all 16 channels from CHANNEL_REGISTRY', () => {
+test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 prototype mixins) and drives all 17 channels from CHANNEL_REGISTRY', () => {
   const daemon = new PrismDaemon({
     rootDir: ROOT_DIR,
     silent: true,
@@ -792,7 +793,7 @@ test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 p
   assert.equal(daemon2.periodicPickerExpr, '');
 });
 
-test('Phase 4D: all 16 channel builders wrap execution in structured try/catch error boundaries without throwing into host', () => {
+test('Phase 4D: all 17 channel builders wrap execution in structured try/catch error boundaries without throwing into host', () => {
   const allEnabledCfg = {
     ...cdp.DEFAULT_CONFIG,
     omniModule: 'on',
@@ -807,6 +808,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
     effortSliderModule: 'on',
     workbenchEnhancer: 'on',
     contextMenu: true,
+    promptEnhancer: 'on',
   };
 
   for (const ch of cdp.CHANNEL_REGISTRY) {
@@ -849,6 +851,8 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
         ? { protocol: 'plugin:', hostname: 'swarm--swarm_board-1', pathname: '/', port: '', username: '', password: '' }
         : { href: 'vscode-file://vscode-app/workbench.html' },
       document: hostileDoc,
+      setTimeout() { return 1; },
+      clearTimeout() {},
       __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', language: 'zh-CN' } }) },
       __agPrismOmni: trapExisting,
       __agPrismSidebar: trapExisting,
@@ -862,6 +866,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
       __agPrismSettingsPanel: trapExisting,
       __agDualMascotRig: trapExisting,
       __agPrismSuggester: trapExisting,
+      __agPrismPromptEnhancer: trapExisting,
       __agPrismTelemetry: trapExisting,
       __agPrismEffortSlider: trapExisting,
       __agPrismHostEnhancer: trapExisting,
@@ -876,7 +881,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
     assert.equal(res?.ok, false, `Channel ${ch.id} crash must return ok:false`);
     assert.equal(res?.status, 'error', `Channel ${ch.id} crash must return status:'error'`);
     assert.equal(res?.channel, ch.id, `Channel ${ch.id} crash must tag channel:'${ch.id}'`);
-    assert.ok(String(res?.error || '').includes(`simulated-${ch.id}-crash`), `Channel ${ch.id} must preserve error message`);
+    assert.ok(String(res?.error || '').includes(`simulated-${ch.id}-crash`), `Channel ${ch.id} must preserve error message: ${JSON.stringify(res)}`);
     assert.equal(typeof res?.stack, 'string');
     assert.ok(res.error.length <= 300 && res.stack.length <= 600);
   }

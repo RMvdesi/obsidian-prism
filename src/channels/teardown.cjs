@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // 全量卸载清理表达式（REMOVE_EXPRESSION）与磁盘数据清理白名单（与 install-manifest.cjs 严格对齐）
 'use strict';
 
@@ -15,6 +16,7 @@ const PURGE_DATA_FILES = Object.freeze([
   'obsidian-prism-sidebar.json.lock',
   'obsidian-prism-wallpaper.json',
   'obsidian-prism-suggester.json',
+  'obsidian-prism-prompt-enhancer.json',
 ]);
 
 const REMOVE_EXPRESSION = `(() => {
@@ -29,6 +31,7 @@ const REMOVE_EXPRESSION = `(() => {
   } catch (e) {}
   try { (window.__agPrismWallpaper || globalThis.__agPrismWallpaper)?.destroy?.(); } catch (e) {}
   try { (window.__agPrismSuggester || globalThis.__agPrismSuggester)?.destroy?.(); } catch (e) {}
+  try { ${channelTeardowns.PROMPT_ENHANCER_REMOVE_EXPRESSION}; } catch (e) {}
   try { document.querySelector?.('[data-testid="prism-suggester-slot"]')?.__agPrismSgUiHandle?.destroy?.(); } catch (e) {}
   try { window.__agPrismInlineDiff?.destroy?.(); } catch (e) {}
   try {
@@ -262,7 +265,7 @@ const REMOVE_EXPRESSION = `(() => {
   delete globalThis.__agCsRippleCore;
   delete globalThis.__agCsUsageCore;
   delete globalThis.__agCsI18nCore;
-  for (const k of ['__agPrismDomBus', '__agPrismPerfCaps', '__agPrismReducedMotion', '__agPrismApplyIgnoreReducedMotion', '__agPrismReducedMotionGuard', '__agPrismFontCustomizer', '__agPrismI18nExtBeta4', '__agPrismSettingsExtBeta4', '__agPrismRippleWorker']) {
+  for (const k of ['__agPrismDomBus', '__agPrismPerfCaps', '__agPrismReducedMotion', '__agPrismApplyIgnoreReducedMotion', '__agPrismReducedMotionGuard', '__agPrismFontCustomizer', '__agPrismI18nExtBeta4', '__agPrismSettingsExtBeta4', '__agPrismPromptEnhancerSettingsExt', '__agPrismRippleWorker']) {
     try { delete window[k]; } catch {}
     try { delete globalThis[k]; } catch {}
   }

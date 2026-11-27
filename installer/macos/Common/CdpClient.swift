@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: synchronize the default-off Prompt Enhancer setting.
 import Foundation
 #if canImport(Darwin)
 import Darwin
@@ -609,6 +610,7 @@ enum CdpHelper {
         ("omniModule", "on", "O"), ("linkTarget", "builtin", "builtin,external"),
         ("sidebarStudio", "off", "O"), ("hostLocalization", "auto", "A"),
         ("autoUpdate", "off", "O"), ("updateChannel", "stable", "stable,beta"),
+        ("promptEnhancer", "off", "O"),
     ]
     private static let boolSchemaDefaultTrueKeys = ["homeRipple", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu"]
     private static let boolSchemaDefaultFalseKeys = ["ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit"]
@@ -779,7 +781,7 @@ enum CdpHelper {
                 out[k] = .bool(toBoolOnOff(v))
             }
         }
-        for k in ["telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold"] {
+        for k in ["telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "promptEnhancer", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold"] {
             if let v = out[k], case .bool(let b) = v { out[k] = .string(b ? "on" : "off") }
         }
         if out["palette"]?.stringValue == "claude" { out["palette"] = .string("warm") }

@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism Binding RPC 表驱动分发器与统一主帧上下文鉴权（Tier 2，独立组合类，无原型 Mixin）
 import { OMNI_BINDING } from '../../vendor/omni-viewer/omni-server.mjs';
 import { sanitizeSecretText } from '../../sidecars/daemon/redact.mjs';
@@ -10,6 +11,7 @@ import {
   SIDEBAR_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   WALLPAPER_MAX_PAYLOAD_BYTES,
   WALLPAPER_ALLOWED_ACTIONS,
   SUGGESTER_MAX_PAYLOAD_BYTES,
@@ -20,6 +22,7 @@ import { isAutomatedTestRuntime } from './pid-lock.mjs';
 import { INLINE_DIFF_MAX_PAYLOAD_BYTES, INLINE_DIFF_MAX_URI_LENGTH } from './inline-diff-filter.mjs';
 import { readSafeInlineDiff } from './inline-diff-service.mjs';
 import { deliverPeriodicPickerFullToEntry } from './channel-sync-engine.mjs';
+import { handlePromptEnhancerBinding } from './prompt-enhancer-rpc.mjs';
 
 // 统一 Fire-and-Forget 回调派发：强制 returnByValue:false / awaitPromise:false 且表达式末尾 ;void 0，防 V8 Inspector objectId 泄漏
 function sendFireAndForgetEval(session, expr, executionContextId = null, timeoutMs = 0, { rethrow = false } = {}) {
@@ -661,6 +664,16 @@ async function handleSuggesterBinding(rpc, entry, payload, executionContextId) {
   return result;
 }
 
+const promptEnhancerDeps = {
+  isTrustedHostContext,
+  resolveTrustedBroadcastContextId,
+  sendFireAndForgetEval,
+};
+
+function dispatchPromptEnhancerBinding(rpc, entry, payload, executionContextId) {
+  return handlePromptEnhancerBinding(rpc, entry, payload, executionContextId, promptEnhancerDeps);
+}
+
 const STATIC_BINDING_TABLE = Object.freeze({
   [REPO_BINDING]: handleRepoBinding,
   [METRICS_BINDING]: handleMetricsBinding,
@@ -671,6 +684,7 @@ const STATIC_BINDING_TABLE = Object.freeze({
   [SIDEBAR_BINDING]: handleSidebarBinding,
   [WALLPAPER_BINDING]: handleWallpaperBinding,
   [SUGGESTER_BINDING]: handleSuggesterBinding,
+  [PROMPT_ENHANCER_BINDING]: dispatchPromptEnhancerBinding,
 });
 
 export class RpcDispatcher {
@@ -732,6 +746,10 @@ export class RpcDispatcher {
     const activeSuggesterBinding = cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING;
     if (name === activeSuggesterBinding) {
       return handleSuggesterBinding(this, entry, payload, executionContextId);
+    }
+    const activePromptEnhancerBinding = cdp?.PROMPT_ENHANCER_BINDING || PROMPT_ENHANCER_BINDING;
+    if (name === activePromptEnhancerBinding) {
+      return dispatchPromptEnhancerBinding(this, entry, payload, executionContextId);
     }
     const handler = STATIC_BINDING_TABLE[name];
     if (typeof handler === 'function') {

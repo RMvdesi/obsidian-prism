@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism CDP 核心兼容门面（Facade）：聚合 src/ 下无环分层模块，100% 保持历史导出与 CLI 契约
 'use strict';
 
@@ -125,6 +126,7 @@ module.exports = {
   INLINE_DIFF_BINDING: schema.INLINE_DIFF_BINDING,
   WALLPAPER_BINDING: schema.WALLPAPER_BINDING,
   SUGGESTER_BINDING: schema.SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING: schema.PROMPT_ENHANCER_BINDING,
   PORT_FILE: fsSafe.PORT_FILE,
   PID_FILE,
   CONFIG_FILE: configStore.CONFIG_FILE,

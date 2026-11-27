@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: synchronize the default-off Prompt Enhancer setting.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -836,9 +837,9 @@ namespace AgyClaudeStyle
         private static readonly string[] AutoOnOffValues = new string[] { "auto", "on", "off" };
         private static readonly string[] StrictOnBoolKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
         private static readonly string[] NotOffBoolKeys = new string[] { "smoothCaret", "contextMenu" };
-        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "omniModule", "sidebarStudio", "autoUpdate" };
+        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "promptEnhancer", "sidebarNavFold", "omniModule", "sidebarStudio", "autoUpdate" };
 
-        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 54 键 100% 对齐：40 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
+        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 55 键 100% 对齐：41 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
         private static readonly string[,] EnumSchemaSpecs = new string[,]
         {
             { "language", "auto", "L" }, { "lang", "auto", "L" },
@@ -859,7 +860,8 @@ namespace AgyClaudeStyle
             { "darkAura", "balanced", "subtle,balanced,vivid" }, { "thoughtView", "immersive", "immersive,bilingual" },
             { "omniModule", "on", "O" }, { "linkTarget", "builtin", "builtin,external" },
             { "sidebarStudio", "off", "O" }, { "hostLocalization", "auto", "A" },
-            { "autoUpdate", "off", "O" }, { "updateChannel", "stable", "stable,beta" }
+            { "autoUpdate", "off", "O" }, { "updateChannel", "stable", "stable,beta" },
+            { "promptEnhancer", "off", "O" }
         };
         private static readonly string[] BoolSchemaDefaultTrueKeys = new string[] { "homeRipple", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu" };
         private static readonly string[] BoolSchemaDefaultFalseKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };

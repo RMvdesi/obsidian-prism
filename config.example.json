@@ -46,6 +46,7 @@
   "omniModule": "on",
   "linkTarget": "builtin",
   "sidebarStudio": "off",
+  "promptEnhancer": "off",
   "hostLocalization": "auto",
   "autoUpdate": "off",
   "updateChannel": "stable",

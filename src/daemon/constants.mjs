@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism 守护进程基础常量、路径解析与端口/配置探测（Tier 0）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -29,6 +30,7 @@ export const INLINE_DIFF_BINDING = '__agPrismInlineDiffCall';
 export const SIDEBAR_BINDING = '__agPrismSidebarCall';
 export const WALLPAPER_BINDING = '__agPrismWallpaperCall';
 export const SUGGESTER_BINDING = '__agPrismSuggestCall';
+export const PROMPT_ENHANCER_BINDING = '__agPrismPromptEnhancerCall';
 
 export const WALLPAPER_MAX_PAYLOAD_BYTES = 131072;
 export const WALLPAPER_ALLOWED_ACTIONS = new Set([
@@ -49,6 +51,16 @@ export const SUGGESTER_ALLOWED_ACTIONS = new Set([
   'suggest',
   'cancel',
   'clear-cache',
+]);
+
+export const PROMPT_ENHANCER_MAX_PAYLOAD_BYTES = 131072;
+export const PROMPT_ENHANCER_ALLOWED_ACTIONS = new Set([
+  'get-config',
+  'save-config',
+  'fetch-models',
+  'test-connection',
+  'enhance',
+  'cancel',
 ]);
 
 export const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

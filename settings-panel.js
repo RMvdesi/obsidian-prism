@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: add the downstream Prompt Enhancer setting.
 // Settings Control Center
 (function (root) {
   'use strict';
@@ -176,6 +177,7 @@
     omniModule: S_ON,
     linkTarget: mkSp(['builtin', 'external']),
     sidebarStudio: S_OFF,
+    promptEnhancer: S_OFF,
     autoUpdate: S_OFF,
     updateChannel: mkSp(['stable', 'beta']),
     autoArchiveOnExit: S_F,

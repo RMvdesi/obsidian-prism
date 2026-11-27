@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // 分通道无损卸载表达式集合与主帧 Isolated Context 协同静音表达式
 'use strict';
 
@@ -267,18 +268,20 @@ const PERIODIC_PICKER_REMOVE_EXPRESSION = `(() => {
 })()`;
 
 const SETTINGS_REMOVE_EXPRESSION = `(() => {
+  try { (window.__agPrismSettingsExtBeta4 || globalThis.__agPrismSettingsExtBeta4)?.dispose?.(document); } catch {}
   try {
     const sec = document.getElementById('ag-cs-settings-sec');
     sec?.__agMascotStageApi?.dispose?.();
     sec?.remove?.();
   } catch {}
-  try { (window.__agPrismSettingsExtBeta4 || globalThis.__agPrismSettingsExtBeta4)?.dispose?.(document); } catch {}
   try { document.getElementById?.('ag-prism-settings-ext-beta4-css')?.remove?.(); } catch {}
   try { document.getElementById?.('ag-prism-local-fonts-list')?.remove?.(); } catch {}
   try { delete window.__agPrismSettingsPanel; } catch {}
   try { delete globalThis.__agPrismSettingsPanel; } catch {}
   try { delete window.__agPrismSettingsExtBeta4; } catch {}
   try { delete globalThis.__agPrismSettingsExtBeta4; } catch {}
+  try { delete window.__agPrismPromptEnhancerSettingsExt; } catch {}
+  try { delete globalThis.__agPrismPromptEnhancerSettingsExt; } catch {}
   try { delete window.__agPrismI18nExtBeta4; } catch {}
   try { delete globalThis.__agPrismI18nExtBeta4; } catch {}
   try { delete window.__agPrismBrandLogoSvg; } catch {}
@@ -346,6 +349,22 @@ const SUGGESTER_REMOVE_EXPRESSION = `(() => {
   try { delete globalThis.__agPrismSuggesterBridge; } catch {}
   try { delete window.__agPrismSuggesterResolve; } catch {}
   try { delete globalThis.__agPrismSuggesterResolve; } catch {}
+  return { ok: true, status: 'off' };
+})()`;
+
+const PROMPT_ENHANCER_REMOVE_EXPRESSION = `(() => {
+  try { (window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer)?.destroy?.(); } catch {}
+  try { (window.__agPrismPromptEnhancerBridge || globalThis.__agPrismPromptEnhancerBridge)?.dispose?.(); } catch {}
+  try { document.getElementById?.('ag-prism-prompt-enhancer-css')?.remove?.(); } catch {}
+  try { document.querySelectorAll?.('[data-testid="prism-prompt-enhancer-trigger"],[data-testid="prism-prompt-enhancer-host"],[data-testid="prism-prompt-enhancer-panel"]')?.forEach?.((node) => node.remove()); } catch {}
+  try {
+    const slot = document.querySelector?.('[data-testid="prism-prompt-enhancer-slot"]');
+    if (slot) { try { slot.__agPrismPeUiHandle?.destroy?.(); } catch {} slot.__agPrismPeUiHandle = null; while (slot.firstChild) slot.removeChild(slot.firstChild); }
+  } catch {}
+  for (const key of ['__agPrismPromptEnhancer','__agPrismPromptEnhancerBridge','__agPrismPromptEnhancerResolve','__agPrismPromptEnhancerSettingsUi','__prismMountPromptEnhancerUi','__agPrismPromptEnhancerFactory','__agPrismPromptEnhancerI18n']) {
+    try { delete window[key]; } catch {}
+    try { delete globalThis[key]; } catch {}
+  }
   return { ok: true, status: 'off' };
 })()`;
 
@@ -442,6 +461,7 @@ const CHANNEL_TEARDOWN_MAP = Object.freeze({
   effortSlider: EFFORT_SLIDER_REMOVE_EXPRESSION,
   workbenchEnhancer: WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   contextMenu: CONTEXT_MENU_REMOVE_EXPRESSION,
+  promptEnhancer: PROMPT_ENHANCER_REMOVE_EXPRESSION,
 });
 
 module.exports = {
@@ -463,5 +483,6 @@ module.exports = {
   EFFORT_SLIDER_REMOVE_EXPRESSION,
   WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   CONTEXT_MENU_REMOVE_EXPRESSION,
+  PROMPT_ENHANCER_REMOVE_EXPRESSION,
   CHANNEL_TEARDOWN_MAP,
 };

@@ -1,3 +1,4 @@
+<!-- Modified by Yaniuan on 2026-11-28: document the downstream Prompt Enhancer, upstream attribution and citation. -->
 <div align="center">
 
 <img src="assets/logo.svg" width="96" height="96" alt="Obsidian Prism Logo" />
@@ -8,7 +9,7 @@
 
 Four dark & daylight themes · A living 512K context vial · Reasoning effort slider · Pixel companions · Custom Static / Video Wallpaper (Beta) · Chat Mode (Beta)
 
-[**简体中文**](./README.md) · [**English**](./README.en.md) · [**Changelog**](./CHANGELOG.md) · [**Releases**](https://github.com/RMvdesi/obsidian-prism/releases) · [**Issues**](https://github.com/RMvdesi/obsidian-prism/issues)
+[**简体中文**](./README.md) · [**English**](./README.en.md) · [**Upstream Changelog**](./CHANGELOG.md) · [**Upstream Releases**](https://github.com/RMvdesi/obsidian-prism/releases) · [**Upstream Issues**](https://github.com/RMvdesi/obsidian-prism/issues)
 
 <p>
   <a href="https://github.com/RMvdesi/obsidian-prism/releases"><img src="https://img.shields.io/github/v/release/RMvdesi/obsidian-prism?style=flat-square&color=3186ff&label=Release" alt="Latest Release" /></a>
@@ -32,7 +33,12 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 > **Non-Affiliation & Trademark Disclaimer**
 >
 > **Obsidian Prism is an independent open-source project and is not affiliated with or endorsed by Google LLC.**
+>
 > References to “Antigravity” and “Google” are strictly for compatibility and descriptive purposes.
+>
+> **Maintained branch**: This is [Yaniuan's unofficial fork](https://github.com/Yaniuan/obsidian-prism). Prompt Enhancer is a downstream feature submitted for review in [upstream PR #118](https://github.com/RMvdesi/obsidian-prism/pull/118). The upstream release links lead to official builds.
+
+> Built upon [Obsidian Prism](https://github.com/RMvdesi/obsidian-prism) by [@RMvdesi](https://github.com/RMvdesi), licensed under [GPL-3.0-only](./LICENSE). Upstream notices are preserved in [NOTICE](./NOTICE) and [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -42,6 +48,7 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 - **Context you can see**: A tiny vial next to the composer shows live 512K context usage; click it for a usage breakdown and quota forecasts.
 - **Reasoning effort at your fingertips**: A starfield slider lives in the model menu; pick Orchestrator and it turns into a light-refracting cut-crystal bar.
 - **Thinking & titles you can read**: Translate the model's thinking in real time (Immersive or Stacked Bilingual) with 1-Click Diagnose, manual HTTP/SOCKS5 proxy, and optional tool-summary & session-title translation.
+- **Prompt Enhancer (maintained-branch addition · off by default)**: Turn a short request into an actionable agent instruction beside the composer. It reuses an existing API profile, runs in the background after an explicit click, and fills the draft when ready without opening a review window or sending it.
 - **Custom Static / Live Video Wallpaper (Beta)**: Located under Settings → **Beta**, off by default with zero overhead; loads local images and MP4/WebM videos read-only (experimental feature that may evolve across versions).
 - **Pixel companions**: Clawd, a little purple cat and three mini crabs stack into a tower above the composer — with a hidden rainbow easter egg.
 - **A friendlier workbench**: Built-in side-pane browser and large-file viewer, right-click actions, long code-block folding and conversation outline jumps.
@@ -91,8 +98,9 @@ Off by default — enable it under **Settings → Appearance → Beta**. A switc
 
 ### 5. More Capabilities
 
-- **Appearance Control Center**: Lives in **Settings → Appearance** — redesigned two-column modal, **9 UI languages** (zh-CN/zh-TW/en/ja/ko/es/fr/de/tr), **39** end-to-end validated panel settings (**54** schema config keys overall, including `sidebarNavFold`, `scrollBottomMotion`, and Stable / Beta update channels), three scene presets (Full Visuals / Deep Focus / Silent Eco), backup/restore and one-click updates.
+- **Appearance Control Center**: Lives in **Settings → Appearance** — redesigned two-column modal, **9 UI languages** (zh-CN/zh-TW/en/ja/ko/es/fr/de/tr), **40** end-to-end validated panel settings (**55** schema config keys overall, including `sidebarNavFold`, `scrollBottomMotion`, and Stable / Beta update channels), three scene presets (Full Visuals / Deep Focus / Silent Eco), backup/restore and one-click updates.
 - **Thought & Title Translator**: On-demand module that injects `0 B` by default when disabled with hot-plug support; zero-config machine translation or streaming local/compatible endpoints, OS proxy auto-detection + manual HTTP/SOCKS5 proxy, optional tool-summary & conversation-title translation, 1-Click Diagnose bar, and clickable source paths/line numbers.
+- **Prompt Enhancer (Channel 17 · maintained-branch addition)**: Enable it under **Settings → Appearance → Beta** to add an enhancement button beside the composer. It reuses Thought Translator / Prompt Suggester provider profiles and credentials, with independent profile and model selection and no separately stored API key. Only an explicit click sends the original prompt and up to 4 relevant recent turns; a successful result replaces the current draft, which the user may then send manually. If the draft changes, the editor disappears, or the result is empty, current content is preserved.
 - **Custom Static / Live Video Wallpaper (Beta)**: Experimental on-demand module, off by default (zero overhead); 100% local read-only streaming for images (JPG/PNG/WebP/GIF/AVIF) and videos (MP4/WebM) with opacity/blur/dim controls, Browser Hole avoidance, and automatic `0fps` pause on blur/hide.
 - **Omni Browser, File Viewer & Inline Diff Preview**: Open bare links and local paths in the side pane, preview inline file diffs directly in conversation turns, stream huge videos/audio/PDFs/tables/fonts, and right-click to copy paths, reveal files or insert references.
 - **Smoked Obsidian Surfaces & Workbench Enhancements**: Unified faceted message bubbles, file-change strips, Artifact cards and graphite keycaps; sticky code-block headers, manual folding for long code blocks, dedicated outline trigger and hover outlines on the conversation rail, `Alt+↑` / `Alt+↓` turn navigation, and conversation right-click `/btw` + native `/compact`, `/plan`, `/learn`, `/grill-me` slash commands.
@@ -109,8 +117,9 @@ Off by default — enable it under **Settings → Appearance → Beta**. A switc
 - **Defense-in-Depth Security & Local Isolation**: Enforces top-level main-frame verification on all privileged `__agPrism*` CDP bindings (rejecting sub-`<iframe>` RPC calls); hardens the loopback streaming gateway and background daemon with fail-closed `Host` and cross-site request checks, UNC/NT device-path blocking, `realpath` blocking of sensitive credential files and Google/Antigravity core credential directories, and in-memory pre-write SHA-256 verification on updates; enforces Git repo boundaries, fail-closed `.git` gitfile/UNC checks, `--literal-pathspecs`, `--no-optional-locks`, and safe `[filter]` downgrade on Inline Diff RPC; isolates local HTML previews with per-directory `HMAC-SHA256` read-only sub-tokens and restricted `sandbox` attributes (without `allow-same-origin`), while preventing cross-origin `apiKey` reuse, disabling upstream redirects, and blocking cloud-metadata/unsafe ports in thought translation requests.
 - **Dual-Window Quota Telemetry & 512K Context Vial**: Aligns `vendor/pulse-dashboard/` with upstream [`ATtacK030130/antigrative-dashboard`](https://github.com/ATtacK030130/antigrative-dashboard) `v0.9.1` (MIT), supporting **5-hour and weekly quota pool tracking with linear depletion forecasts**, **main session vs. Swarm/subagent token attribution**, **cache hit rate** metrics, and CDP process-lineage multi-instance discovery. Exposes Overview, Trends, and Quotas views with workspace filtering on the Studio home dashboard, stores telemetry in an isolated local data directory, and yields automatically when standalone external plugins are active.
 - **Dual-Mode Thought Translator**: Isolated into an on-demand module (`0 B` injected when off) supporting zero-config **Machine Translation** and **OpenAI-Compatible Streaming Translation**, with zero-dependency async Windows/macOS OS system proxy auto-detection and keyless local endpoints (`localhost` / LAN Ollama, LM Studio, vLLM without requiring an API key); safely restores `file://` source paths and `#L` line-number jump pills under a strict `file://`-only protocol allowlist; adds a concurrency-limited (`max = 3`) viewport-priority queue, per-block retry/re-translate controls, **Immersive vs. Stacked Bilingual** view modes, and cache management. API keys and custom prompts are stored locally in `~/.gemini/config/` (`0600` permissions).
+- **Prompt Enhancer privacy boundary**: Model calls happen only after an explicit click; context is limited to relevant recent turns, and network failures leave the original prompt intact. A successful result fills the current draft without submitting it or starting an agent task; changed or missing targets are left untouched. Credentials remain in the shared provider profile and are not copied to enhancer settings.
 - **Chat Mode (Beta · Off by Default)**: Off by default and toggleable anytime in **Settings → Appearance → Beta** (`sidebarStudio: "on" | "off"`). When enabled, adds a top-sidebar switcher between the Code workspace and a dedicated Chat space for everyday conversations and document organization, complete with folder/project grouping, clean multi-turn reading views, Artifacts preview, and project-scoped permission isolation that preserves global Code settings.
-- **Modular On-Demand Microkernel, Zero-`eval` LZSS & Sub-10ms Config Sync**: Splits the runtime into a lean `ui-runtime.js` microkernel and 6 focused controller modules compiled with zero-`eval` synchronous UTF-16 LZSS compression (Omni viewer, Chat sidebar, Host i18n, Thought Translator, Inline Diff, and Wallpaper Beta load on-demand as separate modules) and a unified disk cache (`.bundle-cache.json`) achieving `~26 ms` cold-start builds. Covers **39** validated panel settings (**54** schema config keys in `src/config/schema.cjs`, including Stable / Beta update channels) with `< 10 ms` single-flight incremental `refreshConfig` broadcast, three scene presets, categorized sub-tabs, and API-key-sanitized JSON export/import.
+- **Modular On-Demand Microkernel, Zero-`eval` LZSS & Sub-10ms Config Sync**: Splits the runtime into a lean `ui-runtime.js` microkernel and 6 focused controller modules compiled with zero-`eval` synchronous UTF-16 LZSS compression (Omni viewer, Chat sidebar, Host i18n, Thought Translator, Inline Diff, and Wallpaper Beta load on-demand as separate modules) and a unified disk cache (`.bundle-cache.json`) achieving `~26 ms` cold-start builds. Covers **40** validated panel settings (**55** schema config keys in `src/config/schema.cjs`, including Stable / Beta update channels) with `< 10 ms` single-flight incremental `refreshConfig` broadcast, three scene presets, categorized sub-tabs, and API-key-sanitized JSON export/import.
 
 </details>
 
@@ -195,7 +204,7 @@ obsidian-prism/
 ├── smooth-caret.js / dual-mascot-rig.js# Read/write-separated caret tracking & pixel mascot rig
 ├── usage-core.js / vial-core.js        # Quota forecast functions & 512K shallow-water vial renderer
 ├── pulse-vial-bridge.js                # Context slice breakdown & 5h/weekly quota popover bridge
-├── settings-panel.js                   # Settings UI (39 panel settings, scene presets, sanitized JSON backup)
+├── settings-panel.js                   # Settings UI (40 panel settings, scene presets, sanitized JSON backup)
 ├── home-studio-panel.js                # Controller 1: Studio home dashboard (Overview/Trends/Quotas)
 ├── home-ripple-host.js                 # Controller 2: Home glyph ripple matrix host controller
 ├── model-glyph-crystal.js              # Controller 3: Model glyph & WebGL2 prism bar controller
@@ -226,7 +235,11 @@ Any fork, modification, port, or redistribution must comply with all three requi
 > Built upon [Obsidian Prism](https://github.com/RMvdesi/obsidian-prism) by [@RMvdesi](https://github.com/RMvdesi), licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html). Upstream component notices are preserved in `NOTICE` and `THIRD_PARTY_NOTICES.md`.
 ```
 
-#### Citation (`CITATION.cff` / BibTeX)
+On 2026-11-28, Yaniuan added the default-off `promptEnhancer` setting to `config.example.json`. The example uses strict JSON, so its change notice appears here.
+
+[Meowv/prompt](https://github.com/Meowv/prompt) served as a reference for Prompt Enhancer interactions. The implementation uses Prism's own channels and runtime.
+
+#### Citation ([CITATION.cff](./CITATION.cff) / BibTeX)
 ```bibtex
 @software{rmvdesi_obsidian_prism_2026,
   author       = {RMvdesi},
