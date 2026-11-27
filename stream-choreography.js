@@ -45,17 +45,18 @@
   };
   const ST = (fn, ms) => setTimeout(fn, ms);
   const CT = (id) => clearTimeout(id), AF = Array.from, isFin = Number.isFinite;
+  const mkOwned = (d, t, c) => { const e = d.createElement(t); e.className = c; sa(e, 'aria-hidden', 'true'); sa(e, 'data-ag-no-i18n', ''); sa(e, 'data-ag-owned', '1'); return e; };
 
   const createStreamChoreographyController = ({
     motionEngine,
-    isDestroyed,
-    isMotionStandardOrUltra,
-    isMotionUltra,
+    isDestroyed: isD,
+    isMotionStandardOrUltra: isMS,
+    isMotionUltra: isMU,
     isConvRunning,
-    isThoughtIsolatedNode,
+    isThoughtIsolatedNode: isTI,
     isThoughtMutationRecord,
-    isManagedThoughtPanel,
-    setAttrIfChanged,
+    isManagedThoughtPanel: isMT,
+    setAttrIfChanged: setA,
     runGuardedMut,
     cloneCachedSvgElement,
     buildBrandMarkSvg,
@@ -73,7 +74,7 @@
     let convEntryTimer = 0;
     let convEntryRaf = 0;
     let convEntrySeq = 0;
-    const transientTimers = new Set();
+    const tTmr = new Set();
 
     const heroState = {
       routeInitialized: false,
@@ -85,8 +86,8 @@
       lastGroupPress: null,
     };
     let lastHomeRect = null;
-    let liftoffBubbleUntil = 0;
-    let suppressEntryMotionUntil = 0;
+    let liftBubAt = 0;
+    let supMotAt = 0;
     let runInit = false;
     let wasRunning = false;
     let runStartAt = 0;
@@ -97,8 +98,8 @@
     let sbCid = '';
     let sbRect = null;
     let sbRunning = false;
-    const runningCidMap = new Map();
-    const runningRowMap = new WeakMap();
+    const runCidM = new Map();
+    const runRowM = new WeakMap();
     let runHoldTimer = 0;
 
     const seenHeaders = new WeakSet();
@@ -117,10 +118,10 @@
     let hlBuckets = null;
     let fadeRaf = 0;
     let fadeTimer = 0;
-    let nextFadeDueAt = 0;
-    const doneSparkCache = new WeakMap();
+    let fdDue = 0;
+    const spkCache = new WeakMap();
 
-    const expirableClasses = new Map();
+    const expCls = new Map();
     let sweepTimer = 0;
 
     const guardMut = (fn) => {
@@ -135,10 +136,10 @@
     const canStreamMotion = () => {
       const d = docOf();
       if (ga(d?.documentElement, 'data-ag-cs-motion') === 'off') return false;
-      return typeof isMotionStandardOrUltra === 'function' ? Boolean(isMotionStandardOrUltra()) : Boolean(isMotionUltra());
+      return typeof isMS === 'function' ? Boolean(isMS()) : Boolean(isMU());
     };
 
-    const getHlBuckets = () => {
+    const getBkts = () => {
       const cssObj = typeof CSS !== 'undefined' ? CSS : G.CSS;
       const HlCtor = typeof Highlight === 'function' ? Highlight : G.Highlight;
       const d = docOf();
@@ -160,7 +161,7 @@
       return hlBuckets;
     };
 
-    const dropBucketItem = (it) => {
+    const dropBkt = (it) => {
       if (hlBuckets && it.b >= 0 && it.b < 5) {
         try {
           hlBuckets[it.b].delete(it.r);
@@ -169,137 +170,59 @@
       it.b = -1;
     };
 
-    const clearFadeTimer = () => {
-      if (fadeTimer) {
-        CT(fadeTimer);
-        fadeTimer = 0;
-      }
-    };
-
-    const clearHighlightFade = () => {
-      clearFadeTimer();
-      cAF(fadeRaf);
-      fadeRaf = 0;
-      nextFadeDueAt = 0;
-      for (let i = 0; i < fadeItems.length; i++) dropBucketItem(fadeItems[i]);
-      fadeItems.length = 0;
-    };
-
-    const scheduleFadeStep = (now, useTimer) => {
-      if (isDestroyed() || fadeItems.length === 0) return;
-      if (docOf()?.hidden) {
-        clearHighlightFade();
-        return;
-      }
-      if (fadeRaf) return;
-      const delay = nextFadeDueAt > 0 ? nextFadeDueAt - now : 0;
-      if (useTimer && delay > 18 && typeof setTimeout === 'function') {
+    const clrFT = () => { if (fadeTimer) { CT(fadeTimer); fadeTimer = 0; } };
+    const clearHighlightFade = () => { clrFT(); cAF(fadeRaf); fadeRaf = fdDue = 0; for (const it of fadeItems) dropBkt(it); fadeItems.length = 0; };
+    const schedFd = (now, useT) => {
+      if (isD() || !fadeItems.length || fadeRaf) return;
+      if (docOf()?.hidden) return clearHighlightFade();
+      const dl = fdDue > 0 ? fdDue - now : 0;
+      if (useT && dl > 18 && typeof setTimeout === 'function') {
         if (fadeTimer) return;
         fadeTimer = ST(() => {
           fadeTimer = 0;
-          if (isDestroyed() || !canStreamMotion() || fadeItems.length === 0 || docOf()?.hidden) {
-            clearHighlightFade();
-            return;
-          }
-          if (!fadeRaf) {
-            fadeRaf = rAF(stepHighlightFade);
-            if (!fadeRaf) clearHighlightFade();
-          }
-        }, M.max(8, M.round(delay - 6)));
+          if (isD() || !canStreamMotion() || !fadeItems.length || docOf()?.hidden) return clearHighlightFade();
+          if (!fadeRaf && !(fadeRaf = rAF(stepHighlightFade))) clearHighlightFade();
+        }, M.max(8, M.round(dl - 6)));
         return;
       }
-      clearFadeTimer();
-      fadeRaf = rAF(stepHighlightFade);
-      if (!fadeRaf) clearHighlightFade();
+      clrFT(); if (!(fadeRaf = rAF(stepHighlightFade))) clearHighlightFade();
     };
-
     function stepHighlightFade(ts) {
-      clearFadeTimer();
-      fadeRaf = 0;
-      if (isDestroyed() || !canStreamMotion() || fadeItems.length === 0 || docOf()?.hidden) {
-        clearHighlightFade();
-        return;
-      }
+      clrFT(); fadeRaf = 0;
+      if (isD() || !canStreamMotion() || !fadeItems.length || docOf()?.hidden) return clearHighlightFade();
       const now = typeof ts === 'number' && isFin(ts) ? ts : nowOf();
-      if (nextFadeDueAt > 0 && now < nextFadeDueAt - 1) {
-        scheduleFadeStep(now, true);
-        return;
-      }
-      const buckets = getHlBuckets();
-      if (!buckets) {
-        clearHighlightFade();
-        return;
-      }
-      let w = 0;
-      let earliestDue = Infinity;
-      for (let i = 0; i < fadeItems.length; i++) {
-        const it = fadeItems[i];
-        const tn = it.n;
-        const val = tn ? tn.data ?? tn.nodeValue ?? '' : '';
-        const age = M.max(0, now - it.t);
-        if (!isConn(tn) || val.length < it.e || age >= STREAM_FADE_MS) {
-          dropBucketItem(it);
-          continue;
-        }
+      if (fdDue > 0 && now < fdDue - 1) return schedFd(now, true);
+      const bks = getBkts();
+      if (!bks) return clearHighlightFade();
+      let w = 0, minD = Infinity;
+      for (const it of fadeItems) {
+        const tn = it.n, val = tn ? tn.data ?? tn.nodeValue ?? '' : '', age = M.max(0, now - it.t);
+        if (!isConn(tn) || val.length < it.e || age >= STREAM_FADE_MS) { dropBkt(it); continue; }
         const nb = M.min(4, (age / STREAM_FADE_STEP_MS) | 0);
-        if (it.b !== nb) {
-          dropBucketItem(it);
-          try {
-            buckets[nb].add(it.r);
-            it.b = nb;
-          } catch {
-            continue;
-          }
-        }
+        if (it.b !== nb) { dropBkt(it); try { bks[nb].add(it.r); it.b = nb; } catch { continue; } }
         const due = it.t + (it.b + 1) * STREAM_FADE_STEP_MS;
-        if (due < earliestDue) earliestDue = due;
+        if (due < minD) minD = due;
         fadeItems[w++] = it;
       }
       fadeItems.length = w;
-      if (w > 0) {
-        nextFadeDueAt = isFin(earliestDue) ? earliestDue : 0;
-        scheduleFadeStep(now, false);
-      } else {
-        clearHighlightFade();
-      }
+      if (w) { fdDue = isFin(minD) ? minD : 0; schedFd(now, false); } else clearHighlightFade();
     }
-
-    const enqueueFadeRange = (tn, sOff, eOff, now) => {
-      if (!tn || eOff <= sOff) return false;
-      const d = docOf();
-      if (!d || d.hidden) return false;
-      const buckets = getHlBuckets();
-      if (!buckets) return false;
+    const enqFd = (tn, sO, eO, now) => {
+      if (!tn || eO <= sO) return false;
+      const d = docOf(), bks = d && !d.hidden ? getBkts() : null;
+      if (!bks) return false;
       const raw = tn.data ?? tn.nodeValue ?? '';
-      if (eOff > raw.length || !/\S/.test(raw.slice(sOff, eOff))) return false;
-
-      const prev = fadeItems.length > 0 ? fadeItems[fadeItems.length - 1] : null;
-      if (prev && prev.n === tn && prev.e === sOff && now - prev.t <= 64) {
-        try {
-          prev.r.setEnd(tn, eOff);
-          prev.e = eOff;
-          return true;
-        } catch {}
-      }
-      if (fadeItems.length >= MAX_FADE_RANGES) {
-        const old = fadeItems.shift();
-        if (old) dropBucketItem(old);
-      }
+      if (eO > raw.length || !/\S/.test(raw.slice(sO, eO))) return false;
+      const prev = fadeItems[fadeItems.length - 1];
+      if (prev && prev.n === tn && prev.e === sO && now - prev.t <= 64) { try { prev.r.setEnd(tn, eO); prev.e = eO; return true; } catch {} }
+      if (fadeItems.length >= MAX_FADE_RANGES) { const o = fadeItems.shift(); if (o) dropBkt(o); }
       try {
-        const r = d.createRange();
-        r.setStart(tn, sOff);
-        r.setEnd(tn, eOff);
-        buckets[0].add(r);
-        fadeItems.push({ n: tn, s: sOff, e: eOff, r, b: 0, t: now });
+        const r = d.createRange(); r.setStart(tn, sO); r.setEnd(tn, eO); bks[0].add(r);
+        fadeItems.push({ n: tn, s: sO, e: eO, r, b: 0, t: now });
         const due = now + STREAM_FADE_STEP_MS;
-        const earlier = !nextFadeDueAt || due < nextFadeDueAt;
-        if (earlier) nextFadeDueAt = due;
-        if (earlier && fadeTimer) clearFadeTimer();
-        scheduleFadeStep(now, false);
-        return true;
-      } catch {
-        return false;
-      }
+        if (!fdDue || due < fdDue) { fdDue = due; clrFT(); }
+        schedFd(now, false); return true;
+      } catch { return false; }
     };
 
     const snapTextLens = (node, limit = 24) => {
@@ -319,67 +242,87 @@
       walk(node);
     };
 
-    const flushExpiredClasses = () => {
+    const flushExp = () => {
       sweepTimer = 0;
-      if (expirableClasses.size === 0) return;
+      if (expCls.size === 0) return;
       const now = Date.now();
       let nextDue = Infinity;
       guardMut(() => {
-        for (const [el, map] of expirableClasses.entries()) {
+        for (const [el, map] of expCls.entries()) {
           for (const [cls, expAt] of map.entries()) {
             if (now >= expAt - 2) { clRm(el, cls); map.delete(cls); }
             else if (expAt < nextDue) nextDue = expAt;
           }
-          if (map.size === 0) expirableClasses.delete(el);
+          if (map.size === 0) expCls.delete(el);
         }
       });
-      if (!isDestroyed() && expirableClasses.size > 0 && isFin(nextDue)) {
-        sweepTimer = ST(flushExpiredClasses, M.max(16, M.ceil(nextDue - Date.now())));
+      if (!isD() && expCls.size > 0 && isFin(nextDue)) {
+        sweepTimer = ST(flushExp, M.max(16, M.ceil(nextDue - Date.now())));
       }
     };
 
     const scheduleTransient = (fn, ms) => {
       const id = ST(() => {
-        transientTimers.delete(id);
-        if (!isDestroyed()) try { guardMut(fn); } catch {}
+        tTmr.delete(id);
+        if (!isD()) try { guardMut(fn); } catch {}
       }, ms);
-      transientTimers.add(id);
+      tTmr.add(id);
       return id;
     };
 
+    const VP_SEL = '[data-testid="autoscroll-viewport"]';
+    let pV = null, pLV = null, pRo = null, pTm = 0, pEnd = 0, pOff = null, pUM = false;
+    const vpMax = (v) => M.max(0, (v?.scrollHeight || 0) - (v?.clientHeight || 0));
+    const isConvEntryPinActive = (v) => Boolean(pV && (!v || pV === v) && !pUM && !isD());
+    const clrPin = () => { if (pTm) { CT(pTm); pTm = 0; } try { pRo?.disconnect(); pOff?.(); } catch {} pRo = pOff = pV = null; pEnd = 0; };
+    const pinB = (v) => { const m = vpMax(v); if (v && isConn(v) && !pUM && !isD() && (v.scrollTop || 0) < m - 1) v.scrollTop = m; };
+    const armQ = (ms = 320) => {
+      if (!isConvEntryPinActive()) return;
+      if (pTm) CT(pTm);
+      const r = pEnd - nowOf();
+      if (r <= 0) return clrPin();
+      pTm = ST(() => { pTm = 0; if (isConvEntryPinActive() && unfoldQueue.length && nowOf() < pEnd) armQ(240); else clrPin(); }, M.min(ms, M.max(16, M.round(r))));
+    };
+    const armConvEntryBottomPin = (c) => {
+      clrPin();
+      const v = c ? (ga(c, 'data-testid') === 'autoscroll-viewport' ? c : qs(c, VP_SEL)) : null;
+      if (!v || !isConn(v) || isD()) return false;
+      const m = vpMax(v), st = v.scrollTop || 0;
+      if (m > 240 && st > 40 && m - st > 220) return false;
+      pV = pLV = v; pUM = false; pEnd = nowOf() + 1400;
+      const ab = () => { pUM = true; clrPin(); }, setEv = (fn, op) => { for (const e of ['wheel', 'pointerdown', 'touchstart']) v[fn]?.(e, ab, op); };
+      setEv('addEventListener', { passive: true, once: true }); pOff = () => setEv('removeEventListener');
+      if (typeof ResizeObserver === 'function') try { pRo = new ResizeObserver(() => { if (!isConvEntryPinActive() || !isConn(pV)) clrPin(); else { pinB(pV); armQ(260); } }); pRo.observe(v.firstElementChild || v); } catch { pRo = null; }
+      pinB(v); rAF(() => { if (isConvEntryPinActive(v)) pinB(v); }); armQ(680);
+      return true;
+    };
+
     const clearTransientTimers = () => {
-      convEntrySeq++;
+      convEntrySeq++; clrPin();
       if (convEntryTimer) { CT(convEntryTimer); convEntryTimer = 0; }
       if (convEntryRaf) { cAF(convEntryRaf); convEntryRaf = 0; }
       if (wfClickTimer) { CT(wfClickTimer); wfClickTimer = 0; }
       if (sweepTimer) { CT(sweepTimer); sweepTimer = 0; }
       if (runHoldTimer) { CT(runHoldTimer); runHoldTimer = 0; }
-      runningCidMap.clear(); expirableClasses.clear();
-      for (const id of transientTimers) CT(id);
-      transientTimers.clear();
+      runCidM.clear(); expCls.clear();
+      for (const id of tTmr) CT(id);
+      tTmr.clear();
     };
     const cancelDeferredHydration = () => {
-      convEntrySeq++;
+      convEntrySeq++; clrPin();
       if (convEntryTimer) { CT(convEntryTimer); convEntryTimer = 0; }
       if (convEntryRaf) { cAF(convEntryRaf); convEntryRaf = 0; }
       cAF(hydrateRaf); hydrateRaf = 0; cAF(unfoldRaf); unfoldRaf = 0;
       sparkQueue = []; iconQueue = []; unfoldQueue = [];
     };
 
-    const applySingleSpark = (trig, brand, st) => {
+    const setSpk = (trig, brand, st) => {
       const d = docOf();
       if (!d || !isConn(trig)) return;
-      if (st === 'streaming') setAttrIfChanged(trig, 'data-ag-cs-spark-streaming', '1');
+      if (st === 'streaming') setA(trig, 'data-ag-cs-spark-streaming', '1');
       else if (ha(trig, 'data-ag-cs-spark-streaming')) ra(trig, 'data-ag-cs-spark-streaming');
       let spark = clHas(trig.firstElementChild, 'ag-cs-thinking-spark') ? trig.firstElementChild : qs(trig, '.ag-cs-thinking-spark');
-      if (!spark) {
-        spark = d.createElement('span');
-        spark.className = 'ag-cs-thinking-spark';
-        sa(spark, 'aria-hidden', 'true');
-        sa(spark, 'data-ag-no-i18n', '');
-        sa(spark, 'data-ag-owned', '1');
-        trig.insertBefore(spark, trig.firstChild);
-      }
+      if (!spark) { spark = mkOwned(d, 'span', 'ag-cs-thinking-spark'); trig.insertBefore(spark, trig.firstChild); }
       const isMono = ga(d.documentElement, 'data-ag-cs-accent') === 'mono';
       const mv = isMono ? '1' : '0';
       if (ga(spark, 'data-brand') !== brand || ga(spark, 'data-state') !== st || ga(spark, 'data-mono') !== mv) {
@@ -393,12 +336,12 @@
 
     const stepHydration = () => {
       hydrateRaf = 0;
-      if (isDestroyed()) return;
+      if (isD()) return;
       guardMut(() => {
         let budget = 18;
         while (budget > 0 && sparkQueue.length > 0) {
           const it = sparkQueue.pop();
-          applySingleSpark(it.trig, it.brand, it.st);
+          setSpk(it.trig, it.brand, it.st);
           budget--;
         }
         while (budget > 0 && iconQueue.length > 0) {
@@ -412,65 +355,48 @@
 
     const enqueueDeferredIcons = (items) => {
       iconQueue = items;
-      if (!isDestroyed() && !hydrateRaf) hydrateRaf = rAF(stepHydration);
+      if (!isD() && !hydrateRaf) hydrateRaf = rAF(stepHydration);
     };
 
     const STREAM_THOUGHT_RE = /(?:\.\.\.|…)\s*$|正在思考|思考中/i;
-    const isStreamingThoughtTrigger = (trig, isLast) => {
+    const isStrmT = (trig, isLast) => {
       if (ga(trig, 'data-op-thought-state') === 'streaming') return true;
       if (!isLast) return false;
       return STREAM_THOUGHT_RE.test(String(trig.textContent || '').trim());
     };
 
-    const resolveScopeBrand = (scope, primaryModelInfo, paneModelMap) => {
-      const mapped = paneModelMap && typeof paneModelMap.get === 'function' ? paneModelMap.get(scope)?.brand : '';
-      if (mapped) return mapped;
-      const paneAttr =
-        (scope && scope !== docOf() && ga(scope, 'data-ag-cs-pane-camp')) ||
-        (scope && typeof scope.closest === 'function' && ga(scope.closest('[data-tiling-pane]'), 'data-ag-cs-pane-camp')) ||
-        '';
-      if (paneAttr) return paneAttr;
-      const glyphBrand =
-        scope && scope !== docOf()
-          ? ga(qs(scope, '[data-testid="model-selector-trigger"] .ag-cs-model-glyph'), 'data-brand')
-          : '';
-      if (glyphBrand) return glyphBrand;
-      return primaryModelInfo?.brand || 'gemini';
-    };
+    const resBrand = (sc, pmi, pmm) =>
+      (pmm?.get?.(sc)?.brand) ||
+      (sc && sc !== docOf() && ga(sc, 'data-ag-cs-pane-camp')) ||
+      (sc?.closest && ga(sc.closest('[data-tiling-pane]'), 'data-ag-cs-pane-camp')) ||
+      (sc && sc !== docOf() ? ga(qs(sc, '[data-testid="model-selector-trigger"] .ag-cs-model-glyph'), 'data-brand') : '') ||
+      pmi?.brand || 'gemini';
 
-    const syncThinkingSparks = (primaryModelInfo, paneModelMap = null) => {
+    const syncThinkingSparks = (pmi, pmm = null) => {
       const d = docOf();
-      if (isDestroyed() || !d) return;
-      const views = findFormalConvViews();
-      const scopes = views.length > 0 ? views : [d];
-      const mv = ga(d.documentElement, 'data-ag-cs-accent') === 'mono' ? '1' : '0';
-      const pending = [];
-      for (let s = 0; s < scopes.length; s++) {
-        const scope = scopes[s], brand = resolveScopeBrand(scope, primaryModelInfo, paneModelMap), cacheSig = `${brand}:${mv}`;
-        const triggers = qsa(scope, '[data-testid="thinking-collapsible-trigger"]'), len = triggers.length;
-        for (let i = 0; i < len; i++) {
-          const trig = triggers[i], isLast = i === len - 1, expSt = ga(trig, 'data-op-thought-state') === 'streaming';
-          if (!expSt && !isLast && doneSparkCache.get(trig) === cacheSig) continue;
-          const spark = clHas(trig.firstElementChild, 'ag-cs-thinking-spark') ? trig.firstElementChild : qs(trig, '.ag-cs-thinking-spark');
-          const st = expSt || isStreamingThoughtTrigger(trig, isLast) ? 'streaming' : 'done';
-          if (spark && ga(spark, 'data-brand') === brand && ga(spark, 'data-state') === st && ga(spark, 'data-mono') === mv && (st === 'streaming') === ha(trig, 'data-ag-cs-spark-streaming')) {
-            if (st === 'done' && !isLast) doneSparkCache.set(trig, cacheSig); else doneSparkCache.delete(trig);
+      if (isD() || !d) return;
+      const vs = findFormalConvViews(), scs = vs.length ? vs : [d], mv = ga(d.documentElement, 'data-ag-cs-accent') === 'mono' ? '1' : '0', pend = [];
+      for (const sc of scs) {
+        const br = resBrand(sc, pmi, pmm), sig = `${br}:${mv}`, trs = qsa(sc, '[data-testid="thinking-collapsible-trigger"]'), n = trs.length;
+        for (let i = 0; i < n; i++) {
+          const tr = trs[i], last = i === n - 1, exp = ga(tr, 'data-op-thought-state') === 'streaming';
+          if (!exp && !last && spkCache.get(tr) === sig) continue;
+          const sp = clHas(tr.firstElementChild, 'ag-cs-thinking-spark') ? tr.firstElementChild : qs(tr, '.ag-cs-thinking-spark');
+          const st = exp || isStrmT(tr, last) ? 'streaming' : 'done';
+          if (sp && ga(sp, 'data-brand') === br && ga(sp, 'data-state') === st && ga(sp, 'data-mono') === mv && (st === 'streaming') === ha(tr, 'data-ag-cs-spark-streaming')) {
+            if (st === 'done' && !last) spkCache.set(tr, sig); else spkCache.delete(tr);
             continue;
           }
-          if (st !== 'done') doneSparkCache.delete(trig);
-          pending.push({ trig, brand, st, isLast, cacheSig });
+          if (st !== 'done') spkCache.delete(tr);
+          pend.push({ trig: tr, brand: br, st, isLast: last, sig });
         }
       }
-      const runApply = (it) => {
-        applySingleSpark(it.trig, it.brand, it.st);
-        if (it.st === 'done' && !it.isLast) doneSparkCache.set(it.trig, it.cacheSig);
-      };
-      if (pending.length <= 16 || typeof requestAnimationFrame !== 'function') {
-        for (let i = 0; i < pending.length; i++) runApply(pending[i]);
-      } else {
-        const syncStart = pending.length - 12;
-        for (let i = syncStart; i < pending.length; i++) runApply(pending[i]);
-        sparkQueue = pending.slice(0, syncStart);
+      const runA = (it) => { setSpk(it.trig, it.brand, it.st); if (it.st === 'done' && !it.isLast) spkCache.set(it.trig, it.sig); };
+      if (pend.length <= 16 || typeof requestAnimationFrame !== 'function') for (const it of pend) runA(it);
+      else {
+        const s0 = pend.length - 12;
+        for (let i = s0; i < pend.length; i++) runA(pend[i]);
+        sparkQueue = pend.slice(0, s0);
         if (!hydrateRaf) hydrateRaf = rAF(stepHydration);
       }
     };
@@ -482,18 +408,42 @@
       for (const el of qsa(d, '[data-ag-cs-outer-open]')) ra(el, 'data-ag-cs-outer-open');
     };
 
-    const clickClosed = (cb) => {
-      if (!cb || !isConn(cb) || ga(cb, 'aria-expanded') !== 'false' || typeof cb.click !== 'function') return false;
-      try { cb.click(); } catch {}
-      return true;
+    const clkG = (bs) => {
+      if (!bs?.length) return;
+      const sn = new Map(), d = docOf(), pA = d?.activeElement;
+      for (const b of bs) {
+        if (!b || !isConn(b) || ga(b, 'aria-expanded') !== 'false') continue;
+        const v = closestOf(b, VP_SEL);
+        if (v && isConn(v)) {
+          let s = sn.get(v);
+          if (!s) { const pm = vpMax(v), pt = v.scrollTop || 0; s = { pm, pt, pin: isConvEntryPinActive(v) || pm - pt <= 140, vr: rectOf(v), ab: 0 }; sn.set(v, s); }
+          const br = rectOf(b);
+          if (s.vr?.height > 0 && br && br.top < s.vr.top + s.vr.height * 0.45) s.ab++;
+        }
+        try { b.click(); } catch {}
+      }
+      const cA = d?.activeElement;
+      if (cA && cA !== pA && bs.includes(cA)) try { cA.blur?.(); } catch {}
+      if (!sn.size) return;
+      const rst = () => {
+        if (isD()) return;
+        for (const [v, s] of sn) if (isConn(v)) {
+          const nm = vpMax(v), dl = nm - s.pm;
+          if (s.pin && !(pUM && pLV === v)) { if ((v.scrollTop || 0) < nm - 1) v.scrollTop = nm; if (isConvEntryPinActive(v)) armQ(260); }
+          else if (dl > 0 && s.ab > 0) v.scrollTop = s.pt + dl;
+        }
+      };
+      rst(); if (typeof requestAnimationFrame === 'function') rAF(rst);
     };
     const pumpUnfoldQueue = () => {
       unfoldRaf = 0;
-      if (isDestroyed() || !unfoldQueue.length) { unfoldQueue = []; return; }
-      for (let b = 2; unfoldQueue.length && b > 0;) if (clickClosed(unfoldQueue.pop())) b--;
-      if (unfoldQueue.length && !isDestroyed()) unfoldRaf = rAF(pumpUnfoldQueue);
+      if (isD() || !unfoldQueue.length) { unfoldQueue = []; return; }
+      const b = [];
+      while (unfoldQueue.length && b.length < 2) { const c = unfoldQueue.pop(); if (c && isConn(c) && ga(c, 'aria-expanded') === 'false' && typeof c.click === 'function') b.push(c); }
+      if (b.length) clkG(b);
+      if (unfoldQueue.length && !isD()) unfoldRaf = rAF(pumpUnfoldQueue);
     };
-    const processOuterWf = (btn, pendingClicks) => {
+    const procWf = (btn, pendingClicks) => {
       if (!isConn(btn)) return;
       const expanded = ga(btn, 'aria-expanded') === 'true';
       let scope = btn.nextElementSibling;
@@ -501,7 +451,7 @@
       if (!scope) scope = peOf(btn);
       const innerBtns = qsa(scope, '[data-testid="tool-group-collapsible"]');
       if (expanded) {
-        setAttrIfChanged(btn, 'data-ag-cs-outer-open', '1');
+        setA(btn, 'data-ag-cs-outer-open', '1');
         for (const cb of innerBtns) if (cb !== btn && ga(cb, 'data-ag-cs-auto-unfolded') !== '1') {
           sa(cb, 'data-ag-cs-auto-unfolded', '1');
           if (ga(cb, 'aria-expanded') === 'false' && typeof cb.click === 'function') pendingClicks.push(cb);
@@ -513,57 +463,45 @@
         if (p && p !== scope) for (const el of qsa(p, '[data-ag-cs-auto-unfolded]')) ra(el, 'data-ag-cs-auto-unfolded');
       }
     };
-    const flushPendingUnfoldClicks = (pendingClicks) => {
+    const flushUnf = (pendingClicks) => {
       if (!pendingClicks.length) return;
-      if (pendingClicks.length <= 2 || typeof requestAnimationFrame !== 'function') { for (const cb of pendingClicks) clickClosed(cb); return; }
-      for (let k = 0; k < 2 && pendingClicks.length; k++) clickClosed(pendingClicks.pop());
+      if (pendingClicks.length <= 2 || typeof requestAnimationFrame !== 'function') { clkG(pendingClicks); return; }
+      const nb = [];
+      for (let k = 0; k < 2 && pendingClicks.length; k++) nb.push(pendingClicks.pop());
+      clkG(nb);
       unfoldQueue.push(...pendingClicks);
       if (!unfoldRaf && unfoldQueue.length) unfoldRaf = rAF(pumpUnfoldQueue);
     };
 
-    const syncWorkedForAutoUnfold = (dirtyTargets = null) => {
+    const syncWorkedForAutoUnfold = (dirty = null) => {
       const d = docOf();
-      if (isDestroyed()) {
-        clearWorkedForAutoUnfoldAttrs();
-        return;
-      }
+      if (isD()) return clearWorkedForAutoUnfoldAttrs();
       if (!d) return;
-      const pendingClicks = [];
-      if (dirtyTargets && dirtyTargets.size > 0) {
-        const outers = new Set();
-        for (const node of dirtyTargets) {
-          if (!isConn(node)) continue;
-          if (ga(node, 'data-testid') === 'worked-for-collapsible') {
-            outers.add(node);
-            continue;
-          }
-          const prev = node.previousElementSibling;
-          if (prev && ga(prev, 'data-testid') === 'worked-for-collapsible') outers.add(prev);
-          for (const b of qsa(node, '[data-testid="worked-for-collapsible"]')) outers.add(b);
-          let cur = peOf(node);
-          while (cur && cur !== d.body) {
-            const sib = cur.previousElementSibling;
-            if (sib && ga(sib, 'data-testid') === 'worked-for-collapsible') {
-              outers.add(sib);
-              break;
-            }
-            cur = peOf(cur);
+      const pc = [];
+      if (dirty?.size) {
+        const os = new Set();
+        for (const n of dirty) {
+          if (!isConn(n)) continue;
+          if (ga(n, 'data-testid') === 'worked-for-collapsible') { os.add(n); continue; }
+          const pv = n.previousElementSibling;
+          if (pv && ga(pv, 'data-testid') === 'worked-for-collapsible') os.add(pv);
+          for (const b of qsa(n, '[data-testid="worked-for-collapsible"]')) os.add(b);
+          for (let c = peOf(n); c && c !== d.body; c = peOf(c)) {
+            const s = c.previousElementSibling;
+            if (s && ga(s, 'data-testid') === 'worked-for-collapsible') { os.add(s); break; }
           }
         }
-        for (const btn of outers) processOuterWf(btn, pendingClicks);
-        flushPendingUnfoldClicks(pendingClicks);
-        return;
-      }
-      for (const btn of qsa(d, '[data-testid="worked-for-collapsible"]')) processOuterWf(btn, pendingClicks);
-      flushPendingUnfoldClicks(pendingClicks);
+        for (const b of os) procWf(b, pc);
+      } else for (const b of qsa(d, '[data-testid="worked-for-collapsible"]')) procWf(b, pc);
+      flushUnf(pc);
     };
 
     const scheduleWorkedForClickSync = () => {
-      if (isDestroyed()) return;
+      if (isD()) return;
       if (wfClickTimer) CT(wfClickTimer);
       wfClickTimer = ST(() => {
         wfClickTimer = 0;
-        if (!isDestroyed()) syncWorkedForAutoUnfold();
+        if (!isD()) syncWorkedForAutoUnfold();
       }, 28);
     };
 
@@ -599,257 +537,143 @@
       const home = qs(docOf(), '.agy-home');
       if (!home) return;
       const r = sampleHomeComposerRect();
-      if (isMotionUltra() && rippleCtl) rippleCtl.triggerLiftoffBurst(r);
+      if (isMU() && rippleCtl) rippleCtl.triggerLiftoffBurst(r);
     };
 
-    const markLiftoffBubble = (conv) => {
-      const bubble = qs(conv, '[data-testid="user-message-bubble"]');
-      if (!bubble) return false;
-      sa(bubble, 'data-ag-cs-liftoff-bubble', '1');
-      scheduleTransient(() => {
-        if (isConn(bubble)) ra(bubble, 'data-ag-cs-liftoff-bubble');
-      }, 500);
+    const mkLiftB = (c) => {
+      const b = qs(c, '[data-testid="user-message-bubble"]');
+      if (!b) return false;
+      sa(b, 'data-ag-cs-liftoff-bubble', '1');
+      scheduleTransient(() => { if (isConn(b)) ra(b, 'data-ag-cs-liftoff-bubble'); }, 500);
       return true;
     };
-
-    const triggerHeroALiftoff = (formalConv, measuredRect = null) => {
+    const triggerHeroALiftoff = (fc, mr = null) => {
       const d = docOf();
-      if (!isMotionUltra() || !formalConv || !d) return;
+      if (!isMU() || !fc || !d) return;
       const now = nowOf();
       for (const n of qsa(d, '.ag-cs-liftoff-veil')) n.remove();
-      const veil = d.createElement('div');
-      veil.className = 'ag-cs-liftoff-veil';
-      sa(veil, 'aria-hidden', 'true');
-      sa(veil, 'data-ag-no-i18n', '');
-      sa(veil, 'data-ag-owned', '1');
-      const r = lastHomeRect;
-      setProp(veil, '--ag-lift-x', r && r.width > 0 ? `${Math.round(r.left + r.width / 2)}px` : '50%');
-      setProp(veil, '--ag-lift-y', r && r.height > 0 ? `${Math.round(r.top + r.height / 2)}px` : '58%');
-      const ring = d.createElement('div');
-      ring.className = 'ag-cs-liftoff-ring';
-      veil.appendChild(ring);
-      d.body?.appendChild(veil);
-      scheduleTransient(() => veil.remove(), 540);
-
-      const inputBox = qs(formalConv, '[data-testid="agent-input-box"]') || qs(d, '[data-testid="agent-input-box"]');
-      if (inputBox && typeof motionEngine?.spring === 'function') {
-        const nr = measuredRect || rectOf(inputBox);
-        const rawDelta = r && nr ? M.round(r.top - nr.top) : -160;
-        const hostFade = Boolean(
-          closestOf(inputBox, '.animate-fade-in, .no-transitions') ||
-            closestOf(formalConv, '.no-transitions') ||
-            clHas(formalConv, 'no-transitions')
-        );
-        const dy = hostFade
-          ? M.max(-24, M.min(0, rawDelta === 0 ? -10 : M.round(rawDelta * 0.08)))
-          : M.max(-420, M.min(-24, rawDelta === 0 ? -140 : rawDelta));
-        try {
-          motionEngine.spring(
-            inputBox,
-            [{ transform: `translateY(${dy}px) scale(${hostFade ? 0.996 : 0.985})` }, { transform: 'translateY(0) scale(1)' }],
-            { durationMs: hostFade ? 220 : 480, stiffness: hostFade ? 360 : 310, damping: hostFade ? 32 : 28, slot: 'liftoff-dock' }
-          );
-        } catch {}
+      const v = mkOwned(d, 'div', 'ag-cs-liftoff-veil'), r = lastHomeRect;
+      setProp(v, '--ag-lift-x', r?.width > 0 ? `${M.round(r.left + r.width / 2)}px` : '50%');
+      setProp(v, '--ag-lift-y', r?.height > 0 ? `${M.round(r.top + r.height / 2)}px` : '58%');
+      const rg = d.createElement('div'); rg.className = 'ag-cs-liftoff-ring'; v.appendChild(rg);
+      d.body?.appendChild(v); scheduleTransient(() => v.remove(), 540);
+      const ib = qs(fc, '[data-testid="agent-input-box"]') || qs(d, '[data-testid="agent-input-box"]');
+      if (ib && typeof motionEngine?.spring === 'function') {
+        const nr = mr || rectOf(ib), rd = r && nr ? M.round(r.top - nr.top) : -160;
+        const hf = Boolean(closestOf(ib, '.animate-fade-in, .no-transitions') || closestOf(fc, '.no-transitions') || clHas(fc, 'no-transitions'));
+        const dy = hf ? M.max(-24, M.min(0, rd === 0 ? -10 : M.round(rd * 0.08))) : M.max(-420, M.min(-24, rd === 0 ? -140 : rd));
+        try { motionEngine.spring(ib, [{ transform: `translateY(${dy}px) scale(${hf ? 0.996 : 0.985})` }, { transform: 'translateY(0) scale(1)' }], { durationMs: hf ? 220 : 480, stiffness: hf ? 360 : 310, damping: hf ? 32 : 28, slot: 'liftoff-dock' }); } catch {}
       }
-      liftoffBubbleUntil = markLiftoffBubble(formalConv) ? 0 : now + 900;
+      liftBubAt = mkLiftB(fc) ? 0 : now + 900;
       convAuraCtl?.triggerLiftoffEbb?.(now);
     };
-
     const triggerHeroBHomeReturn = () => {
-      if (!isMotionUltra()) return;
-      const home = qs(docOf(), '.agy-home');
-      if (!home) return;
+      const h = isMU() ? qs(docOf(), '.agy-home') : null;
+      if (!h) return;
       rippleCtl?.triggerTideSwell?.();
       if (typeof motionEngine?.stagger === 'function') {
-        const items = [qs(home, '[data-testid="home-greeting"]'), qs(home, '.ag-cs-home-panel'), qs(home, '[data-testid="agent-input-box"]')].filter(
-          Boolean
-        );
-        if (items.length > 0) {
-          try {
-            motionEngine.stagger(items, [{ transform: 'translateY(8px)' }, { transform: 'translateY(0px)' }], {
-              durationMs: 200,
-              delayStep: 20,
-              stepMs: 20,
-              stiffness: 360,
-              damping: 32,
-              slot: 'home-return',
-            });
-          } catch {}
-        }
+        const it = [qs(h, '[data-testid="home-greeting"]'), qs(h, '.ag-cs-home-panel'), qs(h, '[data-testid="agent-input-box"]')].filter(Boolean);
+        if (it.length) try { motionEngine.stagger(it, [{ transform: 'translateY(8px)' }, { transform: 'translateY(0px)' }], { durationMs: 200, delayStep: 20, stepMs: 20, stiffness: 360, damping: 32, slot: 'home-return' }); } catch {}
       }
     };
 
-    const setAttrSafe = (el, k, v) =>
-      typeof setAttrIfChanged === 'function' ? setAttrIfChanged(el, k, v) : ga(el, k) !== v && sa(el, k, v);
-
-    const getSidebarRowCid = (row) =>
-      String(ga(row, 'data-cascade-id') || ga(qs(row, 'a[href]'), 'href') || ga(row, 'data-conversation-id') || '').trim();
-
-const isStopBtn = (b) => {
-if (!b || b.hidden === true || ga(b, 'aria-hidden') === 'true' || ga(b, 'aria-haspopup') || ga(b, 'role') === 'checkbox') return false;
-const tid = String(ga(b, 'data-testid') || '').trim(), lbl = String(ga(b, 'aria-label') || ga(b, 'title') || '').trim();
-if (NON_STOP_RE.test(tid + ' ' + lbl)) return false;
-return Boolean((tid && (STOP_TID_RE.test(tid) || STOP_CAMEL_RE.test(tid))) || (lbl && STOP_LABEL_RE.test(lbl)) || qs(b, '.lucide-square,.lucide-circle-stop'));
-};
-const isSidebarRowRunning = (row) => {
-if (!row) return false;
-if (qs(row, '[data-testid="status-loading-spinner"]')) return true;
-if (typeof row.getElementsByTagName === 'function') {
-for (const b of row.getElementsByTagName('button')) if (isStopBtn(b)) return true;
-for (const b of qsa(row, '[role="button"]')) if (isStopBtn(b)) return true;
-return false;
-}
-for (const b of qsa(row, 'button, [role="button"]')) if (isStopBtn(b)) return true;
-return false;
-};
-
-    const pruneRunningCidMap = (now) => {
-      for (const [k, ts] of runningCidMap) {
-        if (now - ts > SIDEBAR_RUN_HOLD_MS) runningCidMap.delete(k);
-      }
-      if (runningCidMap.size > 256) {
-        let drop = runningCidMap.size - 256;
-        for (const k of runningCidMap.keys()) {
-          runningCidMap.delete(k);
-          if (--drop <= 0) break;
-        }
-      }
+    const sbOff = (d) => !d || ga(d.documentElement, 'data-ag-cs-sidebar') === 'off';
+    const mkRun = (r, c, now) => { runRowM.set(r, now); if (c) runCidM.set(c, now); };
+    const heldAt = (r, c) => M.max(c ? runCidM.get(c) || 0 : 0, runRowM.get(r) || 0);
+    const setAttrSafe = (el, k, v) => (typeof setA === 'function' ? setA(el, k, v) : ga(el, k) !== v && sa(el, k, v));
+    const rowCid = (r) => String(ga(r, 'data-cascade-id') || ga(qs(r, 'a[href]'), 'href') || ga(r, 'data-conversation-id') || '').trim();
+    const isStopBtn = (b) => {
+      if (!b || b.hidden === true || ga(b, 'aria-hidden') === 'true' || ga(b, 'aria-haspopup') || ga(b, 'role') === 'checkbox') return false;
+      const tid = String(ga(b, 'data-testid') || '').trim(), lbl = String(ga(b, 'aria-label') || ga(b, 'title') || '').trim();
+      return !NON_STOP_RE.test(tid + ' ' + lbl) && Boolean((tid && (STOP_TID_RE.test(tid) || STOP_CAMEL_RE.test(tid))) || (lbl && STOP_LABEL_RE.test(lbl)) || qs(b, '.lucide-square,.lucide-circle-stop'));
     };
-
-    const scheduleRunningHoldExpiry = (delayMs) => {
-      if (isDestroyed() || runHoldTimer) return;
-      const wait = M.max(24, M.min(SIDEBAR_RUN_HOLD_MS + 40, M.ceil(delayMs) + 16));
+    const isSidebarRowRunning = (r) => {
+      if (!r) return false;
+      if (qs(r, '[data-testid="status-loading-spinner"]')) return true;
+      for (const b of typeof r.getElementsByTagName === 'function' ? [...r.getElementsByTagName('button'), ...qsa(r, '[role="button"]')] : qsa(r, 'button, [role="button"]')) if (isStopBtn(b)) return true;
+      return false;
+    };
+    const pruneCid = (now) => {
+      for (const [k, ts] of runCidM) if (now - ts > SIDEBAR_RUN_HOLD_MS) runCidM.delete(k);
+      for (let n = runCidM.size - 256; n > 0; n--) runCidM.delete(runCidM.keys().next().value);
+    };
+    const schedRun = (ms) => {
+      if (isD() || runHoldTimer) return;
       runHoldTimer = ST(() => {
-        runHoldTimer = 0;
-        if (isDestroyed()) return;
-        const d = docOf();
-        if (!d || ga(d.documentElement, 'data-ag-cs-sidebar') === 'off') return;
-        const now = nowOf();
-        pruneRunningCidMap(now);
-        let minRem = Infinity;
+        runHoldTimer = 0; const d = docOf();
+        if (isD() || sbOff(d)) return;
+        const now = nowOf(); pruneCid(now);
+        let minR = Infinity;
         guardMut(() => {
-          const rows = qsa(d, '[data-testid="conversation-row-sidebar"]');
-          for (let i = 0; i < rows.length; i++) {
-            const r = rows[i];
-            const cid = getSidebarRowCid(r);
-            if (isSidebarRowRunning(r)) {
-              runningRowMap.set(r, now);
-              if (cid) runningCidMap.set(cid, now);
-              setAttrSafe(r, 'data-ag-cs-row-running', '1');
-              continue;
-            }
-            const lastAt = M.max(cid ? runningCidMap.get(cid) || 0 : 0, runningRowMap.get(r) || 0);
-            const rem = lastAt > 0 ? SIDEBAR_RUN_HOLD_MS - (now - lastAt) : -1;
-            if (rem > 0) {
-              if (rem < minRem) minRem = rem;
-              setAttrSafe(r, 'data-ag-cs-row-running', '1');
-            } else {
-              if (cid && runningCidMap.get(cid) === lastAt) runningCidMap.delete(cid);
-              runningRowMap.delete(r);
-              if (ha(r, 'data-ag-cs-row-running')) ra(r, 'data-ag-cs-row-running');
-            }
+          for (const r of qsa(d, '[data-testid="conversation-row-sidebar"]')) {
+            const c = rowCid(r);
+            if (isSidebarRowRunning(r)) { mkRun(r, c, now); setAttrSafe(r, 'data-ag-cs-row-running', '1'); continue; }
+            const lt = heldAt(r, c), rm = lt > 0 ? SIDEBAR_RUN_HOLD_MS - (now - lt) : -1;
+            if (rm > 0) { if (rm < minR) minR = rm; setAttrSafe(r, 'data-ag-cs-row-running', '1'); }
+            else { if (c && runCidM.get(c) === lt) runCidM.delete(c); runRowM.delete(r); if (ha(r, 'data-ag-cs-row-running')) ra(r, 'data-ag-cs-row-running'); }
           }
         });
-        if (isFin(minRem)) scheduleRunningHoldExpiry(minRem);
-      }, wait);
+        if (isFin(minR)) schedRun(minR);
+      }, M.max(24, M.min(SIDEBAR_RUN_HOLD_MS + 40, M.ceil(ms) + 16)));
     };
-
-    const resolveSidebarRowRunning = (row, domRunning, now) => {
-      const cid = getSidebarRowCid(row);
-      if (domRunning) {
-        runningRowMap.set(row, now);
-        if (cid) runningCidMap.set(cid, now);
-        return true;
-      }
-      const lastAt = M.max(cid ? runningCidMap.get(cid) || 0 : 0, runningRowMap.get(row) || 0);
-      if (lastAt > 0) {
-        const elapsed = now - lastAt;
-        if (elapsed >= 0 && elapsed <= SIDEBAR_RUN_HOLD_MS) {
-          scheduleRunningHoldExpiry(SIDEBAR_RUN_HOLD_MS - elapsed);
-          return true;
-        }
-        if (cid && runningCidMap.get(cid) === lastAt) runningCidMap.delete(cid);
-        runningRowMap.delete(row);
+    const resSbRun = (r, domR, now) => {
+      const c = rowCid(r);
+      if (domR) { mkRun(r, c, now); return true; }
+      const lt = heldAt(r, c);
+      if (lt > 0) {
+        const el = now - lt;
+        if (el >= 0 && el <= SIDEBAR_RUN_HOLD_MS) { schedRun(SIDEBAR_RUN_HOLD_MS - el); return true; }
+        if (c && runCidM.get(c) === lt) runCidM.delete(c);
+        runRowM.delete(r);
       }
       return false;
     };
-
-    const lockSidebarRowRunningOnPointerDown = (row) => {
-      const d = docOf();
-      if (!row || !d || ga(d.documentElement, 'data-ag-cs-sidebar') === 'off') return false;
-      const now = nowOf();
-      const cid = getSidebarRowCid(row);
-      const heldAt = M.max(cid ? runningCidMap.get(cid) || 0 : 0, runningRowMap.get(row) || 0);
-      const isRun =
-        ha(row, 'data-ag-cs-row-running') ||
-        isSidebarRowRunning(row) ||
-        (heldAt > 0 && now - heldAt <= SIDEBAR_RUN_HOLD_MS);
-      if (!isRun) return false;
-      runningRowMap.set(row, now);
-      if (cid) runningCidMap.set(cid, now);
-      guardMut(() => setAttrSafe(row, 'data-ag-cs-row-running', '1'));
-      scheduleRunningHoldExpiry(SIDEBAR_RUN_HOLD_MS);
+    const lockSidebarRowRunningOnPointerDown = (r) => {
+      if (!r || sbOff(docOf())) return false;
+      const now = nowOf(), c = rowCid(r), ht = heldAt(r, c);
+      if (!ha(r, 'data-ag-cs-row-running') && !isSidebarRowRunning(r) && !(ht > 0 && now - ht <= SIDEBAR_RUN_HOLD_MS)) return false;
+      mkRun(r, c, now); guardMut(() => setAttrSafe(r, 'data-ag-cs-row-running', '1')); schedRun(SIDEBAR_RUN_HOLD_MS);
       return true;
     };
-
-    const stampSidebarRowRunningImmediate = (row) => {
-      const d = docOf();
-      if (!row || !d || ga(d.documentElement, 'data-ag-cs-sidebar') === 'off') return false;
-      const now = nowOf();
-      const run = resolveSidebarRowRunning(row, isSidebarRowRunning(row), now);
-      if (run) guardMut(() => setAttrSafe(row, 'data-ag-cs-row-running', '1'));
+    const stampSidebarRowRunningImmediate = (r) => {
+      if (!r || sbOff(docOf())) return false;
+      const run = resSbRun(r, isSidebarRowRunning(r), nowOf());
+      if (run) guardMut(() => setAttrSafe(r, 'data-ag-cs-row-running', '1'));
       return run;
     };
-
-const measureSidebarSelectionSnapshot = () => {
-const rows = qsa(docOf(), '[data-testid="conversation-row-sidebar"]');
-if (!rows.length) return { e: true };
-const now = nowOf();
-pruneRunningCidMap(now);
-let selIdx = -1, selRow = null, selRun = false, batchRun = null;
-const states = [], listP = rows.length > 1 ? peOf(rows[0]) : null;
-if (listP && typeof listP.getElementsByTagName === 'function' && AF(rows).every((r) => peOf(r) === listP)) {
-batchRun = new Set();
-const mr = (n) => { const r = closestOf(n, '[data-testid="conversation-row-sidebar"]'); if (r) batchRun.add(r); };
-for (const sp of qsa(listP, '[data-testid="status-loading-spinner"]')) mr(sp);
-for (const b of listP.getElementsByTagName('button')) if (isStopBtn(b)) mr(b);
-for (const rb of qsa(listP, '[role="button"]')) if (isStopBtn(rb)) mr(rb);
-}
-for (let i = 0; i < rows.length; i++) {
-const r = rows[i], run = resolveSidebarRowRunning(r, batchRun ? batchRun.has(r) : isSidebarRowRunning(r), now);
-if (selIdx < 0 && ga(r, 'data-selected') === 'true') { selIdx = i; selRow = r; selRun = run; }
-states.push([r, run]);
-}
+    const measureSidebarSelectionSnapshot = () => {
+      const rows = qsa(docOf(), '[data-testid="conversation-row-sidebar"]');
+      if (!rows.length) return { e: true };
+      const now = nowOf(); pruneCid(now);
+      let selIdx = -1, selRow = null, selRun = false, batchRun = null;
+      const states = [], listP = rows.length > 1 ? peOf(rows[0]) : null;
+      if (listP && typeof listP.getElementsByTagName === 'function' && AF(rows).every((r) => peOf(r) === listP)) {
+        batchRun = new Set();
+        const mr = (n) => { const r = closestOf(n, '[data-testid="conversation-row-sidebar"]'); if (r) batchRun.add(r); };
+        for (const sp of qsa(listP, '[data-testid="status-loading-spinner"]')) mr(sp);
+        for (const b of [...listP.getElementsByTagName('button'), ...qsa(listP, '[role="button"]')]) if (isStopBtn(b)) mr(b);
+      }
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i], run = resSbRun(r, batchRun ? batchRun.has(r) : isSidebarRowRunning(r), now);
+        if (selIdx < 0 && ga(r, 'data-selected') === 'true') { selIdx = i; selRow = r; selRun = run; }
+        states.push([r, run]);
+      }
       if (!selRow) return { e: false, i: -1, cid: '', r: null, rn: false, s: null, l: null, t: 0, st: states };
-      const curCid = getSidebarRowCid(selRow);
-      if (sbInit && sbRect && (curCid && sbCid ? curCid === sbCid : selIdx === sbIndex)) return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: sbRect, st: states };
-      const list = peOf(selRow);
-      if (getBus()?.isSkipped?.(selRow)) return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: sbRect, st: states };
-      const rr = rectOf(selRow);
-      const lr = rectOf(list);
-      const stTop = list ? list.scrollTop || 0 : 0;
-      const snap = rr
-        ? {
-            left: rr.left,
-            top: rr.top,
-            width: rr.width,
-            height: rr.height,
-            ry: lr ? rr.top - lr.top + stTop : rr.top,
-            rx: lr ? rr.left - lr.left : rr.left,
-          }
-        : null;
+      const curCid = rowCid(selRow);
+      if ((sbInit && sbRect && (curCid && sbCid ? curCid === sbCid : selIdx === sbIndex)) || getBus()?.isSkipped?.(selRow)) return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: sbRect, st: states };
+      const list = peOf(selRow), rr = rectOf(selRow), lr = rectOf(list), stTop = list ? list.scrollTop || 0 : 0;
+      const snap = rr ? { left: rr.left, top: rr.top, width: rr.width, height: rr.height, ry: lr ? rr.top - lr.top + stTop : rr.top, rx: lr ? rr.left - lr.left : rr.left } : null;
       return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: snap, l: lr, t: stTop, st: states };
     };
-
     const rstSb = () => { sbInit = false; sbIndex = -1; sbCid = ''; sbRect = null; sbRunning = false; };
     const syncSidebarSelectionGlide = (snap) => {
       const d = docOf();
       if (!snap || !d) return;
-      if (ga(d.documentElement, 'data-ag-cs-sidebar') === 'off') {
+      if (sbOff(d)) {
         for (const n of qsa(d, '.ag-cs-sidebar-glide-pill')) n.remove();
         if (snap.st) for (const [row] of snap.st) if (ha(row, 'data-ag-cs-row-running')) ra(row, 'data-ag-cs-row-running');
         if (runHoldTimer) { CT(runHoldTimer); runHoldTimer = 0; }
-        runningCidMap.clear();
+        runCidM.clear();
         return rstSb();
       }
       if (snap.st) for (const [row, run] of snap.st) { if (run) setAttrSafe(row, 'data-ag-cs-row-running', '1'); else if (ha(row, 'data-ag-cs-row-running')) ra(row, 'data-ag-cs-row-running'); }
@@ -859,20 +683,18 @@ states.push([r, run]);
       const targetRun = Boolean(selRun || ha(selRow, 'data-ag-cs-row-running'));
       if (!sbInit) { sbInit = true; sbIndex = selIdx; sbCid = curCid; sbRect = curSnap; sbRunning = targetRun; return; }
       const sessionChanged = curCid && sbCid ? curCid !== sbCid : selIdx !== sbIndex;
-      if (sbIndex >= 0 && selIdx >= 0 && sessionChanged && sbRect && curSnap && !(suppressEntryMotionUntil > nowOf())) {
+      if (sbIndex >= 0 && selIdx >= 0 && sessionChanged && sbRect && curSnap && !(supMotAt > nowOf())) {
         const fromRect = listRect ? { left: listRect.left + sbRect.rx, top: listRect.top + sbRect.ry - scrollTop, width: sbRect.width, height: sbRect.height } : sbRect;
-        if (isMotionStandardOrUltra()) {
+        if (isMS()) {
           for (const n of qsa(d, '.ag-cs-sidebar-glide-pill')) n.remove();
-          const pill = d.createElement('div');
-          pill.className = 'ag-cs-sidebar-glide-pill';
-          sa(pill, 'aria-hidden', 'true'); sa(pill, 'data-ag-no-i18n', ''); sa(pill, 'data-ag-owned', '1');
+          const pill = mkOwned(d, 'div', 'ag-cs-sidebar-glide-pill');
           if (targetRun) sa(pill, 'data-ag-cs-glide-running', '1'); else if (sbRunning) sa(pill, 'data-ag-cs-glide-from-running', '1');
           for (const s of `position:fixed|z-index:38|pointer-events:none|left:${M.round(curSnap.left)}px|top:${M.round(curSnap.top)}px|width:${M.round(curSnap.width)}px|height:${M.round(curSnap.height)}px`.split('|')) { const i = s.indexOf(':'); setProp(pill, s.slice(0, i), s.slice(i + 1)); }
           d.body?.appendChild(pill);
           try { motionEngine?.glideIndicator?.(pill, fromRect, curSnap, { durationMs: 240, stiffness: 390, damping: 32, mass: 0.9 }); } catch {}
           scheduleTransient(() => pill.remove(), 260);
         }
-        if (isMotionUltra()) {
+        if (isMU()) {
           const dir = selIdx < sbIndex ? 'down' : 'up';
           const vps = AF(qsa(d, '[data-testid="autoscroll-viewport"]')).filter((vp) => !closestOf(vp, '[data-testid="subagent-tab-conversation"]'));
           const matchedVp = curCid ? vps.find((vp) => ga(closestOf(vp, '[data-cascade-id]'), 'data-cascade-id') === curCid) : null;
@@ -891,7 +713,7 @@ states.push([r, run]);
     };
 
     const applyCaustic = (el) => {
-      if (!el || !isMotionUltra()) return;
+      if (!el || !isMU()) return;
       sa(el, 'data-ag-cs-caustic', '1');
       scheduleTransient(() => {
         if (isConn(el)) ra(el, 'data-ag-cs-caustic');
@@ -915,7 +737,7 @@ states.push([r, run]);
       if (!root) return;
       for (const hdr of qsa(root, '[data-testid="changed-files-card-header"]')) {
         const next = hdr.nextElementSibling;
-        if (next && tagOf(next) === 'DIV') setAttrIfChanged(hdr, 'data-ag-cs-hdr-open', '1');
+        if (next && tagOf(next) === 'DIV') setA(hdr, 'data-ag-cs-hdr-open', '1');
         else if (ha(hdr, 'data-ag-cs-hdr-open')) ra(hdr, 'data-ag-cs-hdr-open');
       }
     };
@@ -925,7 +747,7 @@ states.push([r, run]);
       for (const hdr of list) {
         if (seenHeaders.has(hdr)) continue;
         seenHeaders.add(hdr); sawNew = true;
-        if (isMotionUltra()) applyCaustic(hdr);
+        if (isMU()) applyCaustic(hdr);
       }
       if (sawNew) notifyMascot('files-changed');
     };
@@ -937,63 +759,30 @@ states.push([r, run]);
       else if (bus?.measure && bus?.mutate) {
         let mHdrs = null;
         bus.measure('sc:caustics-r', () => { mHdrs = measureVisibleChangedHeaders(); });
-        bus.mutate('sc:caustics-w', () => { if (!isDestroyed() && mHdrs?.length) guardMut(() => applyCausticHeaders(mHdrs)); });
+        bus.mutate('sc:caustics-w', () => { if (!isD() && mHdrs?.length) guardMut(() => applyCausticHeaders(mHdrs)); });
       } else applyCausticHeaders(measureVisibleChangedHeaders());
 
       const PANE_RUN_SEL = '[data-testid="input-cancel-button"],[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
       const views = findFormalConvViews();
-      let paneCausticHit = false;
-      if (views.length > 1) {
-        for (let i = 0; i < views.length; i++) {
-          const cv = views[i];
-          const runPane = Boolean(qs(cv, PANE_RUN_SEL));
-          const ps = paneRunState.get(cv);
-          if (!ps) {
-            paneRunState.set(cv, { wasRunning: runPane, startAt: runPane ? now : 0 });
-          } else if (runPane && !ps.wasRunning) {
-            ps.wasRunning = true;
-            ps.startAt = now;
-          } else if (!runPane && ps.wasRunning) {
-            ps.wasRunning = false;
-            const dur = ps.startAt > 0 ? now - ps.startAt : 0;
-            ps.startAt = 0;
-            if (dur >= 6000 && isMotionUltra()) {
-              const card = qs(cv, '[data-testid="agent-input-box"] .surface-composer-card');
-              if (card && !closestOf(card, '[data-testid="subagent-tab-conversation"]')) {
-                applyCaustic(card);
-                paneCausticHit = true;
-              }
-            }
-          }
+      let paneHit = false;
+      if (views.length > 1) for (const cv of views) {
+        const rp = Boolean(qs(cv, PANE_RUN_SEL)), ps = paneRunState.get(cv);
+        if (!ps) paneRunState.set(cv, { w: rp, t: rp ? now : 0 });
+        else if (rp && !ps.w) { ps.w = true; ps.t = now; }
+        else if (!rp && ps.w) {
+          ps.w = false; const dur = ps.t > 0 ? now - ps.t : 0; ps.t = 0;
+          if (dur >= 6000 && isMU()) { const c = qs(cv, '[data-testid="agent-input-box"] .surface-composer-card'); if (c && !closestOf(c, '[data-testid="subagent-tab-conversation"]')) { applyCaustic(c); paneHit = true; } }
         }
       }
-
-      const runningNow = isConvRunning();
-      if (!runInit) {
-        runInit = true;
-        wasRunning = runningNow;
-        runStartAt = runningNow ? now : 0;
-      } else if (runningNow && !wasRunning) {
-        wasRunning = true;
-        runStartAt = now;
-      } else if (!runningNow && wasRunning) {
-        wasRunning = false;
-        const elapsed = runStartAt > 0 ? now - runStartAt : 0;
-        runStartAt = 0;
-        const auraPhase = convAuraCtl?.getInstance?.()?.phase || '';
-        const errDom = qs(
-          d,
-          '[data-testid="conversation-view"] [data-testid="agent-error-banner"], [data-testid="conversation-view"] [data-testid="error-message"]'
-        );
-        if (auraPhase === 'error-halted' || !!(errDom)) {
-          convAuraCtl?.triggerErrorHalted?.(now);
-          notifyMascot('streamDone', { error: true, durationMs: elapsed });
-        } else {
-          if (!paneCausticHit && elapsed >= 6000 && isMotionUltra()) {
-            for (const c of qsa(d, '[data-testid="agent-input-box"] .surface-composer-card')) {
-              if (!closestOf(c, '[data-testid="subagent-tab-conversation"]')) applyCaustic(c);
-            }
-          }
+      const runNow = isConvRunning();
+      if (!runInit) { runInit = true; wasRunning = runNow; runStartAt = runNow ? now : 0; }
+      else if (runNow && !wasRunning) { wasRunning = true; runStartAt = now; }
+      else if (!runNow && wasRunning) {
+        wasRunning = false; const elapsed = runStartAt > 0 ? now - runStartAt : 0; runStartAt = 0;
+        const ap = convAuraCtl?.getInstance?.()?.phase || '', errDom = qs(d, '[data-testid="conversation-view"] [data-testid="agent-error-banner"], [data-testid="conversation-view"] [data-testid="error-message"]');
+        if (ap === 'error-halted' || errDom) { convAuraCtl?.triggerErrorHalted?.(now); notifyMascot('streamDone', { error: true, durationMs: elapsed }); }
+        else {
+          if (!paneHit && elapsed >= 6000 && isMU()) for (const c of qsa(d, '[data-testid="agent-input-box"] .surface-composer-card')) if (!closestOf(c, '[data-testid="subagent-tab-conversation"]')) applyCaustic(c);
           if (elapsed >= 15000) {
             convAuraCtl?.triggerLongTaskComplete?.(now);
             notifyMascot('aura-complete', { durationMs: elapsed });
@@ -1010,11 +799,11 @@ states.push([r, run]);
     };
 
     const triggerHeroDFiberPulse = (card, modelBtn, brand) => {
-      if (!card || !isMotionUltra()) return;
+      if (!card || !isMU()) return;
       const camp = brand === 'antigravity' || brand === 'claude' || brand === 'openai' ? brand : 'gemini';
       if (fiberTimer) {
         CT(fiberTimer);
-        transientTimers.delete(fiberTimer);
+        tTmr.delete(fiberTimer);
         fiberTimer = 0;
       }
       sa(card, 'data-ag-cs-fiber-camp', camp);
@@ -1039,79 +828,50 @@ states.push([r, run]);
     };
 
     const triggerHeroESonar = (navTurn) => {
-      if (!navTurn || !isMotionUltra()) return;
+      if (!navTurn || !isMU()) return;
       const conv = closestOf(navTurn, '[data-testid="conversation-view"]') || findFormalConvView();
       if (!conv) return;
-      let turns = qsa(conv, '[data-testid="user-input-step"]');
-      if (!turns.length) turns = qsa(conv, '[data-testid="conversation-turn"]');
-      if (!turns.length) turns = qsa(conv, '[data-testid="user-message-bubble"]');
-      if (!turns.length) return;
-
-      let idx = -1;
-      const rawAttr = ga(navTurn, 'data-turn-index') ?? ga(navTurn, 'data-index');
-      if (rawAttr != null && /^\d+$/.test(String(rawAttr).trim())) {
-        idx = parseInt(String(rawAttr).trim(), 10);
-      } else if (ga(navTurn, 'data-testid') === 'conversation-navigator-group') {
-        idx = 0;
-      } else {
-        const navRoot = closestOf(navTurn, '[data-testid="conversation-navigator"]') || peOf(navTurn);
-        if (navRoot) {
-          const sibs = AF(qsa(navRoot, '[data-testid="conversation-navigator-turn"]'));
-          const relIdx = sibs.indexOf(navTurn);
-          if (relIdx >= 0) idx = M.min(turns.length - 1, M.max(0, turns.length - sibs.length) + relIdx);
+      let ts = qsa(conv, '[data-testid="user-input-step"]');
+      if (!ts.length) ts = qsa(conv, '[data-testid="conversation-turn"]');
+      if (!ts.length) ts = qsa(conv, '[data-testid="user-message-bubble"]');
+      if (!ts.length) return;
+      let ix = -1;
+      const rw = ga(navTurn, 'data-turn-index') ?? ga(navTurn, 'data-index');
+      if (rw != null && /^\d+$/.test(String(rw).trim())) ix = parseInt(String(rw).trim(), 10);
+      else if (ga(navTurn, 'data-testid') === 'conversation-navigator-group') ix = 0;
+      else {
+        const nr = closestOf(navTurn, '[data-testid="conversation-navigator"]') || peOf(navTurn);
+        if (nr) {
+          const sb = AF(qsa(nr, '[data-testid="conversation-navigator-turn"]')), ri = sb.indexOf(navTurn);
+          if (ri >= 0) ix = M.min(ts.length - 1, M.max(0, ts.length - sb.length) + ri);
         }
       }
-      const target = idx >= 0 && idx < turns.length ? turns[idx] : null;
-      if (!target) return;
-      sa(target, 'data-ag-cs-sonar', '1');
-      scheduleTransient(() => {
-        if (isConn(target)) ra(target, 'data-ag-cs-sonar');
-      }, 720);
+      const tg = ix >= 0 && ix < ts.length ? ts[ix] : null;
+      if (!tg) return;
+      sa(tg, 'data-ag-cs-sonar', '1');
+      scheduleTransient(() => { if (isConn(tg)) ra(tg, 'data-ag-cs-sonar'); }, 720);
     };
 
-    const syncHeroRouteChoreography = (measured) => {
-      const d = docOf();
-      const inHome = measured ? measured.inHome : Boolean(qs(d, '.agy-home'));
-      const formalConv = measured ? measured.formalConv : !inHome ? findFormalConvView() : null;
-      const inFormalConv = !!(formalConv);
-
-      if (inHome) {
-        const sheet = closestOf(qs(d, '.agy-home'), '.agy-sheet');
-        if (sheet) setAttrIfChanged(sheet, 'data-ag-cs-home-sheet', '1');
+    const syncHeroRouteChoreography = (m) => {
+      const d = docOf(), inH = m ? m.inHome : Boolean(qs(d, '.agy-home')), fc = m ? m.formalConv : !inH ? findFormalConvView() : null, inFc = Boolean(fc);
+      if (inH) { const sh = closestOf(qs(d, '.agy-home'), '.agy-sheet'); if (sh) setA(sh, 'data-ag-cs-home-sheet', '1'); }
+      for (const cv of !inH ? findFormalConvViews() : []) {
+        const st = peOf(cv); if (st && tagOf(st) === 'DIV') setA(st, 'data-ag-cs-conv-seat', '1');
+        const vpP = peOf(qs(cv, '[data-testid="autoscroll-viewport"]'));
+        if (vpP && vpP !== cv) setA(vpP, 'data-ag-cs-vp-wrap', '1');
       }
-      const formalViews = !inHome ? findFormalConvViews() : [];
-      for (let i = 0; i < formalViews.length; i++) {
-        const cv = formalViews[i];
-        const seat = peOf(cv);
-        if (seat && tagOf(seat) === 'DIV') setAttrIfChanged(seat, 'data-ag-cs-conv-seat', '1');
-        const vp = qs(cv, '[data-testid="autoscroll-viewport"]');
-        const vpP = peOf(vp);
-        if (vpP && vpP !== cv) setAttrIfChanged(vpP, 'data-ag-cs-vp-wrap', '1');
+      if (inH && !m?.homeComposerSampled) sampleHomeComposerRect();
+      if (!heroState.routeInitialized) { heroState.routeInitialized = true; heroState.wasInHome = inH; heroState.wasInFormalConv = inFc; }
+      else {
+        if (!(supMotAt > nowOf())) {
+          if (heroState.wasInHome && !inH && inFc) triggerHeroALiftoff(fc, m?.convInputRect || null);
+          else if (heroState.wasInFormalConv && !heroState.wasInHome && inH) triggerHeroBHomeReturn();
+        } else liftBubAt = 0;
+        heroState.wasInHome = inH; heroState.wasInFormalConv = inFc;
       }
-      if (inHome && !measured?.homeComposerSampled) sampleHomeComposerRect();
-
-      if (!heroState.routeInitialized) {
-        heroState.routeInitialized = true;
-        heroState.wasInHome = inHome;
-        heroState.wasInFormalConv = inFormalConv;
-      } else {
-        if (!(suppressEntryMotionUntil > nowOf())) {
-          if (heroState.wasInHome && !inHome && inFormalConv) triggerHeroALiftoff(formalConv, measured?.convInputRect || null);
-          else if (heroState.wasInFormalConv && !heroState.wasInHome && inHome) triggerHeroBHomeReturn();
-        } else {
-          liftoffBubbleUntil = 0;
-        }
-        heroState.wasInHome = inHome;
-        heroState.wasInFormalConv = inFormalConv;
-      }
-
-      if (liftoffBubbleUntil > 0 && formalConv) {
-        if (nowOf() <= liftoffBubbleUntil) {
-          if (markLiftoffBubble(formalConv)) liftoffBubbleUntil = 0;
-        } else liftoffBubbleUntil = 0;
-      }
-      if (measured?.sidebarSnap) syncSidebarSelectionGlide(measured.sidebarSnap);
-      if (!measured || measured.checkCaustics !== false) syncHeroCCaustics(measured?.visibleChangedHeaders);
+      if (liftBubAt > 0 && fc) { if (nowOf() <= liftBubAt) { if (mkLiftB(fc)) liftBubAt = 0; } else liftBubAt = 0; }
+      if (m?.sidebarSnap) syncSidebarSelectionGlide(m.sidebarSnap);
+      if (!m || m.checkCaustics !== false) syncHeroCCaustics(m?.visibleChangedHeaders);
     };
 
     const isBlockCode = (el, stopAt) => {
@@ -1148,28 +908,28 @@ states.push([r, run]);
 
     const flushAllStreamArtifacts = (immediate = true) => {
       scannedNodes = new WeakSet(); seenBlocks = new WeakSet();
-      const force = immediate || !canStreamMotion() || isDestroyed();
+      const force = immediate || !canStreamMotion() || isD();
       if (force) { clearHighlightFade(); if (sweepTimer) { CT(sweepTimer); sweepTimer = 0; } }
       guardMut(() => {
         const d = docOf();
         if (force) {
-          for (const [el, map] of expirableClasses.entries()) for (const cls of map.keys()) clRm(el, cls);
-          expirableClasses.clear();
+          for (const [el, map] of expCls.entries()) for (const cls of map.keys()) clRm(el, cls);
+          expCls.clear();
           if (d) for (const cls of ['ag-cs-stream-chunk', 'ag-cs-thought-chunk', 'ag-cs-code-scan']) for (const el of qsa(d, '.' + cls)) clRm(el, cls);
         }
         if (!d) return;
         for (const el of qsa(d, '[data-ag-cs-thought-streaming]')) ra(el, 'data-ag-cs-thought-streaming');
-        if (!isMotionUltra()) {
+        if (!isMU()) {
           for (const el of qsa(d, '.ag-cs-liftoff-veil')) el.remove();
           for (const s of 'liftoff-bubble|caustic|fiber-camp|stage-glide|glide-item|sonar'.split('|')) for (const el of qsa(d, `[data-ag-cs-${s}]`)) ra(el, 'data-ag-cs-' + s);
         }
-        if (!isMotionStandardOrUltra()) for (const el of qsa(d, '.ag-cs-sidebar-glide-pill')) el.remove();
+        if (!isMS()) for (const el of qsa(d, '.ag-cs-sidebar-glide-pill')) el.remove();
       });
     };
 
     const PROSE_SEL = '[data-testid="planner-response-text"],[data-testid="agent-response"] [data-markdown-root]';
 
-    const findStreamingThoughtBody = (node) => {
+    const findThB = (node) => {
       const body = docOf()?.body;
       let cur = isEl(node) ? node : peOf(node);
       while (cur && cur !== body) {
@@ -1192,300 +952,195 @@ states.push([r, run]);
       return null;
     };
 
-    const markStreamClass = (el, cls, dur = 300) => {
+    const mkCls = (el, cls, dur = 300) => {
       if (!el?.[K_CL] || clHas(el, cls)) return false;
       guardMut(() => el[K_CL].add(cls));
-      let map = expirableClasses.get(el);
-      if (!map) {
-        map = new Map();
-        expirableClasses.set(el, map);
-      }
-      map.set(cls, Date.now() + dur);
-      if (!sweepTimer) sweepTimer = ST(flushExpiredClasses, dur);
+      let m = expCls.get(el);
+      if (!m) { m = new Map(); expCls.set(el, m); }
+      m.set(cls, Date.now() + dur);
+      if (!sweepTimer) sweepTimer = ST(flushExp, dur);
       return true;
     };
 
-    const fadeLeafTexts = (node, now, max = 4) => {
-      if (!node || isThoughtIsolatedNode(node)) return;
+    const fadeLeaf = (node, now, max = 4) => {
+      if (!node || isTI(node)) return;
       let c = 0;
       const walk = (cur) => {
-        if (!cur || c >= max || isThoughtIsolatedNode(cur)) return;
-        if (cur.nodeType === 3) {
-          const s = cur.data ?? cur.nodeValue ?? '';
-          textLenMap.set(cur, s.length);
-          if (s.length > 0) {
-            enqueueFadeRange(cur, 0, s.length, now);
-            c++;
-          }
-          return;
-        }
-        if (!isEl(cur) || !cur.childNodes) return;
-        for (let i = 0; i < cur.childNodes.length && c < max; i++) walk(cur.childNodes[i]);
+        if (!cur || c >= max || isTI(cur)) return;
+        if (cur.nodeType === 3) { const s = cur.data ?? cur.nodeValue ?? ''; textLenMap.set(cur, s.length); if (s.length) { enqFd(cur, 0, s.length, now); c++; } return; }
+        if (isEl(cur) && cur.childNodes) for (let i = 0; i < cur.childNodes.length && c < max; i++) walk(cur.childNodes[i]);
       };
       walk(node);
     };
 
     const onStreamMutations = (mutations) => {
-      if (isDestroyed() || streamMutating || !canStreamMotion()) return;
+      if (isD() || streamMutating || !canStreamMotion()) return;
       const now = nowOf();
-      let newBlocks = 0;
-
+      let newB = 0;
       for (const m of mutations) {
         if (!m || isThoughtMutationRecord(m)) continue;
         const target = m.target;
-        if (!target || isThoughtIsolatedNode(target)) continue;
+        if (!target || isTI(target)) continue;
         const baseEl = isEl(target) ? target : peOf(target);
-        if (
-          !baseEl ||
-          getBus()?.isSkipped?.(baseEl) ||
-          closestOf(
-            baseEl,
-            '.ag-prism-thought-overlay, .ag-cs-smooth-caret, .ag-cs-crab, .ag-cs-conv-aura-host, [data-testid="agent-input-box"], script, style'
-          )
-        ) {
-          continue;
-        }
-
+        if (!baseEl || getBus()?.isSkipped?.(baseEl) || closestOf(baseEl, '.ag-prism-thought-overlay, .ag-cs-smooth-caret, .ag-cs-crab, .ag-cs-conv-aura-host, [data-testid="agent-input-box"], script, style')) continue;
         if (m.type === 'characterData') {
           if (target.nodeType !== 3) continue;
-          const nLen = (target.data ?? target.nodeValue ?? '').length;
-          const pLen = textLenMap.get(target);
-          textLenMap.set(target, nLen);
-          if (pLen !== undefined ? nLen <= pLen : nLen <= 0 || nLen > 28) continue;
-          const tb = findStreamingThoughtBody(baseEl);
-          if (tb) {
-            if (isManagedThoughtPanel(tb)) continue;
-          } else if (!closestOf(baseEl, PROSE_SEL)) continue;
-          if (pLen !== undefined) enqueueFadeRange(target, pLen, nLen, now);
-          else enqueueFadeRange(target, 0, nLen, now);
+          const nL = (target.data ?? target.nodeValue ?? '').length, pL = textLenMap.get(target);
+          textLenMap.set(target, nL);
+          if (pL !== undefined ? nL <= pL : nL <= 0 || nL > 28) continue;
+          const tb = findThB(baseEl);
+          if (tb) { if (isMT(tb)) continue; } else if (!closestOf(baseEl, PROSE_SEL)) continue;
+          enqFd(target, pL !== undefined ? pL : 0, nL, now);
           continue;
         }
-
         if (m.type !== 'childList' || !m.addedNodes?.length) continue;
-
-        const inAnimBlock = Boolean(closestOf(baseEl, '.ag-cs-stream-chunk, .ag-cs-thought-chunk'));
-        const thoughtBody = findStreamingThoughtBody(target);
-        if (thoughtBody) {
-          if (isManagedThoughtPanel(thoughtBody)) continue;
-          for (const added of m.addedNodes) {
-            if (isThoughtIsolatedNode(added)) continue;
-            if (added.nodeType === 3) {
-              fadeLeafTexts(added, now, 1);
-            } else if (isEl(added)) {
-              if (inAnimBlock || INLINE_TAGS.has(tagOf(added))) fadeLeafTexts(added, now, 4);
-              else if (!seenBlocks.has(added) && newBlocks < 4) {
-                seenBlocks.add(added);
-                newBlocks++;
-                snapTextLens(added, 12);
-                markStreamClass(added, 'ag-cs-thought-chunk', 290);
-              }
+        const inA = Boolean(closestOf(baseEl, '.ag-cs-stream-chunk, .ag-cs-thought-chunk')), tb = findThB(target);
+        if (tb) {
+          if (isMT(tb)) continue;
+          for (const a of m.addedNodes) {
+            if (isTI(a)) continue;
+            if (a.nodeType === 3) fadeLeaf(a, now, 1);
+            else if (isEl(a)) {
+              if (inA || INLINE_TAGS.has(tagOf(a))) fadeLeaf(a, now, 4);
+              else if (!seenBlocks.has(a) && newB < 4) { seenBlocks.add(a); newB++; snapTextLens(a, 12); mkCls(a, 'ag-cs-thought-chunk', 290); }
             }
-          };
-          continue;
-        }
-
-        const proseRoot = closestOf(baseEl, PROSE_SEL);
-        if (!proseRoot) continue;
-
-        const markCode = (el, lim) => { scannedNodes.add(el); lastCodeAt = now; snapTextLens(el, lim); markStreamClass(el, 'ag-cs-code-scan', 240); };
-        const codeCtx = insideCodeOrTable(target, proseRoot);
-        if (codeCtx) {
-          if (TABLE_TAGS.has(tagOf(codeCtx))) {
-            for (const added of m.addedNodes) {
-              if (added.nodeType === 3) { fadeLeafTexts(added, now, 1); continue; }
-              if (!isEl(added)) continue;
-              const tr = tagOf(added) === 'TR' ? added : findRowAnc(added, proseRoot) || findRowAnc(codeCtx, proseRoot);
-              if (tr && !scannedNodes.has(tr) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(tr, 12);
-              else fadeLeafTexts(added, now, 3);
-            }
-            continue;
-          }
-          for (const added of m.addedNodes) {
-            if (added.nodeType === 3) { fadeLeafTexts(added, now, 1); continue; }
-            if (!isEl(added)) continue;
-            if (tagOf(added) === 'PRE' || clHas(added, 'code-block')) { if (!scannedNodes.has(added)) markCode(added, 16); continue; }
-            const lineEl = clHas(added, 'code-line') ? added : closestOf(added, '.code-line') || added;
-            if (lineEl && lineEl !== proseRoot && tagOf(lineEl) !== 'PRE' && !clHas(lineEl, 'code-block') && !scannedNodes.has(lineEl) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(lineEl, 8);
-            else fadeLeafTexts(added, now, 3);
           }
           continue;
         }
-        for (const added of m.addedNodes) {
-          if (added.nodeType === 3) { fadeLeafTexts(added, now, 1); continue; }
-          if (!isEl(added)) continue;
-          const tag = tagOf(added);
-          const isCodeOrTbl = tag === 'PRE' || tag === 'TABLE' || clHas(added, 'code-block') || clHas(added, 'md-table-host') || clHas(added, 'md-table-frame') || Boolean(qs(added, 'pre, table, .code-block, .md-table-frame'));
-          if (isCodeOrTbl) { if (!scannedNodes.has(added) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(added, 16); }
-          else if (inAnimBlock || (INLINE_TAGS.has(tag) && baseEl !== proseRoot)) fadeLeafTexts(added, now, 4);
-          else if (!seenBlocks.has(added) && newBlocks < 4) { seenBlocks.add(added); newBlocks++; snapTextLens(added, 12); markStreamClass(added, 'ag-cs-stream-chunk', 310); }
-          else fadeLeafTexts(added, now, 4);
+        const pr = closestOf(baseEl, PROSE_SEL);
+        if (!pr) continue;
+        const ctx = insideCodeOrTable(target, pr), isTbl = ctx && TABLE_TAGS.has(tagOf(ctx));
+        const mkC = (el, lim) => { scannedNodes.add(el); lastCodeAt = now; snapTextLens(el, lim); mkCls(el, 'ag-cs-code-scan', 240); };
+        for (const a of m.addedNodes) {
+          if (a.nodeType === 3) { fadeLeaf(a, now, 1); continue; }
+          if (!isEl(a)) continue;
+          const tg = tagOf(a);
+          if (ctx) {
+            if (isTbl) {
+              const tr = tg === 'TR' ? a : findRowAnc(a, pr) || findRowAnc(ctx, pr);
+              if (tr && !scannedNodes.has(tr) && now - lastCodeAt >= STREAM_BATCH_MS) mkC(tr, 12);
+              else fadeLeaf(a, now, 3);
+            } else if (tg === 'PRE' || clHas(a, 'code-block')) { if (!scannedNodes.has(a)) mkC(a, 16); }
+            else {
+              const ln = clHas(a, 'code-line') ? a : closestOf(a, '.code-line') || a;
+              if (ln && ln !== pr && tagOf(ln) !== 'PRE' && !clHas(ln, 'code-block') && !scannedNodes.has(ln) && now - lastCodeAt >= STREAM_BATCH_MS) mkC(ln, 8);
+              else fadeLeaf(a, now, 3);
+            }
+          } else if (tg === 'PRE' || tg === 'TABLE' || clHas(a, 'code-block') || clHas(a, 'md-table-host') || clHas(a, 'md-table-frame') || qs(a, 'pre, table, .code-block, .md-table-frame')) {
+            if (!scannedNodes.has(a) && now - lastCodeAt >= STREAM_BATCH_MS) mkC(a, 16);
+          } else if (inA || (INLINE_TAGS.has(tg) && baseEl !== pr)) fadeLeaf(a, now, 4);
+          else if (!seenBlocks.has(a) && newB < 4) { seenBlocks.add(a); newB++; snapTextLens(a, 12); mkCls(a, 'ag-cs-stream-chunk', 310); }
+          else fadeLeaf(a, now, 4);
         }
-}
-};
-const syncStreamActiveAttr = (on) => {
-const h = docOf()?.documentElement;
-if (h) { if (on) { if (ga(h, 'data-ag-cs-stream-active') !== '1' && typeof h.setAttribute === 'function') setAttrIfChanged(h, 'data-ag-cs-stream-active', '1'); } else if (ha(h, 'data-ag-cs-stream-active') && typeof h.removeAttribute === 'function') ra(h, 'data-ag-cs-stream-active'); }
-try { getBus()?.setStreaming?.(on); } catch {}
-};
-const syncDualStreamEngine = () => {
-const running = isConvRunning();
-const views = running ? findFormalConvViews() : [];
-syncStreamActiveAttr(running && views.length > 0);
-const active = canStreamMotion() && running;
-if (!active || views.length === 0) {
-if (streamObs) { try { streamObs.disconnect(); } catch {} streamRoots.clear(); }
-getBus()?.cancelGroup?.('conv:stream');
-flushAllStreamArtifacts(!canStreamMotion());
-return;
-}
-const trigByView = [];
-for (let v = 0; v < views.length; v++) {
-const conv = views[v];
-const triggers = qsa(conv, '[data-testid="thinking-collapsible-trigger"]');
-trigByView.push([conv, triggers]);
-for (let i = 0; i < triggers.length; i++) {
-const trig = triggers[i];
-const bodyDiv = trig.nextElementSibling;
-if (!bodyDiv || tagOf(bodyDiv) !== 'DIV') continue;
-const streaming =
-ga(trig, 'aria-expanded') === 'true' &&
-isStreamingThoughtTrigger(trig, i === triggers.length - 1);
-if (streaming) setAttrIfChanged(bodyDiv, 'data-ag-cs-thought-streaming', '1');
-else if (ha(bodyDiv, 'data-ag-cs-thought-streaming')) ra(bodyDiv, 'data-ag-cs-thought-streaming');
-}
-}
-if (!streamObs && typeof MutationObserver === 'function') streamObs = new MutationObserver(onStreamMutations);
-if (streamObs) {
-let changed = streamRoots.size !== views.length;
-if (!changed) {
-for (let v = 0; v < views.length; v++) {
-if (!streamRoots.has(views[v])) { changed = true; break; }
-}
-}
-if (changed) {
-try {
-streamObs.disconnect();
-streamRoots.clear();
-for (let v = 0; v < trigByView.length; v++) {
-const [conv, triggers] = trigByView[v];
-const resps = qsa(conv, PROSE_SEL);
-if (resps.length > 0) snapTextLens(resps[resps.length - 1], 24);
-if (triggers.length > 0) {
-const lb = triggers[triggers.length - 1]?.nextElementSibling;
-if (lb && !isManagedThoughtPanel(lb)) snapTextLens(lb, 16);
-}
-streamObs.observe(conv, { childList: true, characterData: true, subtree: true });
-streamRoots.add(conv);
-}
-} catch {}
-}
-}
-};
-const isFreshTriggerOrigin = (trig) => {
-if (!trig || !isFin(trig.at)) return false;
-const age = nowOf() - trig.at;
-return age >= 0 && age <= 900;
-};
-const resolveTriggerOriginCoords = (trig) => {
-if (!isFreshTriggerOrigin(trig)) return null;
-if (trig.el && !trig._measured) {
-trig._measured = true;
-if (trig.el.isConnected !== false) {
-const r = rectOf(trig.el);
-if (r && r.width > 0 && r.height > 0) {
-trig.x = r.left + r.width / 2;
-trig.y = r.top + r.height / 2;
-}
-}
-trig.el = null;
-}
-return isFin(trig.x) && isFin(trig.y) ? trig : null;
-};
-const measureNewLensOverlays = () => {
-const d = docOf();
-if (!isMotionStandardOrUltra() || !d) return [];
-const cands = new Set([
-...qsa(d, '.agy-overlay, .agy-fastpick, [data-testid="context-menu-popup"], [data-testid="context-menu-submenu-popup"]'),
-]);
-for (const el of qsa(d, '[data-testid="overview-panel"]')) {
-const p = peOf(el);
-if (p && tagOf(p) === 'DIV') cands.add(p);
-}
-const freshNew = [], bus = getBus();
-for (const ov of cands) {
-if (!ha(ov, 'data-hover-card-popup') && !seenOverlays.has(ov) && !bus?.isSkipped?.(ov)) freshNew.push(ov);
-}
-if (freshNew.length === 0) return [];
-// 仅在真有新浮层弹出时才懒测距点击源，消除普通正文点击时的同步回流
-const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
-const out = [];
-for (const ov of freshNew) out.push({ ov, rect: trig ? rectOf(ov) : null });
-return out;
-};
-const applyLensOverlays = (list) => {
-if (!list || !list.length) return;
-const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
-for (const { ov, rect: r } of list) {
-if (seenOverlays.has(ov)) continue;
-if (trig && r && (r.width <= 0 || r.height <= 0)) continue;
-seenOverlays.add(ov);
-if (trig && r && r.width > 0 && r.height > 0) {
-          setProp(ov, '--ag-origin-x', `${Math.round(Math.max(-40, Math.min(r.width + 40, trig.x - r.left)))}px`);
-          setProp(ov, '--ag-origin-y', `${Math.round(Math.max(-40, Math.min(r.height + 40, trig.y - r.top)))}px`);
-}
-let idx = 0;
-for (const item of qsa(ov, '[role="option"], [role="menuitem"], [data-testid]')) {
-const role = ga(item, 'role'), tid = ga(item, 'data-testid') || '';
-if (role === 'option' || role === 'menuitem' || tid.startsWith('overview-panel-row-') || tid === 'subagent-node' || tid === 'artifact-row') {
-setProp(item, '--ag-row-i', String(idx++));
-setAttrIfChanged(item, 'data-ag-row-stagger', '1');
-if (idx >= 12) break;
-}
-}
-}
-};
-const syncLensOverlayOrigins = (measuredOverlays) => {
-const d = docOf();
-if (!d) return;
-for (const el of qsa(d, '[data-testid="overview-panel"]')) {
-const p = peOf(el);
-if (p && tagOf(p) === 'DIV') { setAttrIfChanged(p, 'data-ag-cs-overview-shell', '1'); setAttrIfChanged(p, 'data-ag-cs-prism-box', '1'); setAttrIfChanged(p, 'data-ag-cs-prism-mirror', '1'); }
-}
-if (!isMotionStandardOrUltra()) return;
-if (measuredOverlays) { applyLensOverlays(measuredOverlays); return; }
-const bus = getBus();
-if (bus?.measure && bus?.mutate) {
-let mList = null;
-bus.measure('sc:lens-r', () => { mList = measureNewLensOverlays(); });
-bus.mutate('sc:lens-w', () => { if (!isDestroyed() && mList?.length) guardMut(() => applyLensOverlays(mList)); });
-return;
-}
-applyLensOverlays(measureNewLensOverlays());
-};
-const scheduleDeferredConvEntry = (fn, delayMs = 65, frame2Fn = null) => {
-const seq = ++convEntrySeq;
-if (convEntryTimer) CT(convEntryTimer);
-if (convEntryRaf) {
-cAF(convEntryRaf);
-convEntryRaf = 0;
-}
-convEntryTimer = ST(() => {
-convEntryTimer = 0;
-if (isDestroyed() || seq !== convEntrySeq) return;
-const cont = fn();
-if (cont !== false && seq === convEntrySeq && typeof frame2Fn === 'function') {
-convEntryRaf = rAF(() => {
-convEntryRaf = 0;
-if (!isDestroyed() && seq === convEntrySeq) frame2Fn();
-});
-}
-}, delayMs);
-};
-const disconnectStreamObserver = () => {
-syncStreamActiveAttr(false);
-if (streamObs) { try { streamObs.disconnect(); } catch {} streamObs = null; streamRoots.clear(); }
-flushAllStreamArtifacts(true);
-};
+      }
+    };
+    const setStrmAt = (on) => {
+      const h = docOf()?.documentElement;
+      if (h) { if (on) { if (ga(h, 'data-ag-cs-stream-active') !== '1' && h.setAttribute) setA(h, 'data-ag-cs-stream-active', '1'); } else if (ha(h, 'data-ag-cs-stream-active') && h.removeAttribute) ra(h, 'data-ag-cs-stream-active'); }
+      try { getBus()?.setStreaming?.(on); } catch {}
+    };
+    const syncDualStreamEngine = () => {
+      const run = isConvRunning(), views = run ? findFormalConvViews() : [];
+      setStrmAt(run && views.length > 0);
+      if (!canStreamMotion() || !run || !views.length) {
+        if (streamObs) { try { streamObs.disconnect(); } catch {} streamRoots.clear(); }
+        getBus()?.cancelGroup?.('conv:stream'); flushAllStreamArtifacts(!canStreamMotion()); return;
+      }
+      const tbv = [];
+      for (const conv of views) {
+        const trs = qsa(conv, '[data-testid="thinking-collapsible-trigger"]');
+        tbv.push([conv, trs]);
+        for (let i = 0; i < trs.length; i++) {
+          const t = trs[i], b = t.nextElementSibling;
+          if (!b || tagOf(b) !== 'DIV') continue;
+          if (ga(t, 'aria-expanded') === 'true' && isStrmT(t, i === trs.length - 1)) setA(b, 'data-ag-cs-thought-streaming', '1');
+          else if (ha(b, 'data-ag-cs-thought-streaming')) ra(b, 'data-ag-cs-thought-streaming');
+        }
+      }
+      if (!streamObs && typeof MutationObserver === 'function') streamObs = new MutationObserver(onStreamMutations);
+      if (streamObs && (streamRoots.size !== views.length || views.some((v) => !streamRoots.has(v)))) {
+        try {
+          streamObs.disconnect(); streamRoots.clear();
+          for (const [conv, trs] of tbv) {
+            const rs = qsa(conv, PROSE_SEL); if (rs.length) snapTextLens(rs[rs.length - 1], 24);
+            const lb = trs[trs.length - 1]?.nextElementSibling; if (lb && !isMT(lb)) snapTextLens(lb, 16);
+            streamObs.observe(conv, { childList: true, characterData: true, subtree: true }); streamRoots.add(conv);
+          }
+        } catch {}
+      }
+    };
+    const resTrig = (t) => {
+      const age = t && isFin(t.at) ? nowOf() - t.at : -1;
+      if (age < 0 || age > 900) return null;
+      if (t.el && !t._measured) {
+        t._measured = true;
+        if (t.el.isConnected !== false) { const r = rectOf(t.el); if (r?.width > 0 && r.height > 0) { t.x = r.left + r.width / 2; t.y = r.top + r.height / 2; } }
+        t.el = null;
+      }
+      return isFin(t.x) && isFin(t.y) ? t : null;
+    };
+    const measureNewLensOverlays = () => {
+      const d = docOf();
+      if (!isMS() || !d) return [];
+      const cs = new Set(qsa(d, '.agy-overlay, .agy-fastpick, [data-testid="context-menu-popup"], [data-testid="context-menu-submenu-popup"]'));
+      for (const el of qsa(d, '[data-testid="overview-panel"]')) { const p = peOf(el); if (p && tagOf(p) === 'DIV') cs.add(p); }
+      const bus = getBus(), fn = [...cs].filter((ov) => !ha(ov, 'data-hover-card-popup') && !seenOverlays.has(ov) && !bus?.isSkipped?.(ov));
+      if (!fn.length) return [];
+      const t = resTrig(heroState.lastTriggerOrigin);
+      return fn.map((ov) => ({ ov, rect: t ? rectOf(ov) : null }));
+    };
+    const appLens = (list) => {
+      if (!list?.length) return;
+      const t = resTrig(heroState.lastTriggerOrigin);
+      for (const { ov, rect: r } of list) {
+        if (seenOverlays.has(ov) || (t && r && (r.width <= 0 || r.height <= 0))) continue;
+        seenOverlays.add(ov);
+        if (t && r?.width > 0 && r.height > 0) {
+          setProp(ov, '--ag-origin-x', `${M.round(M.max(-40, M.min(r.width + 40, t.x - r.left)))}px`);
+          setProp(ov, '--ag-origin-y', `${M.round(M.max(-40, M.min(r.height + 40, t.y - r.top)))}px`);
+        }
+        let idx = 0;
+        for (const it of qsa(ov, '[role="option"], [role="menuitem"], [data-testid]')) {
+          const rl = ga(it, 'role'), tid = ga(it, 'data-testid') || '';
+          if (rl === 'option' || rl === 'menuitem' || tid.startsWith('overview-panel-row-') || tid === 'subagent-node' || tid === 'artifact-row') {
+            setProp(it, '--ag-row-i', String(idx++)); setA(it, 'data-ag-row-stagger', '1');
+            if (idx >= 12) break;
+          }
+        }
+      }
+    };
+    const syncLensOverlayOrigins = (mOv) => {
+      const d = docOf(); if (!d) return;
+      for (const el of qsa(d, '[data-testid="overview-panel"]')) {
+        const p = peOf(el);
+        if (p && tagOf(p) === 'DIV') { setA(p, 'data-ag-cs-overview-shell', '1'); setA(p, 'data-ag-cs-prism-box', '1'); setA(p, 'data-ag-cs-prism-mirror', '1'); }
+      }
+      if (!isMS()) return;
+      if (mOv) return appLens(mOv);
+      const bus = getBus();
+      if (bus?.measure && bus?.mutate) {
+        let ml = null;
+        bus.measure('sc:lens-r', () => { ml = measureNewLensOverlays(); });
+        bus.mutate('sc:lens-w', () => { if (!isD() && ml?.length) guardMut(() => appLens(ml)); });
+        return;
+      }
+      appLens(measureNewLensOverlays());
+    };
+    const scheduleDeferredConvEntry = (fn, ms = 65, f2 = null) => {
+      const seq = ++convEntrySeq;
+      if (convEntryTimer) CT(convEntryTimer);
+      if (convEntryRaf) { cAF(convEntryRaf); convEntryRaf = 0; }
+      convEntryTimer = ST(() => {
+        convEntryTimer = 0;
+        if (isD() || seq !== convEntrySeq) return;
+        if (fn() !== false && seq === convEntrySeq && typeof f2 === 'function') convEntryRaf = rAF(() => { convEntryRaf = 0; if (!isD() && seq === convEntrySeq) f2(); });
+      }, ms);
+    };
+    const disconnectStreamObserver = () => {
+      setStrmAt(false);
+      if (streamObs) { try { streamObs.disconnect(); } catch {} streamObs = null; streamRoots.clear(); }
+      flushAllStreamArtifacts(true);
+    };
 return {
 heroState,
 scheduleTransient,
@@ -1496,6 +1151,8 @@ syncThinkingSparks,
 clearWorkedForAutoUnfoldAttrs,
 syncWorkedForAutoUnfold,
 scheduleWorkedForClickSync,
+armConvEntryBottomPin,
+isConvEntryPinActive,
 findFormalConvView,
 findFormalConvViews,
 sampleHomeComposerRect,
@@ -1519,12 +1176,12 @@ measureNewLensOverlays,
 syncLensOverlayOrigins,
 scheduleDeferredConvEntry,
 suppressEntryMotion(ms) {
-suppressEntryMotionUntil = M.max(suppressEntryMotionUntil, nowOf() + M.max(120, Number(ms) || 900));
-liftoffBubbleUntil = 0;
+supMotAt = M.max(supMotAt, nowOf() + M.max(120, Number(ms) || 900));
+liftBubAt = 0;
 const d = docOf();
 if (d) for (const n of qsa(d, '.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill')) n.remove();
 },
-isEntryMotionSuppressed: () => suppressEntryMotionUntil > nowOf(),
+isEntryMotionSuppressed: () => supMotAt > nowOf(),
 isStreamMutating: () => streamMutating,
 hasStreamObserver: () => !!(streamObs && streamRoots.size > 0),
 stepHighlightFade,

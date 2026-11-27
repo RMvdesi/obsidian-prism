@@ -642,7 +642,7 @@ setAttrIfChanged, runGuardedMut, cloneCachedSvgElement: (k, s) => modelGlyphCtl.
 buildBrandMarkSvg: (b, sz, tr, m) => modelGlyphCtl.buildBrandMarkSvg(b, sz, tr, m),
 applySingleHostIcon, rippleCtl, convAuraCtl, notifyMascot,
 })
-: mkStub('syncDualStreamEngine|triggerHeroDFiberPulse|syncThinkingSparks|enqueueDeferredIcons|findFormalConvView|sampleHomeComposerRect|isEntryMotionSuppressed|cancelDeferredHydration|scheduleDeferredConvEntry|syncHeroRouteChoreography|syncSidebarSelectionGlide|syncHeroCCaustics|syncLensOverlayOrigins|syncWorkedForAutoUnfold|triggerHomeLiftoffRippleBurst|triggerHeroESonar|scheduleWorkedForClickSync|lockSidebarRowRunningOnPointerDown|stampSidebarRowRunningImmediate|clearTransientTimers|disconnectStreamObserver|flushAllStreamArtifacts|clearWorkedForAutoUnfoldAttrs|suppressEntryMotion', {
+: mkStub('syncDualStreamEngine|triggerHeroDFiberPulse|syncThinkingSparks|enqueueDeferredIcons|findFormalConvView|sampleHomeComposerRect|isEntryMotionSuppressed|cancelDeferredHydration|scheduleDeferredConvEntry|syncHeroRouteChoreography|syncSidebarSelectionGlide|syncHeroCCaustics|syncLensOverlayOrigins|syncWorkedForAutoUnfold|triggerHomeLiftoffRippleBurst|triggerHeroESonar|scheduleWorkedForClickSync|armConvEntryBottomPin|isConvEntryPinActive|lockSidebarRowRunningOnPointerDown|stampSidebarRowRunningImmediate|clearTransientTimers|disconnectStreamObserver|flushAllStreamArtifacts|clearWorkedForAutoUnfoldAttrs|suppressEntryMotion', {
 heroState: { wasInHome: false, wasInFormalConv: false, lastModelSig: null, pendingModelShiftNotify: false, lastTriggerOrigin: null, lastGroupPress: null },
 scheduleTransient: (fn, ms) => ST(fn, ms), measureSidebarSelectionSnapshot: () => ({ empty: true }),
 measureVisibleChangedHeaders: () => [], measureNewLensOverlays: () => [], isStreamMutating: () => false, hasStreamObserver: () => false,
@@ -1408,7 +1408,7 @@ EXT_ZH_UI_SEL;
   const syncBleedTables = () => {
     const hosts = D.getElementsByClassName ? D.getElementsByClassName('md-table-host') : qa(D, '.md-table-host');
     if (!hosts.length && !bleedEls.size) return;
-    const next = new Set();
+    const next = new Set(), vps = new Map(), vm = (v) => Math.max(0, (v.scrollHeight || 0) - (v.clientHeight || 0));
     for (const h of hosts) {
       if (!h || h[K_IC] === false) continue;
       const vp = cl(h, '[data-testid="autoscroll-viewport"]');
@@ -1416,13 +1416,17 @@ EXT_ZH_UI_SEL;
         if (tagU(c) === 'DIV') {
           const p = c[K_PE]; let pv = c.previousElementSibling;
           if (pv === undefined) { pv = null; const ch = p?.children; if (ch) for (let i = 1; i < ch.length; i++) if (ch[i] === c) { pv = ch[i - 1]; break; } }
-          if ((vp && clHas(c, 'flex') && clHas(c, 'items-start') && (p === vp || clHas(p, 'flex-col'))) || BLEED_TRIGS.has(tidOf(pv)) || (clHas(c, 'flex') && clHas(c, 'flex-row') && clHas(p, 'flex-col'))) next.add(c);
+          if ((vp && clHas(c, 'flex') && clHas(c, 'items-start') && (p === vp || clHas(p, 'flex-col'))) || BLEED_TRIGS.has(tidOf(pv)) || (clHas(c, 'flex') && clHas(c, 'flex-row') && clHas(p, 'flex-col'))) {
+            next.add(c);
+            if (vp && !bleedEls.has(c) && !vps.has(vp)) { const pm = vm(vp), pt = vp.scrollTop || 0; vps.set(vp, [pm, pt, !!(streamChoreoCtl.isConvEntryPinActive?.(vp)) || pm - pt <= 140]); }
+          }
         }
         if (c === vp) break;
       }
     }
     for (const e of bleedEls) if (!next.has(e)) { ra(e, A_BL); bleedEls.delete(e); }
     for (const e of next) { setAttrIfChanged(e, A_BL, '1'); bleedEls.add(e); }
+    for (const [vp, [pm, pt, pin]] of vps) { const nm = vm(vp), d = nm - pm; if (pin) { if ((vp.scrollTop || 0) < nm - 1) vp.scrollTop = nm; } else if (d > 0) vp.scrollTop = pt + d; }
   };
 
   const AH_ID = 'ag-prism-host-alert-css', TS_A = 'data-ag-turbo-dedup', TI_A = 'data-ag-turbo-img';
@@ -1722,7 +1726,10 @@ if (hb) dirtyAddedRoots.add(el);
     const frc = !!(flags.f || flags.r || flags.c);
     runGuardedMut(() => {
       applyRootAttrs(effectiveFull);
-      if (actualRouteJump) for (const a of ['data-ag-cs-stage-glide', 'data-ag-cs-sonar', 'data-ag-cs-caustic']) raAll(`[${a}]`, a);
+      if (actualRouteJump) {
+        for (const a of ['data-ag-cs-stage-glide', 'data-ag-cs-sonar', 'data-ag-cs-caustic']) raAll(`[${a}]`, a);
+        if (fc && !measured.inHome) sc.armConvEntryBottomPin?.(fc);
+      }
       if (effectiveFull || flags.m) stampBgCmdWrap(effectiveFull ? D : bgCmdNodes);
       if (frc || flags.l) syncBleedTables();
       if (effectiveFull || turboRoots) syncHostTurbo(effectiveFull ? D : turboRoots);
