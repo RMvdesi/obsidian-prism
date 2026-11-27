@@ -34,8 +34,14 @@ function readUtf8Strict(relPath) {
   return text;
 }
 
-test('av-hygiene 1: main.mjs & track-3 daemon modules have zero PowerShell/Win32_Process/EncodedCommand, zero inline credential wordlists, and zero inline token prefixes', () => {
+test('av-hygiene 1: main.mjs, src/daemon/*.mjs & track-3 daemon modules have zero PowerShell/Win32_Process/EncodedCommand, zero inline credential wordlists, and zero inline token prefixes', () => {
   const mainSrc = readUtf8Strict('sidecars/daemon/main.mjs');
+  const srcDaemonFiles = fs
+    .readdirSync(path.join(ROOT_DIR, 'src', 'daemon'))
+    .filter((f) => f.endsWith('.mjs') || f.endsWith('.cjs'))
+    .sort()
+    .map((f) => [`src/daemon/${f}`, readUtf8Strict(`src/daemon/${f}`)]);
+  const allDaemonEntryFiles = [['sidecars/daemon/main.mjs', mainSrc], ...srcDaemonFiles];
   const archiveSrc = readUtf8Strict('sidecars/daemon/conversation-archive.mjs');
   const redactSrc = readUtf8Strict('sidecars/daemon/redact.mjs');
   const rulesSrc = readUtf8Strict('sidecars/daemon/sensitive-path-rules.json');
@@ -50,8 +56,10 @@ test('av-hygiene 1: main.mjs & track-3 daemon modules have zero PowerShell/Win32
     ['-WindowStyle Hidden', new RegExp('-WindowStyle\\s+Hidden', 'i')],
     ['WScript.' + 'Shell', new RegExp('WScript\\.' + 'Shell', 'i')],
   ];
-  for (const [label, re] of mainForbiddenPatterns) {
-    assert.equal(re.test(mainSrc), false, `sidecars/daemon/main.mjs must contain 0 ${label}`);
+  for (const [rel, content] of allDaemonEntryFiles) {
+    for (const [label, re] of mainForbiddenPatterns) {
+      assert.equal(re.test(content), false, `${rel} must contain 0 ${label}`);
+    }
   }
 
   const archiveForbiddenPatterns = [
@@ -73,22 +81,23 @@ test('av-hygiene 1: main.mjs & track-3 daemon modules have zero PowerShell/Win32
     'config/' + 'sam',
     '.' + 'gnupg',
   ];
-  const lowerMain = mainSrc.toLowerCase();
-  for (const lit of inlineCredentialLiterals) {
-    assert.equal(
-      lowerMain.includes(lit),
-      false,
-      `sidecars/daemon/main.mjs must not inline credential literal "${lit}"`
-    );
-  }
-
   const inlineTokenPrefixes = ['sk' + '-', 'AI' + 'za', 'ghp' + '_', 'github_' + 'pat_'];
-  for (const prefix of inlineTokenPrefixes) {
-    assert.equal(
-      mainSrc.includes(prefix),
-      false,
-      `sidecars/daemon/main.mjs must not inline token prefix "${prefix}"`
-    );
+  for (const [rel, content] of allDaemonEntryFiles) {
+    const lowerContent = content.toLowerCase();
+    for (const lit of inlineCredentialLiterals) {
+      assert.equal(
+        lowerContent.includes(lit),
+        false,
+        `${rel} must not inline credential literal "${lit}"`
+      );
+    }
+    for (const prefix of inlineTokenPrefixes) {
+      assert.equal(
+        content.includes(prefix),
+        false,
+        `${rel} must not inline token prefix "${prefix}"`
+      );
+    }
   }
 
   const track3OtherFiles = [
@@ -307,7 +316,7 @@ test('av-hygiene 5: full-repo runtime scripts have zero -EncodedCommand, -Window
     .readdirSync(daemonDir)
     .filter((f) => f.endsWith('.mjs'))
     .map((f) => `sidecars/daemon/${f}`);
-  const targets = ['cdp.js', 'tools/patch-asar.cjs', 'tools/install-plugin.cjs', ...daemonFiles];
+  const targets = ['cdp.js', 'src/platform/process-probe.cjs', 'tools/install-plugin.cjs', ...daemonFiles];
   const forbidden = [
     ['-Encoded' + 'Command', new RegExp('-Encoded' + 'Command\\b', 'i')],
     ['-WindowStyle Hidden', new RegExp('-WindowStyle\\s+Hidden', 'i')],
@@ -748,6 +757,7 @@ test(
           '/r:System.Windows.Forms.dll',
           path.join(ROOT_DIR, 'installer', 'common', 'MiniJson.cs'),
           path.join(ROOT_DIR, 'installer', 'common', 'CdpClient.cs'),
+          path.join(ROOT_DIR, 'installer', 'common', 'InstallManifest.cs'),
           path.join(ROOT_DIR, 'installer', 'setup', 'Program.cs'),
           probeCs,
         ],

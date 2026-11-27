@@ -464,6 +464,7 @@ test('v107 A2-7: default buildInjectExpression never pollutes repo, and PrismDae
     fs.mkdirSync(fakeWorktree, { recursive: true });
     fs.writeFileSync(path.join(fakeWorktree, '.git'), 'gitdir: /tmp/fake\n', 'utf8');
     fs.copyFileSync(CDP_PATH, path.join(fakeWorktree, 'cdp.js'));
+    fs.cpSync(path.join(ROOT, 'src'), path.join(fakeWorktree, 'src'), { recursive: true });
     const wtDaemon = new PrismDaemon({ rootDir: fakeWorktree, silent: true, enableAutoUpdateTimer: false });
     assert.equal(wtDaemon.resolveBundleCachePath(), null, 'PrismDaemon must recognize git worktree .git file');
 
@@ -549,6 +550,10 @@ test('v107 A2-8: single-pass PrismDaemon.rebuildBundle cold hit parses .bundle-c
     assert.ok(dCold.periodicPickerExpr.length > 0);
     assert.ok(dCold.mascotExpr.length > 0);
     assert.ok(dCold.homeStudioExpr.length > 0);
+    assert.ok(dCold.telemetryExpr.length > 0);
+    assert.ok(dCold.effortSliderExpr.length > 0);
+    assert.ok(dCold.workbenchEnhancerExpr.length > 0);
+    assert.ok(dCold.contextMenuExpr.length > 0);
 
     // 2) Simulate cold daemon restart: all 9 channels hit disk cache with ONLY 1 readFileSync + 1 JSON.parse
     delete require.cache[require.resolve(snap.cdpPath)];
@@ -592,17 +597,25 @@ test('v107 A2-8: single-pass PrismDaemon.rebuildBundle cold hit parses .bundle-c
     assert.equal(dHit.periodicPickerExpr, dCold.periodicPickerExpr);
     assert.equal(dHit.mascotExpr, dCold.mascotExpr);
     assert.equal(dHit.homeStudioExpr, dCold.homeStudioExpr);
-    assert.equal(cacheReads, 1, 'rebuildBundle() cold hit across 10 channels must read .bundle-cache.json only once');
-    assert.equal(cacheParses, 1, 'rebuildBundle() cold hit across 10 channels must JSON.parse .bundle-cache.json only once');
+    assert.equal(dHit.telemetryExpr, dCold.telemetryExpr);
+    assert.equal(dHit.effortSliderExpr, dCold.effortSliderExpr);
+    assert.equal(dHit.workbenchEnhancerExpr, dCold.workbenchEnhancerExpr);
+    assert.equal(dHit.contextMenuExpr, dCold.contextMenuExpr);
+    assert.equal(cacheReads, 1, 'rebuildBundle() cold hit across 14 channels must read .bundle-cache.json only once');
+    assert.equal(cacheParses, 1, 'rebuildBundle() cold hit across 14 channels must JSON.parse .bundle-cache.json only once');
 
     const hitStats = dHit.cdp.getBundleCacheStats();
     assert.equal(hitStats.diskHits, 1);
-    assert.equal(hitStats.channelDiskHits, 10);
+    assert.equal(hitStats.channelDiskHits, 14);
     assert.equal(hitStats.channelHitsByName.wallpaper, 1);
     assert.equal(hitStats.channelHitsByName.periodicPicker, 1);
     assert.equal(hitStats.channelHitsByName.mascot, 1);
     assert.equal(hitStats.channelHitsByName.suggester, 1);
     assert.equal(hitStats.channelHitsByName.homeStudio, 1);
+    assert.equal(hitStats.channelHitsByName.telemetry, 1);
+    assert.equal(hitStats.channelHitsByName.effortSlider, 1);
+    assert.equal(hitStats.channelHitsByName.workbenchEnhancer, 1);
+    assert.equal(hitStats.channelHitsByName.contextMenu, 1);
     assert.equal(hitStats.compileUnifiedRuns, 0);
     assert.equal(hitStats.channelCompileRuns, 0);
 

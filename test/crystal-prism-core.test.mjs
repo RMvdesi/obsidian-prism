@@ -330,12 +330,12 @@ test('crystal-prism-core & model-glyph-crystal honor accentTone (mono/cobalt/iri
     ctl.syncModelGlyphOnButton(btn);
     const glyph = btn.querySelector('.ag-cs-model-glyph');
     assert.equal(glyph.getAttribute('data-mono'), '0');
-    assert.ok(glyph.innerHTML.includes('#669DF6'), 'Default Orchestrator spark uses accent fill');
+    assert.equal(glyph.children[0]?.children?.[0]?.getAttribute?.('fill'), '#669DF6', 'Default Orchestrator spark uses accent fill');
 
     htmlAttrs.set('data-ag-cs-accent', 'mono');
     ctl.syncModelGlyphOnButton(btn);
     assert.equal(glyph.getAttribute('data-mono'), '1');
-    assert.ok(glyph.innerHTML.includes('currentColor') && !glyph.innerHTML.includes('#669DF6'), 'mono accent switches Orchestrator spark to monochrome currentColor');
+    assert.equal(glyph.children[0]?.children?.[0]?.getAttribute?.('fill'), 'currentColor', 'mono accent switches Orchestrator spark to monochrome currentColor');
   } finally {
     globalThis.document = prevDoc;
   }

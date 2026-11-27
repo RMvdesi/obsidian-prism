@@ -78,6 +78,7 @@
     es: { accept: 'Usar sugerencia de prompt' },
     fr: { accept: 'Utiliser la suggestion de prompt' },
     de: { accept: 'Vorgeschlagenen Prompt verwenden' },
+    tr: { accept: 'Önerilen istemi kullan' },
   };
 
   // 运行时高频幽灵建议样式：严格纯 ASCII、0 :has()、行高对齐主输入框 22px，仅在 enabled === true 时注入
@@ -113,6 +114,7 @@
     if (/^es(?:\b|-)/.test(s) || s === 'spanish') return 'es';
     if (/^fr(?:\b|-)/.test(s) || s === 'french') return 'fr';
     if (/^de(?:\b|-)/.test(s) || s === 'german') return 'de';
+    if (/^tr(?:\b|-)/.test(s) || s === 'turkish' || s === 'türkçe' || s === 'turkce') return 'tr';
     if (/^en(?:\b|-)/.test(s) || s === 'english') return 'en';
     return '';
   }
@@ -1158,129 +1160,101 @@
       }
     };
 
-    // 按需开启运行时监控：仅在 enabled === true 时挂载样式、事件监听与 MutationObserver
-    const activateRuntime = () => {
-      if (destroyed || runtimeActive) return;
-      runtimeActive = true;
-      ensureStyle();
-
-      // 记录当前已打开会话的初始静态基线，避免刚开启时对历史回复误触发
-      const initSnap = getActiveMainCascade(doc);
-      currentCascadeId = initSnap.cascadeId;
-      if (currentCascadeId) {
-        const initRunning = isSnapRunning(initSnap);
-        runningByCascade.set(currentCascadeId, initRunning);
-        if (!initRunning && initSnap.view) {
-          const initSig = computeTurnSig(extractTurnsFromView(initSnap.view));
-          if (initSig) {
-            touchSessionEntry(currentCascadeId, {
-              turnSig: '',
-              suggestion: '',
-              dismissed: false,
-              sampledSig: initSig,
-              createdAt: 0,
-            });
-          }
-        }
-      }
-      scanSidebarBackgroundCompletions(currentCascadeId);
-
-      on(doc, 'keydown', onKeyDown, true);
-      on(doc, 'beforeinput', onComposerBeforeEdit, true);
-      on(doc, 'input', onComposerInput, true);
-      on(doc, 'paste', onComposerBeforeEdit, true);
-      on(doc, 'cut', onComposerBeforeEdit, true);
-      on(doc, 'compositionstart', onComposerCompositionStart, true);
-      on(doc, 'compositionend', onComposerCompositionEnd, true);
-      on(doc, 'keyup', onComposerKeyUp, true);
-
-      if (typeof win?.MutationObserver === 'function' && doc.documentElement) {
-        const isHcPortal = (n) => {
-          if (!n || n.nodeType !== 1 || n === doc.body || n === doc.documentElement) return false;
-          const f = n.firstElementChild;
-          if (n.hasAttribute?.('data-hover-card-popup') || f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup')) return true;
-          return Boolean(n.hasAttribute?.('data-base-ui-portal') && n.querySelector?.('[data-hover-card-popup]'));
-        };
-        const isSuggesterNoise = (m) => {
-          const t = m?.target;
-          const el = t && (t.nodeType === 1 ? t : t.parentElement);
-          if (!el) return true;
-          if (el.id === 'ag-prism-prompt-suggester-root' || el.hasAttribute?.('data-ag-prism-suggester-owned') || isHcPortal(el)) return true;
-          if (m.type === 'childList' && el === doc.body) {
-            const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
-            if (nodes.length > 0 && nodes.every(isHcPortal)) return true;
-          }
-          if (typeof el.closest === 'function') {
-            if (el.closest('[data-ag-prism-suggester-owned],[data-hover-card-popup],.toast-viewport')) return true;
-            if (m.type === 'attributes' && m.attributeName === 'class') {
-              const tid = el.getAttribute?.('data-testid') || '';
-              if (tid !== 'conversation-view' && tid !== 'agent-input-box' && tid !== 'conversation-row-sidebar' && !el.hasAttribute?.('data-cascade-id') && !el.classList?.contains?.('agy-home')) {
-                return true;
-              }
-            }
-            if (m.type === 'childList' && el.closest('aside,[data-testid="sidebar-split"]>div:first-child,[data-testid="conversation-list-sidebar"],[data-testid="project-header"]')) {
-              const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
-              const touchesRowOrRun = nodes.some((n) => {
-                if (!n || n.nodeType !== 1) return false;
-                const ntid = n.getAttribute?.('data-testid') || '';
-                if (ntid === 'conversation-row-sidebar' || ntid === 'status-loading-spinner' || n.hasAttribute?.('data-ag-cs-row-running')) return true;
-                return Boolean(n.querySelector?.('[data-testid="conversation-row-sidebar"],[data-testid="status-loading-spinner"],[data-ag-cs-row-running]'));
-              });
-              if (!touchesRowOrRun) return true;
-            }
-            if (m.type === 'childList' && el.closest('[data-testid="autoscroll-viewport"]')) {
-              const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
-              const touchesState = nodes.some((n) => {
-                if (!n || n.nodeType !== 1) return false;
-                const ntid = n.getAttribute?.('data-testid') || '';
-                if (ntid === 'stop-button' || ntid === 'cancel-button' || ntid === 'input-cancel-button' || ntid === 'agent-loading' || ntid === 'thinking-collapsible-trigger') return true;
-                return Boolean(n.querySelector?.('[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="input-cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"]'));
-              });
-              if (!touchesState) return true;
-            }
-          }
-          return false;
-        };
-        mutObserver = new win.MutationObserver((muts) => {
-          if (destroyed || !config.enabled) return;
-          for (let i = 0; i < muts.length; i++) {
-            const m = muts[i];
-            if (m.type === 'attributes' && m.target === doc.documentElement) {
-              syncOverlayForActiveCascade();
-              continue;
-            }
-            if ((m.type === 'childList' || m.type === 'attributes') && !isSuggesterNoise(m)) {
-              scheduleMountCheck();
-              break;
-            }
-          }
-        });
-        mutObserver.observe(doc.documentElement, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: [
-            'data-cascade-id',
-            'data-ag-cs-row-running',
-            'data-ag-cs-lang',
-            'data-ag-prism-lang',
-            'data-ag-pp-open',
-            'data-ag-cs-model-menu',
-            'hidden',
-            'class',
-            'data-op-thought-state',
-          ],
-        });
-      }
-    };
-
-    // 切回关闭态或销毁时彻底断开 Observer、解除 8 个捕获监听、清空全部运行时容器与定时器
-    const deactivateRuntime = () => {
-      runtimeActive = false;
-      clearSettleTimer();
-      clearTtlTimer();
-      clearComposerSyncTimer();
-      cancelMountRaf();
+let mutDebounceTimer = 0;
+const clearMutDebounce = () => { if (mutDebounceTimer) { clearTimeout(mutDebounceTimer); mutDebounceTimer = 0; } };
+const scheduleMutCheck = () => {
+if (destroyed || !config.enabled) return;
+clearMutDebounce();
+mutDebounceTimer = setTimeout(() => { mutDebounceTimer = 0; scheduleMountCheck(); }, 120);
+};
+const activateRuntime = () => {
+if (destroyed || runtimeActive) return;
+runtimeActive = true;
+ensureStyle();
+const initSnap = getActiveMainCascade(doc);
+currentCascadeId = initSnap.cascadeId;
+if (currentCascadeId) {
+const initRunning = isSnapRunning(initSnap);
+runningByCascade.set(currentCascadeId, initRunning);
+if (!initRunning && initSnap.view) {
+const initSig = computeTurnSig(extractTurnsFromView(initSnap.view));
+if (initSig) touchSessionEntry(currentCascadeId, { turnSig: '', suggestion: '', dismissed: false, sampledSig: initSig, createdAt: 0 });
+}
+}
+scanSidebarBackgroundCompletions(currentCascadeId);
+on(doc, 'keydown', onKeyDown, true);
+on(doc, 'beforeinput', onComposerBeforeEdit, true);
+on(doc, 'input', onComposerInput, true);
+on(doc, 'paste', onComposerBeforeEdit, true);
+on(doc, 'cut', onComposerBeforeEdit, true);
+on(doc, 'compositionstart', onComposerCompositionStart, true);
+on(doc, 'compositionend', onComposerCompositionEnd, true);
+on(doc, 'keyup', onComposerKeyUp, true);
+const domBus = (win && (win.__agDomBus || win.__agPrismDomBus)) || null;
+if ((domBus?.subscribe || typeof win?.MutationObserver === 'function') && doc.documentElement) {
+const isHcPortal = (n) => {
+if (!n || n.nodeType !== 1 || n === doc.body || n === doc.documentElement) return false;
+const f = n.firstElementChild;
+return Boolean(n.hasAttribute?.('data-hover-card-popup') || f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup') || (n.hasAttribute?.('data-base-ui-portal') && n.querySelector?.('[data-hover-card-popup]')));
+};
+const someMutNode = (m, fn) => {
+for (const l of [m.addedNodes, m.removedNodes]) if (l) for (let i = 0; i < l.length; i++) if (fn(l[i])) return true;
+return false;
+};
+const hasMutNode = (m) => Boolean((m.addedNodes && m.addedNodes.length) || (m.removedNodes && m.removedNodes.length));
+const Q_TAGS = new Set('DIV|SECTION|ARTICLE|MAIN|ASIDE|FOOTER|HEADER|NAV'.split('|'));
+const matchTidOrQ = (n, tids, sel, b) => {
+if (!n || n.nodeType !== 1) return false;
+if (tids.has(n.getAttribute?.('data-testid') || '') || (n.hasAttribute?.('data-ag-cs-row-running') && sel.includes('row-running'))) return true;
+if (!b || b.n <= 0 || !(n.firstElementChild || n.children?.length) || !Q_TAGS.has(String(n.tagName || '').toUpperCase())) return false;
+b.n--;
+return Boolean(n.querySelector?.(sel));
+};
+const SB_TIDS = new Set(['conversation-row-sidebar', 'status-loading-spinner']);
+const VP_TIDS = new Set('stop-button|cancel-button|input-cancel-button|agent-loading|thinking-collapsible-trigger'.split('|'));
+const isSuggesterNoise = (m, b) => {
+const t = m?.target, el = t && (t.nodeType === 1 ? t : t.parentElement);
+if (!el || el.id === 'ag-prism-prompt-suggester-root' || el.hasAttribute?.('data-ag-prism-suggester-owned') || isHcPortal(el)) return true;
+if (m.type === 'childList' && el === doc.body && hasMutNode(m) && !someMutNode(m, (n) => !isHcPortal(n))) return true;
+if (typeof el.closest === 'function') {
+if (el.closest('[data-ag-prism-suggester-owned],[data-hover-card-popup],.toast-viewport')) return true;
+if (m.type === 'attributes' && m.attributeName === 'class') {
+const tid = el.getAttribute?.('data-testid') || '';
+if (tid !== 'conversation-view' && tid !== 'agent-input-box' && tid !== 'conversation-row-sidebar' && !el.hasAttribute?.('data-cascade-id') && !el.classList?.contains?.('agy-home')) return true;
+}
+if (m.type === 'childList' && el.closest('aside,[data-testid="sidebar-split"]>div:first-child,[data-testid="conversation-list-sidebar"],[data-testid="project-header"]')) {
+if (!someMutNode(m, (n) => matchTidOrQ(n, SB_TIDS, '[data-testid="conversation-row-sidebar"],[data-testid="status-loading-spinner"],[data-ag-cs-row-running]', b))) return true;
+}
+if (m.type === 'childList' && el.closest('[data-testid="autoscroll-viewport"]')) {
+if (!someMutNode(m, (n) => matchTidOrQ(n, VP_TIDS, '[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="input-cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"]', b))) return true;
+}
+}
+return false;
+};
+const onMut = (muts) => {
+if (destroyed || !config.enabled) return;
+const b = { n: 8 };
+for (let i = 0; i < muts.length; i++) {
+const m = muts[i];
+if (m.type === 'attributes' && m.target === doc.documentElement) { syncOverlayForActiveCascade(); continue; }
+if ((m.type === 'childList' || m.type === 'attributes') && !isSuggesterNoise(m, b)) { scheduleMutCheck(); break; }
+}
+};
+const obsOpts = {
+childList: true, subtree: true, attributes: true,
+attributeFilter: 'data-cascade-id|data-ag-cs-row-running|data-ag-cs-lang|data-ag-prism-lang|data-ag-pp-open|data-ag-cs-model-menu|hidden|class|data-op-thought-state'.split('|'),
+};
+if (domBus?.subscribe) mutObserver = { disconnect: domBus.subscribe('suggester-dom', onMut, { doc, win, priority: 'low', observeOptions: obsOpts }) };
+else { mutObserver = new win.MutationObserver(onMut); mutObserver.observe(doc.documentElement, obsOpts); }
+}
+};
+const deactivateRuntime = () => {
+runtimeActive = false;
+clearSettleTimer();
+clearTtlTimer();
+clearComposerSyncTimer();
+clearMutDebounce();
+cancelMountRaf();
       isComposing = false;
       suppressUntilMs = 0;
       if (mutObserver) {

@@ -722,14 +722,13 @@ test('scripts/build-linux.mjs builds valid zero-dependency portable tar.gz in tm
 
     assert.ok(byName.get(`${ARCHIVE_ROOT_PREFIX}/uninstall.sh`).data.toString('utf8').includes('remove.js'));
 
-    // Verify complete native-plugin payload inside tarball
+    // Verify complete native-plugin payload inside tarball (without legacy patch-asar.cjs or pruned dead vendor files)
     for (const required of [
       'native-plugin/cdp.js',
       'native-plugin/style.css',
       'native-plugin/remove.js',
       'native-plugin/plugin.json',
       'native-plugin/tools/install-plugin.cjs',
-      'native-plugin/tools/patch-asar.cjs',
       'native-plugin/sidecars/daemon/main.mjs',
       'native-plugin/sidecars/daemon/conversation-archive.mjs',
       'native-plugin/assets/logo.svg',
@@ -737,6 +736,16 @@ test('scripts/build-linux.mjs builds valid zero-dependency portable tar.gz in tm
     ]) {
       const entry = byName.get(`${ARCHIVE_ROOT_PREFIX}/${required}`);
       assert.ok(entry && entry.size > 0, `Missing required tarball entry: ${required}`);
+    }
+    for (const excluded of [
+      'native-plugin/tools/patch-asar.cjs',
+      'native-plugin/vendor/pulse-dashboard/sidecars/panel/sdk.mjs',
+      'native-plugin/vendor/pulse-dashboard/sidecars/panel/format.mjs',
+      'native-plugin/vendor/pulse-dashboard/compat/inline-widget.cjs',
+      'native-plugin/vendor/pulse-dashboard/compat/usage-ui.cjs',
+      'native-plugin/vendor/pulse-dashboard/compat/runtime-ui.mjs',
+    ]) {
+      assert.equal(byName.has(`${ARCHIVE_ROOT_PREFIX}/${excluded}`), false, `Linux tarball must NOT bundle excluded file: ${excluded}`);
     }
 
     // On Linux CI, run real `bash -n` syntax validation on all generated shell scripts
@@ -764,8 +773,9 @@ test('style.css Antigravity 2.29.1 selectors, zero :has(), ASCII-only, Ch1 budge
   assert.equal(css.includes(':has('), false, 'style.css must never contain :has(');
   assert.equal(/[^\x00-\x7F]/.test(css), false, 'style.css must remain strictly ASCII');
   assert.ok(css.includes('.agy-sheet'), 'style.css must cover non-Home .agy-sheet');
-  assert.ok(
-    css.includes('.agy-shell :is(div,aside).bg-sidebar{background-color:var(--sidebar) !important;}'),
+  assert.match(
+    css,
+    /\.agy-shell :is\(div,aside\)\.bg-sidebar\{background-color:var\(--sidebar\)\s*!important;?\}/,
     'style.css must cover Antigravity 2.29.1 .bg-sidebar'
   );
 

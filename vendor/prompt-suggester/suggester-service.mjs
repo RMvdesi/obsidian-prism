@@ -1,7 +1,4 @@
-// Obsidian Prism — Channel 11 Context-Aware Next-Prompt Suggester Service (v1.0.8 · Beta)
-// - Beta 默认严格关闭（enabled: false）；开启后在助手回复完成时结合上下文预测下一条用户可执行提示词
-// - 与思考转译双向共享渠道凭据（名称、Base URL、API Key），但独立保存提示词建议选中的渠道与各渠道模型 ID（modelsByProfile）
-// - 未配置或无明确下一步可执行提示时保持静默零打扰
+// Obsidian Prism — Channel 11 Prompt Suggester Service (Beta)
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -79,7 +76,7 @@ const NON_CHAT_MODEL_RE = new RegExp(
 );
 const FAST_CHAT_MODEL_RE = /(?:^|[-_/:.])(?:flash|mini|nano|haiku|deepseek-chat|turbo|lite)(?:$|[-_/:.\d])/i;
 
-// 将语言码统一规范为 8 语（zh-CN/zh-TW/en/ja/ko/es/fr/de），移除 yue，未知语言兜底 en
+// 规范 9 语语言码（zh-CN/zh-TW/en/ja/ko/es/fr/de/tr）
 function normalizeSuggesterLang(raw, defaultLang = 'en') {
   const s = String(raw || '').trim().toLowerCase().replace(/_/g, '-');
   if (!s || s === 'auto') return defaultLang;
@@ -91,6 +88,7 @@ function normalizeSuggesterLang(raw, defaultLang = 'en') {
   if (/^es(?:\b|-)/.test(s) || s === 'spanish') return 'es';
   if (/^fr(?:\b|-)/.test(s) || s === 'french') return 'fr';
   if (/^de(?:\b|-)/.test(s) || s === 'german') return 'de';
+  if (/^tr(?:\b|-)/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
   if (/^en(?:\b|-)/.test(s) || s === 'english') return 'en';
   return defaultLang;
 }
@@ -386,6 +384,7 @@ function buildSamplingInstruction(lang = 'en') {
     es: 'Spanish (Español)',
     fr: 'French (Français)',
     de: 'German (Deutsch)',
+    tr: 'Turkish (Türkçe)',
   };
   const normLang = normalizeSuggesterLang(lang, 'en');
   const langLabel = langLabelMap[normLang] || langLabelMap.en;

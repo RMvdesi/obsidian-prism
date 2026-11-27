@@ -15,6 +15,7 @@ final class AttachedEntry {
     var omniScriptId: String?
     var thoughtScriptId: String?
     var inlineDiffScriptId: String?
+    var runtimeChannelScriptIds: [String: String] = [:]
     let title: String
     private let ctxLock = NSLock()
     var mainFrameId: String = ""
@@ -30,31 +31,10 @@ final class AttachedEntry {
         self.title = title
     }
 
-    func setMainFrame(_ id: String) {
-        guard !id.isEmpty else { return }
-        ctxLock.lock()
-        mainFrameId = id
-        hasFrameTree = true
-        ctxLock.unlock()
-    }
-
-    func recordContext(id: Int, meta: FrameContextMeta) {
-        ctxLock.lock()
-        contextFrames[id] = meta
-        ctxLock.unlock()
-    }
-
-    func removeContext(id: Int) {
-        ctxLock.lock()
-        contextFrames.removeValue(forKey: id)
-        ctxLock.unlock()
-    }
-
-    func clearContexts() {
-        ctxLock.lock()
-        contextFrames.removeAll()
-        ctxLock.unlock()
-    }
+    func setMainFrame(_ id: String) { guard !id.isEmpty else { return }; ctxLock.lock(); mainFrameId = id; hasFrameTree = true; ctxLock.unlock() }
+    func recordContext(id: Int, meta: FrameContextMeta) { ctxLock.lock(); contextFrames[id] = meta; ctxLock.unlock() }
+    func removeContext(id: Int) { ctxLock.lock(); contextFrames.removeValue(forKey: id); ctxLock.unlock() }
+    func clearContexts() { ctxLock.lock(); contextFrames.removeAll(); ctxLock.unlock() }
 
     func isTrustedMainFrameBinding(_ params: [String: JsonValue]) -> Bool {
         ctxLock.lock()
@@ -85,11 +65,12 @@ final class WatcherApp {
     private let isWatch: Bool
     private let noNativeDaemon: Bool
     private let noRelaunchPrompt: Bool
+    private let noAutoRelaunchCliFlag: Bool
     private let logLock = NSLock()
     private let promptedHostsLock = NSLock()
     private var promptedHostKeys: Set<String> = []
 
-    init(baseDir: String, pluginDir: String, isWatch: Bool, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false) {
+    init(baseDir: String, pluginDir: String, isWatch: Bool, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, noAutoRelaunch: Bool = false) {
         self.baseDir = baseDir
         self.pluginDir = pluginDir
         self.logFile = (baseDir as NSString).appendingPathComponent("watch.log")
@@ -98,6 +79,7 @@ final class WatcherApp {
         self.isWatch = isWatch
         self.noNativeDaemon = noNativeDaemon || (ProcessInfo.processInfo.environment["AG_PRISM_NO_NATIVE_DAEMON"] == "1")
         self.noRelaunchPrompt = noRelaunchPrompt
+        self.noAutoRelaunchCliFlag = noAutoRelaunch
     }
 
     func log(_ line: String) {
@@ -155,51 +137,29 @@ final class WatcherApp {
         do {
             let manifest = try PluginManifest.load(baseDir: baseDir)
             guard let port = CdpHelper.readPort(overridePort: overridePort) else {
-                Self.writeResult(
-                    outFile: outFile,
-                    ok: false,
-                    message: InstallerI18n.tr(
-                        "未找到调试端口文件，Antigravity 可能未运行",
-                        "Debug port file not found; Antigravity may not be running"
-                    ),
-                    pages: nil
-                )
+                Self.writeResult(outFile: outFile, ok: false, message: InstallerI18n.tr("未找到调试端口文件，Antigravity 可能未运行", "Debug port file not found; Antigravity may not be running"), pages: nil)
                 return 1
             }
             let pages = try CdpHelper.listPages(port: port)
             if pages.isEmpty {
-                Self.writeResult(
-                    outFile: outFile,
-                    ok: false,
-                    message: InstallerI18n.tr(
-                        "未找到 Antigravity 窗口页面",
-                        "No Antigravity window pages found"
-                    ),
-                    pages: nil
-                )
+                Self.writeResult(outFile: outFile, ok: false, message: InstallerI18n.tr("未找到 Antigravity 窗口页面", "No Antigravity window pages found"), pages: nil)
                 return 1
             }
             let onceCfg = CdpHelper.readConfig(baseDir: baseDir, manifest: manifest)
             let expr = try CdpHelper.buildInjectExpression(baseDir: baseDir, manifest: manifest)
             let omniExpr = CdpHelper.buildOmniClientExpression(baseDir: baseDir, manifest: manifest)
-            let thoughtExpr = CdpHelper.shouldEnableThought(onceCfg)
-                ? CdpHelper.buildThoughtExpression(baseDir: baseDir, cfg: onceCfg)
-                : ""
+            let thoughtExpr = CdpHelper.shouldEnableThought(onceCfg) ? CdpHelper.buildThoughtExpression(baseDir: baseDir, cfg: onceCfg) : ""
             let inlineDiffExpr = CdpHelper.buildInlineDiffExpression(baseDir: baseDir, cfg: onceCfg)
+            let runtimeChannels = RuntimeChannelFallback.loadEnabledExpressions(baseDir: baseDir, cfg: onceCfg)
             var injectedTitles: [String] = []
             for page in pages {
                 let session = try CdpSession.connect(wsUrl: page.webSocketDebuggerUrl, timeoutMs: 4000)
                 defer { session.close() }
                 _ = try session.evaluate(expr, awaitPromise: false)
-                if !omniExpr.isEmpty {
-                    _ = try? session.evaluate(omniExpr, awaitPromise: false)
-                }
-                if !thoughtExpr.isEmpty {
-                    _ = try? session.evaluate(thoughtExpr, awaitPromise: false)
-                }
-                if !inlineDiffExpr.isEmpty {
-                    _ = try? session.evaluate(inlineDiffExpr, awaitPromise: false)
-                }
+                if !omniExpr.isEmpty { _ = try? session.evaluate(omniExpr, awaitPromise: false) }
+                if !thoughtExpr.isEmpty { _ = try? session.evaluate(thoughtExpr, awaitPromise: false) }
+                if !inlineDiffExpr.isEmpty { _ = try? session.evaluate(inlineDiffExpr, awaitPromise: false) }
+                RuntimeChannelFallback.evaluateOnce(session, enabledExprs: runtimeChannels)
                 injectedTitles.append(CdpHelper.shortTitle(page))
             }
             Self.writeResult(outFile: outFile, ok: true, message: "injected \(injectedTitles.count) page(s)", pages: injectedTitles)
@@ -272,7 +232,7 @@ final class WatcherApp {
             "vendor/thought-translator/thought-client.js",
             "vendor/thought-translator/thought-settings-ui.js",
             "vendor/inline-diff/inline-diff-client.js",
-        ] {
+        ] + RuntimeChannelFallback.watchedRelPaths {
             let vendorFull = (baseDir as NSString).appendingPathComponent(vendorRel)
             if let attrs = try? fm.attributesOfItem(atPath: vendorFull) {
                 let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
@@ -309,19 +269,14 @@ final class WatcherApp {
         try? "".write(toFile: logFile, atomically: false, encoding: .utf8)
 
         var manifest: PluginManifest
-        var currentExpr: String
-        var currentOmniExpr: String
-        var currentThoughtExpr: String
-        var currentInlineDiffExpr: String
+        var currentExpr = ""
+        var currentOmniExpr = ""
+        var currentThoughtExpr = ""
+        var currentInlineDiffExpr = ""
+        var currentRuntimeChannels: [String: String] = [:]
+        var fallbackScriptsLoaded = false
         do {
             manifest = try PluginManifest.load(baseDir: baseDir)
-            let initCfg = CdpHelper.readConfig(baseDir: baseDir, manifest: manifest)
-            currentExpr = try CdpHelper.buildInjectExpression(baseDir: baseDir, manifest: manifest)
-            currentOmniExpr = CdpHelper.buildOmniClientExpression(baseDir: baseDir, manifest: manifest)
-            currentThoughtExpr = CdpHelper.shouldEnableThought(initCfg)
-                ? CdpHelper.buildThoughtExpression(baseDir: baseDir, cfg: initCfg)
-                : ""
-            currentInlineDiffExpr = CdpHelper.buildInlineDiffExpression(baseDir: baseDir, cfg: initCfg)
         } catch {
             log(InstallerI18n.tr(
                 "[!] 初始化加载失败: \(error.localizedDescription)",
@@ -341,7 +296,29 @@ final class WatcherApp {
         let stateLock = NSLock()
         var attached: [String: AttachedEntry] = [:]
         var attaching: Set<String> = []
-        var lastDirStamp = computeDirStamp()
+        var lastDirStamp: [String: String] = [:]
+
+        // 懒加载兜底脚本：仅在确认原生 Daemon 离线、由 Watcher 接管时才读取拼接
+        let ensureFallbackScriptsLoaded: () -> Void = {
+            stateLock.lock()
+            if fallbackScriptsLoaded { stateLock.unlock(); return }
+            stateLock.unlock()
+            guard let m = try? PluginManifest.load(baseDir: self.baseDir),
+                  let expr = try? CdpHelper.buildInjectExpression(baseDir: self.baseDir, manifest: m) else { return }
+            let cfg = CdpHelper.readConfig(baseDir: self.baseDir, manifest: m)
+            let omni = CdpHelper.buildOmniClientExpression(baseDir: self.baseDir, manifest: m)
+            let thought = CdpHelper.shouldEnableThought(cfg) ? CdpHelper.buildThoughtExpression(baseDir: self.baseDir, cfg: cfg) : ""
+            let diff = CdpHelper.buildInlineDiffExpression(baseDir: self.baseDir, cfg: cfg)
+            let rt = RuntimeChannelFallback.loadEnabledExpressions(baseDir: self.baseDir, cfg: cfg)
+            let stamp = self.computeDirStamp()
+            stateLock.lock()
+            if !fallbackScriptsLoaded {
+                manifest = m; currentExpr = expr; currentOmniExpr = omni
+                currentThoughtExpr = thought; currentInlineDiffExpr = diff
+                currentRuntimeChannels = rt; lastDirStamp = stamp; fallbackScriptsLoaded = true
+            }
+            stateLock.unlock()
+        }
 
         let exitSem = DispatchSemaphore(value: 0)
         var shouldExit = false
@@ -372,121 +349,35 @@ final class WatcherApp {
         intSource.setEventHandler(handler: requestExit)
         intSource.resume()
 
-        let applyToEntry: (AttachedEntry, String, String, String, String) throws -> JsonValue = { entry, exprToUse, omniExprToUse, thoughtExprToUse, inlineDiffExprToUse in
-            if let oldId = entry.scriptId, !oldId.isEmpty {
-                _ = try? entry.session.send(
-                    "Page.removeScriptToEvaluateOnNewDocument",
-                    params: ["identifier": .string(oldId)],
-                    timeoutMs: 5000
-                )
-            }
-            let addRes = try entry.session.send(
-                "Page.addScriptToEvaluateOnNewDocument",
-                params: ["source": .string(exprToUse)],
-                timeoutMs: 15000
-            )
-            if let newId = addRes["identifier"]?.stringValue {
-                entry.scriptId = newId
-            }
+        let replaceDocScript: (CdpSession, String?, String) -> String? = { sess, oldId, src in
+            RuntimeChannelFallback.removeNewDocScript(sess, scriptId: oldId)
+            return src.isEmpty ? nil : RuntimeChannelFallback.addNewDocScript(sess, source: src)
+        }
+        let applyToEntry: (AttachedEntry, String, String, String, String, [String: String]) throws -> JsonValue = { entry, exprToUse, omniExprToUse, thoughtExprToUse, inlineDiffExprToUse, runtimeChannelsToUse in
+            RuntimeChannelFallback.removeNewDocScript(entry.session, scriptId: entry.scriptId)
+            let addRes = try entry.session.send("Page.addScriptToEvaluateOnNewDocument", params: ["source": .string(exprToUse)], timeoutMs: 15000)
+            if let newId = addRes["identifier"]?.stringValue { entry.scriptId = newId }
             let mainVal = try entry.session.evaluate(exprToUse, awaitPromise: false)
             if mainVal.objectValue?["status"]?.stringValue == "skipped-non-host" {
-                if let revId = entry.scriptId, !revId.isEmpty {
-                    _ = try? entry.session.send(
-                        "Page.removeScriptToEvaluateOnNewDocument",
-                        params: ["identifier": .string(revId)],
-                        timeoutMs: 5000
-                    )
-                    entry.scriptId = nil
-                }
-                if let oldOmniId = entry.omniScriptId, !oldOmniId.isEmpty {
-                    _ = try? entry.session.send(
-                        "Page.removeScriptToEvaluateOnNewDocument",
-                        params: ["identifier": .string(oldOmniId)],
-                        timeoutMs: 5000
-                    )
-                    entry.omniScriptId = nil
-                }
-                if let oldThoughtId = entry.thoughtScriptId, !oldThoughtId.isEmpty {
-                    _ = try? entry.session.send(
-                        "Page.removeScriptToEvaluateOnNewDocument",
-                        params: ["identifier": .string(oldThoughtId)],
-                        timeoutMs: 5000
-                    )
-                    entry.thoughtScriptId = nil
-                }
-                if let oldInlineId = entry.inlineDiffScriptId, !oldInlineId.isEmpty {
-                    _ = try? entry.session.send(
-                        "Page.removeScriptToEvaluateOnNewDocument",
-                        params: ["identifier": .string(oldInlineId)],
-                        timeoutMs: 5000
-                    )
-                    entry.inlineDiffScriptId = nil
-                }
+                RuntimeChannelFallback.removeNewDocScript(entry.session, scriptId: entry.scriptId); entry.scriptId = nil
+                RuntimeChannelFallback.removeNewDocScript(entry.session, scriptId: entry.omniScriptId); entry.omniScriptId = nil
+                RuntimeChannelFallback.removeNewDocScript(entry.session, scriptId: entry.thoughtScriptId); entry.thoughtScriptId = nil
+                RuntimeChannelFallback.removeNewDocScript(entry.session, scriptId: entry.inlineDiffScriptId); entry.inlineDiffScriptId = nil
+                RuntimeChannelFallback.removeAllScripts(entry.session, scriptIds: &entry.runtimeChannelScriptIds)
                 return mainVal
             }
-
-            if let oldOmniId = entry.omniScriptId, !oldOmniId.isEmpty {
-                _ = try? entry.session.send(
-                    "Page.removeScriptToEvaluateOnNewDocument",
-                    params: ["identifier": .string(oldOmniId)],
-                    timeoutMs: 5000
-                )
-                entry.omniScriptId = nil
-            }
-            if !omniExprToUse.isEmpty {
-                if let omniRes = try? entry.session.send(
-                    "Page.addScriptToEvaluateOnNewDocument",
-                    params: ["source": .string(omniExprToUse)],
-                    timeoutMs: 15000
-                ), let omniId = omniRes["identifier"]?.stringValue {
-                    entry.omniScriptId = omniId
-                }
-                _ = try? entry.session.evaluate(omniExprToUse, awaitPromise: false)
-            }
-
+            entry.omniScriptId = replaceDocScript(entry.session, entry.omniScriptId, omniExprToUse)
+            if !omniExprToUse.isEmpty { _ = try? entry.session.evaluate(omniExprToUse, awaitPromise: false) }
             let hadThought = (entry.thoughtScriptId?.isEmpty == false)
-            if let oldThoughtId = entry.thoughtScriptId, !oldThoughtId.isEmpty {
-                _ = try? entry.session.send(
-                    "Page.removeScriptToEvaluateOnNewDocument",
-                    params: ["identifier": .string(oldThoughtId)],
-                    timeoutMs: 5000
-                )
-                entry.thoughtScriptId = nil
-            }
-            if !thoughtExprToUse.isEmpty {
-                if let thoughtRes = try? entry.session.send(
-                    "Page.addScriptToEvaluateOnNewDocument",
-                    params: ["source": .string(thoughtExprToUse)],
-                    timeoutMs: 15000
-                ), let thoughtId = thoughtRes["identifier"]?.stringValue {
-                    entry.thoughtScriptId = thoughtId
-                }
-                _ = try? entry.session.evaluate(thoughtExprToUse, awaitPromise: false)
-            } else if hadThought {
-                _ = try? entry.session.evaluate(CdpHelper.thoughtRemoveExpression, awaitPromise: false)
-            }
-
+            entry.thoughtScriptId = replaceDocScript(entry.session, entry.thoughtScriptId, thoughtExprToUse)
+            if !thoughtExprToUse.isEmpty { _ = try? entry.session.evaluate(thoughtExprToUse, awaitPromise: false) }
+            else if hadThought { _ = try? entry.session.evaluate(CdpHelper.thoughtRemoveExpression, awaitPromise: false) }
             let hadInlineDiff = (entry.inlineDiffScriptId?.isEmpty == false)
-            if let oldInlineId = entry.inlineDiffScriptId, !oldInlineId.isEmpty {
-                _ = try? entry.session.send(
-                    "Page.removeScriptToEvaluateOnNewDocument",
-                    params: ["identifier": .string(oldInlineId)],
-                    timeoutMs: 5000
-                )
-                entry.inlineDiffScriptId = nil
-            }
-            if !inlineDiffExprToUse.isEmpty {
-                if let inlineRes = try? entry.session.send(
-                    "Page.addScriptToEvaluateOnNewDocument",
-                    params: ["source": .string(inlineDiffExprToUse)],
-                    timeoutMs: 15000
-                ), let inlineId = inlineRes["identifier"]?.stringValue {
-                    entry.inlineDiffScriptId = inlineId
-                }
-                _ = try? entry.session.evaluate(inlineDiffExprToUse, awaitPromise: false)
-            } else if hadInlineDiff {
-                _ = try? entry.session.evaluate(CdpHelper.inlineDiffRemoveExpression, awaitPromise: false)
-            }
+            entry.inlineDiffScriptId = replaceDocScript(entry.session, entry.inlineDiffScriptId, inlineDiffExprToUse)
+            if !inlineDiffExprToUse.isEmpty { _ = try? entry.session.evaluate(inlineDiffExprToUse, awaitPromise: false) }
+            else if hadInlineDiff { _ = try? entry.session.evaluate(CdpHelper.inlineDiffRemoveExpression, awaitPromise: false) }
+            let prevRuntimeIds = RuntimeChannelFallback.syncNewDocScripts(entry.session, scriptIds: &entry.runtimeChannelScriptIds, enabledExprs: runtimeChannelsToUse)
+            RuntimeChannelFallback.evaluateSynced(entry.session, baseDir: self.baseDir, enabledExprs: runtimeChannelsToUse, previouslyMounted: prevRuntimeIds)
             return mainVal
         }
 
@@ -590,12 +481,14 @@ final class WatcherApp {
                 }
 
                 _ = try s.send("Runtime.enable", params: nil, timeoutMs: 5000)
+                ensureFallbackScriptsLoaded()
                 stateLock.lock()
                 let bindingName = manifest.settingBinding
                 let exprSnap = currentExpr
                 let omniSnap = currentOmniExpr
                 let thoughtSnap = currentThoughtExpr
                 let inlineDiffSnap = currentInlineDiffExpr
+                let runtimeChannelsSnap = currentRuntimeChannels
                 stateLock.unlock()
 
                 _ = try s.send("Runtime.addBinding", params: ["name": .string(bindingName)], timeoutMs: 5000)
@@ -608,7 +501,7 @@ final class WatcherApp {
                 attaching.remove(page.id)
                 stateLock.unlock()
 
-                let evalVal = try applyToEntry(entry, exprSnap, omniSnap, thoughtSnap, inlineDiffSnap)
+                let evalVal = try applyToEntry(entry, exprSnap, omniSnap, thoughtSnap, inlineDiffSnap, runtimeChannelsSnap)
                 let status = evalVal.objectValue?["status"]?.stringValue ?? "ok"
                 self.log(InstallerI18n.tr(
                     "[✓] 已注入 obsidian-prism: \(title) (\(status))",
@@ -658,98 +551,48 @@ final class WatcherApp {
                     ? CdpHelper.buildThoughtExpression(baseDir: self.baseDir, cfg: nextCfg)
                     : ""
                 let nextInlineDiffExpr = CdpHelper.buildInlineDiffExpression(baseDir: self.baseDir, cfg: nextCfg)
+                let nextRuntimeChannels = RuntimeChannelFallback.loadEnabledExpressions(baseDir: self.baseDir, cfg: nextCfg)
                 let fastCfgExpr: String? = ((changedName as NSString).lastPathComponent.caseInsensitiveCompare("config.json") == .orderedSame)
                     ? CdpHelper.buildConfigRefreshExpression(baseDir: self.baseDir, manifest: nextManifest)
                     : nil
                 stateLock.lock()
                 let prevThoughtExpr = currentThoughtExpr
                 let prevInlineDiffExpr = currentInlineDiffExpr
+                let prevRuntimeChannels = currentRuntimeChannels
                 manifest = nextManifest
                 currentExpr = nextExpr
                 currentOmniExpr = nextOmniExpr
                 currentThoughtExpr = nextThoughtExpr
                 currentInlineDiffExpr = nextInlineDiffExpr
+                currentRuntimeChannels = nextRuntimeChannels
+                fallbackScriptsLoaded = true
                 let entries = Array(attached.values)
                 stateLock.unlock()
 
                 var n = 0
                 for entry in entries {
                     if let fastExpr = fastCfgExpr {
-                        if let oldId = entry.scriptId, !oldId.isEmpty {
-                            _ = try? entry.session.send("Page.removeScriptToEvaluateOnNewDocument", params: ["identifier": .string(oldId)], timeoutMs: 5000)
-                            entry.scriptId = nil
-                        }
-                        if let addRes = try? entry.session.send("Page.addScriptToEvaluateOnNewDocument", params: ["source": .string(nextExpr)], timeoutMs: 15000),
-                           let newId = addRes["identifier"]?.stringValue {
-                            entry.scriptId = newId
-                        }
-                        if let oldOmniId = entry.omniScriptId, !oldOmniId.isEmpty {
-                            _ = try? entry.session.send("Page.removeScriptToEvaluateOnNewDocument", params: ["identifier": .string(oldOmniId)], timeoutMs: 5000)
-                            entry.omniScriptId = nil
-                        }
-                        if !nextOmniExpr.isEmpty,
-                           let omniAdd = try? entry.session.send("Page.addScriptToEvaluateOnNewDocument", params: ["source": .string(nextOmniExpr)], timeoutMs: 15000),
-                           let omniId = omniAdd["identifier"]?.stringValue {
-                            entry.omniScriptId = omniId
-                        }
+                        entry.scriptId = replaceDocScript(entry.session, entry.scriptId, nextExpr)
+                        entry.omniScriptId = replaceDocScript(entry.session, entry.omniScriptId, nextOmniExpr)
                         let hadThought = (entry.thoughtScriptId?.isEmpty == false) || !prevThoughtExpr.isEmpty
-                        if let oldThoughtId = entry.thoughtScriptId, !oldThoughtId.isEmpty {
-                            _ = try? entry.session.send("Page.removeScriptToEvaluateOnNewDocument", params: ["identifier": .string(oldThoughtId)], timeoutMs: 5000)
-                            entry.thoughtScriptId = nil
-                        }
-                        if !nextThoughtExpr.isEmpty,
-                           let thoughtAdd = try? entry.session.send("Page.addScriptToEvaluateOnNewDocument", params: ["source": .string(nextThoughtExpr)], timeoutMs: 15000),
-                           let thoughtId = thoughtAdd["identifier"]?.stringValue {
-                            entry.thoughtScriptId = thoughtId
-                        }
+                        entry.thoughtScriptId = replaceDocScript(entry.session, entry.thoughtScriptId, nextThoughtExpr)
                         let hadInlineDiff = (entry.inlineDiffScriptId?.isEmpty == false) || !prevInlineDiffExpr.isEmpty
-                        if let oldInlineId = entry.inlineDiffScriptId, !oldInlineId.isEmpty {
-                            _ = try? entry.session.send("Page.removeScriptToEvaluateOnNewDocument", params: ["identifier": .string(oldInlineId)], timeoutMs: 5000)
-                            entry.inlineDiffScriptId = nil
-                        }
-                        if !nextInlineDiffExpr.isEmpty,
-                           let inlineAdd = try? entry.session.send("Page.addScriptToEvaluateOnNewDocument", params: ["source": .string(nextInlineDiffExpr)], timeoutMs: 15000),
-                           let inlineId = inlineAdd["identifier"]?.stringValue {
-                            entry.inlineDiffScriptId = inlineId
-                        }
-                        if let fastRes = try? entry.session.evaluate(fastExpr, awaitPromise: false),
-                           fastRes.objectValue?["refreshed"]?.boolValue == true {
-                            if !nextOmniExpr.isEmpty {
-                                _ = try? entry.session.evaluate(nextOmniExpr, awaitPromise: false)
-                            }
-                            if !nextThoughtExpr.isEmpty {
-                                _ = try? entry.session.evaluate(nextThoughtExpr, awaitPromise: false)
-                            } else if hadThought {
-                                _ = try? entry.session.evaluate(CdpHelper.thoughtRemoveExpression, awaitPromise: false)
-                            }
-                            if !nextInlineDiffExpr.isEmpty {
-                                _ = try? entry.session.evaluate(nextInlineDiffExpr, awaitPromise: false)
-                            } else if hadInlineDiff {
-                                _ = try? entry.session.evaluate(CdpHelper.inlineDiffRemoveExpression, awaitPromise: false)
-                            }
-                            n += 1
-                            continue
-                        }
-                        if (try? entry.session.evaluate(nextExpr, awaitPromise: false)) != nil {
-                            if !nextOmniExpr.isEmpty {
-                                _ = try? entry.session.evaluate(nextOmniExpr, awaitPromise: false)
-                            }
-                            if !nextThoughtExpr.isEmpty {
-                                _ = try? entry.session.evaluate(nextThoughtExpr, awaitPromise: false)
-                            } else if hadThought {
-                                _ = try? entry.session.evaluate(CdpHelper.thoughtRemoveExpression, awaitPromise: false)
-                            }
-                            if !nextInlineDiffExpr.isEmpty {
-                                _ = try? entry.session.evaluate(nextInlineDiffExpr, awaitPromise: false)
-                            } else if hadInlineDiff {
-                                _ = try? entry.session.evaluate(CdpHelper.inlineDiffRemoveExpression, awaitPromise: false)
-                            }
+                        entry.inlineDiffScriptId = replaceDocScript(entry.session, entry.inlineDiffScriptId, nextInlineDiffExpr)
+                        var prevRuntimeIds = RuntimeChannelFallback.syncNewDocScripts(entry.session, scriptIds: &entry.runtimeChannelScriptIds, enabledExprs: nextRuntimeChannels)
+                        for k in prevRuntimeChannels.keys { prevRuntimeIds.insert(k) }
+                        let fastRefreshed = (try? entry.session.evaluate(fastExpr, awaitPromise: false))?.objectValue?["refreshed"]?.boolValue == true
+                        let mainOk = fastRefreshed || ((try? entry.session.evaluate(nextExpr, awaitPromise: false)) != nil)
+                        if mainOk {
+                            if !nextOmniExpr.isEmpty { _ = try? entry.session.evaluate(nextOmniExpr, awaitPromise: false) }
+                            if !nextThoughtExpr.isEmpty { _ = try? entry.session.evaluate(nextThoughtExpr, awaitPromise: false) }
+                            else if hadThought { _ = try? entry.session.evaluate(CdpHelper.thoughtRemoveExpression, awaitPromise: false) }
+                            if !nextInlineDiffExpr.isEmpty { _ = try? entry.session.evaluate(nextInlineDiffExpr, awaitPromise: false) }
+                            else if hadInlineDiff { _ = try? entry.session.evaluate(CdpHelper.inlineDiffRemoveExpression, awaitPromise: false) }
+                            RuntimeChannelFallback.evaluateSynced(entry.session, baseDir: self.baseDir, enabledExprs: nextRuntimeChannels, previouslyMounted: prevRuntimeIds)
                             n += 1
                         }
-                    } else {
-                        if (try? applyToEntry(entry, nextExpr, nextOmniExpr, nextThoughtExpr, nextInlineDiffExpr)) != nil {
-                            n += 1
-                        }
+                    } else if (try? applyToEntry(entry, nextExpr, nextOmniExpr, nextThoughtExpr, nextInlineDiffExpr, nextRuntimeChannels)) != nil {
+                        n += 1
                     }
                 }
                 self.log(InstallerI18n.tr(
@@ -783,6 +626,10 @@ final class WatcherApp {
         if dirFd >= 0 {
             let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: dirFd, eventMask: [.write, .rename, .extend, .delete], queue: reloadQueue)
             src.setEventHandler {
+                stateLock.lock()
+                let skipStandby = !fallbackScriptsLoaded && attached.isEmpty
+                stateLock.unlock()
+                if skipStandby { return }
                 let currentStamp = self.computeDirStamp()
                 stateLock.lock()
                 let changed = self.firstChangedFile(oldStamp: lastDirStamp, newStamp: currentStamp)
@@ -829,8 +676,42 @@ final class WatcherApp {
         var yieldingToDaemon = false
         var hadLiveHost = false
         var exitArchiveInFlight = false
+        var manualArchiveInFlight = false
+        var autoRelaunchInFlight = false
         var lastDaemonSpawnAttempt = Date.distantPast
-        while !isExiting() {
+
+        let closeAllAttached: () -> [AttachedEntry] = {
+            stateLock.lock()
+            let old = Array(attached.values)
+            attached.removeAll()
+            stateLock.unlock()
+            for oldEntry in old { oldEntry.session.close() }
+            return old
+        }
+
+        let runMainWatchLoop: () -> Void = { [self] in
+            while !isExiting() {
+            stateLock.lock()
+            var isManualInFlight = manualArchiveInFlight
+            stateLock.unlock()
+            if !isManualInFlight, let claimedPath = self.tryClaimPendingArchiveTask() {
+                stateLock.lock()
+                manualArchiveInFlight = true
+                isManualInFlight = true
+                stateLock.unlock()
+                DispatchQueue.global(qos: .utility).async {
+                    defer {
+                        if FileManager.default.fileExists(atPath: claimedPath),
+                           !CdpHelper.isSymbolicLinkOrUnsafePath(claimedPath) {
+                            try? FileManager.default.removeItem(atPath: claimedPath)
+                        }
+                        stateLock.lock()
+                        manualArchiveInFlight = false
+                        stateLock.unlock()
+                    }
+                    self.runClaimedArchiveTask(claimedPath: claimedPath, isExiting: isExiting)
+                }
+            }
             var nativeAlive = !pluginDir.isEmpty && CdpHelper.isNativeDaemonAlive(pluginDir: pluginDir)
             var rawPort: Int? = nil
             var livePort: Int? = nil
@@ -843,13 +724,18 @@ final class WatcherApp {
                         livePages = probed
                     }
                 }
-                if !noNativeDaemon && !pluginDir.isEmpty {
+                if !noNativeDaemon && !pluginDir.isEmpty && !self.shouldSuppressNativeDaemonRespawn(manualInFlight: isManualInFlight) {
                     if let activeLivePort = livePort,
                        Date().timeIntervalSince(lastDaemonSpawnAttempt) >= 6.0 {
                         lastDaemonSpawnAttempt = Date()
                         if CdpHelper.ensureNativeDaemonRunning(pluginDir: pluginDir, cdpPort: activeLivePort, log: { msg in
                             self.log("[+] \(msg)")
                         }) {
+                            // 1.5s 避让窗口等待原生 Daemon 落锁接管，防未压缩 codeHash 抢注引发二次全量重注
+                            for _ in 0..<10 where !isExiting() {
+                                if CdpHelper.isNativeDaemonAlive(pluginDir: pluginDir) { break }
+                                _ = exitSem.wait(timeout: .now() + .milliseconds(150))
+                            }
                             nativeAlive = true
                         }
                     }
@@ -862,15 +748,8 @@ final class WatcherApp {
                     hadLiveHost = true
                 }
                 syncNewerPluginConfigToBase()
-                stateLock.lock()
-                let hasAttached = !attached.isEmpty
-                let oldEntries = Array(attached.values)
-                attached.removeAll()
-                stateLock.unlock()
-                if !yieldingToDaemon || hasAttached {
-                    for oldEntry in oldEntries {
-                        oldEntry.session.close()
-                    }
+                let closedEntries = closeAllAttached()
+                if !yieldingToDaemon || !closedEntries.isEmpty {
                     lastPort = nil
                     lastLoggedStalePort = nil
                     if !yieldingToDaemon {
@@ -892,9 +771,9 @@ final class WatcherApp {
                 ))
             }
 
-            // Poll fallback for in-place edits that don't fire directory vnode write events
-            reloadQueue.sync {
-                performReload(nil)
+            // DispatchSource 已监听目录变更；仅在 dirSource 不可用且进入兜底态时才降级扫描
+            if dirSource == nil && fallbackScriptsLoaded {
+                reloadQueue.sync { performReload(nil) }
             }
 
             if let stalePort = rawPort, livePort == nil {
@@ -905,13 +784,7 @@ final class WatcherApp {
                         "[!] Detected stale debug port \(stalePort) (connection refused/timed out); treating as inactive and checking for bare host recovery"
                     ))
                 }
-                stateLock.lock()
-                let staleEntries = Array(attached.values)
-                attached.removeAll()
-                stateLock.unlock()
-                for oldEntry in staleEntries {
-                    oldEntry.session.close()
-                }
+                _ = closeAllAttached()
                 lastPort = nil
             } else {
                 lastLoggedStalePort = nil
@@ -919,7 +792,7 @@ final class WatcherApp {
 
             if livePort == nil && hadLiveHost {
                 hadLiveHost = false
-                if overridePort == nil && self.isAutoArchiveOnExitAllowed() && self.isAutoArchiveOnExitEnabled() {
+                if overridePort == nil && !isManualInFlight && !self.hasPendingArchiveTask() && self.isAutoArchiveOnExitAllowed() && self.isAutoArchiveOnExitEnabled() {
                     stateLock.lock()
                     let shouldLaunch = !exitArchiveInFlight
                     if shouldLaunch { exitArchiveInFlight = true }
@@ -937,7 +810,11 @@ final class WatcherApp {
                 }
             }
 
-            if livePort == nil && overridePort == nil {
+            stateLock.lock()
+            let relaunchGuardBusy = autoRelaunchInFlight
+            stateLock.unlock()
+
+            if livePort == nil && overridePort == nil && !relaunchGuardBusy && !isManualInFlight && !self.hasPendingArchiveTask() {
                 let env = ProcessInfo.processInfo.environment
                 let mockDec = env["AG_PRISM_MOCK_RELAUNCH_DECISION"] ?? ""
                 var allowPrompt = !self.noRelaunchPrompt &&
@@ -978,15 +855,10 @@ final class WatcherApp {
 
             if let port = livePort,
                let pages = livePages {
+                ensureFallbackScriptsLoaded()
                 hadLiveHost = true
                 if lastPort != port {
-                    stateLock.lock()
-                    let oldEntries = Array(attached.values)
-                    attached.removeAll()
-                    stateLock.unlock()
-                    for oldEntry in oldEntries {
-                        oldEntry.session.close()
-                    }
+                    _ = closeAllAttached()
                     log(InstallerI18n.tr(
                         "[+] 连接到调试端口 \(port)",
                         "[+] Connected to debug port \(port)"
@@ -1011,19 +883,31 @@ final class WatcherApp {
             }
 
             _ = exitSem.wait(timeout: .now() + .seconds(2))
+            }
         }
+
+        LaunchGuard.runWatchWithOptionalObserver(
+            baseDir: self.baseDir,
+            pluginDir: self.pluginDir,
+            overridePort: overridePort,
+            noRelaunchPrompt: self.noRelaunchPrompt,
+            noAutoRelaunch: self.noAutoRelaunchCliFlag,
+            isDefaultDir: isDefaultDir,
+            isExiting: isExiting,
+            setAutoRelaunchInFlight: { active in
+                stateLock.lock()
+                autoRelaunchInFlight = active
+                stateLock.unlock()
+            },
+            log: { [weak self] msg in self?.log(msg) },
+            runMainWatchLoop: runMainWatchLoop
+        )
 
         dirSource?.cancel()
         termSource.cancel()
         intSource.cancel()
 
-        stateLock.lock()
-        let finalEntries = Array(attached.values)
-        attached.removeAll()
-        stateLock.unlock()
-        for entry in finalEntries {
-            entry.session.close()
-        }
+        _ = closeAllAttached()
 
         releasePidFile(selfPid: selfPid)
         flock(lockFd, LOCK_UN)
@@ -1066,42 +950,35 @@ final class WatcherApp {
         return true
     }
 
-    private func isAutoArchiveOnExitEnabled() -> Bool {
-        let fm = FileManager.default
+    private func candidatePluginDirs() -> [String] {
         var dirs: [String] = []
         if !self.pluginDir.isEmpty { dirs.append(self.pluginDir) }
         if !self.baseDir.isEmpty && self.baseDir != self.pluginDir { dirs.append(self.baseDir) }
-        for dir in dirs {
+        return dirs
+    }
+
+    private func isAutoArchiveOnExitEnabled() -> Bool {
+        let fm = FileManager.default
+        for dir in candidatePluginDirs() {
             let cfgPath = (dir as NSString).appendingPathComponent("config.json")
-            guard fm.fileExists(atPath: cfgPath),
-                  !CdpHelper.isSymbolicLinkOrUnsafePath(cfgPath),
-                  let raw = try? String(contentsOfFile: cfgPath, encoding: .utf8) else {
-                continue
-            }
+            guard fm.fileExists(atPath: cfgPath), !CdpHelper.isSymbolicLinkOrUnsafePath(cfgPath),
+                  let raw = try? String(contentsOfFile: cfgPath, encoding: .utf8) else { continue }
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, let obj = try? MiniJson.parseObject(trimmed) else { continue }
             if let val = obj["autoArchiveOnExit"] {
                 if let b = val.boolValue { return b }
-                if let s = val.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-                    return s == "true" || s == "on"
-                }
+                if let s = val.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() { return s == "true" || s == "on" }
                 return false
             }
-            continue
         }
         return false
     }
 
     private func resolveConversationArchiveScriptPath() -> String? {
         let fm = FileManager.default
-        var dirs: [String] = []
-        if !self.pluginDir.isEmpty { dirs.append(self.pluginDir) }
-        if !self.baseDir.isEmpty && self.baseDir != self.pluginDir { dirs.append(self.baseDir) }
-        for dir in dirs {
+        for dir in candidatePluginDirs() {
             let scriptPath = (dir as NSString).appendingPathComponent("sidecars/daemon/conversation-archive.mjs")
-            if fm.fileExists(atPath: scriptPath) && !CdpHelper.isSymbolicLinkOrUnsafePath(scriptPath) {
-                return scriptPath
-            }
+            if fm.fileExists(atPath: scriptPath) && !CdpHelper.isSymbolicLinkOrUnsafePath(scriptPath) { return scriptPath }
         }
         return nil
     }
@@ -1158,18 +1035,110 @@ final class WatcherApp {
         return isoBasic.date(from: str)
     }
 
+    private func getConversationsArchiveDir() -> String {
+        let envHome = ProcessInfo.processInfo.environment["HOME"] ?? ""
+        let home = envHome.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.path : envHome
+        return (home as NSString).appendingPathComponent(".gemini/antigravity/conversations_archive")
+    }
+
+    private func hasPendingArchiveTask() -> Bool {
+        let fm = FileManager.default
+        let archiveDir = getConversationsArchiveDir()
+        guard fm.fileExists(atPath: archiveDir) else { return false }
+        if CdpHelper.isSymbolicLinkOrUnsafePath(archiveDir) { return true }
+        let pendingPath = (archiveDir as NSString).appendingPathComponent(".archive-task-pending.json")
+        guard fm.fileExists(atPath: pendingPath) else { return false }
+        if CdpHelper.isSymbolicLinkOrUnsafePath(pendingPath) { return true }
+        var tsDate: Date? = nil
+        if let raw = try? String(contentsOfFile: pendingPath, encoding: .utf8),
+           let obj = try? MiniJson.parseObject(raw),
+           let reqStr = obj["requestedAt"]?.stringValue {
+            tsDate = parseIsoDate(reqStr)
+        }
+        if tsDate == nil, let attrs = try? fm.attributesOfItem(atPath: pendingPath) {
+            tsDate = attrs[.modificationDate] as? Date
+        }
+        guard let ts = tsDate else { return false }
+        let ageSec = Date().timeIntervalSince(ts)
+        return ageSec >= -15.0 && ageSec < 120.0
+    }
+
+    private func shouldSuppressNativeDaemonRespawn(manualInFlight: Bool) -> Bool {
+        return manualInFlight || hasPendingArchiveTask() || hasActiveArchiveLockOrRecentRestore()
+    }
+
+    private func tryClaimPendingArchiveTask() -> String? {
+        let fm = FileManager.default
+        let archiveDir = getConversationsArchiveDir()
+        guard fm.fileExists(atPath: archiveDir), !CdpHelper.isSymbolicLinkOrUnsafePath(archiveDir) else { return nil }
+        let pendingPath = (archiveDir as NSString).appendingPathComponent(".archive-task-pending.json")
+        guard fm.fileExists(atPath: pendingPath), !CdpHelper.isSymbolicLinkOrUnsafePath(pendingPath) else { return nil }
+        if !hasPendingArchiveTask() {
+            try? fm.removeItem(atPath: pendingPath)
+            return nil
+        }
+        let claimedPath = (archiveDir as NSString).appendingPathComponent(".archive-task-claimed-\(UUID().uuidString.lowercased()).json")
+        if CdpHelper.isSymbolicLinkOrUnsafePath(claimedPath) { return nil }
+        do {
+            try fm.moveItem(atPath: pendingPath, toPath: claimedPath)
+            return claimedPath
+        } catch {
+            return nil
+        }
+    }
+
+    private func runConversationArchiveScript(arguments: [String], timeoutSec: Double, isExiting: () -> Bool) -> Int32? {
+        let runtime: (executable: String, runAsNode: Bool)?
+        if let nodeBin = CdpHelper.findFallbackNodeExecutable() {
+            runtime = (nodeBin, false)
+        } else if let electronRt = CdpHelper.findAntigravityNodeRuntime() {
+            runtime = electronRt
+        } else {
+            runtime = nil
+        }
+        guard let rt = runtime, let scriptPath = arguments.first else { return nil }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: rt.executable)
+        proc.arguments = arguments
+        proc.currentDirectoryURL = URL(fileURLWithPath: (scriptPath as NSString).deletingLastPathComponent)
+        var env = ProcessInfo.processInfo.environment
+        if rt.runAsNode { env["ELECTRON_RUN_AS_NODE"] = "1" } else { env.removeValue(forKey: "ELECTRON_RUN_AS_NODE") }
+        proc.environment = env
+        proc.standardInput = FileHandle.nullDevice
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            let deadline = Date().addingTimeInterval(timeoutSec)
+            while proc.isRunning && Date() < deadline {
+                if isExiting() { break }
+                Thread.sleep(forTimeInterval: 0.25)
+            }
+            return proc.isRunning ? nil : proc.terminationStatus
+        } catch {
+            return -1
+        }
+    }
+
+    private func runClaimedArchiveTask(claimedPath: String, isExiting: () -> Bool) {
+        guard let scriptPath = resolveConversationArchiveScriptPath() else { return }
+        log(InstallerI18n.tr(
+            "[storage-guard] Watcher 已接管离线归档/还原任务",
+            "[storage-guard] Watcher claimed offline archive/restore task"
+        ))
+        if let code = runConversationArchiveScript(arguments: [scriptPath, "--run-task=\(claimedPath)"], timeoutSec: 180.0, isExiting: isExiting) {
+            log(InstallerI18n.tr(
+                "[storage-guard] Watcher 接管离线归档/还原任务完成 (exitCode=\(code))",
+                "[storage-guard] Watcher archive/restore handoff finished (exitCode=\(code))"
+            ))
+        }
+    }
+
     private func hasActiveArchiveLockOrRecentRestore() -> Bool {
         let fm = FileManager.default
-        let envHome = ProcessInfo.processInfo.environment["HOME"] ?? ""
-        let home = envHome.isEmpty ? fm.homeDirectoryForCurrentUser.path : envHome
-        let archiveDir = (home as NSString).appendingPathComponent(".gemini/antigravity/conversations_archive")
-        guard fm.fileExists(atPath: archiveDir) else {
-            return false
-        }
-        // 归档目录若为符号链接或不安全路径，一律 fail-closed 拦截
-        if CdpHelper.isSymbolicLinkOrUnsafePath(archiveDir) {
-            return true
-        }
+        let archiveDir = getConversationsArchiveDir()
+        guard fm.fileExists(atPath: archiveDir) else { return false }
+        if CdpHelper.isSymbolicLinkOrUnsafePath(archiveDir) { return true }
         let lockPath = (archiveDir as NSString).appendingPathComponent(".archive.lock")
         if fm.fileExists(atPath: lockPath) {
             if CdpHelper.isSymbolicLinkOrUnsafePath(lockPath) { return true }
@@ -1179,8 +1148,6 @@ final class WatcherApp {
                 return true
             }
         }
-        // 协调正在静置/等待退出的脱离归档或还原任务（消除 4s vs 5.5s 抢跑竞态）；
-        // 若记录的 auto-exit-archive PID 已死则不让步，立即由 Watcher 接棒兜底
         let activePath = (archiveDir as NSString).appendingPathComponent(".archive-task-active.json")
         if fm.fileExists(atPath: activePath) {
             if CdpHelper.isSymbolicLinkOrUnsafePath(activePath) { return true }
@@ -1202,7 +1169,8 @@ final class WatcherApp {
                             return true
                         }
                         let activeAct = activeObj["action"]?.stringValue ?? ""
-                        if (activeAct == "restore-and-restart" || activeAct == "restore") && ageSec < 30.0 {
+                        let isHandoff = activeObj["handoff"]?.boolValue == true
+                        if (isHandoff || activeAct == "restore-and-restart" || activeAct == "restore") && ageSec < 30.0 {
                             return true
                         }
                     }
@@ -1218,11 +1186,8 @@ final class WatcherApp {
                let tsStr = obj["recordedAt"]?.stringValue ?? obj["updatedAt"]?.stringValue,
                let ts = parseIsoDate(tsStr),
                abs(Date().timeIntervalSince(ts)) < 90.0 {
-                if act == "restore-and-restart" || act == "restore" {
-                    return true
-                }
-                if obj["ok"]?.boolValue == true &&
-                   (act == "archive-and-restart" || act == "auto-exit-archive" || act == "archive") {
+                if act == "restore-and-restart" || act == "restore" { return true }
+                if obj["ok"]?.boolValue == true && (act == "archive-and-restart" || act == "auto-exit-archive" || act == "archive") {
                     return true
                 }
             }
@@ -1231,74 +1196,24 @@ final class WatcherApp {
     }
 
     private func runAutoArchiveOnExitFallback(overridePort: Int?, isExiting: () -> Bool) {
-        // 1) 等待 Antigravity 与 language_server 彻底退出（绝不强杀宿主）
         for _ in 0..<15 {
             if !isAntigravityOrLanguageServerRunning() { break }
             if sleepInterruptible(seconds: 1.0, isExiting: isExiting) { return }
             if !self.pluginDir.isEmpty && CdpHelper.isNativeDaemonAlive(pluginDir: self.pluginDir) { return }
-            if let pWait = CdpHelper.readPort(overridePort: overridePort),
-               (try? CdpHelper.listPages(port: pWait)) != nil {
-                return
-            }
+            if let pWait = CdpHelper.readPort(overridePort: overridePort), (try? CdpHelper.listPages(port: pWait)) != nil { return }
         }
         if isAntigravityOrLanguageServerRunning() { return }
-
-        // 2) 静置 4 秒等待 SQLite WAL/SHM 完全释放
         if sleepInterruptible(seconds: 4.0, isExiting: isExiting) { return }
-
-        // 3) 二次 fail-closed 确认：配置仍开启、无活跃 CDP 端口、原生 Daemon 未运行、宿主与 language_server 均未运行、无锁冲突/刚还原记录
         guard isAutoArchiveOnExitEnabled() else { return }
         if !self.pluginDir.isEmpty && CdpHelper.isNativeDaemonAlive(pluginDir: self.pluginDir) { return }
-        if let portRecheck = CdpHelper.readPort(overridePort: overridePort),
-           (try? CdpHelper.listPages(port: portRecheck)) != nil {
-            return
-        }
+        if let portRecheck = CdpHelper.readPort(overridePort: overridePort), (try? CdpHelper.listPages(port: portRecheck)) != nil { return }
         if isAntigravityOrLanguageServerRunning() { return }
-        if hasActiveArchiveLockOrRecentRestore() { return }
-
+        if hasPendingArchiveTask() || hasActiveArchiveLockOrRecentRestore() { return }
         guard let scriptPath = resolveConversationArchiveScriptPath() else { return }
-        let runtime: (executable: String, runAsNode: Bool)?
-        if let nodeBin = CdpHelper.findFallbackNodeExecutable() {
-            runtime = (nodeBin, false)
-        } else if let electronRt = CdpHelper.findAntigravityNodeRuntime() {
-            runtime = electronRt
-        } else {
-            runtime = nil
-        }
-        guard let rt = runtime else { return }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: rt.executable)
-        proc.arguments = [scriptPath, "--archive", "--subagent-hours=2"]
-        proc.currentDirectoryURL = URL(fileURLWithPath: (scriptPath as NSString).deletingLastPathComponent)
-        var env = ProcessInfo.processInfo.environment
-        if rt.runAsNode {
-            env["ELECTRON_RUN_AS_NODE"] = "1"
-        } else {
-            env.removeValue(forKey: "ELECTRON_RUN_AS_NODE")
-        }
-        proc.environment = env
-        proc.standardInput = FileHandle.nullDevice
-        proc.standardOutput = FileHandle.nullDevice
-        proc.standardError = FileHandle.nullDevice
-
-        do {
-            try proc.run()
-            let deadline = Date().addingTimeInterval(60.0)
-            while proc.isRunning && Date() < deadline {
-                if isExiting() { break }
-                Thread.sleep(forTimeInterval: 0.25)
-            }
-            if !proc.isRunning {
-                log(InstallerI18n.tr(
-                    "[storage-guard] Watcher 退出兜底自动归档已执行 (exitCode=\(proc.terminationStatus))",
-                    "[storage-guard] Watcher auto-archive on exit finished (exitCode=\(proc.terminationStatus))"
-                ))
-            }
-        } catch {
+        if let code = runConversationArchiveScript(arguments: [scriptPath, "--archive", "--subagent-hours=2"], timeoutSec: 60.0, isExiting: isExiting) {
             log(InstallerI18n.tr(
-                "[storage-guard] Watcher 退出兜底自动归档异常: \(error.localizedDescription)",
-                "[storage-guard] Watcher auto-archive on exit error: \(error.localizedDescription)"
+                "[storage-guard] Watcher 退出兜底自动归档已执行 (exitCode=\(code))",
+                "[storage-guard] Watcher auto-archive on exit finished (exitCode=\(code))"
             ))
         }
     }
@@ -1404,13 +1319,9 @@ final class WatcherApp {
             return true
         }
         let fm = FileManager.default
-        var dirs: [String] = []
-        if !self.pluginDir.isEmpty { dirs.append(self.pluginDir) }
-        if !self.baseDir.isEmpty && self.baseDir != self.pluginDir { dirs.append(self.baseDir) }
-
         var matched = false
         var resetLogged = false
-        for dir in dirs {
+        for dir in candidatePluginDirs() {
             let statePath = (dir as NSString).appendingPathComponent(".relaunch-prompt-state.json")
             guard fm.fileExists(atPath: statePath),
                   let raw = try? String(contentsOfFile: statePath, encoding: .utf8) else {
@@ -1457,10 +1368,7 @@ final class WatcherApp {
         ]
         let payload = MiniJson.stringify(.object(obj), pretty: true) + "\n"
         let fm = FileManager.default
-        var targetDirs: [String] = []
-        if !self.pluginDir.isEmpty { targetDirs.append(self.pluginDir) }
-        if !self.baseDir.isEmpty && self.baseDir != self.pluginDir { targetDirs.append(self.baseDir) }
-        for dir in targetDirs {
+        for dir in candidatePluginDirs() {
             let statePath = (dir as NSString).appendingPathComponent(".relaunch-prompt-state.json")
             let tmpPath = statePath + ".tmp.\(getpid())"
             do {
@@ -1491,6 +1399,7 @@ func runWatcherMain() -> Int32 {
     var outFile: String?
     var noNativeDaemon = false
     var noRelaunchPrompt = false
+    var noAutoRelaunch = false
 
     let args = CommandLine.arguments
     var i = 1
@@ -1499,8 +1408,11 @@ func runWatcherMain() -> Int32 {
         if a == "--watch" { mode = "watch" }
         else if a == "--once" { mode = "once" }
         else if a == "--remove" { mode = "remove" }
+        else if a == "--self-test-launch-guard" { mode = "self-test-launch-guard" }
         else if a == "--no-native-daemon" { noNativeDaemon = true }
         else if a == "--no-relaunch-prompt" { noRelaunchPrompt = true }
+        else if a == "--auto-relaunch" { noAutoRelaunch = false }
+        else if a == "--no-auto-relaunch" { noAutoRelaunch = true }
         else if a == "--dir" && i + 1 < args.count { i += 1; customDir = args[i] }
         else if a == "--plugin-dir" && i + 1 < args.count { i += 1; customPluginDir = args[i] }
         else if a == "--cdp-port" && i + 1 < args.count {
@@ -1541,7 +1453,11 @@ func runWatcherMain() -> Int32 {
         pluginDir = (parentDir as NSString).appendingPathComponent("\(baseName)-native-plugin")
     }
 
-    let app = WatcherApp(baseDir: baseDir, pluginDir: pluginDir, isWatch: mode == "watch", noNativeDaemon: noNativeDaemon, noRelaunchPrompt: noRelaunchPrompt)
+    if mode == "self-test-launch-guard" {
+        return LaunchGuard.runSelfTest()
+    }
+
+    let app = WatcherApp(baseDir: baseDir, pluginDir: pluginDir, isWatch: mode == "watch", noNativeDaemon: noNativeDaemon, noRelaunchPrompt: noRelaunchPrompt, noAutoRelaunch: noAutoRelaunch)
 
     if mode == "once" {
         return app.runOnce(overridePort: overridePort, outFile: outFile)

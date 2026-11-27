@@ -1,21 +1,5 @@
 #!/usr/bin/env node
-/**
- * Obsidian Prism — Safe Antigravity Conversation Storage Health & Archiver
- *
- * 解决问题：
- *   Antigravity 官方 language_server.exe 启动时会把 ~/.gemini/antigravity/conversations/
- *   下的历史会话 .db（含大量不可见的后台子代理 / Swarm 子会话）加载进内存，长期积累易导致
- *   language_server.exe 开机即占 3~5 GB 内存。
- *
- * 安全红线（零数据丢失原则）：
- *   1. 绝不删除任何 .db 文件 —— 所有归档一律采用「移动备份 + manifest.json 清单」，随时可一键无损还原；
- *   2. 运行时 fail-closed 防锁破坏 —— 移动/还原前及每个会话处理前均复检 language_server 是否运行，
- *      任何检测命令失败/异常一律按“运行中”拒绝移动；
- *   3. 三件套捆绑移动 + 严控回滚异常 —— .db / .db-wal / .db-shm 同进同出，回滚失败显式升级并记录路径；
- *   4. 全路径链拒绝符号链接 + 排他随机临时文件 —— 逐级 lstatSync 拒绝祖先/末级 symlink，所有写盘均
- *      采用不可预测随机名 + O_EXCL ('wx') 排他创建；
- *   5. 唯一不可复用批次目录 + 默认仅归档已结束隐藏子代理 —— 100% 保留全部主对话。
- */
+// Obsidian Prism — Safe Antigravity Conversation Storage Health & Archiver (move-only, fail-closed, anti-symlink)
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -23,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import runInBgRecovery from '../../src/platform/run-in-bg-recovery.cjs';
 
 const GUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const DB_FILE_RE = /^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.db(?:-(wal|shm))?$/i;
@@ -31,6 +16,7 @@ const RUNNING_STATUS_RE = /RUNNING|IN_PROGRESS|GENERATING|ACTIVE/i;
 const INDEX_FILENAME = '.last-catalog-index.json';
 const LAST_ARCHIVE_RESULT_FILENAME = '.last-archive-result.json';
 const ACTIVE_ARCHIVE_TASK_FILENAME = '.archive-task-active.json';
+const PENDING_ARCHIVE_TASK_FILENAME = '.archive-task-pending.json';
 export const WARN_TOTAL_MB = 1536;
 export const WARN_SUBAGENT_MB = 512;
 export const WARN_LS_MEMORY_MB = 4096;
@@ -64,56 +50,43 @@ export function getDefaultArchiveDir(homeDir = os.homedir()) {
   return path.join(getDefaultAntigravityDir(homeDir), 'conversations_archive');
 }
 
+function matchesDarwinSystemRootTarget(curPath, linkTarget) {
+  return (
+    (curPath === '/var' && (linkTarget === 'private/var' || linkTarget === '/private/var')) ||
+    (curPath === '/tmp' && (linkTarget === 'private/tmp' || linkTarget === '/private/tmp'))
+  );
+}
+
+function splitPathChain(targetPath) {
+  const resolved = path.resolve(targetPath);
+  const parsed = path.parse(resolved);
+  return { root: parsed.root, parts: resolved.slice(parsed.root.length).split(/[\\/]+/).filter(Boolean) };
+}
+
 function isDarwinSystemRootSymlink(curPath) {
-  if (process.platform !== 'darwin') return false;
-  if (curPath !== '/var' && curPath !== '/tmp') return false;
-  try {
-    const linkTarget = fs.readlinkSync(curPath);
-    if (curPath === '/var') return linkTarget === 'private/var' || linkTarget === '/private/var';
-    if (curPath === '/tmp') return linkTarget === 'private/tmp' || linkTarget === '/private/tmp';
-  } catch {
-    return false;
-  }
-  return false;
+  if (process.platform !== 'darwin' || (curPath !== '/var' && curPath !== '/tmp')) return false;
+  try { return matchesDarwinSystemRootTarget(curPath, fs.readlinkSync(curPath)); } catch { return false; }
 }
 
 async function isDarwinSystemRootSymlinkAsync(curPath) {
-  if (process.platform !== 'darwin') return false;
-  if (curPath !== '/var' && curPath !== '/tmp') return false;
-  try {
-    const linkTarget = await fs.promises.readlink(curPath);
-    if (curPath === '/var') return linkTarget === 'private/var' || linkTarget === '/private/var';
-    if (curPath === '/tmp') return linkTarget === 'private/tmp' || linkTarget === '/private/tmp';
-  } catch {
-    return false;
-  }
-  return false;
+  if (process.platform !== 'darwin' || (curPath !== '/var' && curPath !== '/tmp')) return false;
+  try { return matchesDarwinSystemRootTarget(curPath, await fs.promises.readlink(curPath)); } catch { return false; }
 }
 
 async function assertPathChainNoSymlinksAsync(targetPath, label = 'path') {
-  const resolved = path.resolve(targetPath);
-  const parsed = path.parse(resolved);
-  const rel = resolved.slice(parsed.root.length);
-  const parts = rel.split(/[\\/]+/).filter(Boolean);
-  let cur = parsed.root;
-  let lastStat = null;
-  for (let i = 0; i < parts.length; i++) {
-    cur = path.join(cur, parts[i]);
+  const { root, parts } = splitPathChain(targetPath);
+  let cur = root, lastStat = null;
+  for (const part of parts) {
+    cur = path.join(cur, part);
     try {
       const st = await fs.promises.lstat(cur);
       if (st.isSymbolicLink()) {
-        if (await isDarwinSystemRootSymlinkAsync(cur)) {
-          lastStat = await fs.promises.stat(cur);
-          continue;
-        }
+        if (await isDarwinSystemRootSymlinkAsync(cur)) { lastStat = await fs.promises.stat(cur); continue; }
         throw new Error(`Refusing symbolic link in ${label} chain: ${cur}`);
       }
       lastStat = st;
     } catch (err) {
-      if (err && err.code === 'ENOENT') {
-        lastStat = null;
-        break;
-      }
+      if (err && err.code === 'ENOENT') { lastStat = null; break; }
       throw err;
     }
   }
@@ -121,29 +94,19 @@ async function assertPathChainNoSymlinksAsync(targetPath, label = 'path') {
 }
 
 function assertPathChainNoSymlinks(targetPath, label = 'path') {
-  const resolved = path.resolve(targetPath);
-  const parsed = path.parse(resolved);
-  const rel = resolved.slice(parsed.root.length);
-  const parts = rel.split(/[\\/]+/).filter(Boolean);
-  let cur = parsed.root;
-  let lastStat = null;
-  for (let i = 0; i < parts.length; i++) {
-    cur = path.join(cur, parts[i]);
+  const { root, parts } = splitPathChain(targetPath);
+  let cur = root, lastStat = null;
+  for (const part of parts) {
+    cur = path.join(cur, part);
     try {
       const st = fs.lstatSync(cur);
       if (st.isSymbolicLink()) {
-        if (isDarwinSystemRootSymlink(cur)) {
-          lastStat = fs.statSync(cur);
-          continue;
-        }
+        if (isDarwinSystemRootSymlink(cur)) { lastStat = fs.statSync(cur); continue; }
         throw new Error(`Refusing symbolic link in ${label} chain: ${cur}`);
       }
       lastStat = st;
     } catch (err) {
-      if (err && err.code === 'ENOENT') {
-        lastStat = null;
-        break;
-      }
+      if (err && err.code === 'ENOENT') { lastStat = null; break; }
       throw err;
     }
   }
@@ -240,45 +203,20 @@ function atomicWriteJsonSync(filePath, data) {
   atomicWriteTextExclusiveSync(filePath, JSON.stringify(data, null, 2) + '\n', 0o600);
 }
 
-function safeMoveFileSync(src, dst, { trustedParentDirs = false } = {}) {
-  let srcStat;
-  if (trustedParentDirs) {
-    try {
-      srcStat = fs.lstatSync(src);
-    } catch (err) {
-      if (err && err.code === 'ENOENT') srcStat = null;
-      else throw err;
-    }
-    if (srcStat && srcStat.isSymbolicLink()) {
-      throw new Error(`Refusing symbolic link in source file: ${src}`);
-    }
-  } else {
-    srcStat = assertPathChainNoSymlinks(src, 'source file');
-  }
-  if (!srcStat || !srcStat.isFile()) {
-    throw new Error(`Source is not a regular file: ${src}`);
-  }
+function statCheckedFileSync(filePath, label, trustedParentDirs) {
+  if (!trustedParentDirs) return assertPathChainNoSymlinks(filePath, label);
+  let st = null;
+  try { st = fs.lstatSync(filePath); } catch (err) { if (!err || err.code !== 'ENOENT') throw err; }
+  if (st && st.isSymbolicLink()) throw new Error(`Refusing symbolic link in ${label}: ${filePath}`);
+  return st;
+}
 
-  let dstStat;
-  if (trustedParentDirs) {
-    try {
-      dstStat = fs.lstatSync(dst);
-    } catch (err) {
-      if (err && err.code === 'ENOENT') dstStat = null;
-      else throw err;
-    }
-    if (dstStat && dstStat.isSymbolicLink()) {
-      throw new Error(`Refusing symbolic link in destination file: ${dst}`);
-    }
-  } else {
-    dstStat = assertPathChainNoSymlinks(dst, 'destination file');
-  }
-  if (dstStat) {
-    throw new Error(`Destination already exists: ${dst}`);
-  }
-  if (!trustedParentDirs) {
-    ensureSafeDir(path.dirname(dst));
-  }
+function safeMoveFileSync(src, dst, { trustedParentDirs = false } = {}) {
+  const srcStat = statCheckedFileSync(src, 'source file', trustedParentDirs);
+  if (!srcStat || !srcStat.isFile()) throw new Error(`Source is not a regular file: ${src}`);
+  const dstStat = statCheckedFileSync(dst, 'destination file', trustedParentDirs);
+  if (dstStat) throw new Error(`Destination already exists: ${dst}`);
+  if (!trustedParentDirs) ensureSafeDir(path.dirname(dst));
   try {
     fs.renameSync(src, dst);
   } catch (err) {
@@ -344,14 +282,6 @@ function extractCliFlagValue(cmdLine, flagName) {
   return '';
 }
 
-/**
- * 判断命令行是否为第三方工具（如 T3 Code）派生的独立隔离存储区 `agy acp` 进程。
- * 严格 fail-closed：
- *   - 绝不豁免 language_server、Antigravity 桌面主程序或非 `acp` 子命令（如 `agy chat`）；
- *   - 前置校验 `--gemini-dir`：支持 `~` 展开，拒绝默认 `~/.gemini` 与 `~/.gemini/antigravity`；
- *   - 校验 `--app-data-dir`：完整路径（含 `~` 展开）全路径归一化对照默认数据目录，短名拒绝 `antigravity`；
- *   - 命令行缺失、为空或未显式指向独立非默认隔离目录时一律返回 false（按活跃宿主拦截）。
- */
 export function isIsolatedExternalAgyCommandLine(
   cmdLine,
   {
@@ -538,46 +468,18 @@ export function parseWindowsTasklistCsvDetailed(
     parsedCount++;
     const imageName = m[1];
     const pid = Number(m[2]);
-    // 当无全局 node 而以 Antigravity.exe (ELECTRON_RUN_AS_NODE=1) 运行离线归档脚本时，排除自身 PID，绝不排除 language_server
-    if (
-      Number.isInteger(selfPid) &&
-      selfPid > 0 &&
-      pid === selfPid &&
-      !WIN_LS_ONLY_PROCESS_RE.test(imageName)
-    ) {
-      continue;
-    }
+    if (Number.isInteger(selfPid) && selfPid > 0 && pid === selfPid && !WIN_LS_ONLY_PROCESS_RE.test(imageName)) continue;
     if (WIN_HOST_PROCESS_RE.test(imageName)) {
-      if (WIN_AGY_ONLY_PROCESS_RE.test(imageName)) {
-        agyCandidates.push({ imageName, pid });
-      } else {
-        hardBlockers.push({ imageName, pid });
-      }
+      if (WIN_AGY_ONLY_PROCESS_RE.test(imageName)) agyCandidates.push({ imageName, pid });
+      else hardBlockers.push({ imageName, pid });
     }
   }
-  // If tasklist returned non-CSV/error text with zero valid process rows -> fail-closed
-  if (parsedCount === 0) {
-    return { running: true, blockers: [{ imageName: '<invalid-tasklist-csv>', pid: 0 }], ignoredAcp: [] };
-  }
-  if (typeof onLiveAgyPids === 'function') {
-    try { onLiveAgyPids(agyCandidates.map((c) => c.pid)); } catch {}
-  }
-  if (hardBlockers.length > 0) {
-    return { running: true, blockers: hardBlockers, ignoredAcp: [] };
-  }
-  if (agyCandidates.length === 0) {
-    return { running: false, blockers: [], ignoredAcp: [] };
-  }
-  const cmdResolver =
-    typeof queryCommandLines === 'function'
-      ? queryCommandLines
-      : typeof resolveAgyCommandLines === 'function'
-        ? resolveAgyCommandLines
-        : null;
-  // Windows 默认纯原生 tasklist 只读探针：无外部注入的 queryCommandLines 时对 agy.exe 严格 fail-closed 拦截
-  if (!cmdResolver) {
-    return { running: true, blockers: agyCandidates, ignoredAcp: [] };
-  }
+  if (parsedCount === 0) return { running: true, blockers: [{ imageName: '<invalid-tasklist-csv>', pid: 0 }], ignoredAcp: [] };
+  if (typeof onLiveAgyPids === 'function') { try { onLiveAgyPids(agyCandidates.map((c) => c.pid)); } catch {} }
+  if (hardBlockers.length > 0) return { running: true, blockers: hardBlockers, ignoredAcp: [] };
+  if (agyCandidates.length === 0) return { running: false, blockers: [], ignoredAcp: [] };
+  const cmdResolver = typeof queryCommandLines === 'function' ? queryCommandLines : typeof resolveAgyCommandLines === 'function' ? resolveAgyCommandLines : null;
+  if (!cmdResolver) return { running: true, blockers: agyCandidates, ignoredAcp: [] };
   try {
     const cmdMap = cmdResolver(agyCandidates.map((c) => c.pid));
     const blockers = [];
@@ -607,7 +509,7 @@ export function parseWindowsTasklistCsv(csvText, opts = {}) {
   return parseWindowsTasklistCsvDetailed(csvText, opts).running;
 }
 
-export function parsePosixProcessList(
+function parsePosixProcessListDetailed(
   psText,
   {
     selfPid = process.pid,
@@ -618,8 +520,10 @@ export function parsePosixProcessList(
   } = {}
 ) {
   const text = String(psText || '').trim();
-  if (!text) return true; // unexpected empty output -> fail-closed
+  if (!text) return { running: true, blockers: [{ imageName: '<empty-ps>', pid: 0 }], ignoredAcp: [] };
   let parsedCount = 0;
+  const blockers = [];
+  const ignoredAcp = [];
   for (const rawLine of text.split(/\r?\n/)) {
     const m = /^\s*(\d+)\s+(.+)$/.exec(rawLine);
     if (!m) continue;
@@ -627,34 +531,34 @@ export function parsePosixProcessList(
     const pid = Number(m[1]);
     const cmd = m[2].trim();
     if (pid === selfPid) continue;
-    // Exclude current archiver script or its helper shell wrapper to avoid self-match
     if (
       POSIX_SELF_SCRIPT_RE.test(cmd) &&
       (pid === selfPpid || /^(?:["']?)(?:\S*\/)?(?:node|bash|sh|zsh|env)(?:["']?)(?:\s|$)/i.test(cmd))
     ) {
       continue;
     }
-    if (
-      POSIX_LS_RE.test(cmd) ||
-      POSIX_ANTIGRAVITY_APP_RE.test(cmd) ||
-      POSIX_ELECTRON_APP_RE.test(cmd)
-    ) {
-      return true;
+    if (POSIX_LS_RE.test(cmd)) {
+      blockers.push({ imageName: 'language_server', pid });
+      continue;
+    }
+    if (POSIX_ANTIGRAVITY_APP_RE.test(cmd) || POSIX_ELECTRON_APP_RE.test(cmd)) {
+      blockers.push({ imageName: 'Antigravity', pid });
+      continue;
     }
     if (POSIX_HOST_ARGV0_RE.test(cmd)) {
-      if (
-        isIsolatedExternalAgyCommandLine(cmd, {
-          platform,
-          defaultGeminiDir,
-          defaultAppDataDir,
-        })
-      ) {
-        continue;
+      if (isIsolatedExternalAgyCommandLine(cmd, { platform, defaultGeminiDir, defaultAppDataDir })) {
+        ignoredAcp.push({ imageName: 'agy', pid, isolatedAcp: true });
+      } else {
+        blockers.push({ imageName: 'agy', pid });
       }
-      return true;
     }
   }
-  return parsedCount === 0;
+  if (parsedCount === 0) return { running: true, blockers: [{ imageName: '<invalid-ps>', pid: 0 }], ignoredAcp: [] };
+  return { running: blockers.length > 0, blockers, ignoredAcp };
+}
+
+export function parsePosixProcessList(psText, opts = {}) {
+  return parsePosixProcessListDetailed(psText, opts).running;
 }
 
 export function inspectLanguageServerProcesses({
@@ -701,16 +605,14 @@ export function inspectLanguageServerProcesses({
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const posixPlatform = platform === 'darwin' ? 'darwin' : 'linux';
-    const running = parsePosixProcessList(out, {
+    return parsePosixProcessListDetailed(out, {
       selfPid,
       selfPpid,
       platform: posixPlatform,
       defaultGeminiDir,
       defaultAppDataDir,
     });
-    return { running, blockers: running ? [{ imageName: 'posix-host', pid: 0 }] : [], ignoredAcp: [] };
   } catch (err) {
-    // Any process query failure (non-zero exit, ENOENT, timeout, ENOBUFS) fails closed (true)
     return {
       running: true,
       blockers: [{ imageName: `<probe-error:${String(err?.code || 'ERR')}>`, pid: 0 }],
@@ -719,25 +621,14 @@ export function inspectLanguageServerProcesses({
   }
 }
 
-/**
- * Fail-closed check: returns true if language_server OR Antigravity/agy host is running,
- * or if process detection itself fails/errors/times out.
- * Note: offline CLI tool cannot enforce OS-level host startup mutex across closed-source
- * Antigravity; users must keep Antigravity closed until the archive command finishes.
- */
+// Fail-closed：检测到 language_server/宿主运行或探针异常均返回 true
 export function isLanguageServerRunning(opts = {}) {
   return inspectLanguageServerProcesses(opts).running;
 }
 
 const LOOP_RUNNING_CHECK_INTERVAL_MS = 500;
 
-/**
- * 为批量文件移动循环构造节流版进程探针：
- *   - 入口已执行过一次无节流 fail-closed 检查；
- *   - 循环内对真实系统探针按 500ms 时间窗节流（避免 100+ 会话触发数百次 tasklist/ps 进程派生风暴），
- *     一旦检测到宿主启动立即锁定为 true，并包含系统时钟回拨保护；
- *   - 对单元测试注入的无标记同步 mock 函数保持逐次调用零节流。
- */
+// 批量移动循环节流探针（500ms 窗 + 时钟回拨保护，未标记单测 mock 零节流）
 export function createLoopRunningChecker(
   isRunning,
   rawCheckRunning,
@@ -1341,6 +1232,23 @@ function buildStorageScanReport({
   };
 }
 
+function recordScannedDbFile(groups, name, id, suffix, st) {
+  let g = groups.get(id);
+  if (!g) {
+    g = { id, files: [], bytes: 0, mtimeMs: 0, dbMtimeMs: 0, walNonEmptyMtimeMs: 0, hasDb: false };
+    groups.set(id, g);
+  }
+  g.files.push({ name, bytes: st.size, suffix });
+  g.bytes += st.size;
+  if (suffix === 'db') {
+    g.hasDb = true;
+    if (st.mtimeMs > g.dbMtimeMs) g.dbMtimeMs = st.mtimeMs;
+  } else if (suffix === 'wal' && st.size > 0 && st.mtimeMs > g.walNonEmptyMtimeMs) {
+    g.walNonEmptyMtimeMs = st.mtimeMs;
+  }
+  if (suffix !== 'shm' && st.mtimeMs > g.mtimeMs) g.mtimeMs = st.mtimeMs;
+}
+
 export function scanConversationStorage({
   convDir = getDefaultConversationsDir(),
   archiveDir = getDefaultArchiveDir(),
@@ -1357,7 +1265,6 @@ export function scanConversationStorage({
   const safeArchiveDir = path.resolve(archiveDir);
   const convStat = assertPathChainNoSymlinks(safeConvDir, 'conversations directory');
   const excluded = new Set((excludeIds || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean));
-
   let catalogEntries = null;
   let catalogUpdatedAt = null;
   if (summaries && typeof summaries === 'object') {
@@ -1370,12 +1277,10 @@ export function scanConversationStorage({
       catalogUpdatedAt = loaded.updatedAt || null;
     }
   }
-
   const groups = new Map();
   let totalBytes = 0;
   let walBytes = 0;
   let fileCount = 0;
-
   if (convStat && convStat.isDirectory()) {
     for (const dirent of fs.readdirSync(safeConvDir, { withFileTypes: true })) {
       if (dirent.isSymbolicLink() || !dirent.isFile()) continue;
@@ -1383,10 +1288,9 @@ export function scanConversationStorage({
       if (!m) continue;
       const id = m[1].toLowerCase();
       const suffix = m[2] ? m[2].toLowerCase() : 'db';
-      const fullPath = path.join(safeConvDir, dirent.name);
       let st;
       try {
-        st = fs.lstatSync(fullPath);
+        st = fs.lstatSync(path.join(safeConvDir, dirent.name));
         if (st.isSymbolicLink() || !st.isFile()) continue;
       } catch {
         continue;
@@ -1394,38 +1298,12 @@ export function scanConversationStorage({
       fileCount++;
       totalBytes += st.size;
       if (suffix === 'wal' || suffix === 'shm') walBytes += st.size;
-      let g = groups.get(id);
-      if (!g) {
-        g = { id, files: [], bytes: 0, mtimeMs: 0, dbMtimeMs: 0, walNonEmptyMtimeMs: 0, hasDb: false };
-        groups.set(id, g);
-      }
-      g.files.push({ name: dirent.name, bytes: st.size, suffix });
-      g.bytes += st.size;
-      if (suffix === 'db') {
-        g.hasDb = true;
-        if (st.mtimeMs > g.dbMtimeMs) g.dbMtimeMs = st.mtimeMs;
-      } else if (suffix === 'wal' && st.size > 0) {
-        if (st.mtimeMs > g.walNonEmptyMtimeMs) g.walNonEmptyMtimeMs = st.mtimeMs;
-      }
-      if (suffix !== 'shm' && st.mtimeMs > g.mtimeMs) g.mtimeMs = st.mtimeMs;
+      recordScannedDbFile(groups, dirent.name, id, suffix, st);
     }
   }
-
   return buildStorageScanReport({
-    safeConvDir,
-    safeArchiveDir,
-    catalogEntries,
-    catalogUpdatedAt,
-    groups,
-    totalBytes,
-    walBytes,
-    fileCount,
-    subagentMaxAgeHours,
-    mainMaxAgeDays,
-    keepRecentMain,
-    excluded,
-    lsMemoryMb,
-    now,
+    safeConvDir, safeArchiveDir, catalogEntries, catalogUpdatedAt, groups, totalBytes, walBytes, fileCount,
+    subagentMaxAgeHours, mainMaxAgeDays, keepRecentMain, excluded, lsMemoryMb, now,
   });
 }
 
@@ -1446,7 +1324,6 @@ export async function scanConversationStorageAsync({
   const safeArchiveDir = path.resolve(archiveDir);
   const convStat = await assertPathChainNoSymlinksAsync(safeConvDir, 'conversations directory');
   const excluded = new Set((excludeIds || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean));
-
   let catalogEntries = null;
   let catalogUpdatedAt = null;
   if (summaries && typeof summaries === 'object') {
@@ -1459,12 +1336,10 @@ export async function scanConversationStorageAsync({
       catalogUpdatedAt = loaded.updatedAt || null;
     }
   }
-
   const groups = new Map();
   let totalBytes = 0;
   let walBytes = 0;
   let fileCount = 0;
-
   if (convStat && convStat.isDirectory()) {
     const dirents = await fs.promises.readdir(safeConvDir, { withFileTypes: true });
     const candidates = [];
@@ -1479,7 +1354,6 @@ export async function scanConversationStorageAsync({
         fullPath: path.join(safeConvDir, dirent.name),
       });
     }
-
     const stats = new Array(candidates.length).fill(null);
     const maxWorkers = Math.max(1, Math.min(Number(concurrency) || ASYNC_SCAN_LSTAT_CONCURRENCY, candidates.length));
     let cursor = 0;
@@ -1489,16 +1363,11 @@ export async function scanConversationStorageAsync({
         if (idx >= candidates.length) return;
         try {
           const st = await fs.promises.lstat(candidates[idx].fullPath);
-          if (!st.isSymbolicLink() && st.isFile()) {
-            stats[idx] = st;
-          }
+          if (!st.isSymbolicLink() && st.isFile()) stats[idx] = st;
         } catch {}
       }
     };
-    if (candidates.length > 0) {
-      await Promise.all(Array.from({ length: maxWorkers }, () => worker()));
-    }
-
+    if (candidates.length > 0) await Promise.all(Array.from({ length: maxWorkers }, () => worker()));
     for (let i = 0; i < candidates.length; i++) {
       const st = stats[i];
       if (!st) continue;
@@ -1506,38 +1375,12 @@ export async function scanConversationStorageAsync({
       fileCount++;
       totalBytes += st.size;
       if (suffix === 'wal' || suffix === 'shm') walBytes += st.size;
-      let g = groups.get(id);
-      if (!g) {
-        g = { id, files: [], bytes: 0, mtimeMs: 0, dbMtimeMs: 0, walNonEmptyMtimeMs: 0, hasDb: false };
-        groups.set(id, g);
-      }
-      g.files.push({ name, bytes: st.size, suffix });
-      g.bytes += st.size;
-      if (suffix === 'db') {
-        g.hasDb = true;
-        if (st.mtimeMs > g.dbMtimeMs) g.dbMtimeMs = st.mtimeMs;
-      } else if (suffix === 'wal' && st.size > 0) {
-        if (st.mtimeMs > g.walNonEmptyMtimeMs) g.walNonEmptyMtimeMs = st.mtimeMs;
-      }
-      if (suffix !== 'shm' && st.mtimeMs > g.mtimeMs) g.mtimeMs = st.mtimeMs;
+      recordScannedDbFile(groups, name, id, suffix, st);
     }
   }
-
   return buildStorageScanReport({
-    safeConvDir,
-    safeArchiveDir,
-    catalogEntries,
-    catalogUpdatedAt,
-    groups,
-    totalBytes,
-    walBytes,
-    fileCount,
-    subagentMaxAgeHours,
-    mainMaxAgeDays,
-    keepRecentMain,
-    excluded,
-    lsMemoryMb,
-    now,
+    safeConvDir, safeArchiveDir, catalogEntries, catalogUpdatedAt, groups, totalBytes, walBytes, fileCount,
+    subagentMaxAgeHours, mainMaxAgeDays, keepRecentMain, excluded, lsMemoryMb, now,
   });
 }
 
@@ -2013,55 +1856,36 @@ export function writeHelperScripts({
   if (process.platform === 'win32') {
     const nodeCmd = safeNodeExec === 'node' ? 'node' : escapeBatchArg(safeNodeExec);
     const scriptArg = escapeBatchArg(absScript);
-    // subagents+old-main 与指定批次还原分别写入独立文件名，绝不静默覆盖默认子代理归档或最近还原脚本
     const archiveFilename = safeMode === 'subagents+old-main' ? 'archive-old-main.cmd' : '归档旧子代理释放内存.cmd';
     const restoreFilename = safeRestoreBatch === 'latest' ? '一键还原最近归档.cmd' : `restore-${safeRestoreBatch}.cmd`;
     const archiveCmdPath = path.join(safeArchive, archiveFilename);
     const restoreCmdPath = path.join(safeArchive, restoreFilename);
+    const buildWinCmd = (banner, flags) => [
+      '@echo off', 'setlocal DisableDelayedExpansion', 'chcp 65001 >nul',
+      'echo ============================================================',
+      banner,
+      'echo ============================================================',
+      'echo  请确认已完全关闭 Antigravity（等待 language_server.exe 退出）',
+      'echo.', `${nodeCmd} ${scriptArg} ${flags}`, 'echo.', 'pause', '',
+    ].join('\r\n');
     if (writeArchiveScript) {
       const archiveBanner =
         safeMode === 'subagents+old-main'
           ? `echo  Obsidian Prism — 对话库安全归档工具（含 >${safeMainDays} 天旧主对话，保留最近 ${safeKeepMain} 条，只移动不删除）`
           : 'echo  Obsidian Prism — Antigravity 对话库安全归档工具（只移动不删除）';
-      const archiveCmd = [
-        '@echo off',
-        'setlocal DisableDelayedExpansion',
-        'chcp 65001 >nul',
-        'echo ============================================================',
-        archiveBanner,
-        'echo ============================================================',
-        'echo  请确认已完全关闭 Antigravity（等待 language_server.exe 退出）',
-        'echo.',
-        `${nodeCmd} ${scriptArg} ${archiveFlags}`,
-        'echo.',
-        'pause',
-        '',
-      ].join('\r\n');
-      atomicWriteTextExclusiveSync(archiveCmdPath, archiveCmd, 0o600);
+      atomicWriteTextExclusiveSync(archiveCmdPath, buildWinCmd(archiveBanner, archiveFlags), 0o600);
     }
     if (writeRestoreScript) {
-      const restoreCmd = [
-        '@echo off',
-        'setlocal DisableDelayedExpansion',
-        'chcp 65001 >nul',
-        'echo ============================================================',
-        `echo  Obsidian Prism — 一键无损还原对话归档 (${safeRestoreBatch})`,
-        'echo ============================================================',
-        'echo  请确认已完全关闭 Antigravity（等待 language_server.exe 退出）',
-        'echo.',
-        `${nodeCmd} ${scriptArg} ${restoreFlags}`,
-        'echo.',
-        'pause',
-        '',
-      ].join('\r\n');
-      atomicWriteTextExclusiveSync(restoreCmdPath, restoreCmd, 0o600);
+      atomicWriteTextExclusiveSync(
+        restoreCmdPath,
+        buildWinCmd(`echo  Obsidian Prism — 一键无损还原对话归档 (${safeRestoreBatch})`, restoreFlags),
+        0o600
+      );
     }
     return {
       archiveScriptPath: writeArchiveScript ? archiveCmdPath : '',
       restoreScriptPath: writeRestoreScript ? restoreCmdPath : '',
-      archiveDir: safeArchive,
-      mode: safeMode,
-      restoreBatch: safeRestoreBatch,
+      archiveDir: safeArchive, mode: safeMode, restoreBatch: safeRestoreBatch,
     };
   }
 
@@ -2090,177 +1914,18 @@ export function writeHelperScripts({
 }
 
 const STORAGE_WB_I18N = {
-  'zh-CN': {
-    summary: '存储明细与无损归档工作台',
-    archiveOldMain: '含 >14 天旧主对话',
-    restoreBtn: '生成离线还原脚本',
-    refreshBtn: '刷新',
-    restoreReadyTpl: '还原脚本就绪（{0}）：{1}（退出 Antigravity 后运行）',
-    oldMainReadyTpl: '旧主对话归档脚本就绪（可归档 {0} 项 / {1}）：{2}（退出 Antigravity 后运行）',
-    breakdown: '空间构成',
-    main: '主对话',
-    subagent: '隐藏子代理',
-    wal: 'WAL 日志',
-    unknown: '未索引',
-    lsMem: '后台服务内存',
-    archivable: '可安全归档',
-    archSub: '已结束子代理',
-    archOld: '>14 天旧主对话（保留最近 20 条）',
-    topTitle: '体积 Top 5 会话（只读）',
-    batchTitle: '历史无损归档批次',
-    none: '暂无',
-    hint: '安全原则：只移动不删除，支持按批次无损还原；离线脚本请在退出 Antigravity 后运行。',
-  },
-  'zh-TW': {
-    summary: '儲存明細與無損封存工作台',
-    archiveOldMain: '含 >14 天舊主對話',
-    restoreBtn: '產生離線還原腳本',
-    refreshBtn: '重新整理',
-    restoreReadyTpl: '還原腳本就緒（{0}）：{1}（退出 Antigravity 後執行）',
-    oldMainReadyTpl: '舊主對話封存腳本就緒（可封存 {0} 項 / {1}）：{2}（退出 Antigravity 後執行）',
-    breakdown: '空間構成',
-    main: '主對話',
-    subagent: '隱藏子代理',
-    wal: 'WAL 日誌',
-    unknown: '未索引',
-    lsMem: '背景服務記憶體',
-    archivable: '可安全封存',
-    archSub: '已結束子代理',
-    archOld: '>14 天舊主對話（保留最近 20 筆）',
-    topTitle: '體積 Top 5 會話（唯讀）',
-    batchTitle: '歷史無損封存批次',
-    none: '暫無',
-    hint: '安全原則：只移動不刪除，支援按批次無損還原；離線腳本請在退出 Antigravity 後執行。',
-  },
-  en: {
-    summary: 'Storage Details & Lossless Archive Workbench',
-    archiveOldMain: 'Include >14d Main',
-    restoreBtn: 'Offline Restore Script',
-    refreshBtn: 'Refresh',
-    restoreReadyTpl: 'Restore script ready ({0}): {1} (quit Antigravity first)',
-    oldMainReadyTpl: 'Old-main archive script ready ({0} items / {1}): {2} (quit Antigravity first)',
-    breakdown: 'Breakdown',
-    main: 'Main',
-    subagent: 'Subagents',
-    wal: 'WAL',
-    unknown: 'Unindexed',
-    lsMem: 'Background RAM',
-    archivable: 'Archivable',
-    archSub: 'Finished subagents',
-    archOld: 'Old main >14d (keeps latest 20)',
-    topTitle: 'Top 5 Largest Conversations (Read-only)',
-    batchTitle: 'Lossless Archive Batches',
-    none: 'None',
-    hint: 'Zero-loss policy: move-only with manifest.json for per-batch restore; quit Antigravity before running helper scripts.',
-  },
-  ja: {
-    summary: 'ストレージ詳細・無損失アーカイブ管理',
-    archiveOldMain: '>14日前の主会話も含む',
-    restoreBtn: 'オフライン復元スクリプト',
-    refreshBtn: '更新',
-    restoreReadyTpl: '復元スクリプト準備完了（{0}）：{1}（Antigravity 終了後に実行）',
-    oldMainReadyTpl: '旧主会話スクリプト準備完了（{0} 件 / {1}）：{2}（Antigravity 終了後に実行）',
-    breakdown: '容量内訳',
-    main: '主会話',
-    subagent: 'サブエージェント',
-    wal: 'WAL',
-    unknown: '未分類',
-    lsMem: 'バックグラウンドメモリ',
-    archivable: '安全にアーカイブ可能',
-    archSub: '完了済みサブエージェント',
-    archOld: '>14日前の主会話（最新20件保持）',
-    topTitle: '容量 Top 5 会話（参照のみ）',
-    batchTitle: '過去の無損失アーカイブバッチ',
-    none: 'なし',
-    hint: '安全方針：削除せず移動のみ（manifest.json 付でバッチ別復元可）。スクリプト実行前に Antigravity を終了してください。',
-  },
-  ko: {
-    summary: '저장소 상세 및 무손실 아카이브 작업대',
-    archiveOldMain: '14일 초과 기본 대화 포함',
-    restoreBtn: '오프라인 복원 스크립트',
-    refreshBtn: '새로고침',
-    restoreReadyTpl: '복원 스크립트 준비됨 ({0}): {1} (Antigravity 종료 후 실행)',
-    oldMainReadyTpl: '이전 기본 대화 스크립트 준비됨 ({0}건 / {1}): {2} (Antigravity 종료 후 실행)',
-    breakdown: '용량 구성',
-    main: '기본 대화',
-    subagent: '서브에이전트',
-    wal: 'WAL 로그',
-    unknown: '미색인',
-    lsMem: '백그라운드 메모리',
-    archivable: '안전 아카이브 가능',
-    archSub: '종료된 서브에이전트',
-    archOld: '14일 초과 기본 대화 (최근 20개 유지)',
-    topTitle: '용량 Top 5 대화 (읽기 전용)',
-    batchTitle: '무손실 아카이브 배치 기록',
-    none: '없음',
-    hint: '무손실 원칙: 삭제 없이 이동만 수행하며 배치별 복원을 지원합니다. 스크립트 실행 전 Antigravity를 종료하세요.',
-  },
-  es: {
-    summary: 'Detalles de almacenamiento y archivo sin pérdida',
-    archiveOldMain: 'Incluir chats >14 d',
-    restoreBtn: 'Script de restauración',
-    refreshBtn: 'Actualizar',
-    restoreReadyTpl: 'Script de restauración listo ({0}): {1} (cierra Antigravity primero)',
-    oldMainReadyTpl: 'Script de chats >14 d listo ({0} elem. / {1}): {2} (cierra Antigravity primero)',
-    breakdown: 'Desglose',
-    main: 'Principales',
-    subagent: 'Subagentes',
-    wal: 'WAL',
-    unknown: 'Sin indexar',
-    lsMem: 'RAM en segundo plano',
-    archivable: 'Archivable',
-    archSub: 'Subagentes finalizados',
-    archOld: 'Chats principales >14 d (conserva 20 recientes)',
-    topTitle: 'Top 5 conversaciones por tamaño (solo lectura)',
-    batchTitle: 'Lotes de archivo sin pérdida',
-    none: 'Ninguno',
-    hint: 'Política sin pérdida: solo mover con manifest.json y restauración por lote; cierra Antigravity antes de ejecutar scripts.',
-  },
-  fr: {
-    summary: 'Détails de stockage et archivage sans perte',
-    archiveOldMain: 'Inclure chats >14 j',
-    restoreBtn: 'Script de restauration',
-    refreshBtn: 'Actualiser',
-    restoreReadyTpl: 'Script de restauration prêt ({0}) : {1} (fermez Antigravity d’abord)',
-    oldMainReadyTpl: 'Script chats >14 j prêt ({0} élém. / {1}) : {2} (fermez Antigravity d’abord)',
-    breakdown: 'Répartition',
-    main: 'Principales',
-    subagent: 'Sous-agents',
-    wal: 'WAL',
-    unknown: 'Non indexés',
-    lsMem: 'RAM arrière-plan',
-    archivable: 'Archivable',
-    archSub: 'Sous-agents terminés',
-    archOld: 'Chats principaux >14 j (garde les 20 derniers)',
-    topTitle: 'Top 5 des conversations les plus volumineuses (lecture seule)',
-    batchTitle: 'Lots d’archivage sans perte',
-    none: 'Aucun',
-    hint: 'Politique sans perte : déplacement seul avec manifest.json et restauration par lot ; fermez Antigravity avant d’exécuter les scripts.',
-  },
-  de: {
-    summary: 'Speicherdetails & verlustfreie Archiv-Werkbank',
-    archiveOldMain: 'Hauptchats >14 T. einschließen',
-    restoreBtn: 'Offline-Wiederherstellungsskript',
-    refreshBtn: 'Aktualisieren',
-    restoreReadyTpl: 'Wiederherstellungsskript bereit ({0}): {1} (Antigravity vorher beenden)',
-    oldMainReadyTpl: 'Archivskript >14 T. bereit ({0} Einträge / {1}): {2} (Antigravity vorher beenden)',
-    breakdown: 'Aufschlüsselung',
-    main: 'Hauptchats',
-    subagent: 'Subagenten',
-    wal: 'WAL',
-    unknown: 'Nicht indiziert',
-    lsMem: 'Hintergrund-RAM',
-    archivable: 'Archivierbar',
-    archSub: 'Beendete Subagenten',
-    archOld: 'Alte Hauptchats >14 T. (behält letzte 20)',
-    topTitle: 'Top 5 größte Unterhaltungen (nur Lesen)',
-    batchTitle: 'Verlustfreie Archivstapel',
-    none: 'Keine',
-    hint: 'Verlustfrei-Richtlinie: nur Verschieben mit manifest.json und stapelweiser Wiederherstellung; Antigravity vor Skriptstart schließen.',
-  },
+  'zh-CN': { summary: '存储明细与无损归档工作台', archiveOldMain: '含 >14 天旧主对话', restoreBtn: '生成离线还原脚本', refreshBtn: '刷新', restoreReadyTpl: '还原脚本就绪（{0}）：{1}（退出 Antigravity 后运行）', oldMainReadyTpl: '旧主对话归档脚本就绪（可归档 {0} 项 / {1}）：{2}（退出 Antigravity 后运行）', breakdown: '空间构成', main: '主对话', subagent: '隐藏子代理', wal: 'WAL 日志', unknown: '未索引', lsMem: '后台服务内存', archivable: '可安全归档', archSub: '已结束子代理', archOld: '>14 天旧主对话（保留最近 20 条）', topTitle: '体积 Top 5 会话（只读）', batchTitle: '历史无损归档批次', none: '暂无', hint: '安全原则：只移动不删除，支持按批次无损还原；离线脚本请在退出 Antigravity 后运行。', },
+  'zh-TW': { summary: '儲存明細與無損封存工作台', archiveOldMain: '含 >14 天舊主對話', restoreBtn: '產生離線還原腳本', refreshBtn: '重新整理', restoreReadyTpl: '還原腳本就緒（{0}）：{1}（退出 Antigravity 後執行）', oldMainReadyTpl: '舊主對話封存腳本就緒（可封存 {0} 項 / {1}）：{2}（退出 Antigravity 後執行）', breakdown: '空間構成', main: '主對話', subagent: '隱藏子代理', wal: 'WAL 日誌', unknown: '未索引', lsMem: '背景服務記憶體', archivable: '可安全封存', archSub: '已結束子代理', archOld: '>14 天舊主對話（保留最近 20 筆）', topTitle: '體積 Top 5 會話（唯讀）', batchTitle: '歷史無損封存批次', none: '暫無', hint: '安全原則：只移動不刪除，支援按批次無損還原；離線腳本請在退出 Antigravity 後執行。', },
+  en: { summary: 'Storage Details & Lossless Archive Workbench', archiveOldMain: 'Include >14d Main', restoreBtn: 'Offline Restore Script', refreshBtn: 'Refresh', restoreReadyTpl: 'Restore script ready ({0}): {1} (quit Antigravity first)', oldMainReadyTpl: 'Old-main archive script ready ({0} items / {1}): {2} (quit Antigravity first)', breakdown: 'Breakdown', main: 'Main', subagent: 'Subagents', wal: 'WAL', unknown: 'Unindexed', lsMem: 'Background RAM', archivable: 'Archivable', archSub: 'Finished subagents', archOld: 'Old main >14d (keeps latest 20)', topTitle: 'Top 5 Largest Conversations (Read-only)', batchTitle: 'Lossless Archive Batches', none: 'None', hint: 'Zero-loss policy: move-only with manifest.json for per-batch restore; quit Antigravity before running helper scripts.', },
+  ja: { summary: 'ストレージ詳細・無損失アーカイブ管理', archiveOldMain: '>14日前の主会話も含む', restoreBtn: 'オフライン復元スクリプト', refreshBtn: '更新', restoreReadyTpl: '復元スクリプト準備完了（{0}）：{1}（Antigravity 終了後に実行）', oldMainReadyTpl: '旧主会話スクリプト準備完了（{0} 件 / {1}）：{2}（Antigravity 終了後に実行）', breakdown: '容量内訳', main: '主会話', subagent: 'サブエージェント', wal: 'WAL', unknown: '未分類', lsMem: 'バックグラウンドメモリ', archivable: '安全にアーカイブ可能', archSub: '完了済みサブエージェント', archOld: '>14日前の主会話（最新20件保持）', topTitle: '容量 Top 5 会話（参照のみ）', batchTitle: '過去の無損失アーカイブバッチ', none: 'なし', hint: '安全方針：削除せず移動のみ（manifest.json 付でバッチ別復元可）。スクリプト実行前に Antigravity を終了してください。', },
+  ko: { summary: '저장소 상세 및 무손실 아카이브 작업대', archiveOldMain: '14일 초과 기본 대화 포함', restoreBtn: '오프라인 복원 스크립트', refreshBtn: '새로고침', restoreReadyTpl: '복원 스크립트 준비됨 ({0}): {1} (Antigravity 종료 후 실행)', oldMainReadyTpl: '이전 기본 대화 스크립트 준비됨 ({0}건 / {1}): {2} (Antigravity 종료 후 실행)', breakdown: '용량 구성', main: '기본 대화', subagent: '서브에이전트', wal: 'WAL 로그', unknown: '미색인', lsMem: '백그라운드 메모리', archivable: '안전 아카이브 가능', archSub: '종료된 서브에이전트', archOld: '14일 초과 기본 대화 (최근 20개 유지)', topTitle: '용량 Top 5 대화 (읽기 전용)', batchTitle: '무손실 아카이브 배치 기록', none: '없음', hint: '무손실 원칙: 삭제 없이 이동만 수행하며 배치별 복원을 지원합니다. 스크립트 실행 전 Antigravity를 종료하세요.', },
+  es: { summary: 'Detalles de almacenamiento y archivo sin pérdida', archiveOldMain: 'Incluir chats >14 d', restoreBtn: 'Script de restauración', refreshBtn: 'Actualizar', restoreReadyTpl: 'Script de restauración listo ({0}): {1} (cierra Antigravity primero)', oldMainReadyTpl: 'Script de chats >14 d listo ({0} elem. / {1}): {2} (cierra Antigravity primero)', breakdown: 'Desglose', main: 'Principales', subagent: 'Subagentes', wal: 'WAL', unknown: 'Sin indexar', lsMem: 'RAM en segundo plano', archivable: 'Archivable', archSub: 'Subagentes finalizados', archOld: 'Chats principales >14 d (conserva 20 recientes)', topTitle: 'Top 5 conversaciones por tamaño (solo lectura)', batchTitle: 'Lotes de archivo sin pérdida', none: 'Ninguno', hint: 'Política sin pérdida: solo mover con manifest.json y restauración por lote; cierra Antigravity antes de ejecutar scripts.', },
+  fr: { summary: 'Détails de stockage et archivage sans perte', archiveOldMain: 'Inclure chats >14 j', restoreBtn: 'Script de restauration', refreshBtn: 'Actualiser', restoreReadyTpl: 'Script de restauration prêt ({0}) : {1} (fermez Antigravity d’abord)', oldMainReadyTpl: 'Script chats >14 j prêt ({0} élém. / {1}) : {2} (fermez Antigravity d’abord)', breakdown: 'Répartition', main: 'Principales', subagent: 'Sous-agents', wal: 'WAL', unknown: 'Non indexés', lsMem: 'RAM arrière-plan', archivable: 'Archivable', archSub: 'Sous-agents terminés', archOld: 'Chats principaux >14 j (garde les 20 derniers)', topTitle: 'Top 5 des conversations les plus volumineuses (lecture seule)', batchTitle: 'Lots d’archivage sans perte', none: 'Aucun', hint: 'Politique sans perte : déplacement seul avec manifest.json et restauration par lot ; fermez Antigravity avant d’exécuter les scripts.', },
+  de: { summary: 'Speicherdetails & verlustfreie Archiv-Werkbank', archiveOldMain: 'Hauptchats >14 T. einschließen', restoreBtn: 'Offline-Wiederherstellungsskript', refreshBtn: 'Aktualisieren', restoreReadyTpl: 'Wiederherstellungsskript bereit ({0}): {1} (Antigravity vorher beenden)', oldMainReadyTpl: 'Archivskript >14 T. bereit ({0} Einträge / {1}): {2} (Antigravity vorher beenden)', breakdown: 'Aufschlüsselung', main: 'Hauptchats', subagent: 'Subagenten', wal: 'WAL', unknown: 'Nicht indiziert', lsMem: 'Hintergrund-RAM', archivable: 'Archivierbar', archSub: 'Beendete Subagenten', archOld: 'Alte Hauptchats >14 T. (behält letzte 20)', topTitle: 'Top 5 größte Unterhaltungen (nur Lesen)', batchTitle: 'Verlustfreie Archivstapel', none: 'Keine', hint: 'Verlustfrei-Richtlinie: nur Verschieben mit manifest.json und stapelweiser Wiederherstellung; Antigravity vor Skriptstart schließen.', },
+  tr: { summary: 'Depolama ayrıntıları ve kayıpsız arşiv çalışma alanı', archiveOldMain: '14 günden eski ana sohbetleri dahil et', restoreBtn: 'Çevrimdışı geri yükleme betiği', refreshBtn: 'Yenile', restoreReadyTpl: 'Geri yükleme betiği hazır ({0}): {1} (önce Antigravity’yi kapatın)', oldMainReadyTpl: 'Arşiv betiği hazır ({0} öğe / {1}): {2} (önce Antigravity’yi kapatın)', breakdown: 'Dağılım', main: 'Ana sohbetler', subagent: 'Alt ajanlar', wal: 'WAL', unknown: 'Dizine eklenmemiş', lsMem: 'Arka plan belleği', archivable: 'Arşivlenebilir', archSub: 'Tamamlanan alt ajanlar', archOld: '14 günden eski ana sohbetler (son 20 sohbet korunur)', topTitle: 'En büyük 5 sohbet (salt okunur)', batchTitle: 'Kayıpsız arşiv grupları', none: 'Yok', hint: 'Kayıpsız ilke: yalnızca manifest.json ile taşıma ve toplu geri yükleme; betikleri çalıştırmadan önce Antigravity’yi kapatın.', },
 };
 
-export const WORKBENCH_SUPPORTED_LANGS = Object.freeze(['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de']);
+export const WORKBENCH_SUPPORTED_LANGS = Object.freeze(['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr']);
 
 export function normalizeWorkbenchLang(lang = 'en') {
   const s = String(lang || '').trim().toLowerCase().replace(/_/g, '-');
@@ -2272,6 +1937,7 @@ export function normalizeWorkbenchLang(lang = 'en') {
   if (s === 'es' || s.startsWith('es-')) return 'es';
   if (s === 'fr' || s.startsWith('fr-')) return 'fr';
   if (s === 'de' || s.startsWith('de-')) return 'de';
+  if (s === 'tr' || s.startsWith('tr-') || s === 'turkish' || s === 'türkçe') return 'tr';
   return 'en';
 }
 
@@ -2375,6 +2041,8 @@ export function writeActiveArchiveTask(archiveDir = getDefaultArchiveDir(), info
       schema: 1,
       action: String(info.action || 'archive-and-restart'),
       pid: Number.isInteger(pidNum) && pidNum > 0 ? pidNum : 0,
+      ...(info.handoff ? { handoff: true } : {}),
+      ...(info.id ? { id: String(info.id) } : {}),
       startedAt: new Date().toISOString(),
     };
     atomicWriteJsonSync(filePath, payload);
@@ -2402,6 +2070,76 @@ export function clearActiveArchiveTask(archiveDir = getDefaultArchiveDir(), expe
   } catch {
     return false;
   }
+}
+
+function buildSafeArchiveTaskPayload(task = {}, safeArchiveDir = getDefaultArchiveDir()) {
+  const ownDaemonPid = Number(task.ownDaemonPid);
+  return {
+    schema: 1,
+    id: String(task.id || `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`),
+    action: String(task.action || 'archive-and-restart'),
+    convDir: path.resolve(task.convDir || getDefaultConversationsDir()),
+    archiveDir: safeArchiveDir,
+    hostPid: Number(task.hostPid) || 0,
+    ownDaemonPid: Number.isInteger(ownDaemonPid) && ownDaemonPid > 0 ? ownDaemonPid : 0,
+    cdpPort: normalizeLoopbackCdpPort(task.cdpPort),
+    cdpBrowserWsPath: normalizeExpectedBrowserWsPath(task.cdpBrowserWsPath),
+    exePath: String(task.exePath || '').trim(),
+    gracefulQuit: Boolean(task.gracefulQuit),
+    relaunch: Boolean(task.relaunch),
+    mode: task.mode === 'subagents+old-main' ? 'subagents+old-main' : 'subagents',
+    subagentMaxAgeHours: Number.isFinite(Number(task.subagentMaxAgeHours))
+      ? Number(task.subagentMaxAgeHours)
+      : AUTO_ARCHIVE_SUBAGENT_MAX_AGE_HOURS,
+    batchName: String(task.batchName || 'latest'),
+    settleMs: Number.isFinite(Number(task.settleMs)) ? Number(task.settleMs) : 4000,
+    waitExitTimeoutMs: Number.isFinite(Number(task.waitExitTimeoutMs)) ? Number(task.waitExitTimeoutMs) : 45000,
+    ...(typeof task.pluginDir === 'string' && task.pluginDir.trim()
+      ? { pluginDir: path.resolve(task.pluginDir.trim()) }
+      : {}),
+    ...(typeof task.appStoragePath === 'string' && task.appStoragePath.trim()
+      ? { appStoragePath: path.resolve(task.appStoragePath.trim()) }
+      : {}),
+    requestedAt:
+      typeof task.requestedAt === 'string' && task.requestedAt.trim()
+        ? task.requestedAt.trim()
+        : new Date().toISOString(),
+  };
+}
+
+export function writePendingArchiveTask(archiveDir = getDefaultArchiveDir(), task = {}) {
+  const safeArchive = ensureSafeDir(archiveDir);
+  const filePath = path.join(safeArchive, PENDING_ARCHIVE_TASK_FILENAME);
+  assertPathChainNoSymlinks(filePath, 'pending archive task');
+  const payload = buildSafeArchiveTaskPayload(task, safeArchive);
+  atomicWriteJsonSync(filePath, payload);
+  return { filePath, payload };
+}
+
+export function readPendingArchiveTask(archiveDir = getDefaultArchiveDir()) {
+  try {
+    const filePath = path.join(path.resolve(archiveDir), PENDING_ARCHIVE_TASK_FILENAME);
+    const st = assertPathChainNoSymlinks(filePath, 'pending archive task');
+    if (!st || !st.isFile() || st.size > 262144) return null;
+    const p = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return p && typeof p === 'object' && !Array.isArray(p) ? p : null;
+  } catch { return null; }
+}
+
+export function clearPendingArchiveTask(archiveDir = getDefaultArchiveDir(), expectedId = '') {
+  try {
+    const filePath = path.join(path.resolve(archiveDir), PENDING_ARCHIVE_TASK_FILENAME);
+    const st = assertPathChainNoSymlinks(filePath, 'pending archive task');
+    if (!st || !st.isFile()) return false;
+    if (expectedId) {
+      try {
+        const cur = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (cur && cur.id && String(cur.id) !== String(expectedId)) return false;
+      } catch {}
+    }
+    fs.unlinkSync(filePath);
+    return true;
+  } catch { return false; }
 }
 
 function normalizeMacAppBundlePath(rawPath) {
@@ -2464,13 +2202,7 @@ export function getDefaultWindowsAppStoragePath({ env = process.env, homeDir = o
   return path.join(appData, 'Antigravity', 'app_storage.json');
 }
 
-/**
- * Windows 托盘防卡死守卫：
- *   在请求 Antigravity 优雅退出前，若 app_storage.json 中开启了 runInBackground="true"，
- *   通过全链路 lstatSync 非符号链接校验 + 原子排他写将其临时挂起为 "false"；
- *   并在调用方 finally 阶段重读磁盘最新 app_storage.json（保留宿主退出期间写入的布局/状态字段），
- *   带 3 次短重试无损恢复原值。
- */
+// Windows 托盘防卡死守卫：临时挂起 runInBackground 并落盘崩溃恢复标记，退出后重试无损恢复。
 export function suspendWindowsRunInBackgroundForQuit(appStoragePath, opts = {}) {
   const platform = opts.platform || process.platform;
   const resolved = appStoragePath ? path.resolve(String(appStoragePath)) : '';
@@ -2486,26 +2218,18 @@ export function suspendWindowsRunInBackgroundForQuit(appStoragePath, opts = {}) 
   const writeFn = typeof opts.writeAtomicFn === 'function' ? opts.writeAtomicFn : atomicWriteTextExclusiveSync;
   const readFn = typeof opts.readFileSyncFn === 'function' ? opts.readFileSyncFn : fs.readFileSync;
   let originalValue;
+  let markerPath = '';
   try {
     const st = assertPathChainNoSymlinks(resolved, 'Antigravity app_storage.json');
-    if (!st || !st.isFile() || st.size > APP_STORAGE_MAX_BYTES) {
-      return { ...noop, reason: 'missing-or-invalid' };
-    }
-    const raw = readFn(resolved, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { ...noop, reason: 'invalid-json' };
-    }
+    if (!st || !st.isFile() || st.size > APP_STORAGE_MAX_BYTES) return { ...noop, reason: 'missing-or-invalid' };
+    const parsed = JSON.parse(readFn(resolved, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...noop, reason: 'invalid-json' };
     originalValue = parsed.runInBackground;
-    if (originalValue !== 'true' && originalValue !== true) {
-      return { ...noop, reason: 'not-enabled', originalValue };
-    }
-    const suspendedPayload = {
-      ...parsed,
-      runInBackground: typeof originalValue === 'boolean' ? false : 'false',
-    };
-    writeFn(resolved, JSON.stringify(suspendedPayload, null, 2) + '\n', 0o600);
+    if (originalValue !== 'true' && originalValue !== true) return { ...noop, reason: 'not-enabled', originalValue };
+    markerPath = runInBgRecovery.writePendingRunInBgRestoreMarker(resolved, originalValue, opts);
+    writeFn(resolved, JSON.stringify({ ...parsed, runInBackground: typeof originalValue === 'boolean' ? false : 'false' }, null, 2) + '\n', 0o600);
   } catch (err) {
+    if (markerPath) runInBgRecovery.clearPendingRunInBgRestoreMarker(markerPath);
     return { ...noop, reason: 'error', error: String(err?.message || err) };
   }
 
@@ -2514,46 +2238,26 @@ export function suspendWindowsRunInBackgroundForQuit(appStoragePath, opts = {}) 
     if (restored) return true;
     const maxAttempts = Math.max(1, Math.min(10, Number(retries) || 3));
     const delayMs = Math.max(0, Math.min(2000, Number(retryDelayMs ?? 50)));
-    const wait =
-      typeof sleepFn === 'function'
-        ? sleepFn
-        : typeof opts.sleepFn === 'function'
-          ? opts.sleepFn
-          : (ms) => new Promise((r) => setTimeout(r, ms));
+    const wait = typeof sleepFn === 'function' ? sleepFn : typeof opts.sleepFn === 'function' ? opts.sleepFn : (ms) => new Promise((r) => setTimeout(r, ms));
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const st = assertPathChainNoSymlinks(resolved, 'Antigravity app_storage.json');
-        if (!st || !st.isFile() || st.size > APP_STORAGE_MAX_BYTES) {
-          throw new Error('Antigravity app_storage.json missing or unsafe during restore');
-        }
-        const latestRaw = readFn(resolved, 'utf8');
-        const latest = JSON.parse(latestRaw);
-        if (!latest || typeof latest !== 'object' || Array.isArray(latest)) {
-          throw new Error('Antigravity app_storage.json contains non-object JSON during restore');
-        }
+        if (!st || !st.isFile() || st.size > APP_STORAGE_MAX_BYTES) throw new Error('Antigravity app_storage.json missing or unsafe during restore');
+        const latest = JSON.parse(readFn(resolved, 'utf8'));
+        if (!latest || typeof latest !== 'object' || Array.isArray(latest)) throw new Error('Antigravity app_storage.json contains non-object JSON during restore');
         latest.runInBackground = originalValue;
         writeFn(resolved, JSON.stringify(latest, null, 2) + '\n', 0o600);
+        if (markerPath) runInBgRecovery.clearPendingRunInBgRestoreMarker(markerPath);
         restored = true;
         return true;
       } catch (err) {
-        if (/symbolic link/i.test(String(err?.message || ''))) {
-          return false;
-        }
-        if (attempt < maxAttempts && delayMs > 0) {
-          await wait(delayMs);
-        }
+        if (/symbolic link/i.test(String(err?.message || ''))) return false;
+        if (attempt < maxAttempts && delayMs > 0) await wait(delayMs);
       }
     }
     return false;
   };
-
-  return {
-    suspended: true,
-    filePath: resolved,
-    originalValue,
-    reason: 'suspended',
-    restore,
-  };
+  return { suspended: true, filePath: resolved, originalValue, markerPath, reason: 'suspended', restore };
 }
 
 export function readLinuxEnvDGoMemLimit(opts = {}) {
@@ -2668,12 +2372,7 @@ function isAntigravityCdpTarget(target) {
   return /\bantigravity\b/i.test(title);
 }
 
-/**
- * 通过本机回环 CDP 浏览器端点发送标准 Browser.close 请求宿主优雅退出（触发 Electron app.quit()，
- * 避免 Windows 托盘拦截 WM_CLOSE 导致 CloseMainWindow() 仅最小化到托盘而不退出）。
- * 发送前严格校验 /json/version 与 /json/list 均属于本机 Antigravity 宿主实例，绝不误关其他应用；
- * 超时未收到 ACK 且未关闭时 fail-closed 返回 false，立即交由 OS 级温和退出回退。
- */
+// 通过本机回环 CDP 浏览器端点校验身份并发送标准 Browser.close 请求宿主优雅退出
 export async function requestCdpBrowserClose(cdpPort, opts = {}) {
   const port = normalizeLoopbackCdpPort(cdpPort);
   if (!port) return false;
@@ -2913,20 +2612,28 @@ export function launchHostWithCdpFlag(exePath, platform = process.platform, opts
   }
 }
 
-/**
- * 纯异步离线归档/还原与可选重启编排器：
- *   1) 如需重启：仅温和请求关闭 Antigravity（绝不强杀 language_server）
- *   2) 轮询等待 Antigravity 与 language_server 完全退出（超时则 fail-closed 中止）
- *   3) 退出后静置 3~5 秒并执行双重 fail-closed isLanguageServerRunning() 确认无锁
- *   4) 执行原子移动归档或无损还原（途中若宿主重开立刻安全中止）
- *   5) 如需重启：携带 --remote-debugging-port=0 重开 Antigravity
- */
+function readDaemonPidFromPluginDir(pluginDir) {
+  if (!pluginDir) return 0;
+  try {
+    const pidFile = path.join(path.resolve(pluginDir), '.daemon.pid');
+    const st = assertPathChainNoSymlinks(pidFile, 'daemon pid');
+    if (!st || !st.isFile() || st.size > 4096) return 0;
+    const raw = fs.readFileSync(pidFile, 'utf8').trim();
+    if (!raw) return 0;
+    if (/^\d+$/.test(raw)) return parseInt(raw, 10) || 0;
+    const n = Number(JSON.parse(raw)?.pid);
+    return Number.isInteger(n) && n > 0 ? n : 0;
+  } catch { return 0; }
+}
+
+// 离线归档/还原与可选重启编排器：温和退出 -> 等退出(含自有 Daemon 让位) -> 静置双检 -> 移动 -> 重启
 export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
   const action = String(task.action || 'archive-and-restart');
   const targetPlatform = hooks.platform || process.platform;
   const convDir = task.convDir ? path.resolve(String(task.convDir)) : getDefaultConversationsDir();
   const archiveDir = task.archiveDir ? path.resolve(String(task.archiveDir)) : getDefaultArchiveDir();
   const hostPid = Number(task.hostPid) || 0;
+  const ownDaemonPid = Number.isInteger(Number(task.ownDaemonPid)) && Number(task.ownDaemonPid) > 0 ? Number(task.ownDaemonPid) : 0;
   const cdpPort = normalizeLoopbackCdpPort(task.cdpPort);
   const expectedBrowserWsPath = normalizeExpectedBrowserWsPath(task.cdpBrowserWsPath);
   const exePath = String(task.exePath || '').trim();
@@ -2939,10 +2646,21 @@ export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
   const relaunchDelayMs = Math.max(0, Math.min(5000, Number(task.relaunchDelayMs ?? 500)));
 
   const sleepFn = typeof hooks.sleep === 'function' ? hooks.sleep : (ms) => new Promise((r) => setTimeout(r, ms));
+  const hasCustomInspect = typeof hooks.inspectProcesses === 'function';
   const hasCustomCheck = typeof hooks.checkRunning === 'function';
+  const killDaemonFn = typeof hooks.killFn === 'function' ? hooks.killFn : process.kill;
   let lastInspect = { running: false, blockers: [], ignoredAcp: [] };
   const safeIsRunning = () => {
     try {
+      if (hasCustomInspect) {
+        const res = hooks.inspectProcesses();
+        lastInspect = {
+          running: Boolean(res?.running),
+          blockers: Array.isArray(res?.blockers) ? res.blockers : [],
+          ignoredAcp: Array.isArray(res?.ignoredAcp) ? res.ignoredAcp : [],
+        };
+        return lastInspect.running;
+      }
       if (hasCustomCheck) {
         const r = Boolean(hooks.checkRunning());
         lastInspect = { running: r, blockers: r ? [{ imageName: 'custom-hook', pid: 0 }] : [], ignoredAcp: [] };
@@ -2952,10 +2670,10 @@ export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
       return Boolean(lastInspect.running);
     } catch {
       lastInspect = { running: true, blockers: [{ imageName: 'exception', pid: 0 }], ignoredAcp: [] };
-      return true; // fail-closed
+      return true;
     }
   };
-  safeIsRunning.__allowLoopThrottle = !hasCustomCheck;
+  safeIsRunning.__allowLoopThrottle = !hasCustomCheck && !hasCustomInspect;
   const quitHost =
     typeof hooks.requestGracefulQuit === 'function'
       ? hooks.requestGracefulQuit
@@ -2975,13 +2693,20 @@ export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
         : '';
   const hasAnyTestHook = Boolean(
     typeof hooks.requestGracefulQuit === 'function' ||
-      typeof hooks.checkRunning === 'function' ||
+      hasCustomCheck ||
+      hasCustomInspect ||
       typeof hooks.launchHost === 'function' ||
       typeof hooks.archiveFn === 'function' ||
       typeof hooks.restoreFn === 'function' ||
       typeof hooks.sleep === 'function'
   );
-  // 单测未显式传入 appStoragePath 时自动跳过，绝不触碰本机真实 %APPDATA%\Antigravity\app_storage.json
+  const explicitPluginDir =
+    typeof hooks.pluginDir === 'string' && hooks.pluginDir.trim()
+      ? path.resolve(hooks.pluginDir.trim())
+      : typeof task.pluginDir === 'string' && task.pluginDir.trim()
+        ? path.resolve(task.pluginDir.trim())
+        : '';
+  const effectivePluginDir = explicitPluginDir || (!hasAnyTestHook ? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..') : '');
   const effectiveAppStoragePath = explicitAppStoragePath
     ? explicitAppStoragePath
     : !hasAnyTestHook && targetPlatform === 'win32'
@@ -2990,6 +2715,37 @@ export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
 
   const seqStartedAt = Date.now();
   const trace = (event, detail = {}) => appendArchiveTrace(archiveDir, event, detail);
+  const signaledDaemonPids = new Set();
+  const tryYieldOwnDaemonBlockers = () => {
+    const blockers = Array.isArray(lastInspect?.blockers) ? lastInspect.blockers : [];
+    if (!lastInspect?.running || blockers.length === 0) return false;
+    if (blockers.some((b) => /language_server/i.test(String(b?.imageName || '')))) return false;
+    const ownPids = new Set();
+    if (ownDaemonPid > 0 && ownDaemonPid !== process.pid && ownDaemonPid !== hostPid) ownPids.add(ownDaemonPid);
+    const filePid = readDaemonPidFromPluginDir(effectivePluginDir);
+    if (filePid > 0 && filePid !== process.pid && filePid !== hostPid) ownPids.add(filePid);
+    if (ownPids.size === 0) return false;
+    if (
+      !blockers.every((b) => {
+        const pid = Number(b?.pid);
+        return Number.isInteger(pid) && pid > 0 && pid !== hostPid && pid !== process.pid && ownPids.has(pid);
+      })
+    ) {
+      return false;
+    }
+    const toSignal = [];
+    for (const b of blockers) {
+      const pid = Number(b.pid);
+      if (!signaledDaemonPids.has(pid)) {
+        signaledDaemonPids.add(pid);
+        toSignal.push(pid);
+      }
+    }
+    if (toSignal.length === 0) return false;
+    for (const pid of toSignal) { try { killDaemonFn(pid, 'SIGTERM'); } catch {} }
+    trace('OWN_DAEMON_YIELD_SIGTERM', { pids: toSignal });
+    return true;
+  };
 
   writeActiveArchiveTask(archiveDir, { action, pid: process.pid });
   trace('TASK_START', { action, hostPid, exePath, gracefulQuit, relaunch, waitExitTimeoutMs, settleMs });
@@ -3016,6 +2772,7 @@ export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
       // 等待 Antigravity 与 language_server 完全退出
       const deadline = Date.now() + waitExitTimeoutMs;
       exited = !safeIsRunning();
+      if (!exited) tryYieldOwnDaemonBlockers();
       let nudged = false;
       let pollIter = 0;
       let lastPollTraceAt = 0;
@@ -3027,6 +2784,7 @@ export async function executeArchiveTaskSequence(task = {}, hooks = {}) {
           exited = true;
           break;
         }
+        tryYieldOwnDaemonBlockers();
         const nowPoll = Date.now();
         if (pollIter === 1 || nowPoll - lastPollTraceAt >= 2500) {
           lastPollTraceAt = nowPoll;
@@ -3190,13 +2948,7 @@ function isElectronHostBinaryPath(rawPath) {
   return false;
 }
 
-/**
- * 解析离线归档脱离任务所用的 Node 运行时：
- *   1) 当前进程为独立 node 时直接复用；
- *   2) 当前进程为 Electron 宿主（ELECTRON_RUN_AS_NODE=1）时，优先查找系统独立 node；
- *   3) 若宿主机未安装全局 node（纯安装版 Antigravity 常见），安全回退复用宿主二进制 + ELECTRON_RUN_AS_NODE=1
- *      （配合 parseWindowsTasklistCsv / parsePosixProcessList 排除 selfPid，绝不触发自检死锁或 ENOENT 崩溃）。
- */
+// 解析离线归档 Node 运行时：优先独立 node，无全局 node 时回退宿主二进制 + ELECTRON_RUN_AS_NODE=1
 export function resolveArchiveNodeRuntime(
   nodeExec = process.execPath,
   { platform = process.platform, whichSync = null, existsSync = fs.existsSync } = {}
@@ -3266,29 +3018,7 @@ export function spawnDetachedArchiveTask(task = {}, opts = {}) {
   const safeNodeExec = runtime.execPath;
   const useElectronAsNode = runtime.useElectronAsNode;
   const taskFile = path.join(archiveDir, `.archive-task-${crypto.randomBytes(6).toString('hex')}.json`);
-
-  const safePayload = {
-    schema: 1,
-    action: String(task.action || 'archive-and-restart'),
-    convDir: path.resolve(task.convDir || getDefaultConversationsDir()),
-    archiveDir,
-    hostPid: Number(task.hostPid) || 0,
-    cdpPort: normalizeLoopbackCdpPort(task.cdpPort),
-    cdpBrowserWsPath: normalizeExpectedBrowserWsPath(task.cdpBrowserWsPath),
-    exePath: String(task.exePath || '').trim(),
-    gracefulQuit: Boolean(task.gracefulQuit),
-    relaunch: Boolean(task.relaunch),
-    mode: task.mode === 'subagents+old-main' ? 'subagents+old-main' : 'subagents',
-    subagentMaxAgeHours: Number.isFinite(Number(task.subagentMaxAgeHours))
-      ? Number(task.subagentMaxAgeHours)
-      : AUTO_ARCHIVE_SUBAGENT_MAX_AGE_HOURS,
-    batchName: String(task.batchName || 'latest'),
-    settleMs: Number.isFinite(Number(task.settleMs)) ? Number(task.settleMs) : 4000,
-    waitExitTimeoutMs: Number.isFinite(Number(task.waitExitTimeoutMs)) ? Number(task.waitExitTimeoutMs) : 45000,
-    ...(typeof task.appStoragePath === 'string' && task.appStoragePath.trim()
-      ? { appStoragePath: path.resolve(task.appStoragePath.trim()) }
-      : {}),
-  };
+  const safePayload = buildSafeArchiveTaskPayload(task, archiveDir);
   atomicWriteJsonSync(taskFile, safePayload);
 
   if (typeof opts.spawnHook === 'function') {

@@ -1,11 +1,4 @@
-/**
- * Obsidian Prism — Periodic Picker Bento UI & Theme Engine
- * Stylesheet CSS, 4-Kit CNC Theme Resolver, 5-Axis Radar, 512K Telemetry Pod,
- * Aux Pad Pagination UI, Anti-i18n Isolation & Strict EN/ZH Bilingual Rendering.
- *
- * Contract:
- *   globalThis.__agPeriodicBentoUi (Browser) / module.exports (Node)
- */
+// Periodic Picker Bento UI & Theme Engine
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module && typeof module.exports === 'object') {
@@ -43,174 +36,15 @@
     ];
 
     var BENTO_I18N = {
-      'zh-CN': {
-        detailsOpen: '展开面板 ▾', detailsClose: '收起面板 ▴',
-        teleOff: '遥测未开启', teleOffTitle: '实时遥测未开启', teleDisabledTitle: '实时遥测已关闭',
-        teleOffSub: '仅展示真实上下文指标 · 已禁用模拟数据',
-        badgeDisabled: '已关闭', badgeOffline: '未开启', badgeTight: '紧凑 TIGHT', badgeOptimal: '充裕 OPTIMAL',
-        kv: '缓存 ', free: '余量 ', specBtn: '规格',
-        flipToSpec: '切换回 MOD-01 评测规格面板', flipToTele: '切换至 MOD-02 512K 实时遥测面板',
-        metaKicker: '原生模型元信息', metaModel: '名称', metaEffort: '推理档位', metaDefault: '默认', metaId: '原生标识',
-        metaNote: '未收录于 2026Q4 基准库 · 仅展示真实宿主元数据',
-        ttHead: '2026Q4 评测口径与思考档位说明',
-        infoAria: '评测指标与思考档位说明',
-        ttLines: ['AA v5：Artificial Analysis 综合智力指数（满分 100）', 'TermBench：命令行与终端自主排障通过率（%）', 'HLE-D / GPQA-D：前沿科学与多步难题推理（%）', 'SWE-Pro / AutoBench：真实软件工程修复率（%）', '思考档位：Low 极速响应 · Med 均衡 · High 深度 · XHigh 极限推理'],
-        locked: '锁定态', hoverTag: '预览', activeTag: '当前',
-        orchTopo: '双核路由拓扑 · DUAL-CORE', planner: '规划核', runner: '执行核',
-        inFlowDock: '内嵌底坞', stage3d: '全屏展台',
-        dockReturn: '收起回输入框正下方内嵌底坞 (F)', stageExpand: '展开全屏 3D 展台并解锁自由旋转 (F)',
-        unmute: '开启机械音效', mute: '静音', closeDock: '收起底坞 (Esc / Enter)',
-        auxPrev: '上一页副盘模型', auxNext: '下一页副盘模型', pagePre: '第 ', pageSuf: ' 页',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '吞吐极速'],
-        radarVerts: ['推理', '终端', '科学', '工程', '极速'],
-      },
-      'zh-TW': {
-        detailsOpen: '展開面板 ▾', detailsClose: '收起面板 ▴',
-        teleOff: '遙測未開啟', teleOffTitle: '即時遙測未開啟', teleDisabledTitle: '即時遙測已關閉',
-        teleOffSub: '僅顯示真實上下文指標 · 已停用模擬資料',
-        badgeDisabled: '已關閉', badgeOffline: '未開啟', badgeTight: '緊湊 TIGHT', badgeOptimal: '充裕 OPTIMAL',
-        kv: '快取 ', free: '餘量 ', specBtn: '規格',
-        flipToSpec: '切換回 MOD-01 評測規格面板', flipToTele: '切換至 MOD-02 512K 即時遙測面板',
-        metaKicker: '原生模型中繼資料', metaModel: '名稱', metaEffort: '推理檔位', metaDefault: '預設', metaId: '原生識別',
-        metaNote: '未收錄於 2026Q4 基準庫 · 僅顯示真實宿主中繼資料',
-        ttHead: '2026Q4 評測口徑與思考檔位說明',
-        infoAria: '評測指標與思考檔位說明',
-        ttLines: ['AA v5：Artificial Analysis 綜合智力指數（滿分 100）', 'TermBench：命令列與終端自主排障通過率（%）', 'HLE-D / GPQA-D：前沿科學與多步難題推理（%）', 'SWE-Pro / AutoBench：真實軟體工程修復率（%）', '思考檔位：Low 極速響應 · Med 均衡 · High 深度 · XHigh 極限推理'],
-        locked: '鎖定態', hoverTag: '預覽', activeTag: '目前',
-        orchTopo: '雙核路由拓樸 · DUAL-CORE', planner: '規劃核', runner: '執行核',
-        inFlowDock: '內嵌底塢', stage3d: '全螢幕展台',
-        dockReturn: '收合回輸入框下方內嵌底塢 (F)', stageExpand: '展開全螢幕 3D 展台並解鎖自由旋轉 (F)',
-        unmute: '開啟機械音效', mute: '靜音', closeDock: '收合底塢 (Esc / Enter)',
-        auxPrev: '上一頁副盤模型', auxNext: '下一頁副盤模型', pagePre: '第 ', pageSuf: ' 頁',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '吞吐極速'],
-        radarVerts: ['推理', '終端', '科學', '工程', '極速'],
-      },
-      en: {
-        detailsOpen: 'Details ▾', detailsClose: 'Hide Panel ▴',
-        teleOff: 'Telemetry Off', teleOffTitle: 'Telemetry Offline', teleDisabledTitle: 'Telemetry Disabled',
-        teleOffSub: 'Live metrics only · Synthetic fallback disabled',
-        badgeDisabled: 'DISABLED', badgeOffline: 'OFFLINE', badgeTight: 'TIGHT', badgeOptimal: 'OPTIMAL',
-        kv: 'KV ', free: 'Free ', specBtn: 'Spec',
-        flipToSpec: 'Switch to MOD-01 Spec & Benchmarks', flipToTele: 'Switch to MOD-02 512K Telemetry',
-        metaKicker: 'NATIVE MODEL METADATA', metaModel: 'MODEL', metaEffort: 'EFFORT', metaDefault: 'Default', metaId: 'TAG / ID',
-        metaNote: 'Not listed in 2026Q4 benchmarks · Showing live host metadata',
-        ttHead: '2026Q4 Benchmarks & Thinking Tiers',
-        infoAria: 'Benchmark metrics and thinking tiers explanation',
-        ttLines: ['AA v5: Artificial Analysis Intelligence Index (0-100)', 'TermBench: Autonomous terminal & CLI task accuracy (%)', 'HLE-D / GPQA-D: Frontier science & deep reasoning (%)', 'SWE-Pro / AutoBench: Real-world software engineering (%)', 'Effort: Low Fast · Med Balanced · High Deep · XHigh Max'],
-        locked: 'Locked', hoverTag: 'Hover', activeTag: 'Active',
-        orchTopo: 'Dual-Core Routing Topology', planner: 'PLANNER', runner: 'RUNNER',
-        inFlowDock: 'In-Flow Dock', stage3d: '3D Stage',
-        dockReturn: 'Return to In-Flow Desk Dock below Input Box (F)', stageExpand: 'Expand Fullscreen 3D Stage & Free Orbit (F)',
-        unmute: 'Unmute Audio', mute: 'Mute Audio', closeDock: 'Collapse Dock (Esc / Enter)',
-        auxPrev: 'Previous aux pad page', auxNext: 'Next aux pad page', pagePre: 'Page ', pageSuf: '',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Velocity'],
-        radarVerts: ['AA', 'Term', 'Sci', 'SWE', 'Speed'],
-      },
-      ja: {
-        detailsOpen: '詳細 ▾', detailsClose: 'パネルを閉じる ▴',
-        teleOff: '計測オフ', teleOffTitle: 'テレメトリ未接続', teleDisabledTitle: 'テレメトリ無効',
-        teleOffSub: '実測コンテキスト指標のみ表示 · 擬似データ無効',
-        badgeDisabled: '無効', badgeOffline: 'オフライン', badgeTight: '逼迫 TIGHT', badgeOptimal: '余裕 OPTIMAL',
-        kv: 'KV ', free: '残 ', specBtn: '仕様',
-        flipToSpec: 'MOD-01 ベンチマーク仕様へ戻る', flipToTele: 'MOD-02 512K リアルタイム計測へ切替',
-        metaKicker: 'ネイティブモデルメタ情報', metaModel: 'モデル', metaEffort: '推論レベル', metaDefault: '既定', metaId: '識別子',
-        metaNote: '2026Q4 ベンチ対象外 · ホスト実メタデータを表示中',
-        ttHead: '2026Q4 評価指標と推論レベル説明',
-        infoAria: '評価指標と推論レベルの説明',
-        ttLines: ['AA v5：Artificial Analysis 総合知能指数 (100点満点)', 'TermBench：端末・CLI 自律修復成功率 (%)', 'HLE-D / GPQA-D：先端科学・多段推論正答率 (%)', 'SWE-Pro / AutoBench：実ソフトウェア修正率 (%)', '推論レベル：Low 高速 · Med 均衡 · High 深層 · XHigh 極限'],
-        locked: 'ロック中', hoverTag: 'プレビュー', activeTag: '現在',
-        orchTopo: 'デュアルコア経路トポロジ', planner: '計画コア', runner: '実行コア',
-        inFlowDock: 'インラインドック', stage3d: '3Dステージ',
-        dockReturn: '入力欄下のインラインドックへ戻す (F)', stageExpand: '全画面 3D ステージを展開して自由回転 (F)',
-        unmute: 'メカニカル音を有効化', mute: 'ミュート', closeDock: 'ドックを閉じる (Esc / Enter)',
-        auxPrev: '前のサブキーページ', auxNext: '次のサブキーページ', pagePre: '', pageSuf: ' ページ',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '生成速度'],
-        radarVerts: ['AA', 'Term', '科学', 'SWE', '速度'],
-      },
-      ko: {
-        detailsOpen: '상세 ▾', detailsClose: '패널 접기 ▴',
-        teleOff: '텔레메트리 꺼짐', teleOffTitle: '텔레메트리 오프라인', teleDisabledTitle: '텔레메트리 비활성',
-        teleOffSub: '실시간 컨텍스트 지표만 표시 · 가상 데이터 비활성화',
-        badgeDisabled: '꺼짐', badgeOffline: '오프라인', badgeTight: '부족 TIGHT', badgeOptimal: '여유 OPTIMAL',
-        kv: '캐시 ', free: '여유 ', specBtn: '사양',
-        flipToSpec: 'MOD-01 벤치마크 사양으로 전환', flipToTele: 'MOD-02 512K 실시간 텔레메트리로 전환',
-        metaKicker: '기본 모델 메타데이터', metaModel: '모델', metaEffort: '추론 수준', metaDefault: '기본값', metaId: '태그 / ID',
-        metaNote: '2026Q4 벤치마크 미등재 · 호스트 메타데이터 표시 중',
-        ttHead: '2026Q4 벤치마크 및 사고 수준 안내',
-        infoAria: '벤치마크 지표 및 사고 수준 안내',
-        ttLines: ['AA v5: Artificial Analysis 종합 지능 지수 (0-100)', 'TermBench: 터미널·CLI 자율 작업 정확도 (%)', 'HLE-D / GPQA-D: 첨단 과학 및 심층 추론 (%)', 'SWE-Pro / AutoBench: 실제 소프트웨어 엔지니어링 (%)', '수준: Low 고속 · Med 균형 · High 심층 · XHigh 최대'],
-        locked: '잠김', hoverTag: '미리보기', activeTag: '활성',
-        orchTopo: '듀얼 코어 라우팅 토폴로지', planner: '플래너', runner: '러너',
-        inFlowDock: '인라인 독', stage3d: '3D 스테이지',
-        dockReturn: '입력창 아래 인라인 독으로 복귀 (F)', stageExpand: '전체 화면 3D 스테이지 및 자유 회전 (F)',
-        unmute: '키캡 사운드 켜기', mute: '음소거', closeDock: '독 닫기 (Esc / Enter)',
-        auxPrev: '이전 보조 키 페이지', auxNext: '다음 보조 키 페이지', pagePre: '', pageSuf: '페이지',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '처리 속도'],
-        radarVerts: ['AA', 'Term', '과학', 'SWE', '속도'],
-      },
-      es: {
-        detailsOpen: 'Detalles ▾', detailsClose: 'Ocultar ▴',
-        teleOff: 'Telemetría apagada', teleOffTitle: 'Telemetría desconectada', teleDisabledTitle: 'Telemetría desactivada',
-        teleOffSub: 'Solo métricas reales · Datos sintéticos desactivados',
-        badgeDisabled: 'APAGADA', badgeOffline: 'OFFLINE', badgeTight: 'JUSTO', badgeOptimal: 'ÓPTIMO',
-        kv: 'KV ', free: 'Libre ', specBtn: 'Espec.',
-        flipToSpec: 'Volver a especificaciones MOD-01', flipToTele: 'Cambiar a telemetría MOD-02 512K',
-        metaKicker: 'METADATOS DEL MODELO', metaModel: 'MODELO', metaEffort: 'ESFUERZO', metaDefault: 'Predet.', metaId: 'TAG / ID',
-        metaNote: 'Fuera de benchmarks 2026Q4 · Mostrando metadatos reales',
-        ttHead: 'Benchmarks 2026Q4 y niveles de esfuerzo',
-        infoAria: 'Explicación de métricas y niveles de razonamiento',
-        ttLines: ['AA v5: Índice de inteligencia Artificial Analysis (0-100)', 'TermBench: Precisión autónoma en terminal y CLI (%)', 'HLE-D / GPQA-D: Ciencia de frontera y razonamiento (%)', 'SWE-Pro / AutoBench: Ingeniería de software real (%)', 'Esfuerzo: Low Rápido · Med Equil. · High Prof. · XHigh Máx'],
-        locked: 'Bloqueado', hoverTag: 'Vista previa', activeTag: 'Activo',
-        orchTopo: 'Topología de doble núcleo', planner: 'PLANIF.', runner: 'EJECUTOR',
-        inFlowDock: 'Dock integrado', stage3d: 'Escena 3D',
-        dockReturn: 'Volver al dock bajo el editor (F)', stageExpand: 'Expandir escena 3D y órbita libre (F)',
-        unmute: 'Activar sonido', mute: 'Silenciar', closeDock: 'Contraer dock (Esc / Enter)',
-        auxPrev: 'Página anterior', auxNext: 'Página siguiente', pagePre: 'Página ', pageSuf: '',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Velocidad'],
-        radarVerts: ['AA', 'Term', 'Cienc.', 'SWE', 'Vel.'],
-      },
-      fr: {
-        detailsOpen: 'Détails ▾', detailsClose: 'Masquer ▴',
-        teleOff: 'Télémétrie coupée', teleOffTitle: 'Télémétrie hors ligne', teleDisabledTitle: 'Télémétrie désactivée',
-        teleOffSub: 'Métriques réelles uniquement · Secours synthétique coupé',
-        badgeDisabled: 'COUPÉE', badgeOffline: 'HORS LIGNE', badgeTight: 'SERRÉ', badgeOptimal: 'OPTIMAL',
-        kv: 'KV ', free: 'Libre ', specBtn: 'Spéc.',
-        flipToSpec: 'Revenir au panneau MOD-01', flipToTele: 'Passer à la télémétrie MOD-02 512K',
-        metaKicker: 'MÉTADONNÉES NATIVES', metaModel: 'MODÈLE', metaEffort: 'EFFORT', metaDefault: 'Défaut', metaId: 'TAG / ID',
-        metaNote: 'Absent des benchmarks 2026Q4 · Métadonnées hôte réelles',
-        ttHead: 'Benchmarks 2026Q4 et niveaux de réflexion',
-        infoAria: 'Explication des benchmarks et niveaux de réflexion',
-        ttLines: ['AA v5 : Indice d’intelligence Artificial Analysis (0-100)', 'TermBench : Précision autonome terminal & CLI (%)', 'HLE-D / GPQA-D : Science avancée & raisonnement (%)', 'SWE-Pro / AutoBench : Génie logiciel réel (%)', 'Effort : Low Rapide · Med Équil. · High Prof. · XHigh Max'],
-        locked: 'Verrouillé', hoverTag: 'Aperçu', activeTag: 'Actif',
-        orchTopo: 'Topologie double cœur', planner: 'PLANIF.', runner: 'EXÉC.',
-        inFlowDock: 'Dock intégré', stage3d: 'Scène 3D',
-        dockReturn: 'Revenir au dock sous la zone de saisie (F)', stageExpand: 'Agrandir la scène 3D en plein écran (F)',
-        unmute: 'Activer le son', mute: 'Couper le son', closeDock: 'Fermer le dock (Esc / Enter)',
-        auxPrev: 'Page précédente', auxNext: 'Page suivante', pagePre: 'Page ', pageSuf: '',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Vélocité'],
-        radarVerts: ['AA', 'Term', 'Sci', 'SWE', 'Vit.'],
-      },
-      de: {
-        detailsOpen: 'Details ▾', detailsClose: 'Ausblenden ▴',
-        teleOff: 'Telemetrie aus', teleOffTitle: 'Telemetrie offline', teleDisabledTitle: 'Telemetrie deaktiviert',
-        teleOffSub: 'Nur Live-Kontextmetriken · Synthetik deaktiviert',
-        badgeDisabled: 'AUS', badgeOffline: 'OFFLINE', badgeTight: 'KNAPP', badgeOptimal: 'OPTIMAL',
-        kv: 'KV ', free: 'Frei ', specBtn: 'Daten',
-        flipToSpec: 'Zurück zu MOD-01 Spezifikationen', flipToTele: 'Zu MOD-02 512K-Telemetrie wechseln',
-        metaKicker: 'NATIVE MODELL-METADATEN', metaModel: 'MODELL', metaEffort: 'AUFWAND', metaDefault: 'Standard', metaId: 'TAG / ID',
-        metaNote: 'Nicht in 2026Q4-Benchmarks · Zeige echte Host-Metadaten',
-        ttHead: '2026Q4-Benchmarks & Denkstufen',
-        infoAria: 'Erklärung zu Benchmarks und Denkstufen',
-        ttLines: ['AA v5: Artificial Analysis Intelligence Index (0-100)', 'TermBench: Autonome Terminal- & CLI-Aufgaben (%)', 'HLE-D / GPQA-D: Spitzenwissenschaft & Tiefenlogik (%)', 'SWE-Pro / AutoBench: Reale Softwareentwicklung (%)', 'Aufwand: Low Schnell · Med Ausgew. · High Tief · XHigh Max'],
-        locked: 'Gesperrt', hoverTag: 'Vorschau', activeTag: 'Aktiv',
-        orchTopo: 'Dual-Core-Routingtopologie', planner: 'PLANER', runner: 'RUNNER',
-        inFlowDock: 'Inline-Dock', stage3d: '3D-Bühne',
-        dockReturn: 'Zurück zum Inline-Dock unter dem Eingabefeld (F)', stageExpand: 'Vollbild-3D-Bühne & freies Drehen (F)',
-        unmute: 'Ton einschalten', mute: 'Stummschalten', closeDock: 'Dock schließen (Esc / Enter)',
-        auxPrev: 'Vorherige Aux-Seite', auxNext: 'Nächste Aux-Seite', pagePre: 'Seite ', pageSuf: '',
-        radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Tempo'],
-        radarVerts: ['AA', 'Term', 'Wiss.', 'SWE', 'Tempo'],
-      },
+  'zh-CN': { detailsOpen: '展开面板 ▾', detailsClose: '收起面板 ▴', teleOff: '遥测未开启', teleOffTitle: '实时遥测未开启', teleDisabledTitle: '实时遥测已关闭', teleOffSub: '仅展示真实上下文指标 · 已禁用模拟数据', badgeDisabled: '已关闭', badgeOffline: '未开启', badgeTight: '紧凑 TIGHT', badgeOptimal: '充裕 OPTIMAL', kv: '缓存 ', free: '余量 ', specBtn: '规格', flipToSpec: '切换回 MOD-01 评测规格面板', flipToTele: '切换至 MOD-02 512K 实时遥测面板', metaKicker: '原生模型元信息', metaModel: '名称', metaEffort: '推理档位', metaDefault: '默认', metaId: '原生标识', metaNote: '未收录于 2026Q4 基准库 · 仅展示真实宿主元数据', ttHead: '2026Q4 评测口径与思考档位说明', infoAria: '评测指标与思考档位说明', ttLines: ['AA v5：Artificial Analysis 综合智力指数（满分 100）', 'TermBench：命令行与终端自主排障通过率（%）', 'HLE-D / GPQA-D：前沿科学与多步难题推理（%）', 'SWE-Pro / AutoBench：真实软件工程修复率（%）', '思考档位：Low 极速响应 · Med 均衡 · High 深度 · XHigh 极限推理'], locked: '锁定态', hoverTag: '预览', activeTag: '当前', orchTopo: '双核路由拓扑 · DUAL-CORE', planner: '规划核', runner: '执行核', inFlowDock: '内嵌底坞', stage3d: '全屏展台', dockReturn: '收起回输入框正下方内嵌底坞 (F)', stageExpand: '展开全屏 3D 展台并解锁自由旋转 (F)', unmute: '开启机械音效', mute: '静音', closeDock: '收起底坞 (Esc / Enter)', auxPrev: '上一页副盘模型', auxNext: '下一页副盘模型', pagePre: '第 ', pageSuf: ' 页', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '吞吐极速'], radarVerts: ['推理', '终端', '科学', '工程', '极速'], },
+  'zh-TW': { detailsOpen: '展開面板 ▾', detailsClose: '收起面板 ▴', teleOff: '遙測未開啟', teleOffTitle: '即時遙測未開啟', teleDisabledTitle: '即時遙測已關閉', teleOffSub: '僅顯示真實上下文指標 · 已停用模擬資料', badgeDisabled: '已關閉', badgeOffline: '未開啟', badgeTight: '緊湊 TIGHT', badgeOptimal: '充裕 OPTIMAL', kv: '快取 ', free: '餘量 ', specBtn: '規格', flipToSpec: '切換回 MOD-01 評測規格面板', flipToTele: '切換至 MOD-02 512K 即時遙測面板', metaKicker: '原生模型中繼資料', metaModel: '名稱', metaEffort: '推理檔位', metaDefault: '預設', metaId: '原生識別', metaNote: '未收錄於 2026Q4 基準庫 · 僅顯示真實宿主中繼資料', ttHead: '2026Q4 評測口徑與思考檔位說明', infoAria: '評測指標與思考檔位說明', ttLines: ['AA v5：Artificial Analysis 綜合智力指數（滿分 100）', 'TermBench：命令列與終端自主排障通過率（%）', 'HLE-D / GPQA-D：前沿科學與多步難題推理（%）', 'SWE-Pro / AutoBench：真實軟體工程修復率（%）', '思考檔位：Low 極速響應 · Med 均衡 · High 深度 · XHigh 極限推理'], locked: '鎖定態', hoverTag: '預覽', activeTag: '目前', orchTopo: '雙核路由拓樸 · DUAL-CORE', planner: '規劃核', runner: '執行核', inFlowDock: '內嵌底塢', stage3d: '全螢幕展台', dockReturn: '收合回輸入框下方內嵌底塢 (F)', stageExpand: '展開全螢幕 3D 展台並解鎖自由旋轉 (F)', unmute: '開啟機械音效', mute: '靜音', closeDock: '收合底塢 (Esc / Enter)', auxPrev: '上一頁副盤模型', auxNext: '下一頁副盤模型', pagePre: '第 ', pageSuf: ' 頁', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '吞吐極速'], radarVerts: ['推理', '終端', '科學', '工程', '極速'], },
+  en: { detailsOpen: 'Details ▾', detailsClose: 'Hide Panel ▴', teleOff: 'Telemetry Off', teleOffTitle: 'Telemetry Offline', teleDisabledTitle: 'Telemetry Disabled', teleOffSub: 'Live metrics only · Synthetic fallback disabled', badgeDisabled: 'DISABLED', badgeOffline: 'OFFLINE', badgeTight: 'TIGHT', badgeOptimal: 'OPTIMAL', kv: 'KV ', free: 'Free ', specBtn: 'Spec', flipToSpec: 'Switch to MOD-01 Spec & Benchmarks', flipToTele: 'Switch to MOD-02 512K Telemetry', metaKicker: 'NATIVE MODEL METADATA', metaModel: 'MODEL', metaEffort: 'EFFORT', metaDefault: 'Default', metaId: 'TAG / ID', metaNote: 'Not listed in 2026Q4 benchmarks · Showing live host metadata', ttHead: '2026Q4 Benchmarks & Thinking Tiers', infoAria: 'Benchmark metrics and thinking tiers explanation', ttLines: ['AA v5: Artificial Analysis Intelligence Index (0-100)', 'TermBench: Autonomous terminal & CLI task accuracy (%)', 'HLE-D / GPQA-D: Frontier science & deep reasoning (%)', 'SWE-Pro / AutoBench: Real-world software engineering (%)', 'Effort: Low Fast · Med Balanced · High Deep · XHigh Max'], locked: 'Locked', hoverTag: 'Hover', activeTag: 'Active', orchTopo: 'Dual-Core Routing Topology', planner: 'PLANNER', runner: 'RUNNER', inFlowDock: 'In-Flow Dock', stage3d: '3D Stage', dockReturn: 'Return to In-Flow Desk Dock below Input Box (F)', stageExpand: 'Expand Fullscreen 3D Stage & Free Orbit (F)', unmute: 'Unmute Audio', mute: 'Mute Audio', closeDock: 'Collapse Dock (Esc / Enter)', auxPrev: 'Previous aux pad page', auxNext: 'Next aux pad page', pagePre: 'Page ', pageSuf: '', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Velocity'], radarVerts: ['AA', 'Term', 'Sci', 'SWE', 'Speed'], },
+  ja: { detailsOpen: '詳細 ▾', detailsClose: 'パネルを閉じる ▴', teleOff: '計測オフ', teleOffTitle: 'テレメトリ未接続', teleDisabledTitle: 'テレメトリ無効', teleOffSub: '実測コンテキスト指標のみ表示 · 擬似データ無効', badgeDisabled: '無効', badgeOffline: 'オフライン', badgeTight: '逼迫 TIGHT', badgeOptimal: '余裕 OPTIMAL', kv: 'KV ', free: '残 ', specBtn: '仕様', flipToSpec: 'MOD-01 ベンチマーク仕様へ戻る', flipToTele: 'MOD-02 512K リアルタイム計測へ切替', metaKicker: 'ネイティブモデルメタ情報', metaModel: 'モデル', metaEffort: '推論レベル', metaDefault: '既定', metaId: '識別子', metaNote: '2026Q4 ベンチ対象外 · ホスト実メタデータを表示中', ttHead: '2026Q4 評価指標と推論レベル説明', infoAria: '評価指標と推論レベルの説明', ttLines: ['AA v5：Artificial Analysis 総合知能指数 (100点満点)', 'TermBench：端末・CLI 自律修復成功率 (%)', 'HLE-D / GPQA-D：先端科学・多段推論正答率 (%)', 'SWE-Pro / AutoBench：実ソフトウェア修正率 (%)', '推論レベル：Low 高速 · Med 均衡 · High 深層 · XHigh 極限'], locked: 'ロック中', hoverTag: 'プレビュー', activeTag: '現在', orchTopo: 'デュアルコア経路トポロジ', planner: '計画コア', runner: '実行コア', inFlowDock: 'インラインドック', stage3d: '3Dステージ', dockReturn: '入力欄下のインラインドックへ戻す (F)', stageExpand: '全画面 3D ステージを展開して自由回転 (F)', unmute: 'メカニカル音を有効化', mute: 'ミュート', closeDock: 'ドックを閉じる (Esc / Enter)', auxPrev: '前のサブキーページ', auxNext: '次のサブキーページ', pagePre: '', pageSuf: ' ページ', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '生成速度'], radarVerts: ['AA', 'Term', '科学', 'SWE', '速度'], },
+  ko: { detailsOpen: '상세 ▾', detailsClose: '패널 접기 ▴', teleOff: '텔레메트리 꺼짐', teleOffTitle: '텔레메트리 오프라인', teleDisabledTitle: '텔레메트리 비활성', teleOffSub: '실시간 컨텍스트 지표만 표시 · 가상 데이터 비활성화', badgeDisabled: '꺼짐', badgeOffline: '오프라인', badgeTight: '부족 TIGHT', badgeOptimal: '여유 OPTIMAL', kv: '캐시 ', free: '여유 ', specBtn: '사양', flipToSpec: 'MOD-01 벤치마크 사양으로 전환', flipToTele: 'MOD-02 512K 실시간 텔레메트리로 전환', metaKicker: '기본 모델 메타데이터', metaModel: '모델', metaEffort: '추론 수준', metaDefault: '기본값', metaId: '태그 / ID', metaNote: '2026Q4 벤치마크 미등재 · 호스트 메타데이터 표시 중', ttHead: '2026Q4 벤치마크 및 사고 수준 안내', infoAria: '벤치마크 지표 및 사고 수준 안내', ttLines: ['AA v5: Artificial Analysis 종합 지능 지수 (0-100)', 'TermBench: 터미널·CLI 자율 작업 정확도 (%)', 'HLE-D / GPQA-D: 첨단 과학 및 심층 추론 (%)', 'SWE-Pro / AutoBench: 실제 소프트웨어 엔지니어링 (%)', '수준: Low 고속 · Med 균형 · High 심층 · XHigh 최대'], locked: '잠김', hoverTag: '미리보기', activeTag: '활성', orchTopo: '듀얼 코어 라우팅 토폴로지', planner: '플래너', runner: '러너', inFlowDock: '인라인 독', stage3d: '3D 스테이지', dockReturn: '입력창 아래 인라인 독으로 복귀 (F)', stageExpand: '전체 화면 3D 스테이지 및 자유 회전 (F)', unmute: '키캡 사운드 켜기', mute: '음소거', closeDock: '독 닫기 (Esc / Enter)', auxPrev: '이전 보조 키 페이지', auxNext: '다음 보조 키 페이지', pagePre: '', pageSuf: '페이지', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', '처리 속도'], radarVerts: ['AA', 'Term', '과학', 'SWE', '속도'], },
+  es: { detailsOpen: 'Detalles ▾', detailsClose: 'Ocultar ▴', teleOff: 'Telemetría apagada', teleOffTitle: 'Telemetría desconectada', teleDisabledTitle: 'Telemetría desactivada', teleOffSub: 'Solo métricas reales · Datos sintéticos desactivados', badgeDisabled: 'APAGADA', badgeOffline: 'OFFLINE', badgeTight: 'JUSTO', badgeOptimal: 'ÓPTIMO', kv: 'KV ', free: 'Libre ', specBtn: 'Espec.', flipToSpec: 'Volver a especificaciones MOD-01', flipToTele: 'Cambiar a telemetría MOD-02 512K', metaKicker: 'METADATOS DEL MODELO', metaModel: 'MODELO', metaEffort: 'ESFUERZO', metaDefault: 'Predet.', metaId: 'TAG / ID', metaNote: 'Fuera de benchmarks 2026Q4 · Mostrando metadatos reales', ttHead: 'Benchmarks 2026Q4 y niveles de esfuerzo', infoAria: 'Explicación de métricas y niveles de razonamiento', ttLines: ['AA v5: Índice de inteligencia Artificial Analysis (0-100)', 'TermBench: Precisión autónoma en terminal y CLI (%)', 'HLE-D / GPQA-D: Ciencia de frontera y razonamiento (%)', 'SWE-Pro / AutoBench: Ingeniería de software real (%)', 'Esfuerzo: Low Rápido · Med Equil. · High Prof. · XHigh Máx'], locked: 'Bloqueado', hoverTag: 'Vista previa', activeTag: 'Activo', orchTopo: 'Topología de doble núcleo', planner: 'PLANIF.', runner: 'EJECUTOR', inFlowDock: 'Dock integrado', stage3d: 'Escena 3D', dockReturn: 'Volver al dock bajo el editor (F)', stageExpand: 'Expandir escena 3D y órbita libre (F)', unmute: 'Activar sonido', mute: 'Silenciar', closeDock: 'Contraer dock (Esc / Enter)', auxPrev: 'Página anterior', auxNext: 'Página siguiente', pagePre: 'Página ', pageSuf: '', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Velocidad'], radarVerts: ['AA', 'Term', 'Cienc.', 'SWE', 'Vel.'], },
+  fr: { detailsOpen: 'Détails ▾', detailsClose: 'Masquer ▴', teleOff: 'Télémétrie coupée', teleOffTitle: 'Télémétrie hors ligne', teleDisabledTitle: 'Télémétrie désactivée', teleOffSub: 'Métriques réelles uniquement · Secours synthétique coupé', badgeDisabled: 'COUPÉE', badgeOffline: 'HORS LIGNE', badgeTight: 'SERRÉ', badgeOptimal: 'OPTIMAL', kv: 'KV ', free: 'Libre ', specBtn: 'Spéc.', flipToSpec: 'Revenir au panneau MOD-01', flipToTele: 'Passer à la télémétrie MOD-02 512K', metaKicker: 'MÉTADONNÉES NATIVES', metaModel: 'MODÈLE', metaEffort: 'EFFORT', metaDefault: 'Défaut', metaId: 'TAG / ID', metaNote: 'Absent des benchmarks 2026Q4 · Métadonnées hôte réelles', ttHead: 'Benchmarks 2026Q4 et niveaux de réflexion', infoAria: 'Explication des benchmarks et niveaux de réflexion', ttLines: ['AA v5 : Indice d’intelligence Artificial Analysis (0-100)', 'TermBench : Précision autonome terminal & CLI (%)', 'HLE-D / GPQA-D : Science avancée & raisonnement (%)', 'SWE-Pro / AutoBench : Génie logiciel réel (%)', 'Effort : Low Rapide · Med Équil. · High Prof. · XHigh Max'], locked: 'Verrouillé', hoverTag: 'Aperçu', activeTag: 'Actif', orchTopo: 'Topologie double cœur', planner: 'PLANIF.', runner: 'EXÉC.', inFlowDock: 'Dock intégré', stage3d: 'Scène 3D', dockReturn: 'Revenir au dock sous la zone de saisie (F)', stageExpand: 'Agrandir la scène 3D en plein écran (F)', unmute: 'Activer le son', mute: 'Couper le son', closeDock: 'Fermer le dock (Esc / Enter)', auxPrev: 'Page précédente', auxNext: 'Page suivante', pagePre: 'Page ', pageSuf: '', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Vélocité'], radarVerts: ['AA', 'Term', 'Sci', 'SWE', 'Vit.'], },
+  de: { detailsOpen: 'Details ▾', detailsClose: 'Ausblenden ▴', teleOff: 'Telemetrie aus', teleOffTitle: 'Telemetrie offline', teleDisabledTitle: 'Telemetrie deaktiviert', teleOffSub: 'Nur Live-Kontextmetriken · Synthetik deaktiviert', badgeDisabled: 'AUS', badgeOffline: 'OFFLINE', badgeTight: 'KNAPP', badgeOptimal: 'OPTIMAL', kv: 'KV ', free: 'Frei ', specBtn: 'Daten', flipToSpec: 'Zurück zu MOD-01 Spezifikationen', flipToTele: 'Zu MOD-02 512K-Telemetrie wechseln', metaKicker: 'NATIVE MODELL-METADATEN', metaModel: 'MODELL', metaEffort: 'AUFWAND', metaDefault: 'Standard', metaId: 'TAG / ID', metaNote: 'Nicht in 2026Q4-Benchmarks · Zeige echte Host-Metadaten', ttHead: '2026Q4-Benchmarks & Denkstufen', infoAria: 'Erklärung zu Benchmarks und Denkstufen', ttLines: ['AA v5: Artificial Analysis Intelligence Index (0-100)', 'TermBench: Autonome Terminal- & CLI-Aufgaben (%)', 'HLE-D / GPQA-D: Spitzenwissenschaft & Tiefenlogik (%)', 'SWE-Pro / AutoBench: Reale Softwareentwicklung (%)', 'Aufwand: Low Schnell · Med Ausgew. · High Tief · XHigh Max'], locked: 'Gesperrt', hoverTag: 'Vorschau', activeTag: 'Aktiv', orchTopo: 'Dual-Core-Routingtopologie', planner: 'PLANER', runner: 'RUNNER', inFlowDock: 'Inline-Dock', stage3d: '3D-Bühne', dockReturn: 'Zurück zum Inline-Dock unter dem Eingabefeld (F)', stageExpand: 'Vollbild-3D-Bühne & freies Drehen (F)', unmute: 'Ton einschalten', mute: 'Stummschalten', closeDock: 'Dock schließen (Esc / Enter)', auxPrev: 'Vorherige Aux-Seite', auxNext: 'Nächste Aux-Seite', pagePre: 'Seite ', pageSuf: '', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Tempo'], radarVerts: ['AA', 'Term', 'Wiss.', 'SWE', 'Tempo'], },
+  tr: { detailsOpen: 'Ayrıntılar ▾', detailsClose: 'Paneli Gizle ▴', teleOff: 'Telemetri Kapalı', teleOffTitle: 'Telemetri Çevrimdışı', teleDisabledTitle: 'Telemetri Devre Dışı', teleOffSub: 'Yalnızca canlı bağlam metrikleri · Sentetik veri kapalı', badgeDisabled: 'KAPALI', badgeOffline: 'ÇEVRİMDIŞI', badgeTight: 'DAR', badgeOptimal: 'OPTİMAL', kv: 'KV ', free: 'Boş ', specBtn: 'Özellik', flipToSpec: 'MOD-01 Özellik ve Kıyaslama paneline geç', flipToTele: 'MOD-02 512K Telemetri paneline geç', metaKicker: 'YEREL MODEL ÜSTVERİSİ', metaModel: 'MODEL', metaEffort: 'DÜZEY', metaDefault: 'Varsayılan', metaId: 'ETİKET / ID', metaNote: '2026Q4 kıyaslamasında yok · Yalnızca gerçek ana makine üstverisi', ttHead: '2026Q4 Kıyaslama Ölçütleri ve Düşünme Düzeyleri', infoAria: 'Kıyaslama metrikleri ve düşünme düzeyleri açıklaması', ttLines: ['AA v5: Artificial Analysis Zeka Endeksi (0-100)', 'TermBench: Otonom terminal ve CLI sorun giderme (%)', 'HLE-D / GPQA-D: İleri bilim ve çok adımlı akıl yürütme (%)', 'SWE-Pro / AutoBench: Gerçek yazılım mühendisliği çözümü (%)', 'Düzey: Low Hızlı · Med Dengeli · High Derin · XHigh Maks'], locked: 'Kilitli', hoverTag: 'Önizleme', activeTag: 'Aktif', orchTopo: 'ÇİFT ÇEKİRDEK YÖNLENDİRME TOPOLOJİSİ', planner: 'PLANLAYICI', runner: 'YÜRÜTÜCÜ', inFlowDock: 'Satır İçi Yuva', stage3d: '3D Sahne', dockReturn: 'Giriş kutusunun altındaki yuvaya dön (F)', stageExpand: 'Tam ekran 3D sahneyi aç ve serbest döndür (F)', unmute: 'Mekanik sesi aç', mute: 'Sesi kapat', closeDock: 'Yuvayı kapat (Esc / Enter)', auxPrev: 'Önceki yardımcı sayfa', auxNext: 'Sonraki yardımcı sayfa', pagePre: 'Sayfa ', pageSuf: '', radarAxes: ['AA v5', 'TermBench', 'HLE-D', 'SWE-Pro', 'Hız'], radarVerts: ['AA', 'Term', 'Bilim', 'SWE', 'Hız'], },
     };
 
     function normalizePeriodicLang(raw) {
@@ -224,6 +58,7 @@
       if (/^es(?:$|-)/.test(s) || s === 'spanish') return 'es';
       if (/^fr(?:$|-)/.test(s) || s === 'french') return 'fr';
       if (/^de(?:$|-)/.test(s) || s === 'german') return 'de';
+      if (/^tr(?:$|-)/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
       if (/^en(?:$|-)/.test(s) || s === 'english') return 'en';
       return '';
     }
@@ -407,22 +242,23 @@
       '}',
       '#ag-prism-periodic-picker-root[data-open="1"]{opacity:1;}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"]{',
-      'position:relative;inset:auto;z-index:24;flex:0 0 auto;width:100%;height:0px;',
+      'position:relative;inset:auto;z-index:24;flex:0 0 auto;width:100%;height:0;--pp-dh:clamp(336px,38vh,392px);',
       'display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;',
       'padding:0;gap:0;overflow:hidden;border-top:1px solid var(--pp-dock-hairline);',
       'background:var(--pp-felt-bg);box-shadow:none;',
       'transition:height 300ms cubic-bezier(0.22,1,0.36,1),opacity 180ms ease;',
       '}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-in-flow="0"]{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:2147483640;}',
-      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-open="1"]{height:clamp(336px,38vh,392px);max-height:calc(100vh - 176px);opacity:1;}',
-      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-dock-tier="medium"][data-open="1"]{height:clamp(368px,43vh,422px);max-height:calc(100vh - 176px);}',
-      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"][data-open="1"]{height:var(--ag-pp-short-dock-h,236px) !important;max-height:calc(100vh - 176px);}',
+      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-dock-tier="medium"]{--pp-dh:clamp(368px,43vh,422px);}',
+      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"]{--pp-dh:var(--ag-pp-short-dock-h,236px);}',
+      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-open="1"]{height:var(--pp-dh);max-height:calc(100vh - 176px);opacity:1;}',
+      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-spatial-dock{flex:0 0 auto;height:var(--pp-dh);max-height:calc(100vh - 176px);}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-spatial-dock{padding:6px 10px 6px;gap:8px;}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-stage{min-height:0 !important;}',
-      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-micro-tags,#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-source-row,#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-tele-subscreen,#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-pulse-svg{display:none;}',
+      '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] :is(.ag-pp-micro-tags,.ag-pp-source-row,.ag-pp-tele-subscreen,.ag-pp-pulse-svg){display:none;}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-radar-pane{grid-template-columns:68px minmax(0,1fr);gap:4px;}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-short-viewport="1"] .ag-pp-radar-svg{width:66px;height:66px;}',
-      '@media (max-height:560px){#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-open="1"]{height:clamp(184px,45vh,252px) !important;max-height:calc(100vh - 176px);}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-spatial-dock{padding:6px 10px 6px;gap:8px;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-stage{min-height:0 !important;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-micro-tags,#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-source-row,#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-tele-subscreen,#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-pulse-svg{display:none;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-radar-pane{grid-template-columns:68px minmax(0,1fr);gap:4px;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-radar-svg{width:66px;height:66px;}}',
+      '@media (max-height:560px){#ag-prism-periodic-picker-root[data-stage-mode="drawer"]{--pp-dh:clamp(184px,45vh,252px);}#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-open="1"]{height:var(--pp-dh)!important;max-height:calc(100vh - 176px);}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-spatial-dock{padding:6px 10px 6px;gap:8px;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-stage{min-height:0 !important;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] :is(.ag-pp-micro-tags,.ag-pp-source-row,.ag-pp-tele-subscreen,.ag-pp-pulse-svg){display:none;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-radar-pane{grid-template-columns:68px minmax(0,1fr);gap:4px;}#ag-prism-periodic-picker-root[data-stage-mode="drawer"] .ag-pp-radar-svg{width:66px;height:66px;}}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"][data-closing="1"]{height:0px !important;opacity:0;transition:height 260ms cubic-bezier(0.32,0,0.67,0),opacity 180ms ease;}',
       '#ag-prism-periodic-picker-root[data-stage-mode="drawer"] > .ag-pp-deskmat-stage{opacity:0;pointer-events:none;}',
       '#ag-prism-periodic-picker-root[data-orbit-dragging="1"],#ag-prism-periodic-picker-root[data-orbit-dragging="1"] *{cursor:grabbing !important;}',
@@ -786,10 +622,10 @@
       '.ag-pp-deskmat-topo{position:absolute;inset:-3%;width:106%;height:106%;display:block;pointer-events:none;color:var(--pp-topo-color);opacity:calc(var(--pp-ambient-mul,1) * var(--pp-topo-mul,0.018));}',
       '.ag-pp-deskmat-topo path{stroke-width:0.85;}',
       '.ag-pp-stage{position:relative;z-index:1;flex:1 1 0;min-width:0;width:100%;height:100%;min-height:190px;background:transparent;border:0;box-shadow:none;padding:0;margin:0;box-sizing:border-box;user-select:none;-webkit-user-select:none;contain:layout style;}',
-      '.ag-pp-floor-shadow{position:absolute;left:4%;right:4%;top:30%;bottom:-16%;z-index:0;pointer-events:none;border-radius:50%;contain:layout style;will-change:transform;transform:translate3d(var(--pp-shadow-px,0px),var(--pp-shadow-py,0px),0);transition:transform 140ms cubic-bezier(0.22,1,0.36,1);}',
-      '#ag-prism-periodic-picker-root[data-orbit-dragging="1"] .ag-pp-floor-shadow{transition:none;}',
-      '.ag-pp-floor-shadow::before{content:"";position:absolute;inset:8% -4% -12% -4%;pointer-events:none;border-radius:50%;background:var(--pp-levitation-shadow);}',
-      '.ag-pp-floor-shadow::after{content:"";position:absolute;inset:20% 5% 0% 5%;pointer-events:none;border-radius:50%;background:var(--pp-contact-shadow);will-change:transform;transform:translate3d(calc(var(--pp-shadow-px,0px) * -0.35),calc(var(--pp-shadow-py,0px) * -0.35),0);}',
+      '.ag-pp-floor-shadow{position:absolute;left:4%;right:4%;top:30%;bottom:-16%;z-index:0;pointer-events:none;border-radius:50%;contain:layout style;transform:translate3d(var(--pp-shadow-px,0px),var(--pp-shadow-py,0px),0);transition:transform 140ms cubic-bezier(0.22,1,0.36,1);}',
+      '#ag-prism-periodic-picker-root[data-orbit-dragging="1"] .ag-pp-floor-shadow{transition:none;will-change:transform;}',
+      '.ag-pp-floor-shadow::before{content:"";position:absolute;inset:8% -4% -12% -4%;pointer-events:none;border-radius:50%;contain:strict;background:var(--pp-levitation-shadow);}',
+      '.ag-pp-floor-shadow::after{content:"";position:absolute;inset:20% 5% 0% 5%;pointer-events:none;border-radius:50%;contain:strict;background:var(--pp-contact-shadow);transform:translate3d(calc(var(--pp-shadow-px,0px) * -0.35),calc(var(--pp-shadow-py,0px) * -0.35),0);}',
       '.ag-pp-gl-canvas{position:relative;z-index:1;display:block;width:100%;height:100%;background:transparent;border:0;outline:none;touch-action:none;}',
       '.ag-pp-hit-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2;}',
       '.ag-pp-hit-btn{position:absolute;margin:0;padding:0;border:0;background:transparent;color:transparent;opacity:0;pointer-events:auto;cursor:inherit;box-sizing:border-box;border-radius:6px;outline:none;}',
@@ -813,74 +649,37 @@
       '.ag-pp-mk-z{position:relative;font-size:9.5px;font-weight:600;line-height:1;letter-spacing:0.01em;}',
       '.ag-pp-mk-z:empty{display:none;}',
       '.ag-pp-mk-sym{position:relative;font-size:9.5px;font-weight:600;line-height:1;letter-spacing:0.015em;}',
-      /* Native Host Tooltip Suppression during Long-Press Hold & Open Picker */
       'html[data-ag-pp-holding="1"] [role="tooltip"], html[data-ag-pp-open="1"] [role="tooltip"] { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }',
       'html[data-ag-pp-open="1"] #ag-prism-periodic-picker-root .ag-pp-source-row:hover .ag-pp-bench-tooltip, html[data-ag-pp-open="1"] #ag-prism-periodic-picker-root .ag-pp-source-row:focus-within .ag-pp-bench-tooltip { opacity: 1 !important; visibility: visible !important; transform: translateY(0); pointer-events: auto !important; }',
-      /* Motion Level Blur Downgrade (medium / low / subtle / off) */
       'html[data-ag-cs-motion="medium"] #ag-prism-periodic-picker-root,html[data-ag-cs-motion="low"] #ag-prism-periodic-picker-root,html[data-ag-cs-motion="subtle"] #ag-prism-periodic-picker-root,html[data-ag-cs-motion="off"] #ag-prism-periodic-picker-root{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}',
       'html[data-ag-cs-motion="medium"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::before,html[data-ag-cs-motion="medium"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::after,html[data-ag-cs-motion="low"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::before,html[data-ag-cs-motion="low"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::after,html[data-ag-cs-motion="subtle"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::before,html[data-ag-cs-motion="subtle"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::after,html[data-ag-cs-motion="off"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::before,html[data-ag-cs-motion="off"] #ag-prism-periodic-picker-root .ag-pp-floor-shadow::after{filter:none !important;opacity:0.42;}',
       'html[data-ag-cs-motion="off"] #ag-prism-periodic-picker-root,html[data-ag-cs-motion="off"] #ag-prism-periodic-picker-root *{transition:none !important;transition-delay:0ms !important;animation:none !important;}',
-      '@media (prefers-reduced-motion:reduce){',
-      '#ag-prism-periodic-picker-root,.ag-pp-spatial-dock,.ag-pp-bento-grid,.ag-pp-stage,.ag-pp-right-wing,.ag-pp-hud-pill,.ag-pp-hud-reset-btn,.ag-pp-floor-shadow,.ag-pp-radar-poly,.ag-pp-radar-poly-runner,.ag-pp-radar-poly-cmp,.ag-pp-radar-fill,.ag-pp-crystal-fill,.ag-pp-bench-tooltip,.ag-pp-bento-card.is-session-switching .ag-pp-spec-body,.ag-pp-bento-card.is-session-switching .ag-pp-tele-screen,.ag-pp-bento-card.is-session-switching .ag-pp-tele-subscreen{transition:none !important;transition-delay:0ms !important;animation:none !important;}',
-      '}',
+      '@media (prefers-reduced-motion:reduce){:root:not([data-ag-cs-ignore-rm="1"]) :is(#ag-prism-periodic-picker-root,.ag-pp-spatial-dock,.ag-pp-bento-grid,.ag-pp-stage,.ag-pp-right-wing,.ag-pp-hud-pill,.ag-pp-hud-reset-btn,.ag-pp-floor-shadow,.ag-pp-radar-poly,.ag-pp-radar-poly-runner,.ag-pp-radar-poly-cmp,.ag-pp-radar-fill,.ag-pp-crystal-fill,.ag-pp-bench-tooltip,.ag-pp-bento-card.is-session-switching .ag-pp-spec-body,.ag-pp-bento-card.is-session-switching .ag-pp-tele-screen,.ag-pp-bento-card.is-session-switching .ag-pp-tele-subscreen){transition:none !important;transition-delay:0ms !important;animation:none !important;}}',
     ].join('\n');
 
-    function buildPickerCss() {
-      return PICKER_CSS;
-    }
-
-    /* ── Safe DOM & Isolation Helpers ──────────────────────────────────────── */
-
+    function buildPickerCss() { return PICKER_CSS; }
     function safeRemove(node) {
       if (!node) return;
-      if (typeof node.remove === 'function') {
-        node.remove();
-      } else if (node.parentNode && typeof node.parentNode.removeChild === 'function') {
-        node.parentNode.removeChild(node);
-      } else if (node.parentElement && typeof node.parentElement.removeChild === 'function') {
-        node.parentElement.removeChild(node);
-      }
+      if (typeof node.remove === 'function') node.remove();
+      else if (node.parentNode && typeof node.parentNode.removeChild === 'function') node.parentNode.removeChild(node);
+      else if (node.parentElement && typeof node.parentElement.removeChild === 'function') node.parentElement.removeChild(node);
     }
-
     function setStyleVar(el, prop, val) {
       if (!el || !el.style) return;
       if (val === null || val === undefined || val === '') {
-        if (typeof el.style.removeProperty === 'function') {
-          el.style.removeProperty(prop);
-        } else {
-          delete el.style[prop];
-        }
+        if (typeof el.style.removeProperty === 'function') el.style.removeProperty(prop); else delete el.style[prop];
         return;
       }
-      if (typeof el.style.setProperty === 'function') {
-        el.style.setProperty(prop, String(val));
-      } else {
-        el.style[prop] = String(val);
-      }
+      if (typeof el.style.setProperty === 'function') el.style.setProperty(prop, String(val)); else el.style[prop] = String(val);
     }
-
-    function mkEl(doc, tag, className, text) {
-      var el = doc.createElement(tag);
-      if (className) el.className = className;
-      if (text !== undefined && text !== null) el.textContent = String(text);
-      return el;
-    }
-
+    function mkEl(doc, tag, className, text) { var el = doc.createElement(tag); if (className) el.className = className; if (text !== undefined && text !== null) el.textContent = String(text); return el; }
     function mkSvg(doc, tag, attrs) {
-      var el =
-        typeof doc.createElementNS === 'function' ? doc.createElementNS(SVG_NS, tag) : doc.createElement(tag);
-      if (attrs) {
-        var keys = Object.keys(attrs);
-        for (var i = 0; i < keys.length; i += 1) {
-          el.setAttribute(keys[i], String(attrs[keys[i]]));
-        }
-      }
+      var el = typeof doc.createElementNS === 'function' ? doc.createElementNS(SVG_NS, tag) : doc.createElement(tag);
+      if (attrs) { var keys = Object.keys(attrs); for (var i = 0; i < keys.length; i += 1) el.setAttribute(keys[i], String(attrs[keys[i]])); }
       return el;
     }
 
-    /**
-     * Stamp full 5+1 anti-translation / ownership markers so host-i18n never rewrites Periodic Picker DOM.
-     */
+    /* Stamp 5+1 anti-translation markers */
     function markPeriodicOwnedRoot(el) {
       if (!el || typeof el !== 'object') return el;
       if (typeof el.setAttribute === 'function') {
@@ -911,21 +710,16 @@
     var _bentoRmMqlCache = typeof WeakMap === 'function' ? new WeakMap() : null;
     function isReducedMotion(doc, rt) {
       try {
-        if (doc && doc.documentElement && doc.documentElement.getAttribute('data-ag-cs-motion') === 'off') {
-          return true;
-        }
+        var de = doc && doc.documentElement;
+        if (de && de.getAttribute('data-ag-cs-motion') === 'off') return true;
+        if (rt && typeof rt.__agPrismReducedMotion === 'function') return Boolean(rt.__agPrismReducedMotion(doc, rt));
+        if (de && de.getAttribute('data-ag-cs-ignore-rm') === '1') return false;
         if (rt && typeof rt.matchMedia === 'function') {
-          var mm = rt.matchMedia;
-          if (_bentoRmMqlCache) {
-            var cached = _bentoRmMqlCache.get(rt);
-            if (cached && cached.fn === mm && cached.mq) {
-              return Boolean(cached.mq.matches);
-            }
-            var mq = mm.call(rt, '(prefers-reduced-motion: reduce)');
-            _bentoRmMqlCache.set(rt, { fn: mm, mq: mq });
-            return Boolean(mq && mq.matches);
-          }
-          return Boolean(mm.call(rt, '(prefers-reduced-motion: reduce)').matches);
+          var mm = rt.matchMedia, c = _bentoRmMqlCache && _bentoRmMqlCache.get(rt);
+          if (c && c.fn === mm && c.mq) return Boolean(c.mq.matches);
+          var mq = mm.call(rt, '(prefers-reduced-motion: reduce)');
+          if (_bentoRmMqlCache) _bentoRmMqlCache.set(rt, { fn: mm, mq: mq });
+          return Boolean(mq && mq.matches);
         }
       } catch (e) {}
       return false;

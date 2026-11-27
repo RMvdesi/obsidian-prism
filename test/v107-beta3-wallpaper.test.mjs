@@ -755,6 +755,37 @@ test('wallpaper-service: atomic config persistence, lazy 127.0.0.1 HTTP 206 Rang
     assert.equal(evilOriginRes.statusCode, 403);
     assert.equal(evilOriginRes.headers['access-control-allow-origin'], undefined);
 
+    // DNS Rebinding Host spoofing -> 403 Forbidden (only exact 127.0.0.1:<port> accepted)
+    const spoofHostRes = await httpRequestRaw(mediaUrl, {
+      headers: { Host: `rebind.evil.test:${parsedUrl.port}` },
+    });
+    assert.equal(spoofHostRes.statusCode, 403);
+    const wrongPortHostRes = await httpRequestRaw(mediaUrl, {
+      headers: { Host: '127.0.0.1:1' },
+    });
+    assert.equal(wrongPortHostRes.statusCode, 403);
+
+    // Sec-Fetch-Site: cross-site without trusted desktop origin -> 403; same-origin/none/trusted vscode-file -> 200
+    const crossSiteRes = await httpRequestRaw(mediaUrl, {
+      headers: { 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(crossSiteRes.statusCode, 403);
+    const sameOriginFetchRes = await httpRequestRaw(mediaUrl, {
+      method: 'HEAD',
+      headers: { 'Sec-Fetch-Site': 'same-origin' },
+    });
+    assert.equal(sameOriginFetchRes.statusCode, 200);
+    const noneFetchRes = await httpRequestRaw(mediaUrl, {
+      method: 'HEAD',
+      headers: { 'Sec-Fetch-Site': 'none' },
+    });
+    assert.equal(noneFetchRes.statusCode, 200);
+    const extCrossSiteRes = await httpRequestRaw(mediaUrl, {
+      method: 'HEAD',
+      headers: { Origin: 'vscode-file://vscode-app', 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(extCrossSiteRes.statusCode, 200);
+
     // HTTP 206 Range streaming (start-end, suffix, and invalid 416)
     const rangeRes = await httpRequestRaw(mediaUrl, { headers: { Range: 'bytes=10-49' } });
     assert.equal(rangeRes.statusCode, 206);
@@ -850,11 +881,14 @@ test('wallpaper-service: get-media-blob supports <= 8 MB images, rejects > 8 MB 
     await svc.dispose();
   }
 
-  // Native picker: Windows parameterized powershell.exe -EncodedCommand
+  // Native picker: Windows zero-PowerShell compiled obsidian-prism-watcher.exe --pick-file
+  const fakeWatcherExe = path.join(tmpDir, 'obsidian-prism-watcher.exe');
+  fs.writeFileSync(fakeWatcherExe, 'stub-exe', 'utf8');
   const winCalls = [];
   const winSvc = createWallpaperService({
     configPath: path.join(tmpDir, 'win.json'),
     platform: 'win32',
+    watcherExePath: fakeWatcherExe,
     execFileImpl(file, args, opts, cb) {
       winCalls.push({ file, args, opts });
       cb(null, `${smallPng}\r\n`, '');
@@ -866,17 +900,40 @@ test('wallpaper-service: get-media-blob supports <= 8 MB images, rejects > 8 MB 
     assert.equal(picked.config.enabled, true);
     assert.equal(picked.mediaType, 'image');
     assert.equal(winCalls.length, 1);
-    assert.equal(winCalls[0].file, 'powershell.exe');
-    assert.ok(winCalls[0].args.includes('-EncodedCommand'));
-    assert.ok(winCalls[0].args.includes('-STA'));
+    assert.equal(winCalls[0].file, fakeWatcherExe);
+    assert.ok(winCalls[0].args.includes('--pick-file'));
+    assert.ok(winCalls[0].args.includes('--filter'));
+    assert.equal(/powershell/i.test(winCalls[0].file), false, 'Windows picker must never invoke PowerShell');
   } finally {
     await winSvc.dispose();
+  }
+
+  // Native picker: Windows dev fallback (missing watcher exe) gracefully returns manual-input-required with 0 subprocesses
+  const winNoExeCalls = [];
+  const winNoExeSvc = createWallpaperService({
+    configPath: path.join(tmpDir, 'win-no-exe.json'),
+    platform: 'win32',
+    watcherExePath: null,
+    execFileImpl(file, args, opts, cb) {
+      winNoExeCalls.push({ file, args, opts });
+      cb(null, '', '');
+    },
+  });
+  try {
+    const fallbackRes = await winNoExeSvc.handleAction('pick-media');
+    assert.equal(fallbackRes.ok, false);
+    assert.equal(fallbackRes.manualRequired, true);
+    assert.equal(fallbackRes.code, 'manual-input-required');
+    assert.equal(winNoExeCalls.length, 0);
+  } finally {
+    await winNoExeSvc.dispose();
   }
 
   // Native picker: Windows selecting disallowed .svg gets blocked by post-pick validation
   const winSvgSvc = createWallpaperService({
     configPath: path.join(tmpDir, 'winsvg.json'),
     platform: 'win32',
+    watcherExePath: fakeWatcherExe,
     execFileImpl(_file, _args, _opts, cb) {
       cb(null, badSvg, '');
     },
@@ -1349,8 +1406,9 @@ test('red-team #229 [P0-1, P1-1, P2-1, P2-3]: NTFS 8.3 short paths, AppData/Loca
 
     // 3) ReDoS hygiene: zero polynomial /.replace(\/\/+\$/, '')/ in wallpaper-service.mjs + fast linear handling of 40k trailing slashes
     const svcSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'wallpaper', 'wallpaper-service.mjs'), 'utf8');
+    const pickerCsSrc = fs.readFileSync(path.join(ROOT, 'installer', 'watcher', 'FilePicker.cs'), 'utf8');
     assert.equal(svcSrc.includes(".replace(/\\/+$/, '')"), false, 'Must not contain polynomial trailing-slash regex');
-    assert.equal(svcSrc.includes('$dlg.DereferenceLinks = $true'), true, 'Windows OpenFileDialog must set DereferenceLinks = $true');
+    assert.equal(pickerCsSrc.includes('dlg.DereferenceLinks = true;'), true, 'Windows C# OpenFileDialog must set DereferenceLinks = true');
 
     const t0 = Date.now();
     const slashDir = 'C:/safe-dir' + '/'.repeat(40000);
@@ -1534,8 +1592,10 @@ test('red-team #229 [P1-3]: pick-media single-flight mutex, dispose() kills orph
   const tmpDir = mkTempDir('prism-wp-rt-p13-');
   const pngA = path.join(tmpDir, 'a.png');
   const pngB = path.join(tmpDir, 'b.png');
+  const fakeWatcherExe = path.join(tmpDir, 'obsidian-prism-watcher.exe');
   fs.writeFileSync(pngA, makeValidPngBuffer(48));
   fs.writeFileSync(pngB, makeValidPngBuffer(64));
+  fs.writeFileSync(fakeWatcherExe, 'stub');
 
   // Verify getMediaBlob no longer uses synchronous fs.readFileSync
   const svcSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'wallpaper', 'wallpaper-service.mjs'), 'utf8');
@@ -1544,15 +1604,34 @@ test('red-team #229 [P1-3]: pick-media single-flight mutex, dispose() kills orph
   assert.equal(svcSrc.slice(blobFnIdx).includes('readFileSync'), false, 'getMediaBlob must be fully async without readFileSync');
 
   try {
+    const createSpawnGate = (label, timeoutMs = 5000) => {
+      let resolveGate;
+      let timer;
+      const promise = new Promise((resolve, reject) => {
+        resolveGate = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        timer = setTimeout(
+          () => reject(new Error(`${label}: execFileImpl was not invoked within ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      });
+      return { promise, notify: resolveGate, cancel: () => clearTimeout(timer) };
+    };
+
     // 1) Concurrent pick-media calls share single-flight promise (only 1 child spawned)
     let spawnCount = 0;
     let releasePicker = null;
+    const sfSpawnGate = createSpawnGate('pick-media single-flight');
     const sfSvc = createWallpaperService({
       configPath: path.join(tmpDir, 'sf-pick.json'),
       platform: 'win32',
+      watcherExePath: fakeWatcherExe,
       execFileImpl(_file, _args, _opts, cb) {
         spawnCount += 1;
         releasePicker = () => cb(null, `${pngA}\r\n`, '');
+        sfSpawnGate.notify();
         return { killed: false, kill() { this.killed = true; } };
       },
     });
@@ -1563,26 +1642,31 @@ test('red-team #229 [P1-3]: pick-media single-flight mutex, dispose() kills orph
         sfSvc.handleAction('pick-media'),
         sfSvc.handleAction('pick-media'),
       ];
-      await new Promise((r) => setTimeout(r, 10));
+      await sfSpawnGate.promise;
       assert.equal(spawnCount, 1, 'Concurrent pick-media must spawn only 1 OS picker child');
       releasePicker();
       const results = await Promise.all(calls);
+      assert.equal(spawnCount, 1, 'Concurrent pick-media must still have spawned only 1 OS picker child after settling');
       for (const r of results) {
         assert.equal(r.ok, true);
         assert.equal(r.config.enabled, true);
       }
     } finally {
+      sfSpawnGate.cancel();
       await sfSvc.dispose();
     }
 
     // 2) dispose() immediately kills in-flight picker child
     let killCalls = 0;
     let pendingCb = null;
+    const killSpawnGate = createSpawnGate('pick-media dispose kill');
     const killSvc = createWallpaperService({
       configPath: path.join(tmpDir, 'kill-pick.json'),
       platform: 'win32',
+      watcherExePath: fakeWatcherExe,
       execFileImpl(_file, _args, _opts, cb) {
         pendingCb = cb;
+        killSpawnGate.notify();
         return {
           killed: false,
           kill() {
@@ -1594,13 +1678,18 @@ test('red-team #229 [P1-3]: pick-media single-flight mutex, dispose() kills orph
         };
       },
     });
-    const inFlightPick = killSvc.handleAction('pick-media');
-    await new Promise((r) => setTimeout(r, 10));
-    await killSvc.dispose();
-    assert.equal(killCalls, 1, 'dispose() must kill active picker child process');
-    const killedRes = await inFlightPick;
-    assert.equal(killedRes.ok, false);
-    assert.equal(killedRes.code, 'service-disposed');
+    try {
+      const inFlightPick = killSvc.handleAction('pick-media');
+      await killSpawnGate.promise;
+      await killSvc.dispose();
+      assert.equal(killCalls, 1, 'dispose() must kill active picker child process');
+      const killedRes = await inFlightPick;
+      assert.equal(killedRes.ok, false);
+      assert.equal(killedRes.code, 'service-disposed');
+    } finally {
+      killSpawnGate.cancel();
+      await killSvc.dispose();
+    }
 
     // 3) get-media-blob: same-rev single-flight (1 open for 5 concurrent calls) + cross-rev concurrency <= 1
     let openCalls = 0;
@@ -1751,12 +1840,16 @@ test('red-team #229 [P1-2] & #230 [P0-1, P1-7, P2-3, P2-4]: no bootWpCfg token i
   assert.ok(getConfigCalls > prevCalls, 'sync() must always call refresh() when bridge is online even if bootCfg has mediaUrl');
   assert.equal(client.getState().rev, 3);
 
-  // blurPx === 0 sets --ag-prism-wp-filter: none; blurPx === 8 sets blur(8px)
-  assert.equal(env.html.style.getPropertyValue('--ag-prism-wp-filter'), 'none');
+  // blurPx === 0 sets --ag-prism-wp-filter: none; blurPx === 8 sets blur(8px) on #ag-prism-wallpaper-root (0 writes to html.style)
+  const wpRootNode = env.doc.getElementById('ag-prism-wallpaper-root');
+  assert.ok(wpRootNode, 'Wallpaper root element must exist');
+  assert.equal(env.html.style.getPropertyValue('--ag-prism-wp-filter'), '', 'Must not write --ag-prism-wp-filter to html.style');
+  assert.equal(wpRootNode.style.getPropertyValue('--ag-prism-wp-filter'), 'none');
   client.previewVisualVars({ blurPx: 8 });
-  assert.equal(env.html.style.getPropertyValue('--ag-prism-wp-filter'), 'blur(8px)');
+  assert.equal(env.html.style.getPropertyValue('--ag-prism-wp-filter'), '', 'previewVisualVars must not touch html.style');
+  assert.equal(wpRootNode.style.getPropertyValue('--ag-prism-wp-filter'), 'blur(8px)');
   client.previewVisualVars({ blurPx: 0 });
-  assert.equal(env.html.style.getPropertyValue('--ag-prism-wp-filter'), 'none');
+  assert.equal(wpRootNode.style.getPropertyValue('--ag-prism-wp-filter'), 'none');
 
   // doc.hasFocus() === false at init pauses video; passive pointerdown resets winBlurred = false and resumes playback
   const vid = env.doc.querySelector('#ag-prism-wallpaper-root video');

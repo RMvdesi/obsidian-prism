@@ -464,8 +464,15 @@ test('perf guard 11: style.css enables offscreen content-visibility, sidebar con
 
   // Verify flattenMainStyleSheet logic in ui-runtime.js expands nested & and :is(...) idempotently
   const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
-  const fnMatch = uiSrc.match(/function flattenMainStyleSheet\(\)[\s\S]*?\n  \}/);
-  assert.ok(fnMatch, 'flattenMainStyleSheet must exist in ui-runtime.js');
+  const fnStart = uiSrc.indexOf('function flattenMainStyleSheet()');
+  assert.ok(fnStart >= 0, 'flattenMainStyleSheet must exist in ui-runtime.js');
+  let fnDepth = 0, fnEnd = -1;
+  for (let i = uiSrc.indexOf('{', fnStart); i < uiSrc.length; i++) {
+    if (uiSrc[i] === '{') fnDepth++;
+    else if (uiSrc[i] === '}' && --fnDepth === 0) { fnEnd = i + 1; break; }
+  }
+  const fnMatch = fnEnd > fnStart ? [uiSrc.slice(fnStart, fnEnd)] : null;
+  assert.ok(fnMatch, 'flattenMainStyleSheet must have balanced braces in ui-runtime.js');
   const attrs = new Map([['data-ag-cs-css-hash', 'h1']]);
   const fakeStyle = {
     textContent: 'orig',
@@ -661,8 +668,15 @@ test('perf guard 13: thought-client skips checkVisibility on unchanged translate
 
 test('perf guard 14: flattenMainStyleSheet preserves :not(:is(...)), prefix &, and minifyCss keeps quoted strings/URLs/IDs intact', () => {
   const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
-  const fnMatch = uiSrc.match(/function flattenMainStyleSheet\(\)[\s\S]*?\n  \}/);
-  assert.ok(fnMatch, 'flattenMainStyleSheet must exist in ui-runtime.js');
+  const fnStart = uiSrc.indexOf('function flattenMainStyleSheet()');
+  assert.ok(fnStart >= 0, 'flattenMainStyleSheet must exist in ui-runtime.js');
+  let fnDepth = 0, fnEnd = -1;
+  for (let i = uiSrc.indexOf('{', fnStart); i < uiSrc.length; i++) {
+    if (uiSrc[i] === '{') fnDepth++;
+    else if (uiSrc[i] === '}' && --fnDepth === 0) { fnEnd = i + 1; break; }
+  }
+  const fnMatch = fnEnd > fnStart ? [uiSrc.slice(fnStart, fnEnd)] : null;
+  assert.ok(fnMatch, 'flattenMainStyleSheet must have balanced braces in ui-runtime.js');
   const attrs = new Map([['data-ag-cs-css-hash', 'h2']]);
   const fakeStyle = {
     textContent: 'orig',
@@ -693,9 +707,9 @@ test('perf guard 14: flattenMainStyleSheet preserves :not(:is(...)), prefix &, a
   assert.ok(fakeStyle.textContent.includes('html[x] .card:not(:is(.a,.b)){display: block;}'), 'must never expand :is() inside :not()');
   assert.ok(fakeStyle.textContent.includes('html[x] .card [data-x=":is(p,q)"]{color: blue;}'), 'must never expand :is() inside quoted attribute values');
 
-  const cdpSrc = fs.readFileSync(path.join(ROOT, 'cdp.js'), 'utf8');
-  const minMatch = cdpSrc.match(/function minifyCss\(css\)[\s\S]*?\n\}/);
-  assert.ok(minMatch, 'minifyCss must exist in cdp.js');
+  const cssPackSrc = fs.readFileSync(path.join(ROOT, 'src', 'compiler', 'css-pack.cjs'), 'utf8');
+  const minMatch = cssPackSrc.match(/function minifyCss\(css\)[\s\S]*?\n\}/);
+  assert.ok(minMatch, 'minifyCss must exist in src/compiler/css-pack.cjs');
   const sbCss = { Set };
   vm.runInNewContext(`${minMatch[0]}; globalThis.minifyCss = minifyCss;`, sbCss);
   const sample = '#aabbcc-box { content: "v: 0.5 #aabbcc !important"; background: url(/files/0.5.png); color: red !important; }';
@@ -988,7 +1002,7 @@ test('perf guard 17: pulse-dashboard keep-alive agent & includeMessages:false, b
   const bgWorkSrc = fs.readFileSync(path.join(ROOT, 'vendor/pulse-dashboard/sidecars/panel/background-worker.mjs'), 'utf8');
   const usageSrc = fs.readFileSync(path.join(ROOT, 'vendor/pulse-dashboard/sidecars/panel/usage.mjs'), 'utf8');
   const thoughtSrc = fs.readFileSync(path.join(ROOT, 'vendor/thought-translator/translator-service.mjs'), 'utf8');
-  const mainSrc = fs.readFileSync(path.join(ROOT, 'sidecars/daemon/main.mjs'), 'utf8');
+  const telemetrySrc = fs.readFileSync(path.join(ROOT, 'src/daemon/telemetry-service.mjs'), 'utf8');
 
   assert.ok(readerSrc.includes('budgetBytes=4*1024*1024') && readerSrc.includes('summaryAt>=6000') && readerSrc.includes('trajectoryVerbosity:2'), 'trajectory-reader must use 4 MiB budget, 6s summary TTL, and compact trajectoryVerbosity:2');
   assert.ok(storeSrc.includes('updatedAt < 4500') && storeSrc.includes('this.sessions.size > 32'), 'store must use 4.5s hot TTL and 32-session cap');
@@ -997,7 +1011,7 @@ test('perf guard 17: pulse-dashboard keep-alive agent & includeMessages:false, b
   assert.ok(bgWorkSrc.includes('++revisions>1') && bgWorkSrc.includes('sleep(8000)') && bgWorkSrc.includes('trajectoryVerbosity:2'), 'background-worker must cap active-session restarts to 1 with 8s backoff and verbosity 2');
   assert.ok(usageSrc.includes('maxOldGenerationSizeMb:32') && usageSrc.includes('livePollMs=3000') && usageSrc.includes('maxCandidates=10'), 'usage worker V8 cap must be 32 MB, live poll 3s, and maxCandidates 10');
   assert.ok(thoughtSrc.includes('opts.maxCacheEntries || 400'), 'thought-translator in-memory cache default must be capped at 400');
-  assert.equal((mainSrc.match(/includeMessages:\s*false/g) || []).length >= 2, true, 'main.mjs generator metadata calls must pass includeMessages:false');
+  assert.equal((telemetrySrc.match(/includeMessages:\s*false/g) || []).length >= 2, true, 'telemetry-service.mjs generator metadata calls must pass includeMessages:false');
 
   // 2b) TrajectoryJson zero-allocation discard fast-path preserves strict JSON validation
   const { TrajectoryJson } = await import('../vendor/pulse-dashboard/sidecars/panel/trajectory-json.mjs');
@@ -1210,18 +1224,23 @@ test('perf guard 20: Host Turbo alert.css dedup+restore, async img, hidden sidec
     'Hidden status spinner dots must clear native animation'
   );
   assert.ok(css.includes('iframe[src^="plugin://"]{contain:strict;'), 'plugin:// sidecar iframes must have contain:strict');
-  assert.ok(
-    css.includes('pre:not([data-ag-cs-rich-pre="1"]),pre>div:is(.border,.bg-muted)>div:nth-child(2),.agy-md-table.md-table-frame,table:not(.md-table-el)){contain:layout style;}'),
+  assert.match(
+    css,
+    /pre:not\(\[data-ag-cs-rich-pre="1"\]\),pre>div:is\(\.border,\.bg-muted\)>div:nth-child\(2\),\.agy-md-table\.md-table-frame,table:not\(\.md-table-el\)\)\{contain:layout style;?\}/,
     'Read-only code bodies and Markdown tables must have safe contain:layout style without contain:paint'
   );
-  const blurRuleMatch = css.match(/html\[data-ag-cs-style\](?:\[data-ag-cs-win-blur="1"\]|:is\(\[data-ag-cs-win-blur="1"\],\[data-ag-pp-open="1"\]\))\{[^\n]+\}/);
-  assert.ok(blurRuleMatch, 'style.css must define window-blur animation pause rule');
+  const blurRuleMatch = css.match(/html\[data-ag-cs-style\]:is\(\[data-ag-cs-win-blur="1"\],\[data-ag-pp-open="1"\]\):is\(\[data-ag-cs-perf-mode="performance"\],\[data-ag-cs-perf-mode="eco"\]\)\{[^\n]+\}/);
+  assert.ok(blurRuleMatch, 'style.css must define performance/eco-scoped window-blur & pp-open animation pause rule');
+  assert.ok(
+    blurRuleMatch[0].includes(':is([data-ag-cs-win-blur="1"],[data-ag-pp-open="1"]):is([data-ag-cs-perf-mode="performance"],[data-ag-cs-perf-mode="eco"])'),
+    'Window-blur & periodic-picker animation pause must be scoped strictly to performance/eco modes so default mode stays alive'
+  );
   assert.ok(
     blurRuleMatch[0].includes('animation-play-state:paused !important;') &&
       blurRuleMatch[0].includes('[data-testid="status-loading-spinner"]::before') &&
       blurRuleMatch[0].includes('.shimmer-text-mask') &&
       blurRuleMatch[0].includes('.shimmer-text-content'),
-    'Window-blur rule must pause spinner, dot, and shimmer animations'
+    'Performance/eco window-blur rule must pause spinner, dot, and shimmer animations'
   );
   assert.equal(/:is\([^)]*::(?:before|after)/.test(blurRuleMatch[0]), false, 'Pseudo-elements must never be placed inside :is()');
 
@@ -1615,19 +1634,18 @@ test('perf guard 21: Issues #2/#3/#5/#7/#8 + PR #6 + #35 queued-message 3-gears 
   const uiMainFactory = require(path.join(ROOT, 'ui-runtime.js'));
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
 
-  // 1) CSS & REMOVE_EXPRESSION hygiene: 0 :has(), 0 non-ASCII, stepped animations, blur/off backdrop-filter:none, fold-body contain:layout style, Issue #8 scrollbar fix
+  // 1) CSS & REMOVE_EXPRESSION hygiene: 0 :has(), 0 non-ASCII, smooth GPU animations, perf/off backdrop-filter:none, fold-body contain:layout style, Issue #8 scrollbar fix
   assert.equal((css.match(/:has\(/g) || []).length, 0, 'style.css must contain zero :has() selectors');
   assert.equal(/[^\x00-\x7F]/.test(css), false, 'style.css must contain zero non-ASCII characters');
-  assert.ok(css.includes('ag-cs-spark-orbit 2.4s steps(36) infinite'), 'PR #6: spark orbit must use discrete steps(36)');
-  assert.ok(css.includes('ag-cs-orbit-spin 2.4s steps(36) infinite'), 'PR #6: spinner orbit must use discrete steps(36)');
-  assert.ok(css.includes('ag-cs-comet-tip 1.1s steps(18) infinite'), 'PR #6: streaming comet tip must use discrete steps(18)');
+  assert.ok(css.includes('ag-cs-spark-orbit 2.4s ease-in-out infinite'), 'W7: spark orbit must use smooth ease-in-out');
+  assert.ok(css.includes('ag-cs-orbit-spin 2.4s linear infinite'), 'W7: spinner orbit must use smooth linear');
+  assert.ok(css.includes('ag-cs-comet-tip 1.1s ease-in-out infinite'), 'W7: streaming comet tip must use smooth ease-in-out');
   assert.ok(
-    css.includes('html[data-ag-cs-style]:is([data-ag-cs-win-blur="1"],[data-ag-cs-motion="off"])') &&
-      css.includes('backdrop-filter:none !important;'),
-    'Issue #2: win-blur & motion=off must disable backdrop-filter on transient overlays'
+    /html\[data-ag-cs-style\]:not\(#_\):is\(\[data-ag-cs-perf-mode="performance"\],\[data-ag-cs-motion="off"\][^\n]*backdrop-filter:none\s*!important/.test(css),
+    'W7: performance & motion=off must disable backdrop-filter on overlays without transient scroll/stream flicker'
   );
   assert.ok(
-    css.includes('& .ag-cs-settings-fold-body{display:none;') && css.includes('contain:layout style;}'),
+    css.includes('& .ag-cs-settings-fold-body{display:none;') && /contain:layout style;?\}/.test(css),
     'Issue #3: .ag-cs-settings-fold-body must use display:none + contain:layout style instead of max-height transition'
   );
   assert.ok(

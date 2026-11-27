@@ -159,7 +159,6 @@ test('GLSL minifyGlsl preserves preprocessor directives, interfaces, structs, sw
           'uDark',
           'uReach',
           'uIntensity',
-          'uStretch',
           'uPresence',
           'uPrism',
           'uSurge',
@@ -193,11 +192,11 @@ test('GLSL minifyGlsl preserves preprocessor directives, interfaces, structs, sw
           'u_wetL',
           'u_wetR',
           'u_hoverSlice',
-          'u_wave',
+          'u_waveTex',
+          'u_scaleTex',
           'u_drops',
           'u_bubbles',
           'u_bubShape',
-          'u_raySlope',
           'u_ratios',
           'main',
         ],
@@ -845,7 +844,7 @@ test('settings-panel persists Beta sub-tab, localizes Conversation DB Health acr
   }
 });
 
-test('Main bundle budget <= 704,000 B (< 690 KiB / 706,560 B CI hard limit), sidebarStudio defaults off, dead CSS removed, and v1.0.8-beta.3 metadata aligned', () => {
+test('Main bundle budget <= 704,000 B (< 690 KiB / 706,560 B CI hard limit), sidebarStudio defaults off, dead CSS removed, and release metadata aligned with package.json SSOT', () => {
   assert.equal(cdp.DEFAULT_CONFIG.sidebarStudio, 'off', 'DEFAULT_CONFIG.sidebarStudio must remain "off"');
   const expr = cdp.buildInjectExpression(cdp.DEFAULT_CONFIG);
   const bytes = Buffer.byteLength(expr, 'utf8');
@@ -913,9 +912,13 @@ test('Main bundle budget <= 704,000 B (< 690 KiB / 706,560 B CI hard limit), sid
   };
   sandbox.window = sandbox;
   sandbox.self = sandbox;
+  sandbox.top = sandbox;
   sandbox.globalThis = sandbox;
   const runRes = vm.runInNewContext(expr, sandbox);
   assert.equal(runRes?.status, 'ok');
+  const effortExpr = cdp.buildEffortSliderChannelExpression(cdp.DEFAULT_CONFIG);
+  assert.ok(effortExpr.length > 0, 'Channel 14 effortSlider must compile when enabled');
+  vm.runInNewContext(effortExpr, sandbox);
   const injectedCss = styles.join('\n');
   assert.ok(
     injectedCss.includes("html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='model-selector-effort-option'])"),
@@ -933,16 +936,24 @@ test('Main bundle budget <= 704,000 B (< 690 KiB / 706,560 B CI hard limit), sid
   assert.equal(injectedCss.includes('.ces-set-head'), false, 'Dead .ces-set* settings modal CSS must remain stripped');
   assert.ok(injectedCss.includes('data-ces-model-selected'), 'Active model-selected SLIDER_CSS rule must be preserved in bundle');
 
-  // Verify release metadata consistency
+  // Verify release metadata consistency dynamically against package.json#version SSOT
+  const pkgVersion = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+  assert.equal(cdp.PLUGIN_VERSION, pkgVersion, 'cdp.PLUGIN_VERSION must match package.json#version');
+  const numParts = pkgVersion.match(/^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]*?(\d+))?$/);
+  const win4Version = numParts ? `${numParts[1]}.${numParts[2]}.${numParts[3]}.${numParts[4] || 0}` : '';
+
   const wbApp = fs.readFileSync(path.join(ROOT, 'workbench/app.js'), 'utf8');
-  assert.ok(wbApp.includes('Obsidian Prism v1.0.8-beta.3') && wbApp.includes('GPL-3.0 · 7 CREDITS'), 'workbench/app.js must reflect v1.0.8-beta.3 and GPL-3.0');
+  assert.ok(
+    wbApp.includes(`Obsidian Prism v${pkgVersion}`) && wbApp.includes('GPL-3.0 · 7 CREDITS'),
+    `workbench/app.js must reflect v${pkgVersion} and GPL-3.0`
+  );
   assert.equal(wbApp.includes('Obsidian Prism v1.0.0'), false);
   assert.equal(wbApp.includes('MIT · 7 CREDITS'), false);
 
   const bugTpl = fs.readFileSync(path.join(ROOT, '.github/ISSUE_TEMPLATE/bug_report.md'), 'utf8');
-  assert.ok(bugTpl.includes('`v1.0.8-beta.3`'));
+  assert.ok(bugTpl.includes(`\`v${pkgVersion}\``), `bug_report.md must reflect v${pkgVersion}`);
   const manifest = fs.readFileSync(path.join(ROOT, 'installer/setup/app.manifest'), 'utf8');
-  assert.ok(manifest.includes('version="1.0.8.3"'));
+  assert.ok(manifest.includes(`version="${win4Version}"`), `app.manifest must reflect ${win4Version}`);
   for (const rel of [
     'vendor/omni-viewer/omni-client.js',
     'vendor/thought-translator/thought-client.js',
@@ -951,8 +962,25 @@ test('Main bundle budget <= 704,000 B (< 690 KiB / 706,560 B CI hard limit), sid
     'vendor/wallpaper/wallpaper-settings-ui.js',
   ]) {
     const firstLine = fs.readFileSync(path.join(ROOT, rel), 'utf8').split(/\r?\n/)[0];
-    assert.ok(firstLine.includes('v1.0.8-beta.3'), `${rel} header comment must be v1.0.8-beta.3`);
+    assert.ok(firstLine.includes('Obsidian Prism'), `${rel} header comment must preserve Obsidian Prism attribution`);
+    assert.equal(
+      /\bv\d+\.\d+\.\d+/.test(firstLine),
+      false,
+      `${rel} header comment must not hard-lock release version string`
+    );
   }
   const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
-  assert.ok(changelog.includes('## [1.0.8-beta.3]') && changelog.includes('## [1.0.8-beta.2]') && changelog.includes('## [1.0.8-beta.1]') && changelog.includes('## [1.0.7]') && !changelog.includes('## [1.0.7-beta.') && changelog.includes('## [1.0.6]') && changelog.includes('## [1.0.5]') && changelog.includes('## [1.0.4]') && changelog.includes('## [1.0.3]') && changelog.includes('## [1.0.2]') && changelog.includes('archive:conversations'));
+  assert.ok(
+    changelog.includes(`## [${pkgVersion}]`) &&
+      changelog.includes('## [1.0.8-beta.2]') &&
+      changelog.includes('## [1.0.8-beta.1]') &&
+      changelog.includes('## [1.0.7]') &&
+      !changelog.includes('## [1.0.7-beta.') &&
+      changelog.includes('## [1.0.6]') &&
+      changelog.includes('## [1.0.5]') &&
+      changelog.includes('## [1.0.4]') &&
+      changelog.includes('## [1.0.3]') &&
+      changelog.includes('## [1.0.2]') &&
+      changelog.includes('archive:conversations')
+  );
 });

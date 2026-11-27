@@ -14,8 +14,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gates:
+    name: Architecture & Security Gates
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Run architecture, security, budget & i18n gates
+        run: npm run test:gates
+
+      - name: Verify single version SSOT sync
+        run: npm run version:check
+
   test:
     name: Node ${{ matrix.node }} (${{ matrix.os }})
+    needs: gates
     if: github.event.repository.private == false
     runs-on: ${{ matrix.os }}
     strategy:
@@ -42,4 +63,4 @@ jobs:
           fi
 
       - name: Run full test suite
-        run: npm test
+        run: node scripts/run-tests.mjs --all

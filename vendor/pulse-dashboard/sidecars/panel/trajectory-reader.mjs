@@ -14,10 +14,11 @@ export class TrajectoryReader {
  entries=new Map();epoch=0;endpoint=null;summaries=null;summaryAt=-Infinity;summaryPending=null;cachedBytes=0;
  reset(){this.epoch++;this.entries.clear();this.failures.clear();this.summaries=null;this.summaryAt=-Infinity;this.summaryPending=null;this.cachedBytes=0;}
  trim(keep){for(const [key,e]of this.entries){if(this.cachedBytes<=this.budgetBytes)break;if(key===keep||e.pending)continue;this.cachedBytes-=e.bytes;this.entries.delete(key);}}
- async summary(id,provided,force){
+ async summary(id,provided,force,freshContext=false){
   if(provided)return provided;
-    if(force&&this.summaries&&this.client.now()-this.summaryAt<30000)force=false;
-   if(force||!this.summaries||this.client.now()-this.summaryAt>=6000){
+    const wantFreshSummary=Boolean(freshContext&&(!this.summaries||this.client.now()-this.summaryAt>=400));
+    if(force&&!wantFreshSummary&&this.summaries&&this.client.now()-this.summaryAt<30000)force=false;
+   if(force||wantFreshSummary||!this.summaries||this.client.now()-this.summaryAt>=6000){
    if(!this.summaryPending){const epoch=this.epoch;
     const pending=this.client.call('GetAllCascadeTrajectories',{excludeSubtrajectories:false}).then(r=>{
      if(epoch!==this.epoch)throw unavailable();
@@ -33,7 +34,7 @@ export class TrajectoryReader {
   }
   const s=this.summaries[id];if(!s)throw new Error('会话暂时没有可用统计');return s;
  }
- async read(id,{summary:provided,force=false,isCurrent=()=>true}={}){
+ async read(id,{summary:provided,force=false,freshContext=false,isCurrent=()=>true}={}){
   if(!isCurrent())throw unavailable();
   if(this.isBackgroundManaged?.(id))throw this.failures.get(id)?.error||new Error('会话统计正在后台处理');
   const endpoint=await this.client.discover();
@@ -47,7 +48,7 @@ export class TrajectoryReader {
    const failure=this.failures.get(id),now=this.client.now();
    if(failure&&now<(failure.mark===null&&!force?failure.retryAt:failure.at+10000))throw failure.error;
    attempted=true;
-   const summary=await this.summary(id,provided,force);assertCurrent();
+   const summary=await this.summary(id,provided,force,freshContext);assertCurrent();
    const count=summary.stepCount===undefined?null:Number(summary.stepCount);if(count!==null&&(!Number.isSafeInteger(count)||count<0))throw new Error('会话统计分页数量无效');
    const mark=JSON.stringify([count,summary.lastModifiedTime,summary.status,summary.lastUserInputStepIndex]);
    attemptMark=mark;
@@ -58,7 +59,8 @@ export class TrajectoryReader {
    attempted=true;
    const old=entry.data;
    const same=old&&entry.mark===mark;
-   if(!failure&&!force&&same&&settled(summary.status)&&summary.lastModifiedTime&&this.client.now()-entry.verifiedAt<this.idleRecheckMs){this.entries.delete(id);this.entries.set(id,entry);return old;}
+   const recheckWindow=freshContext?1200:this.idleRecheckMs;
+   if(!failure&&!force&&same&&settled(summary.status)&&summary.lastModifiedTime&&this.client.now()-entry.verifiedAt<recheckWindow){this.entries.delete(id);this.entries.set(id,entry);return old;}
    // A changed settled history with no append may have been edited/compacted.
    const incremental=old&&!force&&count!==null&&count>=old.trajectory.steps.length&&(count>old.trajectory.steps.length||!settled(entry.summary?.status)||same);
    let stepOffset=0,metadataOffset=0;
@@ -73,10 +75,14 @@ export class TrajectoryReader {
      const associated=(gs.at(-1)?.stepIndices||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<old.trajectory.steps.length&&!/USER_INPUT/.test(String(old.trajectory.steps[i]?.type||'')));
      stepOffset=associated.length?Math.min(...associated):old.trajectory.steps.length;
     }
-    // Background tools can finish after newer model requests have started.
-    // Refresh from the earliest unresolved timed tool as well as the last model.
-    const pendingTool=old.trajectory.steps.findIndex(s=>s?.metadata&&(s.metadata.startedAt||s.metadata.createdAt)&&!s.metadata.completedAt&&
-     (/SEARCH_WEB|BROWSE|RUN_COMMAND|COMMAND|READ|WRITE|EDIT|CODE_ACTION|TOOL|MCP|LIST|GREP|VIEW|FIND|TERMINAL|INVOKE_SUBAGENT/i.test(String(s.type||''))||s.metadata.toolCall));
+    // Background tools & in-progress compaction checkpoints can finish after newer steps start.
+    const pendingTool=old.trajectory.steps.findIndex(s=>{
+     const t=String(s?.type||'');
+     const isPendingCp=(/CHECKPOINT|COMPACT/i.test(t)||Boolean(s?.checkpoint))&&(!s?.metadata?.completedAt||/PENDING|RUNNING|GENERATING|WAITING|QUEUED/i.test(String(s?.status||'')));
+     if(isPendingCp)return true;
+     return s?.metadata&&(s.metadata.startedAt||s.metadata.createdAt)&&!s.metadata.completedAt&&
+      (/SEARCH_WEB|BROWSE|RUN_COMMAND|COMMAND|READ|WRITE|EDIT|CODE_ACTION|TOOL|MCP|LIST|GREP|VIEW|FIND|TERMINAL|INVOKE_SUBAGENT/i.test(t)||s.metadata.toolCall);
+    });
     if(pendingTool>=0)stepOffset=Math.min(stepOffset,pendingTool);
     if(gs.some(g=>!Array.isArray(g.stepIndices)||!g.stepIndices.length))metadataOffset=0;
    }

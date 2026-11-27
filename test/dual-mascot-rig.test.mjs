@@ -306,13 +306,13 @@ test('static frame cache & adaptive heartbeat: skips redundant clearRect + style
   try {
     const snap0 = stage.getLayoutSnapshot();
     assert.equal(snap0.perf.timerIntervalMs, 100, 'Active heartbeat must run at 100ms');
-    assert.equal(clearRectCount, 3, 'Initial mount draws both mascots + 1 static habitat prop once');
+    assert.equal(clearRectCount, 2, 'Initial mount draws both main mascots once (habitat prop uses pure CSS SVG DataURI, 0 Canvas)');
     assert.equal(transformAssignCount, 2, 'Initial mount writes initial style.transform once per mascot');
 
     // 等待 260ms（跨过 2 拍心跳）：因姿态、帧签名与坐标完全未变，必须 0 次 clearRect、0 次 style.transform 写入！
     await new Promise((r) => setTimeout(r, 260));
     const snapIdle = stage.getLayoutSnapshot();
-    assert.equal(clearRectCount, 3, 'Unchanged idle frames must completely skip Canvas clearRect/redraw');
+    assert.equal(clearRectCount, 2, 'Unchanged idle frames must completely skip Canvas clearRect/redraw');
     assert.equal(transformAssignCount, 2, 'Stationary mascots must completely skip DOM style.transform writes');
     assert.ok(snapIdle.perf.canvasSkips >= 2, 'Must record skipped canvas redraws');
     assert.ok(snapIdle.perf.domTransformSkips >= 2, 'Must record skipped DOM transform writes');
@@ -1008,9 +1008,10 @@ test('Issue #1 & perf guard: dual mascots (cat + clawd) track side-panel push/dr
   assert.equal(ftAttrs.get('data-t'), '0');
   const callsAfterInit = rectCalls;
   ftRoCb([{ contentRect: { width: 610 } }]);
-  assert.equal(ftAttrs.get('data-t'), '1');
+  assert.equal(ftAttrs.get('data-t'), '0');
+  assert.equal(barAttrs.get('data-t'), '1 2');
   ftRoCb([{ contentRect: { width: 340 } }]);
-  assert.equal(ftAttrs.get('data-t'), '1 2 3 4 5');
+  assert.equal(ftAttrs.get('data-t'), '1 2');
   assert.equal(barAttrs.get('data-t'), '1 2 3 4 5');
   assert.equal(rectCalls, callsAfterInit, 'ResizeObserver path must use contentRect.width with 0 getBoundingClientRect reflows');
   assert.equal(/(?<![a-z-])width:0!important/.test(injectedTierCss), false, 'TIER_CSS must not use non-interpolable width:0!important');
@@ -1199,13 +1200,8 @@ test('Red-team regressions: wide rebound (reducedMotion=false), narrower restore
     }
   }
 
-  // ④ Verify TIER_CSS against real inline-widget.cjs CSS: never overrides .collection-label{display:none} or .card positioning
+  // ④ Verify TIER_CSS against external Pulse widget CSS contract: never overrides .collection-label{display:none} or .card positioning
   {
-    const widgetSrc = fs.readFileSync(require.resolve('../vendor/pulse-dashboard/compat/inline-widget.cjs'), 'utf8');
-    assert.ok(widgetSrc.includes('.collection-label{display:none}'), 'Real inline-widget.cjs must hide .collection-label by default');
-    assert.ok(widgetSrc.includes('.rounds,.group,.dot.live{display:none}'), 'Real inline-widget.cjs must hide .rounds/.group by default');
-    assert.ok(widgetSrc.includes(':host(.icons-only) .chip>:not(svg):not(.context-ring){display:none}'), 'Real inline-widget.cjs must hide chip text in icons-only mode');
-
     const fbMod = require('../vendor/pulse-dashboard/inline-fallback.js');
     let injectedTierCss = '';
     const barAttrs = new Map();
@@ -1343,7 +1339,8 @@ test('Red-team regressions: wide rebound (reducedMotion=false), narrower restore
     assert.ok(disconnectedCount >= 1, 'Session switch rebuilding footer must disconnect stale ResizeObserver');
     assert.equal(observedEls[observedEls.length - 1], newFt, 'Session switch must rebind ResizeObserver to rebuilt footer');
     assert.equal(newBar.hasStyle(), true, 'Rebuilt external bar must receive style[data-pt="1"]');
-    assert.equal(newFt.getAttribute('data-t'), '1 2 3 4 5', 'Rebuilt narrow footer must immediately compute tier 5');
+    assert.equal(newFt.getAttribute('data-t'), '1 2', 'Rebuilt narrow footer must immediately compute decoupled outer footerTier "1 2"');
+    assert.equal(newBar.getAttribute('data-t'), '1 2 3 4 5', 'Rebuilt narrow bar must immediately compute tier 5');
     ctl.destroy();
   }
 });
@@ -1528,7 +1525,7 @@ test('Issue #2/#4/#5 regressions: RLE fillRect batching pixel-equivalence, tier-
 
   try {
     const initialCtxCalls = getCtxCalls;
-    assert.equal(initialCtxCalls, 6, 'Should acquire 2D context exactly once for 2 main actors + 3 mini crabs + 1 static habitat prop');
+    assert.equal(initialCtxCalls, 5, 'Should acquire 2D context exactly once for 2 main actors + 3 mini crabs (0 habitat canvas)');
 
     // Verify streamTier === 3 write pose alternates frames across ticks instead of freezing on even localTick
     const seenWriteFrames = new Set([
@@ -1808,8 +1805,10 @@ test('WO-MAIN-001B: 9 Slash theaters, 4 contextual links, habitat 3-mode 0fps pr
 
   try {
     const habEl = hostEl.children.find((n) => n.className === 'ag-v2-habitat-prop');
-    assert.ok(habEl, 'Expected .ag-v2-habitat-prop canvas mounted in stage');
-    assert.equal(habDraws, 1, 'Habitat prop must draw exactly 1 static frame at mount (0fps idle)');
+    assert.ok(habEl, 'Expected .ag-v2-habitat-prop mounted in stage');
+    assert.notEqual(habEl.tagName, 'CANVAS', 'Habitat prop must use pure CSS SVG DataURI div (0 Canvas)');
+    assert.equal(habDraws, 0, 'Habitat prop must perform 0 Canvas2D draws');
+    assert.ok(String(habEl.style.backgroundImage || '').includes('data:image/svg+xml'), 'Habitat prop must render SVG DataURI backgroundImage');
 
     // Test all 9 slash commands + /swarm alias
     for (const cmd of ['plan', 'goal', 'boost', 'teamwork', 'swarm', 'browser', 'compact', 'schedule', 'grill-me', 'learn']) {
@@ -2153,7 +2152,7 @@ test('PR #45 Quad mascot mode: GPT White Dragon & DeepSeek Whale sprites, 4-camp
   const ctrl = mgc.createModelGlyphCrystalController({});
   const mockBtn = { nodeType: 1, textContent: 'DeepSeek R1 (高思考)', getAttribute: () => null };
   const trigInfo = ctrl.parseModelTriggerInfo(mockBtn);
-  assert.equal(trigInfo.brand, 'openai');
+  assert.equal(trigInfo.brand, 'deepseek');
   assert.equal(trigInfo.camp, 'gemini');
   assert.equal(trigInfo.mascotCamp, 'deepseek');
 });
@@ -2311,7 +2310,7 @@ test('Custom mascot roster DSL: single-toggle 0/1 clamp, canonical folding, 3-wa
   }
 });
 
-test('Periodic picker PP_OPEN 0fps sleep covers 4-species quad-minis roster and restores cleanly', () => {
+test('Periodic picker PP_OPEN keeps 100ms breathing in balanced/quality and enforces 0fps sleep in performance/eco or win-blur', () => {
   const { doc, html } = createRigMockDom(760);
   const hostEl = doc.createElement('div');
   doc.body.appendChild(hostEl);
@@ -2320,14 +2319,23 @@ test('Periodic picker PP_OPEN 0fps sleep covers 4-species quad-minis roster and 
     assert.equal(stage.getLayoutSnapshot().actors.length, 4);
     assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 100, 'Active quad-minis roster must tick at 100ms');
 
-    // Open periodic picker -> immediate 0fps heartbeat pause
+    // Open periodic picker in balanced/quality -> stays alive at 100ms (cute peek breathing/blinking preserved)
+    html.setAttribute('data-ag-cs-perf-mode', 'balanced');
     html.setAttribute('data-ag-pp-open', '1');
-    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 0, 'PP_OPEN=1 must pause roster heartbeat to 0fps');
+    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 100, 'Balanced mode + PP_OPEN=1 must keep mascot breathing alive');
+
+    // Switch to performance / eco mode while PP_OPEN=1 -> immediate 0fps heartbeat pause
+    html.setAttribute('data-ag-cs-perf-mode', 'performance');
+    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 0, 'Performance mode + PP_OPEN=1 must pause roster heartbeat to 0fps');
     assert.equal(stage.getLayoutSnapshot().perf.timerPaused, true);
+
+    html.setAttribute('data-ag-cs-perf-mode', 'eco');
+    assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 0, 'Eco mode + PP_OPEN=1 must pause roster heartbeat to 0fps');
 
     // Close periodic picker -> cleanly wakes back to 100ms
     html.removeAttribute('data-ag-pp-open');
     assert.equal(stage.getLayoutSnapshot().perf.timerIntervalMs, 100, 'Removing PP_OPEN must wake roster back to 100ms');
+    html.removeAttribute('data-ag-cs-perf-mode');
   } finally {
     stage.dispose();
   }
@@ -2339,9 +2347,9 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
   const sp = require('../settings-panel.js');
   const i18nLocales = require('../i18n-locales.js');
 
-  // 1. Strict 39 schema keys (37 baseline + darkAura + darkAuraStyle) & 4 mascot presets
+  // 1. Strict 39 schema keys (37 baseline + darkAura + darkAuraStyle) & 5 mascot presets aligned with src/config/schema.cjs
   assert.equal(Object.keys(sp.PRISM_SETTINGS_SCHEMA).length, 39, 'PRISM_SETTINGS_SCHEMA must remain strictly 39 keys');
-  assert.deepEqual([...sp.PRISM_SETTINGS_SCHEMA.mascot.allowed], ['crab', 'swarm-team', 'quad', 'quad-minis', 'off']);
+  assert.deepEqual([...sp.PRISM_SETTINGS_SCHEMA.mascot.allowed], ['crab', 'minis', 'quad', 'quad-minis', 'off']);
 
   // 2. 8-language coverage (including all stage keys), /4 cap copy, zero CJK in en/es/fr/de, and 0 new keys leaked into RUNTIME_UI_KEYS
   const newKeys = [
@@ -2426,7 +2434,7 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
     assert.equal(presetBtns.length, 5, 'Mascot row must present 5 quick preset buttons');
     const openStageBtn = mascotRow.querySelector('button[data-ag-mascot-stage-open="1"]');
     assert.ok(openStageBtn, 'Mascot row must render Open Casting Stage button');
-    assert.ok(openStageBtn.children[0]?.innerHTML?.includes('<svg'), 'Stage entry button must render built-in SVG spotlight icon (no emoji)');
+    assert.equal(openStageBtn.children[0]?.children?.[0]?.tagName, 'SVG', 'Stage entry button must render built-in SVG spotlight icon (no emoji)');
 
     // Before opening stage: 0 CPU / 0 VRAM invariant
     assert.equal(stageApi.isOpen(), false);
@@ -3094,4 +3102,129 @@ test('subtle motion [role="button"] rules exclude .ag-v2-mascot-actor and [data-
       `subtle rule must exclude mascot actors so inline translate3d is never clobbered: ${line}`
     );
   }
+});
+
+test('Issue #109 (PR #111): whale and cat keep eyes closed (loafShut) without 400ms blinking during loaf and sleep', () => {
+  // 1) Pure layer check across ticks 0..15 for whale & cat in both loaf and sleep
+  const whaleLoafRef = rig.buildClipLayers('whale', 'loaf', 0);
+  const whaleSleepRef = rig.buildClipLayers('whale', 'sleep', 0);
+  const catSleepRef = rig.buildClipLayers('cat', 'sleep', 0);
+
+  for (let t = 0; t < 16; t++) {
+    for (const pose of ['loaf', 'sleep']) {
+      const wLayers = rig.buildClipLayers('whale', pose, t);
+      assert.ok(wLayers.includes(rig.WHALE_PARTS.eyes.loafShut), `whale:${pose}@${t} must keep loafShut eyes`);
+      assert.equal(wLayers.includes(rig.WHALE_PARTS.eyes.loafHalf), false, `whale:${pose}@${t} must not blink to loafHalf`);
+
+      const wBlinkLayers = rig.buildClipLayers('whale', pose, t, { blink: true, blinkStage: 'closed', eyeScan: 1 });
+      assert.ok(wBlinkLayers.includes(rig.WHALE_PARTS.eyes.loafShut), `whale:${pose}@${t} must ignore blink overrides`);
+
+      const cLayers = rig.buildClipLayers('cat', pose, t);
+      assert.ok(cLayers.includes(rig.CAT_PARTS.eyes.loafShut), `cat:${pose}@${t} must keep loafShut eyes`);
+      assert.equal(cLayers.includes(rig.CAT_PARTS.eyes.loafHalf), false, `cat:${pose}@${t} must not blink to loafHalf`);
+
+      const cBlinkLayers = rig.buildClipLayers('cat', pose, t, { blink: true, blinkStage: 'half', eyeScan: -1 });
+      assert.ok(cBlinkLayers.includes(rig.CAT_PARTS.eyes.loafShut), `cat:${pose}@${t} must ignore blink overrides`);
+    }
+
+    // Whale loaf/sleep and cat sleep remain 100% static across ticks; cat loaf preserves slow 4-tick tail swish
+    assert.deepEqual(rig.buildClipLayers('whale', 'loaf', t), whaleLoafRef, `whale:loaf@${t} layers must stay static`);
+    assert.deepEqual(rig.buildClipLayers('whale', 'sleep', t), whaleSleepRef, `whale:sleep@${t} layers must stay static`);
+    assert.deepEqual(rig.buildClipLayers('cat', 'sleep', t), catSleepRef, `cat:sleep@${t} layers must stay static`);
+
+    const catLoafLayers = rig.buildClipLayers('cat', 'loaf', t);
+    const expectedCatTail = Math.floor(t / 4) % 2 ? rig.CAT_PARTS.tail.loaf : rig.CAT_PARTS.tail.curl;
+    assert.ok(catLoafLayers.includes(expectedCatTail), `cat:loaf@${t} must preserve gentle tail cadence`);
+  }
+
+  // Non-regression: clawd/dragon sleep keep shut eyes; loafHalf sprite remains intact for peek/catStretch
+  assert.ok(rig.buildClipLayers('clawd', 'sleep', 3).includes(rig.CLAWD_PARTS.eyes.shut));
+  assert.ok(rig.buildClipLayers('dragon', 'sleep', 3).includes(rig.DRAGON_PARTS.eyes.shut));
+  assert.ok(rig.buildClipLayers('whale', 'peek', 3).includes(rig.WHALE_PARTS.eyes.loafHalf));
+  assert.ok(rig.buildClipLayers('cat', 'catStretch', 18, { clipTick: 18 }).includes(rig.CAT_PARTS.eyes.loafHalf));
+
+  // 2) Live stage check: non-working whale & cat loaf during streaming without tick-3 eye-blink redraw churn
+  const { doc } = createRigMockDom(760);
+  const hostEl = doc.createElement('div');
+  doc.body.appendChild(hostEl);
+  const stage = rig.mountDualMascotStage(hostEl, {
+    mascot: 'quad-minis',
+    camp: 'claude',
+    streaming: true,
+    reducedMotion: true,
+  });
+  try {
+    const getFrames = () => {
+      const byId = Object.fromEntries(stage.getLayoutSnapshot().actors.map((a) => [a.id, a]));
+      return {
+        whalePose: byId.whale.pose,
+        catPose: byId.cat.pose,
+        whaleFrame: byId.whale.renderCache.frameIdx,
+        catFrame: byId.cat.renderCache.frameIdx,
+      };
+    };
+    const f0 = getFrames();
+    assert.equal(f0.whalePose, 'loaf');
+    assert.equal(f0.catPose, 'loaf');
+    assert.notEqual(f0.whaleFrame, null, 'whale frame cache must be populated when host is connected');
+    assert.notEqual(f0.catFrame, null, 'cat frame cache must be populated when host is connected');
+
+    // Ticks 1..3 stay within z1 window (tickIdx % 8 < 4) — no phase4===3 eye flip on either whale or cat
+    for (let step = 1; step <= 3; step++) {
+      stage.stepTick(1);
+      const ft = getFrames();
+      assert.equal(ft.whaleFrame, f0.whaleFrame, `whale loaf frame must stay steady across z1 window at tick=${step}`);
+      assert.equal(ft.catFrame, f0.catFrame, `cat loaf frame must stay steady across z1 window at tick=${step}`);
+    }
+
+    // Tick 4 transitions z1 -> z2 (and cat tail curl -> loaf), then stays steady across ticks 5..7
+    stage.stepTick(1);
+    const f4 = getFrames();
+    assert.notEqual(f4.whaleFrame, f0.whaleFrame, 'whale loaf frame should update cleanly on z1 -> z2 transition');
+    assert.notEqual(f4.catFrame, f0.catFrame, 'cat loaf frame should update cleanly on z1 -> z2 transition');
+    for (let step = 5; step <= 7; step++) {
+      stage.stepTick(1);
+      const ft = getFrames();
+      assert.equal(ft.whaleFrame, f4.whaleFrame, `whale loaf frame must stay steady across z2 window at tick=${step}`);
+      assert.equal(ft.catFrame, f4.catFrame, `cat loaf frame must stay steady across z2 window at tick=${step}`);
+    }
+  } finally {
+    stage.dispose();
+  }
+});
+
+test('peek 探头姿态深度（PEEK_Y=7）与输入框顶边裁切保护（不露腿穿帮、保留 z-index 8 与 pointer-events none）', () => {
+  const { doc } = createRigMockDom(760);
+  const hostEl = doc.createElement('div');
+  doc.body.appendChild(hostEl);
+  const stage = rig.mountDualMascotStage(hostEl, {
+    mascot: 'quad-minis',
+    camp: 'claude',
+    reducedMotion: true,
+  });
+  try {
+    stage.setState({ yieldMode: 'peek' });
+    const actors = hostEl.querySelectorAll('.ag-v2-mascot-actor');
+    assert.ok(actors.length >= 2, 'dual-minis 应渲染双主宠');
+    for (const a of actors) {
+      assert.equal(a.style.zIndex, '8', 'peek 态主宠应保持 z-index 8');
+      assert.equal(a.style.pointerEvents, 'none', 'peek 态主宠应保持 pointer-events none');
+      assert.match(a.style.transform || '', /translate3d\([^,]+,\s*7px,\s*0\)/, 'peek 态主宠应下沉 7px 仅露半张脸与前爪');
+    }
+    const minis = hostEl.querySelectorAll('.ag-v2-mini-crab-canvas');
+    assert.ok(minis.length > 0, '应渲染迷你螃蟹');
+    for (const mc of minis) {
+      assert.equal(mc.style.zIndex, '8');
+      assert.equal(mc.style.pointerEvents, 'none');
+      assert.match(mc.style.transform || '', /translate3d\([^,]+,\s*2px,\s*0\)/, '迷你螃蟹应保持 +2px 轻量下沉');
+    }
+  } finally {
+    stage.dispose();
+  }
+
+  const css = require('node:fs').readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  const peekLine = css.split('\n').find((l) => l.startsWith('.ag-cs-crab[data-ag-mascot-peek="1"],')) || '';
+  assert.ok(peekLine.includes('z-index:8 !important;'), 'peek 规则必须保留 z-index:8 !important');
+  assert.ok(peekLine.includes('pointer-events:none !important;'), 'peek 规则必须保留 pointer-events:none !important');
+  assert.ok(peekLine.includes('clip-path:inset(-48px -24px 8px -24px)!important;'), 'peek 规则必须通过底部 clip-path 裁切防止压过输入框顶边穿帮');
 });

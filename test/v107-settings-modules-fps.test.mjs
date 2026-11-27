@@ -638,12 +638,16 @@ test('prism-rim-canvas (1A & #8b): follows targetFps (native/180/120/60) without
   clock.flushRafs(6.0);
   assert.equal(strokeCount, 1, '60Hz (15.2ms) must draw once 16ms elapsed');
 
-  // 3e) < 1.5px micro-move skip still holds under native (0ms)
+  // 3e) < 0.5px micro-jitter skips redraw while 1.0px fine move draws smoothly under native (0ms)
   gapMs = 0;
   strokeCount = 0;
-  ctl.onPointerMove({ clientX: px + 0.8, clientY: 140.5 });
+  ctl.onPointerMove({ clientX: px + 0.3, clientY: 140.2 });
   clock.flushRafs(5);
-  assert.equal(strokeCount, 0, '<1.5px micro-move must still skip redraw');
+  assert.equal(strokeCount, 0, '<0.5px micro-jitter must skip redraw');
+  ctl.onPointerMove({ clientX: px + 1.3, clientY: 140.2 });
+  clock.flushRafs(5);
+  assert.equal(strokeCount, 1, '1.0px fine move must trigger crisp rim redraw');
+  px += 1.3;
 
   // 3f) #8b Light mode palette='host' vs 'obsidian' vs 'warm' under alabaster preset
   isDark = false;

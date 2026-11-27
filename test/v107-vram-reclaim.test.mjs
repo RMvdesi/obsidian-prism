@@ -644,7 +644,7 @@ test('A1 conv-aura: document.hidden true->false releases & restores backing stor
   assert.equal(inst.height, Math.round(750 * 0.32));
   assert.ok(cv.width > 0 && cv.height > 0);
   assert.equal(glowDraws, drawsHidden + 1, 'Must immediately paint first frame on visibility restore');
-  assert.ok(env.timers.size >= 1, 'Running aura must resume frame scheduler on restore');
+  assert.ok(env.timers.size + env.rafs.size >= 1, 'Running aura must resume frame scheduler (VSync rAF or timer) on restore');
 
   // Settled 0fps idle aura: hide -> 0x0, show -> restores backing store, draws 1 static snapshot, and returns to 0fps sleep
   running = false;

@@ -1422,7 +1422,7 @@ namespace AgyClaudeStyle.Installer
                     ),
                     RegistryValueKind.String
                 );
-                key.SetValue("DisplayVersion", version ?? "1.0.8-beta.3", RegistryValueKind.String);
+                key.SetValue("DisplayVersion", version ?? "1.0.8-beta.4", RegistryValueKind.String);
                 key.SetValue("Publisher", "Obsidian Prism Contributors", RegistryValueKind.String);
                 key.SetValue("InstallLocation", installDir, RegistryValueKind.String);
                 key.SetValue("DisplayIcon", exePath + ",0", RegistryValueKind.String);
@@ -1994,57 +1994,35 @@ namespace AgyClaudeStyle.Installer
                 currentStepLabel = InstallerI18n.Tr("解压部署插件与守护文件", "Extract plugin & watcher files");
                 bool preservedConfig = false;
                 const string nativePrefix = "native-plugin/";
+                InstallManifestInfo installM = null, pluginM = null;
                 using (Stream resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("AGY_PAYLOAD.zip"))
                 {
-                    if (resStream == null)
-                    {
-                        throw new InvalidOperationException(InstallerI18n.Tr(
-                            "安装包内嵌资源 AGY_PAYLOAD.zip 缺失",
-                            "Embedded installer resource AGY_PAYLOAD.zip is missing"
-                        ));
-                    }
+                    if (resStream == null) throw new InvalidOperationException(InstallerI18n.Tr("安装包内嵌资源 AGY_PAYLOAD.zip 缺失", "Embedded installer resource AGY_PAYLOAD.zip is missing"));
                     using (ZipArchive archive = new ZipArchive(resStream, ZipArchiveMode.Read))
                     {
+                        InstallManifestHelper.LoadArchiveManifests(archive, out installM, out pluginM);
                         foreach (ZipArchiveEntry entry in archive.Entries)
                         {
                             if (string.IsNullOrEmpty(entry.Name)) continue;
                             string normFull = entry.FullName.Replace('\\', '/');
-                            bool isNativeEntry = normFull.StartsWith(nativePrefix, StringComparison.OrdinalIgnoreCase);
-                            string relPath = isNativeEntry ? normFull.Substring(nativePrefix.Length) : normFull;
-                            if (string.IsNullOrEmpty(relPath)) continue;
+                            bool isNative = normFull.StartsWith(nativePrefix, StringComparison.OrdinalIgnoreCase);
+                            string relPath = isNative ? normFull.Substring(nativePrefix.Length) : normFull;
+                            string targetRoot = isNative ? pluginDir : installDir;
+                            if (string.IsNullOrEmpty(relPath) || string.IsNullOrEmpty(targetRoot)) continue;
 
-                            string targetRoot = isNativeEntry ? pluginDir : installDir;
-                            if (string.IsNullOrEmpty(targetRoot)) continue;
-
-                            currentTargetPath = Path.Combine(targetRoot, relPath.Replace('/', '\\'));
                             string destPath = ResolveSafeZipEntryDestPath(targetRoot, relPath);
                             currentTargetPath = destPath;
                             string parent = Path.GetDirectoryName(destPath);
-                            if (!string.IsNullOrEmpty(parent))
-                            {
-                                Directory.CreateDirectory(parent);
-                                AssertNoReparsePointChain(parent, targetRoot);
-                            }
+                            if (!string.IsNullOrEmpty(parent)) { Directory.CreateDirectory(parent); AssertNoReparsePointChain(parent, targetRoot); }
                             uint destTag;
                             if (IsReparsePoint(destPath, out destTag))
-                            {
-                                throw new InvalidOperationException(InstallerI18n.TrFormat(
-                                    "检测到目标文件为符号链接或重解析点 [{0}]，已拒绝覆盖: {1}",
-                                    "Target file is a symbolic link or reparse point [{0}]; overwrite refused: {1}",
-                                    CdpHelper.DescribeReparseTag(destTag),
-                                    destPath
-                                ));
-                            }
-
-                            if (string.Equals(entry.Name, "config.json", StringComparison.OrdinalIgnoreCase) && File.Exists(destPath))
-                            {
-                                if (!isNativeEntry) preservedConfig = true;
-                                continue;
-                            }
+                                throw new InvalidOperationException(InstallerI18n.TrFormat("检测到目标文件为符号链接或重解析点 [{0}]，已拒绝覆盖: {1}", "Target file is a symbolic link or reparse point [{0}]; overwrite refused: {1}", CdpHelper.DescribeReparseTag(destTag), destPath));
+                            if (InstallManifestHelper.ShouldSkipProtectedExtract(relPath, isNative, destPath, installM, pluginM, ref preservedConfig)) continue;
                             WriteZipEntryWithRetry(entry, destPath);
                         }
                     }
                 }
+                InstallManifestHelper.CleanupBothDirs(installDir, pluginDir, installM, pluginM, IsReparsePoint, AssertNoReparsePointChain);
                 CleanupStaleOldFiles(installDir);
                 CleanupStaleOldFiles(pluginDir);
                 CleanupStaleRemovedSelfTempFiles();
@@ -2702,7 +2680,7 @@ namespace AgyClaudeStyle.Installer
             if (!string.IsNullOrEmpty(pluginDir) && Directory.Exists(pluginDir))
             {
                 report(80, InstallerI18n.TrFormat("正在清理本地插件目录: {0}", "Removing local plugin directory: {0}", pluginDir));
-                try { SafeDeleteDirectory(pluginDir); } catch { }
+                try { InstallManifestHelper.UninstallDirPreservingUserAssets(pluginDir, opts.PurgeData, IsReparsePoint, SafeDeleteDirectory); } catch { }
             }
 
             report(85, InstallerI18n.TrFormat("正在清理安装目录: {0}", "Removing install directory: {0}", installDir));

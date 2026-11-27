@@ -51,12 +51,14 @@ test('light-theme overlays avoid specificity inversion and dark fallback leaks a
     .split(/\r?\n/)
     .find((l) => l.includes('&[data-ag-cs-palette="host"]{color-scheme:dark;'));
   assert.ok(hostLightVarsLine, 'palette="host" light variable override line must exist');
-  assert.ok(
-    hostLightVarsLine.includes('--ag-cs-panel-bg:color-mix(in srgb,var(--vscode-editorWidget-background,var(--card,#FFFFFF)) 96%,transparent);'),
-    'palette="host" light block must declare light --ag-cs-panel-bg fallback (#FFFFFF)'
+  assert.match(
+    hostLightVarsLine,
+    /--ag-cs-panel-bg:color-mix\(in srgb,var\(--vscode-editorWidget-background,var\(--card,#(?:FFF|FFFFFF)\)\) 96%,transparent\);?/,
+    'palette="host" light block must declare light --ag-cs-panel-bg fallback (#FFF/#FFFFFF)'
   );
-  assert.ok(
-    hostLightVarsLine.includes('--ag-cs-popover-bg:color-mix(in srgb,var(--vscode-editorWidget-background,var(--card,#FCFDFF)) 94%,transparent);'),
+  assert.match(
+    hostLightVarsLine,
+    /--ag-cs-popover-bg:color-mix\(in srgb,var\(--vscode-editorWidget-background,var\(--card,#FCFDFF\)\) 94%,transparent\);?/,
     'palette="host" light block must declare light --ag-cs-popover-bg fallback (#FCFDFF)'
   );
 

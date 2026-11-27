@@ -527,6 +527,12 @@ test('Task 2, 3, 4 & Invariants: Q&A selected contrast (.bg-secondary.border-bor
     false,
     'Subagent spinner dash rule must NEVER target primary conversation-row-sidebar rows'
   );
+  const subRowPillResetLine =
+    css.split('\n').find((l) => l.includes('[data-testid="subagent-node"]') && l.includes('.rounded-full')) || '';
+  assert.ok(
+    subRowPillResetLine.includes('.rounded-full:not([data-agent-state-dot]):not([data-testid="status-loading-spinner"])'),
+    'Overview/subagent .rounded-full badge reset must exclude [data-agent-state-dot] and [data-testid="status-loading-spinner"] so the white dash stays visible'
+  );
 
   // ── Task 4: Home Studio orbital dead CSS cleanup ─────────────────────
   for (const dead of ['.ag-cs-orbital-backdrop', '.ag-cs-orbit-arc', '.ag-cs-orbit-reticle', '.ag-cs-orbit-node']) {

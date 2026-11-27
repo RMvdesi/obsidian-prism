@@ -1,4 +1,4 @@
-// Obsidian Prism — OpenAI-Compatible Thought Translator Settings Workbench UI (v1.0.8-beta.3 Five-Locale & Sync Hardened)
+// Obsidian Prism — OpenAI-Compatible Thought Translator Settings Workbench UI (8-Locale & Sync Hardened)
 // Extracted modular UI component mounted on globalThis.__agPrismThoughtSettingsUi
 
 (function (root) {
@@ -69,6 +69,12 @@
       'Profil',
       'Kein Modell',
     ],
+    tr: [
+      'Birincil OpenAI Profili|Profil|Okuma Görünümü|Yalnızca Çeviri|İki Dilli Alt Alta|Üslup Ön Ayarı|Teknik Mühendislik|Özlü Ana Noktalar|Özel İstem|Yalnızca yerel özel sistem istemi girin (~/.gemini/config/ içinde saklanır, Git’e yazılmaz)…|OpenAI Uç Nokta Profilleri|+ Yeni|Sil|Profil Adı|örn. Ana Ağ Geçidi / Yerel Ollama|Modelleri Getir|Kaydet|Test Gönder|Önbelleği Temizle|API anahtarları ve özel istemler yerel olarak ~/.gemini/config/ (0600) dizininde saklanır, Git’e asla yazılmaz.|Yerel uç nokta için isteğe bağlı|Anahtarsız OK|Temizle|Temizlenmeyi bekliyor|Üst akış /models alınıyor…|Modeller alınamadı|Yapılandırma kaydediliyor…|Kaydetme başarısız (arka plan servisi çevrimdışı)|Uç nokta gecikmesi test ediliyor…|Bağlantı testi başarısız|✓ Çeviri önbelleği temizlendi|✓ Yerel önbellek temizlendi|Çeviriyi görmek için İngilizce bir düşünce bloğunu genişletin; hedef dilde olan bloklar özgün kalır; ücretsiz makine çevirisi sistem proxy’sini otomatik izler.|Prism arka plan servisi bağlı değil. Lütfen eklenti arka plan servisinin çalıştığından emin olun.|Özel Proxy URL|Oto|Özel|Doğrudan|Ortam ve sistem proxy’sini otomatik algılamak için boş bırakın; http://, https://, socks5://, socks5h:// desteklenir|Doğrudan mod etkin: ortam ve sistem proxy’leri atlanır.|✓ Proxy URL geçerli (kaydedildikten sonra önceliklendirilir; kimlik bilgileri maskelenir)|✓ Kimlik bilgileri maskelenmiş proxy kaydedildi (değiştirmek için temizleyin veya üzerine yazın)|✕ Geçersiz proxy URL: yalnızca http://, https://, socks5://, socks5h:// (port 1–65535, kontrol karakteri yok)|Temizle|"Exploring" Araç Özetlerini Çevir|Exploring/araç listelerindeki kısa İngilizce özetleri toplu çevirir (varsayılan kapalı); dosya adları, yollar, satır numaraları ve çıkış kodlarını korur, kapatıldığında aslına döndürür.|Açık|Kapalı',
+      ['Kaydedildi {0} (korumak için boş bırakın)', 'Önbellek: {0}', 'Ön yüz: {0} / Arka plan: {1}', '▾ {0} model arasından hızlı seç…', '✓ {0} model yüklendi · {1}ms', '✓ Kaydedildi ({0} · {1})', '✓ Bağlandı · {0}ms · Yanıt: "{2}"'],
+      'Profil',
+      'Model yok',
+    ],
   };
   const WORKBENCH_I18N = Object.fromEntries(
     Object.entries(WB_DATA).map(([lk, [strRow, fmts, f0, f1]]) => {
@@ -82,282 +88,22 @@
     })
   );
 
-  const EXTRA_I18N = {
-    'zh-CN': {
-      titlesLabel: '会话标题自动翻译',
-      titlesDesc: '仅在渲染层翻译英文会话标题（默认关闭），不修改底层会话数据，自动跳过时间戳/文件名/路径，关闭后立即无损还原原文。',
-      diagBtn: '一键诊断',
-      diagRunning: '正在诊断…',
-      diagBridgeLbl: '① 守护桥接',
-      diagBridgeOnline: '在线',
-      diagBridgeOffline: '离线（后台守护进程未连接）',
-      diagProfileLbl: '② 模式与配置',
-      diagModeAi: 'AI 润色',
-      diagModeMachine: '免费机翻',
-      diagModeOff: '已关闭',
-      diagProfileOk: '渠道配置完整',
-      diagProfileMissing: '配置待补全',
-      diagIssueUrl: 'Base URL 无效',
-      diagIssueModel: '缺少模型 ID',
-      diagIssueKey: '缺少 API Key',
-      diagConnLbl: '③ 代理与连通',
-      diagConnOk: '连通正常',
-      diagConnSkipped: '未探测（思考翻译当前关闭）',
-      diagConnOffline: '未探测（守护桥接离线）',
-      diagConnFail: '连通异常',
-      diagProxyNone: '直连/无代理',
-      diagProxyOs: '系统代理',
-      diagRemedyLbl: '④ 排查指引',
-      diagHealthy: '各项链路正常，展开英文思考块即可看到译文。',
-      diagRemedyOffline: '请先在终端运行下方自检命令确认守护进程在线，必要时通过已修补的快捷方式重启一次 Antigravity。',
-      diagRemedyAuth: '上游鉴权失败，请检查 API Key 是否正确、额度是否充足或是否具备目标模型权限。',
-      diagRemedyProxy: '上游或代理连接超时/不可达，请切换「自动检测 / 自定义 / 直连」并确认本地代理端口已放行。',
-      diagRemedyProfile: '请先完善 AI 渠道的 Base URL、模型 ID 与 API Key（本地 Ollama 可免密），或切至免费机翻。',
-      diagRemedyGeneral: '若问题持续，请运行下方状态检查命令核验安装与守护状态，或重开 Antigravity 生效。',
-      diagCopyBtn: '复制命令',
-      diagCopied: '已复制 ✓',
-    },
-    'zh-TW': {
-      titlesLabel: '工作階段標題自動翻譯',
-      titlesDesc: '僅在渲染層翻譯英文工作階段標題（預設關閉），不修改底層工作階段資料，自動略過時間戳/檔名/路徑，關閉後立即無損還原原文。',
-      diagBtn: '一鍵診斷',
-      diagRunning: '正在診斷…',
-      diagBridgeLbl: '① 守護橋接',
-      diagBridgeOnline: '線上',
-      diagBridgeOffline: '離線（背景守護行程未連線）',
-      diagProfileLbl: '② 模式與設定',
-      diagModeAi: 'AI 潤飾',
-      diagModeMachine: '免費機翻',
-      diagModeOff: '已關閉',
-      diagProfileOk: '管道設定完整',
-      diagProfileMissing: '設定待補全',
-      diagIssueUrl: 'Base URL 無效',
-      diagIssueModel: '缺少模型 ID',
-      diagIssueKey: '缺少 API Key',
-      diagConnLbl: '③ 代理與連通',
-      diagConnOk: '連線正常',
-      diagConnSkipped: '未偵測（思考翻譯目前關閉）',
-      diagConnOffline: '未偵測（守護橋接離線）',
-      diagConnFail: '連線異常',
-      diagProxyNone: '直連/無代理',
-      diagProxyOs: '系統代理',
-      diagRemedyLbl: '④ 排查指引',
-      diagHealthy: '各項鏈路正常，展開英文思考區塊即可查看譯文。',
-      diagRemedyOffline: '請先在終端執行下方自檢指令確認守護行程在線，必要時透過已修補捷徑重開 Antigravity。',
-      diagRemedyAuth: '上游驗證失敗，請檢查 API Key 是否正確、額度充足或具備目標模型權限。',
-      diagRemedyProxy: '上游或代理連線逾時/不可達，請切換「自動偵測 / 自訂 / 直連」並確認本機代理埠已開啟。',
-      diagRemedyProfile: '請先補齊 AI 管道的 Base URL、模型 ID 與 API Key（本機 Ollama 可免密），或改用免費機翻。',
-      diagRemedyGeneral: '若問題持續，請執行下方狀態檢查指令確認安裝與守護狀態，或重新啟動 Antigravity。',
-      diagCopyBtn: '複製指令',
-      diagCopied: '已複製 ✓',
-    },
-    en: {
-      titlesLabel: 'Auto-Translate Conversation Titles',
-      titlesDesc: 'Translates English conversation titles in the render layer only (off by default); never modifies underlying session data, skips timestamps/paths/filenames, and restores raw titles when off.',
-      diagBtn: 'Diagnose',
-      diagRunning: 'Diagnosing…',
-      diagBridgeLbl: '1. Daemon Bridge',
-      diagBridgeOnline: 'Online',
-      diagBridgeOffline: 'Offline (daemon disconnected)',
-      diagProfileLbl: '2. Mode & Profile',
-      diagModeAi: 'AI Polish',
-      diagModeMachine: 'Machine',
-      diagModeOff: 'Off',
-      diagProfileOk: 'Profile ready',
-      diagProfileMissing: 'Incomplete config',
-      diagIssueUrl: 'Invalid Base URL',
-      diagIssueModel: 'Missing Model ID',
-      diagIssueKey: 'Missing API Key',
-      diagConnLbl: '3. Proxy & Connectivity',
-      diagConnOk: 'Connected',
-      diagConnSkipped: 'Skipped (translator off)',
-      diagConnOffline: 'Unavailable (bridge offline)',
-      diagConnFail: 'Unreachable',
-      diagProxyNone: 'Direct / No proxy',
-      diagProxyOs: 'OS Proxy',
-      diagRemedyLbl: '4. Troubleshooting',
-      diagHealthy: 'All checks passed. Expand an English thought block to see translation.',
-      diagRemedyOffline: 'Run the status command below in a terminal to verify the daemon, then relaunch Antigravity via its patched shortcut.',
-      diagRemedyAuth: 'Upstream authentication failed. Check your API key, quota, and model permissions.',
-      diagRemedyProxy: 'Upstream or proxy timed out / unreachable. Switch Auto / Custom / Direct proxy mode and verify your local proxy port.',
-      diagRemedyProfile: 'Fill in a valid Base URL, Model ID, and API Key (local Ollama can omit key), or switch to free Machine Translation.',
-      diagRemedyGeneral: 'Run the status command below to inspect installation & daemon health, or restart Antigravity.',
-      diagCopyBtn: 'Copy',
-      diagCopied: 'Copied ✓',
-    },
-    ja: {
-      titlesLabel: '会話タイトルの自動翻訳',
-      titlesDesc: '描画層のみで英語の会話タイトルを翻訳します（初期設定オフ）。会話データ本体は変更せず、時刻・ファイル名・パスを除外し、オフ時に原文へ即時復元します。',
-      diagBtn: 'ワンクリック診断',
-      diagRunning: '診断中…',
-      diagBridgeLbl: '① デーモン接続',
-      diagBridgeOnline: 'オンライン',
-      diagBridgeOffline: 'オフライン（デーモン未接続）',
-      diagProfileLbl: '② モードと設定',
-      diagModeAi: 'AI 翻訳',
-      diagModeMachine: '無料機械翻訳',
-      diagModeOff: 'オフ',
-      diagProfileOk: '設定完了',
-      diagProfileMissing: '設定不足',
-      diagIssueUrl: 'Base URL 無効',
-      diagIssueModel: 'モデル ID 未入力',
-      diagIssueKey: 'API キー未入力',
-      diagConnLbl: '③ プロキシと接続性',
-      diagConnOk: '接続正常',
-      diagConnSkipped: '未検証（翻訳オフ）',
-      diagConnOffline: '検証不可（デーモン未接続）',
-      diagConnFail: '接続異常',
-      diagProxyNone: '直接接続/プロキシなし',
-      diagProxyOs: 'OS プロキシ',
-      diagRemedyLbl: '④ 対処ガイド',
-      diagHealthy: 'すべての診断が正常です。英語の思考ブロックを展開すると訳文が表示されます。',
-      diagRemedyOffline: '下の状態確認コマンドを端末で実行してデーモンを確認し、パッチ済みショートカットから Antigravity を再起動してください。',
-      diagRemedyAuth: '認証に失敗しました。API キー・残高・モデル権限を確認してください。',
-      diagRemedyProxy: 'プロキシまたは上流接続がタイムアウト/到達不能です。「自動検出 / カスタム / 直接接続」を切り替えて確認してください。',
-      diagRemedyProfile: '有効な Base URL・モデル ID・API キー（ローカル Ollama は空欄可）を入力するか、無料機械翻訳へ切り替えてください。',
-      diagRemedyGeneral: '問題が続く場合は下の状態確認コマンドを実行するか、Antigravity を再起動してください。',
-      diagCopyBtn: 'コピー',
-      diagCopied: 'コピー済 ✓',
-    },
-    ko: {
-      titlesLabel: '대화 제목 자동 번역',
-      titlesDesc: '렌더링 계층에서만 영어 대화 제목을 번역합니다(기본 꺼짐). 원본 세션 데이터를 변경하지 않으며, 타임스탬프·파일명·경로를 건너뛰고 끄면 즉시 복원합니다.',
-      diagBtn: '진단',
-      diagRunning: '진단 중…',
-      diagBridgeLbl: '1. 데몬 브리지',
-      diagBridgeOnline: '온라인',
-      diagBridgeOffline: '오프라인(데몬 연결 끊김)',
-      diagProfileLbl: '2. 모드 및 설정',
-      diagModeAi: 'AI 다듬기',
-      diagModeMachine: '기계 번역',
-      diagModeOff: '꺼짐',
-      diagProfileOk: '프로필 준비됨',
-      diagProfileMissing: '설정 미완료',
-      diagIssueUrl: '잘못된 Base URL',
-      diagIssueModel: '모델 ID 누락',
-      diagIssueKey: 'API 키 누락',
-      diagConnLbl: '3. 프록시 및 연결',
-      diagConnOk: '연결됨',
-      diagConnSkipped: '건너뜀(번역 꺼짐)',
-      diagConnOffline: '확인 불가(브리지 오프라인)',
-      diagConnFail: '연결 불가',
-      diagProxyNone: '직접 연결 / 프록시 없음',
-      diagProxyOs: 'OS 프록시',
-      diagRemedyLbl: '4. 문제 해결',
-      diagHealthy: '모든 검사를 통과했습니다. 영어 사고 블록을 펼치면 번역이 표시됩니다.',
-      diagRemedyOffline: '터미널에서 아래 상태 확인 명령을 실행해 데몬을 확인한 뒤 패치된 바로가기로 Antigravity를 재시작하세요.',
-      diagRemedyAuth: '상위 인증에 실패했습니다. API 키, 할당량 및 모델 권한을 확인하세요.',
-      diagRemedyProxy: '상위/프록시 연결 시간이 초과되었거나 도달할 수 없습니다. 자동/사용자/직접 프록시 모드를 전환하고 포트를 확인하세요.',
-      diagRemedyProfile: '유효한 Base URL, 모델 ID, API 키를 입력하거나 무료 기계 번역 모드로 전환하세요.',
-      diagRemedyGeneral: '아래 상태 명령으로 설치 및 데몬 상태를 확인하거나 Antigravity를 재시작하세요.',
-      diagCopyBtn: '복사',
-      diagCopied: '복사됨 ✓',
-    },
-    es: {
-      titlesLabel: 'Traducir títulos automáticamente',
-      titlesDesc: 'Traduce títulos en inglés solo en la capa de vista (desactivado por defecto); nunca altera los datos de sesión y restaura el texto original al apagar.',
-      diagBtn: 'Diagnosticar',
-      diagRunning: 'Diagnosticando…',
-      diagBridgeLbl: '1. Puente del demonio',
-      diagBridgeOnline: 'En línea',
-      diagBridgeOffline: 'Desconectado',
-      diagProfileLbl: '2. Modo y config.',
-      diagModeAi: 'Pulido IA',
-      diagModeMachine: 'Automática',
-      diagModeOff: 'Desactivado',
-      diagProfileOk: 'Perfil listo',
-      diagProfileMissing: 'Config. incompleta',
-      diagIssueUrl: 'Base URL inválida',
-      diagIssueModel: 'Falta ID de modelo',
-      diagIssueKey: 'Falta clave API',
-      diagConnLbl: '3. Proxy y conexión',
-      diagConnOk: 'Conectado',
-      diagConnSkipped: 'Omitido (traductor apagado)',
-      diagConnOffline: 'No disponible (puente offline)',
-      diagConnFail: 'Inaccesible',
-      diagProxyNone: 'Directo / Sin proxy',
-      diagProxyOs: 'Proxy del SO',
-      diagRemedyLbl: '4. Solución',
-      diagHealthy: 'Todas las comprobaciones correctas. Expande un bloque de pensamiento en inglés para ver la traducción.',
-      diagRemedyOffline: 'Ejecuta el comando de estado en una terminal para verificar el demonio y reinicia Antigravity.',
-      diagRemedyAuth: 'Error de autenticación. Revisa tu clave API, cuota y permisos del modelo.',
-      diagRemedyProxy: 'Tiempo de espera o proxy inaccesible. Cambia entre Auto / Personalizado / Directo y verifica el puerto.',
-      diagRemedyProfile: 'Completa una Base URL, ID de modelo y clave API válidos o cambia al modo automático gratuito.',
-      diagRemedyGeneral: 'Ejecuta el comando de estado para verificar la instalación o reinicia Antigravity.',
-      diagCopyBtn: 'Copiar',
-      diagCopied: 'Copiado ✓',
-    },
-    fr: {
-      titlesLabel: 'Traduction auto des titres',
-      titlesDesc: 'Traduit les titres anglais uniquement à l’affichage (désactivé par défaut) ; ne modifie jamais les données de session et restaure l’original à l’arrêt.',
-      diagBtn: 'Diagnostiquer',
-      diagRunning: 'Diagnostic…',
-      diagBridgeLbl: '1. Pont démon',
-      diagBridgeOnline: 'En ligne',
-      diagBridgeOffline: 'Hors ligne (démon déconnecté)',
-      diagProfileLbl: '2. Mode et config.',
-      diagModeAi: 'Affinage IA',
-      diagModeMachine: 'Automatique',
-      diagModeOff: 'Désactivé',
-      diagProfileOk: 'Profil prêt',
-      diagProfileMissing: 'Config. incomplète',
-      diagIssueUrl: 'Base URL invalide',
-      diagIssueModel: 'ID de modèle manquant',
-      diagIssueKey: 'Clé API manquante',
-      diagConnLbl: '3. Proxy et réseau',
-      diagConnOk: 'Connecté',
-      diagConnSkipped: 'Ignoré (traducteur coupé)',
-      diagConnOffline: 'Indisponible (pont hors ligne)',
-      diagConnFail: 'Inaccessible',
-      diagProxyNone: 'Direct / Sans proxy',
-      diagProxyOs: 'Proxy OS',
-      diagRemedyLbl: '4. Dépannage',
-      diagHealthy: 'Tous les tests ont réussi. Dépliez un bloc de réflexion en anglais pour voir la traduction.',
-      diagRemedyOffline: 'Exécutez la commande d’état ci-dessous dans un terminal pour vérifier le démon, puis relancez Antigravity.',
-      diagRemedyAuth: 'Échec d’authentification. Vérifiez votre clé API, votre quota et les droits du modèle.',
-      diagRemedyProxy: 'Délai dépassé ou proxy inaccessible. Basculez Auto / Personnalisé / Direct et vérifiez votre port.',
-      diagRemedyProfile: 'Renseignez Base URL, ID de modèle et clé API valides, ou passez en mode automatique gratuit.',
-      diagRemedyGeneral: 'Exécutez la commande d’état pour vérifier l’installation ou redémarrez Antigravity.',
-      diagCopyBtn: 'Copier',
-      diagCopied: 'Copié ✓',
-    },
-    de: {
-      titlesLabel: 'Gesprächstitel automatisch übersetzen',
-      titlesDesc: 'Übersetzt englische Titel nur in der Darstellung (standardmäßig aus); verändert keine Sitzungsdaten und stellt Originale beim Ausschalten wieder her.',
-      diagBtn: 'Diagnose',
-      diagRunning: 'Diagnose läuft…',
-      diagBridgeLbl: '1. Daemon-Bridge',
-      diagBridgeOnline: 'Online',
-      diagBridgeOffline: 'Offline (Daemon getrennt)',
-      diagProfileLbl: '2. Modus & Config',
-      diagModeAi: 'KI-Feinschliff',
-      diagModeMachine: 'Maschinell',
-      diagModeOff: 'Aus',
-      diagProfileOk: 'Profil bereit',
-      diagProfileMissing: 'Unvollständig',
-      diagIssueUrl: 'Ungültige Base URL',
-      diagIssueModel: 'Modell-ID fehlt',
-      diagIssueKey: 'API-Schlüssel fehlt',
-      diagConnLbl: '3. Proxy & Verbindung',
-      diagConnOk: 'Verbunden',
-      diagConnSkipped: 'Übersprungen (Übersetzer aus)',
-      diagConnOffline: 'Nicht verfügbar (Bridge offline)',
-      diagConnFail: 'Nicht erreichbar',
-      diagProxyNone: 'Direkt / Kein Proxy',
-      diagProxyOs: 'OS-Proxy',
-      diagRemedyLbl: '4. Fehlerbehebung',
-      diagHealthy: 'Alle Prüfungen bestanden. Englischen Denkblock aufklappen, um Übersetzungen zu sehen.',
-      diagRemedyOffline: 'Führe den Statusbefehl unten im Terminal aus und starte Antigravity über die gepatchte Verknüpfung neu.',
-      diagRemedyAuth: 'Upstream-Auth fehlgeschlagen. API-Schlüssel, Kontingent und Modellrechte prüfen.',
-      diagRemedyProxy: 'Timeout oder Proxy nicht erreichbar. Auto / Benutzerdef. / Direkt wechseln und Port prüfen.',
-      diagRemedyProfile: 'Gültige Base URL, Modell-ID und API-Schlüssel ergänzen oder auf kostenlose MT wechseln.',
-      diagRemedyGeneral: 'Statusbefehl zur Prüfung der Installation ausführen oder Antigravity neu starten.',
-      diagCopyBtn: 'Kopieren',
-      diagCopied: 'Kopiert ✓',
-    },
+  const EXTRA_KEYS = 'titlesLabel|titlesDesc|diagBtn|diagRunning|diagBridgeLbl|diagBridgeOnline|diagBridgeOffline|diagProfileLbl|diagModeAi|diagModeMachine|diagModeOff|diagProfileOk|diagProfileMissing|diagIssueUrl|diagIssueModel|diagIssueKey|diagConnLbl|diagConnOk|diagConnSkipped|diagConnOffline|diagConnFail|diagProxyNone|diagProxyOs|diagRemedyLbl|diagHealthy|diagRemedyOffline|diagRemedyAuth|diagRemedyProxy|diagRemedyProfile|diagRemedyGeneral|diagCopyBtn|diagCopied'.split('|');
+  const EXTRA_ROWS = {
+    'zh-CN': '会话标题自动翻译|仅在渲染层翻译英文会话标题（默认关闭），不修改底层会话数据，自动跳过时间戳/文件名/路径，关闭后立即无损还原原文。|一键诊断|正在诊断…|① 守护桥接|在线|离线（后台守护进程未连接）|② 模式与配置|AI 润色|免费机翻|已关闭|渠道配置完整|配置待补全|Base URL 无效|缺少模型 ID|缺少 API Key|③ 代理与连通|连通正常|未探测（思考翻译当前关闭）|未探测（守护桥接离线）|连通异常|直连/无代理|系统代理|④ 排查指引|各项链路正常，展开英文思考块即可看到译文。|请先在终端运行下方自检命令确认守护进程在线，必要时通过已修补的快捷方式重启一次 Antigravity。|上游鉴权失败，请检查 API Key 是否正确、额度是否充足或是否具备目标模型权限。|上游或代理连接超时/不可达，请切换「自动检测 / 自定义 / 直连」并确认本地代理端口已放行。|请先完善 AI 渠道的 Base URL、模型 ID 与 API Key（本地 Ollama 可免密），或切至免费机翻。|若问题持续，请运行下方状态检查命令核验安装与守护状态，或重开 Antigravity 生效。|复制命令|已复制 ✓',
+    'zh-TW': '工作階段標題自動翻譯|僅在渲染層翻譯英文工作階段標題（預設關閉），不修改底層工作階段資料，自動略過時間戳/檔名/路徑，關閉後立即無損還原原文。|一鍵診斷|正在診斷…|① 守護橋接|線上|離線（背景守護行程未連線）|② 模式與設定|AI 潤飾|免費機翻|已關閉|管道設定完整|設定待補全|Base URL 無效|缺少模型 ID|缺少 API Key|③ 代理與連通|連線正常|未偵測（思考翻譯目前關閉）|未偵測（守護橋接離線）|連線異常|直連/無代理|系統代理|④ 排查指引|各項鏈路正常，展開英文思考區塊即可查看譯文。|請先在終端執行下方自檢指令確認守護行程在線，必要時透過已修補捷徑重開 Antigravity。|上游驗證失敗，請檢查 API Key 是否正確、額度充足或具備目標模型權限。|上游或代理連線逾時/不可達，請切換「自動偵測 / 自訂 / 直連」並確認本機代理埠已開啟。|請先補齊 AI 管道的 Base URL、模型 ID 與 API Key（本機 Ollama 可免密），或改用免費機翻。|若問題持續，請執行下方狀態檢查指令確認安裝與守護狀態，或重新啟動 Antigravity。|複製指令|已複製 ✓',
+    en: 'Auto-Translate Conversation Titles|Translates English conversation titles in the render layer only (off by default); never modifies underlying session data, skips timestamps/paths/filenames, and restores raw titles when off.|Diagnose|Diagnosing…|1. Daemon Bridge|Online|Offline (daemon disconnected)|2. Mode & Profile|AI Polish|Machine|Off|Profile ready|Incomplete config|Invalid Base URL|Missing Model ID|Missing API Key|3. Proxy & Connectivity|Connected|Skipped (translator off)|Unavailable (bridge offline)|Unreachable|Direct / No proxy|OS Proxy|4. Troubleshooting|All checks passed. Expand an English thought block to see translation.|Run the status command below in a terminal to verify the daemon, then relaunch Antigravity via its patched shortcut.|Upstream authentication failed. Check your API key, quota, and model permissions.|Upstream or proxy timed out / unreachable. Switch Auto / Custom / Direct proxy mode and verify your local proxy port.|Fill in a valid Base URL, Model ID, and API Key (local Ollama can omit key), or switch to free Machine Translation.|Run the status command below to inspect installation & daemon health, or restart Antigravity.|Copy|Copied ✓',
+    ja: '会話タイトルの自動翻訳|描画層のみで英語の会話タイトルを翻訳します（初期設定オフ）。会話データ本体は変更せず、時刻・ファイル名・パスを除外し、オフ時に原文へ即時復元します。|ワンクリック診断|診断中…|① デーモン接続|オンライン|オフライン（デーモン未接続）|② モードと設定|AI 翻訳|無料機械翻訳|オフ|設定完了|設定不足|Base URL 無効|モデル ID 未入力|API キー未入力|③ プロキシと接続性|接続正常|未検証（翻訳オフ）|検証不可（デーモン未接続）|接続異常|直接接続/プロキシなし|OS プロキシ|④ 対処ガイド|すべての診断が正常です。英語の思考ブロックを展開すると訳文が表示されます。|下の状態確認コマンドを端末で実行してデーモンを確認し、パッチ済みショートカットから Antigravity を再起動してください。|認証に失敗しました。API キー・残高・モデル権限を確認してください。|プロキシまたは上流接続がタイムアウト/到達不能です。「自動検出 / カスタム / 直接接続」を切り替えて確認してください。|有効な Base URL・モデル ID・API キー（ローカル Ollama は空欄可）を入力するか、無料機械翻訳へ切り替えてください。|問題が続く場合は下の状態確認コマンドを実行するか、Antigravity を再起動してください。|コピー|コピー済 ✓',
+    ko: '대화 제목 자동 번역|렌더링 계층에서만 영어 대화 제목을 번역합니다(기본 꺼짐). 원본 세션 데이터를 변경하지 않으며, 타임스탬프·파일명·경로를 건너뛰고 끄면 즉시 복원합니다.|진단|진단 중…|1. 데몬 브리지|온라인|오프라인(데몬 연결 끊김)|2. 모드 및 설정|AI 다듬기|기계 번역|꺼짐|프로필 준비됨|설정 미완료|잘못된 Base URL|모델 ID 누락|API 키 누락|3. 프록시 및 연결|연결됨|건너뜀(번역 꺼짐)|확인 불가(브리지 오프라인)|연결 불가|직접 연결 / 프록시 없음|OS 프록시|4. 문제 해결|모든 검사를 통과했습니다. 영어 사고 블록을 펼치면 번역이 표시됩니다.|터미널에서 아래 상태 확인 명령을 실행해 데몬을 확인한 뒤 패치된 바로가기로 Antigravity를 재시작하세요.|상위 인증에 실패했습니다. API 키, 할당량 및 모델 권한을 확인하세요.|상위/프록시 연결 시간이 초과되었거나 도달할 수 없습니다. 자동/사용자/직접 프록시 모드를 전환하고 포트를 확인하세요.|유효한 Base URL, 모델 ID, API 키를 입력하거나 무료 기계 번역 모드로 전환하세요.|아래 상태 명령으로 설치 및 데몬 상태를 확인하거나 Antigravity를 재시작하세요.|복사|복사됨 ✓',
+    es: 'Traducir títulos automáticamente|Traduce títulos en inglés solo en la capa de vista (desactivado por defecto); nunca altera los datos de sesión y restaura el texto original al apagar.|Diagnosticar|Diagnosticando…|1. Puente del demonio|En línea|Desconectado|2. Modo y config.|Pulido IA|Automática|Desactivado|Perfil listo|Config. incompleta|Base URL inválida|Falta ID de modelo|Falta clave API|3. Proxy y conexión|Conectado|Omitido (traductor apagado)|No disponible (puente offline)|Inaccesible|Directo / Sin proxy|Proxy del SO|4. Solución|Todas las comprobaciones correctas. Expande un bloque de pensamiento en inglés para ver la traducción.|Ejecuta el comando de estado en una terminal para verificar el demonio y reinicia Antigravity.|Error de autenticación. Revisa tu clave API, cuota y permisos del modelo.|Tiempo de espera o proxy inaccesible. Cambia entre Auto / Personalizado / Directo y verifica el puerto.|Completa una Base URL, ID de modelo y clave API válidos o cambia al modo automático gratuito.|Ejecuta el comando de estado para verificar la instalación o reinicia Antigravity.|Copiar|Copiado ✓',
+    fr: 'Traduction auto des titres|Traduit les titres anglais uniquement à l’affichage (désactivé par défaut) ; ne modifie jamais les données de session et restaure l’original à l’arrêt.|Diagnostiquer|Diagnostic…|1. Pont démon|En ligne|Hors ligne (démon déconnecté)|2. Mode et config.|Affinage IA|Automatique|Désactivé|Profil prêt|Config. incomplète|Base URL invalide|ID de modèle manquant|Clé API manquante|3. Proxy et réseau|Connecté|Ignoré (traducteur coupé)|Indisponible (pont hors ligne)|Inaccessible|Direct / Sans proxy|Proxy OS|4. Dépannage|Tous les tests ont réussi. Dépliez un bloc de réflexion en anglais pour voir la traduction.|Exécutez la commande d’état ci-dessous dans un terminal pour vérifier le démon, puis relancez Antigravity.|Échec d’authentification. Vérifiez votre clé API, votre quota et les droits du modèle.|Délai dépassé ou proxy inaccessible. Basculez Auto / Personnalisé / Direct et vérifiez votre port.|Renseignez Base URL, ID de modèle et clé API valides, ou passez en mode automatique gratuit.|Exécutez la commande d’état pour vérifier l’installation ou redémarrez Antigravity.|Copier|Copié ✓',
+    de: 'Gesprächstitel automatisch übersetzen|Übersetzt englische Titel nur in der Darstellung (standardmäßig aus); verändert keine Sitzungsdaten und stellt Originale beim Ausschalten wieder her.|Diagnose|Diagnose läuft…|1. Daemon-Bridge|Online|Offline (Daemon getrennt)|2. Modus & Config|KI-Feinschliff|Maschinell|Aus|Profil bereit|Unvollständig|Ungültige Base URL|Modell-ID fehlt|API-Schlüssel fehlt|3. Proxy & Verbindung|Verbunden|Übersprungen (Übersetzer aus)|Nicht verfügbar (Bridge offline)|Nicht erreichbar|Direkt / Kein Proxy|OS-Proxy|4. Fehlerbehebung|Alle Prüfungen bestanden. Englischen Denkblock aufklappen, um Übersetzungen zu sehen.|Führe den Statusbefehl unten im Terminal aus und starte Antigravity über die gepatchte Verknüpfung neu.|Upstream-Auth fehlgeschlagen. API-Schlüssel, Kontingent und Modellrechte prüfen.|Timeout oder Proxy nicht erreichbar. Auto / Benutzerdef. / Direkt wechseln und Port prüfen.|Gültige Base URL, Modell-ID und API-Schlüssel ergänzen oder auf kostenlose MT wechseln.|Statusbefehl zur Prüfung der Installation ausführen oder Antigravity neu starten.|Kopieren|Kopiert ✓',
+    tr: 'Sohbet Başlıklarını Otomatik Çevir|İngilizce sohbet başlıklarını yalnızca görünüm katmanında çevirir (varsayılan kapalı); oturum verilerini değiştirmez, zaman damgası/yol/dosya adlarını atlar ve kapatıldığında aslına döndürür.|Tanıla|Tanılanıyor…|1. Arka Plan Köprüsü|Çevrimiçi|Çevrimdışı (servis bağlı değil)|2. Mod ve Profil|YZ İyileştirme|Makine|Kapalı|Profil hazır|Eksik yapılandırma|Geçersiz Base URL|Model ID eksik|API Anahtarı eksik|3. Proxy ve Bağlantı|Bağlı|Atlandı (çevirmen kapalı)|Kullanılamıyor (köprü çevrimdışı)|Erişilemiyor|Doğrudan / Proxy yok|Sistem Proxy|4. Sorun Giderme|Tüm kontroller geçti. Çeviriyi görmek için İngilizce bir düşünce bloğunu genişletin.|Arka plan servisini doğrulamak için aşağıdaki durum komutunu terminalde çalıştırın, ardından yamalı kısayoldan Antigravity’yi yeniden başlatın.|Üst akış kimlik doğrulaması başarısız. API anahtarını, kotanızı ve model izinlerini kontrol edin.|Üst akış veya proxy zaman aşımına uğradı / erişilemiyor. Oto / Özel / Doğrudan proxy modunu değiştirip yerel proxy portunu doğrulayın.|Geçerli bir Base URL, Model ID ve API Anahtarı girin (yerel Ollama anahtar gerektirmeyebilir) veya ücretsiz Makine Çevirisi’ne geçin.|Kurulum ve servis durumunu incelemek için aşağıdaki durum komutunu çalıştırın veya Antigravity’yi yeniden başlatın.|Kopyala|Kopyalandı ✓',
   };
-  for (const [lk, extra] of Object.entries(EXTRA_I18N)) {
-    if (WORKBENCH_I18N[lk]) Object.assign(WORKBENCH_I18N[lk], extra);
+  for (const [lk, row] of Object.entries(EXTRA_ROWS)) {
+    if (!WORKBENCH_I18N[lk]) continue;
+    const vals = row.split('|');
+    for (let i = 0; i < EXTRA_KEYS.length; i++) WORKBENCH_I18N[lk][EXTRA_KEYS[i]] = vals[i];
   }
 
   function normalizeLangCode(raw) {
@@ -371,6 +117,7 @@
     if (/^es\b/.test(s) || s === 'spanish') return 'es';
     if (/^fr\b/.test(s) || s === 'french') return 'fr';
     if (/^de\b/.test(s) || s === 'german') return 'de';
+    if (/^tr\b/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
     if (/^en\b/.test(s) || s === 'english') return 'en';
     return '';
   }
@@ -640,6 +387,7 @@
       translateTitles: false,
       dirtyToolSum: false,
       dirtyTitles: false,
+      dirtyStyle: false,
       diagnosing: false,
       lastDiag: null,
       cacheCount: 0,
@@ -659,6 +407,8 @@
       fetchedModels: [],
     };
     let loadConfigPromise = null;
+    let styleSaving = false, pendingStyle = null, styleSynced = false, styleEpoch = 0;
+    const normStyle = (r) => { const m = r === 'tech' ? 'technical' : r; return ['technical', 'concise', 'custom'].includes(m) ? m : null; };
 
     // -1) Usage Hint, Background Bridge Status Banner & One-Click Diagnostics Strip
     const usageBanner = mkEl('div', 'ag-cs-thought-hint');
@@ -1382,31 +1132,42 @@
 
     const syncStyleUi = () => {
       guard(() => {
-        const pack = getPack();
-        for (const [sid, btn] of styleBtns.entries()) {
-          const on = state.stylePreset === sid;
-          btn.setAttribute('aria-pressed', String(on));
-          setToggleAttr(btn, 'data-pressed', on);
-          btn.textContent = getStyleLabel(sid, pack);
-        }
+        const p = getPack();
+        for (const [sid, b] of styleBtns) { const on = state.stylePreset === sid; b.setAttribute('aria-pressed', String(on)); setToggleAttr(b, 'data-pressed', on); b.textContent = getStyleLabel(sid, p); }
         customField.hidden = state.stylePreset !== 'custom';
         if (customTa.value !== state.customPrompt) customTa.value = state.customPrompt;
       });
     };
-
+    const flushStyle = (sid) => {
+      const api = resolveThoughtApi();
+      if (state.busy || typeof api?.saveConfig !== 'function') return;
+      if (styleSaving) { pendingStyle = sid; return; }
+      styleSaving = true;
+      const ep = styleEpoch;
+      const drain = () => {
+        const next = pendingStyle; pendingStyle = null; styleSaving = false;
+        if (next !== null && !state.busy) flushStyle(next);
+      };
+      let resOrProm;
+      try { resOrProm = api.saveConfig({ stylePreset: sid }); } catch { drain(); return; }
+      Promise.resolve(resOrProm).then((res) => {
+        if (ep === styleEpoch && pendingStyle === null && res && res.ok) {
+          const sv = normStyle(res.stylePreset);
+          if (sv && state.stylePreset !== sv) { state.stylePreset = sv; syncStyleUi(); }
+          styleSynced = true;
+          if (!loadConfigPromise) state.dirtyStyle = false;
+        }
+      }, () => {}).finally(drain);
+    };
     for (const sid of ['technical', 'concise', 'custom']) {
       const sb = doc.createElement('button');
-      sb.type = 'button';
-      sb.className = btnClass;
-      sb.textContent = getStyleLabel(sid, initialPack);
-      sb.setAttribute('data-thought-style', sid);
+      sb.type = 'button'; sb.className = btnClass; sb.textContent = getStyleLabel(sid, initialPack); sb.setAttribute('data-thought-style', sid);
       sb.addEventListener('click', (ev) => {
-        if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-        state.stylePreset = sid;
-        syncStyleUi();
+        ev?.stopPropagation?.();
+        state.stylePreset = sid; state.dirtyStyle = true; styleSynced = false; syncStyleUi();
+        flushStyle(sid);
       });
-      styleBtns.set(sid, sb);
-      styleGrp.appendChild(sb);
+      styleBtns.set(sid, sb); styleGrp.appendChild(sb);
     }
     styleBar.appendChild(styleLbl);
     styleBar.appendChild(styleGrp);
@@ -1652,7 +1413,7 @@
     };
 
     clearKeyBtn.addEventListener('click', (ev) => {
-      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      ev?.stopPropagation?.();
       const cur = getActiveProfile();
       if (!cur) return;
       cur.clearSavedKey = true;
@@ -1665,7 +1426,7 @@
       const cur = getActiveProfile();
       if (!cur) return;
       cur.name = nameInput.value.trim() || cur.name || 'Profile';
-      cur.baseUrl = urlInput.value.trim() || 'https://api.openai.com/v1';
+      cur.baseUrl = urlInput.value.trim() || (cur.baseUrlError ? '' : 'https://api.openai.com/v1');
       cur.model = modelInput.value.trim();
       if (keyInput.value.trim()) {
         cur.draftKey = keyInput.value.trim();
@@ -1684,7 +1445,7 @@
           chip.setAttribute('data-active', p.id === state.activeProfileId ? '1' : '0');
           chip.textContent = p.name || p.id;
           chip.addEventListener('click', (ev) => {
-            if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+            ev?.stopPropagation?.();
             syncFormIntoProfile();
             state.activeProfileId = p.id;
             state.fetchedModels = [];
@@ -1700,7 +1461,7 @@
         addBtn.setAttribute('data-testid', 'thought-add-profile-btn');
         addBtn.textContent = ui.thoughtAddProfileBtn || pack.addProfile;
         addBtn.addEventListener('click', (ev) => {
-          if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+          ev?.stopPropagation?.();
           syncFormIntoProfile();
           const curPack = getPack();
           const nextNum = state.profiles.length + 1;
@@ -1729,7 +1490,7 @@
           delBtn.setAttribute('data-testid', 'thought-del-profile-btn');
           delBtn.textContent = ui.thoughtDelProfileBtn || pack.delProfile;
           delBtn.addEventListener('click', (ev) => {
-            if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+            ev?.stopPropagation?.();
             if (state.profiles.length <= 1) return;
             state.profiles = state.profiles.filter((item) => item.id !== state.activeProfileId);
             state.activeProfileId = state.profiles[0].id;
@@ -1741,12 +1502,14 @@
         const cur = getActiveProfile();
         if (cur) {
           nameInput.value = cur.name || '';
-          urlInput.value = cur.baseUrl || 'https://api.openai.com/v1';
+          urlInput.value = cur.baseUrl || (cur.baseUrlError ? '' : 'https://api.openai.com/v1');
           modelInput.value = cur.model || '';
           keyInput.value = cur.draftKey || '';
           syncKeyHintForUrl(cur);
         }
       });
+      const curErr = getActiveProfile()?.baseUrlError;
+      if (curErr) setStatus('err', `✕ ${curErr}`);
     };
 
     const refreshStaticLabels = () => {
@@ -1778,15 +1541,14 @@
       const cur = getActiveProfile();
       if (cur) {
         cur.name = nameInput.value;
-        const activeChip =
-          profPills.querySelector && profPills.querySelector(`[data-profile-id="${cur.id}"]`);
+        const activeChip = profPills.querySelector?.(`[data-profile-id="${cur.id}"]`);
         if (activeChip) activeChip.textContent = cur.name.trim() || cur.id;
       }
     });
     urlInput.addEventListener('input', () => {
       const cur = getActiveProfile();
       if (cur) {
-        cur.baseUrl = urlInput.value;
+        cur.baseUrl = urlInput.value; cur.baseUrlError = '';
         syncKeyHintForUrl(cur);
       }
     });
@@ -1822,8 +1584,12 @@
       if (!res || !res.ok) return;
       const fromSave = Boolean(opts && opts.fromSave);
       state.loaded = true;
-      const mappedPreset = res.stylePreset === 'tech' ? 'technical' : res.stylePreset;
-      state.stylePreset = ['technical', 'concise', 'custom'].includes(mappedPreset) ? mappedPreset : 'technical';
+      if (fromSave || !state.dirtyStyle) {
+        state.stylePreset = normStyle(res.stylePreset) || 'technical';
+        if (fromSave) state.dirtyStyle = false;
+      } else if (styleSynced && !styleSaving && !pendingStyle) {
+        state.dirtyStyle = false;
+      }
       const hostView = resolveHostPrism()?.getState?.()?.cfg?.thoughtView;
       const api = resolveThoughtApi();
       const clientView = api && typeof api.getViewMode === 'function' ? api.getViewMode() : null;
@@ -1854,6 +1620,7 @@
           id: p.id,
           name: p.name,
           baseUrl: p.baseUrl,
+          baseUrlError: p.baseUrlError || '',
           model: p.model,
           hasApiKey: Boolean(p.hasApiKey),
           maskedKey: p.maskedKey || '',
@@ -1932,6 +1699,7 @@
       loadConfigPromise = null;
       state.dirtyToolSum = false;
       state.dirtyTitles = false;
+      state.dirtyStyle = false; pendingStyle = null; styleSynced = false; styleEpoch += 1;
       syncUsageBanner();
       syncActionButtons();
       const hostView = resolveHostPrism()?.getState?.()?.cfg?.thoughtView;
@@ -1957,7 +1725,7 @@
     };
 
     fetchModelsBtn.addEventListener('click', (ev) => {
-      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      ev?.stopPropagation?.();
       const api = resolveThoughtApi();
       if (!api || typeof api.fetchModels !== 'function' || state.busy) return;
       syncFormIntoProfile();
@@ -2030,7 +1798,7 @@
     };
 
     saveBtn.addEventListener('click', (ev) => {
-      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      ev?.stopPropagation?.();
       const api = resolveThoughtApi();
       if (!api || typeof api.saveConfig !== 'function' || state.busy) return;
       if (hasThoughtBridge() && !state.loaded) return;
@@ -2039,7 +1807,7 @@
         setStatus('err', pack.proxyHintInvalid);
         return;
       }
-      state.busy = true;
+      state.busy = true; pendingStyle = null; styleEpoch += 1;
       syncActionButtons();
       setStatus('idle', pack.savingCfg);
       void api
@@ -2065,7 +1833,7 @@
     });
 
     testBtn.addEventListener('click', (ev) => {
-      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      ev?.stopPropagation?.();
       const api = resolveThoughtApi();
       if (!api || typeof api.testConnection !== 'function' || state.busy) return;
       if (hasThoughtBridge() && !state.loaded) return;
@@ -2074,7 +1842,7 @@
         setStatus('err', pack.proxyHintInvalid);
         return;
       }
-      state.busy = true;
+      state.busy = true; pendingStyle = null; styleEpoch += 1;
       syncActionButtons();
       setStatus('idle', pack.testingConn);
       const payload = buildSavePayload();
@@ -2109,15 +1877,12 @@
     });
 
     clearCacheBtn.addEventListener('click', (ev) => {
-      if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+      ev?.stopPropagation?.();
       if (state.busy) return;
       state.busy = true;
       clearCacheBtn.disabled = true;
-
       const api = resolveThoughtApi();
-      if (api && typeof api.clearLocalCache === 'function') {
-        api.clearLocalCache();
-      }
+      api?.clearLocalCache?.();
 
       const rpcCall = resolveThoughtRpcCall();
       const daemonClear = rpcCall

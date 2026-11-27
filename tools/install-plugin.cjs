@@ -16,10 +16,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { spawnBreakawayNodeProcess, isPidAlive } = require("./patch-asar.cjs");
+const { spawnBreakawayNodeProcess, isPidAlive } = require("../src/platform/process-probe.cjs");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const {
+  PLUGIN_VERSION,
   SYNC_ROOT_FILES,
   readPidFromLockFile,
   isExpectedDaemonProcess,
@@ -28,6 +29,16 @@ const {
   detectRunningAntigravityHostSync,
   recordRelaunchPromptState,
 } = require(path.join(ROOT_DIR, "cdp.js"));
+const im = require(path.join(ROOT_DIR, "src", "platform", "install-manifest.cjs"));
+const repoSync = require(path.join(ROOT_DIR, "src", "platform", "repo-sync.cjs"));
+
+function resolveDefaultPluginVersion(sourceDir = ROOT_DIR) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(sourceDir || ROOT_DIR, "package.json"), "utf8"));
+    if (pkg && typeof pkg.version === "string" && pkg.version.trim()) return pkg.version.trim();
+  } catch {}
+  return PLUGIN_VERSION || "1.0.8-beta.3";
+}
 
 function isAutomatedTestRuntime() {
   if (process.env.NODE_ENV === "test") return true;
@@ -379,57 +390,6 @@ function atomicWriteFileSync(filePath, content, options = {}) {
   }
 }
 
-function safeCopyFileNoSymlink(src, dst) {
-  const srcStat = assertNotSymbolicLink(src, "source");
-  if (!srcStat || !srcStat.isFile()) {
-    throw new Error(`Refusing non-regular source file: ${src}`);
-  }
-  assertNotSymbolicLink(dst, "destination");
-  const dstDir = path.dirname(dst);
-  assertNotSymbolicLink(dstDir, "destination directory");
-  fs.mkdirSync(dstDir, { recursive: true });
-  assertNotSymbolicLink(dstDir, "destination directory");
-
-  let lastErr = null;
-  for (let attempt = 0; attempt <= FS_RETRY_BACKOFFS_MS.length; attempt++) {
-    assertNotSymbolicLink(dst, "destination");
-    clearReadOnlyIfRegularFile(dst, "destination");
-    try {
-      fs.copyFileSync(src, dst);
-      return;
-    } catch (err) {
-      if (!isTransientFsError(err)) {
-        throw err;
-      }
-      // 遇 Windows 共享读取占用时回退临时文件原子重命名替换
-      const tmpPath = `${dst}.tmp.${process.pid}.${crypto.randomBytes(6).toString("hex")}`;
-      try {
-        fs.copyFileSync(src, tmpPath, fs.constants.COPYFILE_EXCL);
-        assertNotSymbolicLink(dst, "destination");
-        clearReadOnlyIfRegularFile(dst, "destination");
-        fs.renameSync(tmpPath, dst);
-        return;
-      } catch (fallbackErr) {
-        try {
-          fs.unlinkSync(tmpPath);
-        } catch {}
-        lastErr = fallbackErr || err;
-        if (attempt < FS_RETRY_BACKOFFS_MS.length) {
-          sleepSync(FS_RETRY_BACKOFFS_MS[attempt]);
-        }
-      }
-    }
-  }
-  if (lastErr) {
-    const wrapped = new Error(
-      `Failed to copy "${dst}" (${lastErr.code || lastErr.message}); file may be locked by Antigravity or antivirus software`
-    );
-    wrapped.code = lastErr.code;
-    wrapped.cause = lastErr;
-    throw wrapped;
-  }
-}
-
 function syncHostPluginRegistry(configDir, enable) {
   if (!configDir) return false;
   const hostConfigPath = path.join(configDir, "config.json");
@@ -613,9 +573,11 @@ function normalizeMacosAntigravityAppPath(rawPath) {
   return normalized.toLowerCase().endsWith(".app") ? normalized : fallback;
 }
 
-function generateMacosLauncherInfoPlist(version = "1.0.8-beta.3") {
-  const safeShort = escapeXmlText(version || "1.0.8-beta.3");
-  const numericMatch = String(version || "1.0.8-beta.3").match(/^\d+(?:\.\d+){0,2}/);
+function generateMacosLauncherInfoPlist(version = resolveDefaultPluginVersion()) {
+  const fallbackVer = resolveDefaultPluginVersion();
+  const resolvedVer = version || fallbackVer;
+  const safeShort = escapeXmlText(resolvedVer);
+  const numericMatch = String(resolvedVer).match(/^\d+(?:\.\d+){0,2}/);
   const safeBundleVer = escapeXmlText(numericMatch ? numericMatch[0] : "1.0.8");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -915,12 +877,7 @@ function createMacosLosslessLauncher(opts = {}) {
 
   let version = opts.version || "";
   if (!version) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(path.join(opts.sourceDir || ROOT_DIR, "package.json"), "utf8"));
-      version = pkg?.version || "1.0.8-beta.3";
-    } catch {
-      version = "1.0.8-beta.3";
-    }
+    version = resolveDefaultPluginVersion(opts.sourceDir || ROOT_DIR);
   }
   const targetApp = normalizeMacosAntigravityAppPath(opts.targetApp || "/Applications/Antigravity.app");
   const plistPath = path.join(contentsDir, "Info.plist");
@@ -1166,9 +1123,10 @@ function resolveLinuxLauncherTargetExe(opts = {}) {
   return "antigravity";
 }
 
-function generateLinuxLauncherDesktop({ targetExe = "antigravity", iconPath = "obsidian-prism", version = "1.0.8-beta.3" } = {}) {
+function generateLinuxLauncherDesktop({ targetExe = "antigravity", iconPath = "obsidian-prism", version = resolveDefaultPluginVersion() } = {}) {
   const safeIcon = String(iconPath || "obsidian-prism").replace(/[\r\n]+/g, "").trim() || "obsidian-prism";
-  const safeVersion = String(version || "1.0.8-beta.3").replace(/[\r\n]+/g, "").trim() || "1.0.8-beta.3";
+  const fallbackVer = resolveDefaultPluginVersion();
+  const safeVersion = String(version || fallbackVer).replace(/[\r\n]+/g, "").trim() || fallbackVer;
   const execToken = formatDesktopExecArg(targetExe);
   return [
     "[Desktop Entry]",
@@ -1223,12 +1181,7 @@ function createLinuxLosslessLauncher(opts = {}) {
 
   let version = opts.version || "";
   if (!version) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(path.join(opts.sourceDir || ROOT_DIR, "package.json"), "utf8"));
-      version = pkg?.version || "1.0.8-beta.3";
-    } catch {
-      version = "1.0.8-beta.3";
-    }
+    version = resolveDefaultPluginVersion(opts.sourceDir || ROOT_DIR);
   }
 
   let iconWritten = false;
@@ -1315,47 +1268,65 @@ function removeLinuxLosslessLauncher(opts = {}) {
   };
 }
 
-const DIRS_TO_SYNC = [
-  "assets",
-  "vendor",
-  "sidecars",
-];
+const DIRS_TO_SYNC = ["assets", "src", "vendor", "sidecars"];
 
-function shouldSkipSyncEntry(name) {
-  if (name === "__pycache__" || name === ".DS_Store" || name === ".daemon.pid") return true;
-  const lower = String(name || "").toLowerCase();
-  if (lower.endsWith(".log") || lower.endsWith(".tmp")) return true;
-  if (/\.tmp\.[a-z0-9._-]+$/i.test(name)) return true;
-  return false;
-}
+function copyDirRecursiveSync(srcDir, dstDir, relPrefix = "", prot = im.PROTECTED_USER_PATHS, opts = null) {
+  const st = assertNotSymbolicLink(srcDir, "source directory");
+  if (!st) return 0;
+  if (!st.isDirectory()) throw new Error(`Refusing non-directory source: ${srcDir}`);
+  const dstSt = assertNotSymbolicLink(dstDir, "destination directory");
+  if (dstSt && !dstSt.isDirectory()) throw new Error(`Refusing non-directory destination: ${dstDir}`);
 
-function copyDirRecursiveSync(srcDir, dstDir) {
-  const srcStat = assertNotSymbolicLink(srcDir, "source directory");
-  if (!srcStat) return 0;
-  if (!srcStat.isDirectory()) {
-    throw new Error(`Refusing non-directory source: ${srcDir}`);
-  }
-  assertNotSymbolicLink(dstDir, "destination directory");
-  fs.mkdirSync(dstDir, { recursive: true });
-  assertNotSymbolicLink(dstDir, "destination directory");
-  let copied = 0;
-  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
-    if (shouldSkipSyncEntry(entry.name)) continue;
-    const srcPath = path.join(srcDir, entry.name);
-    const dstPath = path.join(dstDir, entry.name);
-    if (entry.isSymbolicLink()) {
-      throw new Error(`Refusing symbolic link entry: ${srcPath}`);
+  const mergedProt = im.mergeProtectedUserPaths(Array.isArray(prot) ? prot : []);
+  const normPrefix = String(relPrefix || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const stagedEntries = [];
+  const extraProtectedForTarget = [...mergedProt];
+
+  const collect = (curSrc, curDst, subPrefix) => {
+    for (const e of fs.readdirSync(curSrc, { withFileTypes: true })) {
+      const subRel = subPrefix ? `${subPrefix}/${e.name}` : e.name;
+      const checkRel = normPrefix ? `${normPrefix}/${subRel}` : subRel;
+      if (im.shouldExcludeSyncRelPath(checkRel) || im.shouldExcludeSyncRelPath(subRel)) continue;
+      const s = path.join(curSrc, e.name);
+      const d = path.join(curDst, e.name);
+      if (e.isSymbolicLink()) throw new Error(`Refusing symbolic link entry: ${s}`);
+      const es = assertNotSymbolicLink(s, "source");
+      assertNotSymbolicLink(d, "destination");
+      if (im.isProtectedUserPath(checkRel, mergedProt) || im.isProtectedUserPath(subRel, mergedProt)) {
+        extraProtectedForTarget.push(subRel);
+        continue;
+      }
+      if (e.isDirectory() || (es && es.isDirectory())) {
+        collect(s, d, subRel);
+      } else if (e.isFile() || (es && es.isFile())) {
+        stagedEntries.push({ path: subRel, scope: "plugin", data: fs.readFileSync(s) });
+      }
     }
-    const entryStat = assertNotSymbolicLink(srcPath, "source");
-    assertNotSymbolicLink(dstPath, "destination");
-    if (entry.isDirectory() || (entryStat && entryStat.isDirectory())) {
-      copied += copyDirRecursiveSync(srcPath, dstPath);
-    } else if (entry.isFile() || (entryStat && entryStat.isFile())) {
-      safeCopyFileNoSymlink(srcPath, dstPath);
-      copied += 1;
-    }
+  };
+
+  collect(srcDir, dstDir, "");
+
+  if (stagedEntries.length === 0) {
+    fs.mkdirSync(dstDir, { recursive: true });
+    assertNotSymbolicLink(dstDir, "destination directory");
+    return 0;
   }
-  return copied;
+
+  const txManifest = im.buildInstallManifest({
+    version: resolveDefaultPluginVersion(ROOT_DIR),
+    entries: stagedEntries,
+    obsoletePaths: opts && Array.isArray(opts.obsoletePaths) ? opts.obsoletePaths : [],
+    extraProtectedPaths: extraProtectedForTarget,
+  });
+  const res = im.applyManifestAtomicUpgrade({
+    targetDir: dstDir,
+    stagedFiles: stagedEntries,
+    manifest: txManifest,
+    scope: "plugin",
+    allowSeedProtected: false,
+    _testHooks: opts && typeof opts === "object" ? opts._testHooks || null : null,
+  });
+  return res.appliedFiles.length;
 }
 
 const DAEMON_STOP_POLL_MS = 30;
@@ -1534,25 +1505,11 @@ async function installPlugin(opts = {}) {
 
   const stoppedOldPid = await stopExistingDaemonInDir(targetDir, opts.daemonStopOpts);
 
-  let copiedFiles = 0;
-  const missingOptional = [];
-  for (const rel of ROOT_FILES_TO_SYNC) {
-    const src = path.join(sourceDir, rel);
-    const dst = path.join(targetDir, rel);
-    const srcStat = assertNotSymbolicLink(src, "source");
-    if (srcStat) {
-      safeCopyFileNoSymlink(src, dst);
-      copiedFiles += 1;
-    } else {
-      missingOptional.push(rel);
-    }
-  }
-
-  for (const dirName of DIRS_TO_SYNC) {
-    const srcSub = path.join(sourceDir, dirName);
-    const dstSub = path.join(targetDir, dirName);
-    copiedFiles += copyDirRecursiveSync(srcSub, dstSub);
-  }
+  const { copiedFiles: syncedCount, missingOptional } = repoSync.syncPluginDirWithManifest({
+    sourceDir, targetDir, rootFiles: ROOT_FILES_TO_SYNC, dirs: DIRS_TO_SYNC,
+    assertNotSymlink: assertNotSymbolicLink, _testHooks: opts._atomicTestHooks || null,
+  });
+  let copiedFiles = syncedCount;
 
   // Record linked Git repository metadata so Sidecar can inspect/pull source repo
   const repoMetaPath = path.join(targetDir, "repo-meta.json");
@@ -1977,41 +1934,24 @@ async function uninstallPlugin(opts = {}) {
 
   syncHostPluginRegistry(hostConfigDir, false);
 
-  if (fs.existsSync(targetDir)) {
-    const tStat = assertNotSymbolicLink(targetDir, "target directory");
-    if (tStat) {
-      fs.rmSync(targetDir, { recursive: true, force: true });
-    }
+  if (fs.existsSync(targetDir) && assertNotSymbolicLink(targetDir, "target directory")) {
+    if (!purgeData && repoSync.hasUserOwnedAssetsInDir(targetDir)) repoSync.removeManagedFilesKeepingUserAssets(targetDir);
+    else fs.rmSync(targetDir, { recursive: true, force: true });
   }
-
   let cleanedLegacyPluginDir = false;
   if (legacyDir && !isProtectedUserDataPath(legacyDir)) {
     try {
       const legStat = assertNotSymbolicLink(legacyDir, "legacy plugin directory");
-      if (legStat && legStat.isDirectory()) {
-        fs.rmSync(legacyDir, { recursive: true, force: true });
-        cleanedLegacyPluginDir = !fs.existsSync(legacyDir);
-      }
+      if (legStat && legStat.isDirectory()) { fs.rmSync(legacyDir, { recursive: true, force: true }); cleanedLegacyPluginDir = !fs.existsSync(legacyDir); }
     } catch {}
   }
-
   const purgedPaths = [];
   if (purgeData) {
     if (hostConfigDir) {
       try {
         assertNotSymbolicLink(hostConfigDir, "host config directory");
-        const exactFiles = [
-          "obsidian-prism-config.backup.json",
-          "obsidian-prism-thought.json",
-          "obsidian-prism-thought-cache.json",
-          "obsidian-prism-usage-rollup-cache.json",
-          "obsidian-prism-storage-guard-state.json",
-          "obsidian-prism-sidebar.json",
-          "obsidian-prism-sidebar.json.lock",
-          "obsidian-prism-wallpaper.json",
-          "obsidian-prism-suggester.json",
-        ];
-        for (const name of exactFiles) {
+        // PURGE_DATA_FILES (includes obsidian-prism-storage-guard-state.json)
+        for (const name of im.PURGE_DATA_FILES) {
           const fp = path.join(hostConfigDir, name);
           if (safeUnlinkNoSymlink(fp, name)) purgedPaths.push(fp);
         }

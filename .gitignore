@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+i18n-work/
 .antigravity/
 installer.exe
 *.exe

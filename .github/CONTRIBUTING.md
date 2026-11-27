@@ -1,5 +1,7 @@
 # 贡献指南 / Contributing to Obsidian Prism
 
+> **架构宪法 / Architecture Constitution**：开工修改代码或提交 PR 前，请先阅读仓库最高工程规范 **[`.github/ARCHITECTURE.md`](./ARCHITECTURE.md)**（涵盖零依赖 `L0→L4` DAG、体积棘轮、单一版本源、防杀软与宿主安全红线、8 语种规范及 5 大自动化适应度门禁）。
+
 感谢你为 **Obsidian Prism（黑曜棱镜）** 贡献代码、问题复现与改进建议！
 
 ## 环境要求
@@ -41,6 +43,6 @@ npm run install:plugin
 ## Pull Request 自检清单
 
 1. 保持运行时 **0 外部依赖**（纯 Node >= 22 内置能力 + 浏览器原生 Web API）。
-2. 所有修改文件保持 **UTF-8 无 BOM + LF 换行**；`style.css` 保持 **纯 ASCII、0 `:has()`、括号配平**，且 Channel 1 全 9 语种编译体积 `< 549,500 B`。
+2. 所有修改文件保持 **UTF-8 无 BOM + LF 换行**；`style.css` 保持 **纯 ASCII、0 `:has()`、括号配平**，且 Channel 1 全 8 语种（+ `auto`）编译体积 `< 549,500 B`。
 3. 严禁提交明文 API Key、私有内网地址、个人本机路径或编译后的 `.exe` / `.dmg` 二进制。
 4. 保留 `GPL-3.0` 协议与 `NOTICE` / `THIRD_PARTY_NOTICES.md` 完整致谢链，并确保 `npm test` 全量 `0 fail`。

@@ -1,4 +1,4 @@
-// Obsidian Prism — Omni Native Browser Router, Context Menu & Streaming Workbench Client (v1.0.8-beta.3)
+// Obsidian Prism — Omni Native Browser Router, Context Menu & Streaming Workbench Client
 // Second-channel runtime (`window.__agPrismOmni`) + CommonJS factory for deterministic unit tests.
 // Engineering & security guarantees:
 // 1. ZERO custom side-dock DOM or rogue `wcvBrowser` calls: 100% native integration with Antigravity's
@@ -32,36 +32,36 @@
 })(typeof window !== 'undefined' ? window : globalThis, function () {
   'use strict';
 
-  const VERSION = '1.0.8-beta.3';
+  const VERSION = '1.0.8-beta.4';
   const STYLE_EL_ID = 'ag-prism-omni-css';
   const HL_URL_NAME = 'ag-omni-url';
   const HL_PATH_NAME = 'ag-omni-path';
   const GUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-  // Compact 8-locale fallback table [zh-CN, zh-TW, en, ja, ko, es, fr, de]; primary source is `window.__agCsLocales`
-  const LANG_INDEX = { 'zh-CN': 0, 'zh-TW': 1, en: 2, ja: 3, ko: 4, es: 5, fr: 6, de: 7 };
+  // Compact 9-locale fallback table [zh-CN, zh-TW, en, ja, ko, es, fr, de, tr]; primary source is `window.__agCsLocales`
+  const LANG_INDEX = { 'zh-CN': 0, 'zh-TW': 1, en: 2, ja: 3, ko: 4, es: 5, fr: 6, de: 7, tr: 8 };
   const FALLBACK_ROWS = {
-    omniOpenBuiltin: ['在右侧面板打开', '在右側面板開啟', 'Open in Side Pane', '右パネルで開く', '오른쪽 패널에서 열기', 'Abrir en panel lateral', 'Ouvrir dans le panneau latéral', 'Im Seitenbereich öffnen'],
-    omniOpenPreview: ['在右侧检视台预览', '在右側檢視台預覽', 'Preview in Workbench', 'ワークベンチでプレビュー', '워크벤치에서 미리보기', 'Previsualizar en Workbench', 'Aperçu dans Workbench', 'In Workbench vorschauen'],
-    omniOpenExternal: ['使用系统默认程序打开', '使用系統預設程式開啟', 'Open in Default App', '既定のアプリで開く', '기본 앱으로 열기', 'Abrir en app predeterminada', 'Ouvrir avec l’app par défaut', 'In Standard-App öffnen'],
-    omniOpenBrowser: ['在系统浏览器中打开', '在系統瀏覽器中開啟', 'Open in System Browser', '標準ブラウザで開く', '시스템 브라우저에서 열기', 'Abrir en el navegador', 'Ouvrir dans le navigateur', 'Im Systembrowser öffnen'],
-    omniRevealFolder: ['在文件夹中显示', '在資料夾中顯示', 'Reveal in Folder', 'フォルダに表示', '폴더에서 보기', 'Mostrar en carpeta', 'Afficher dans le dossier', 'Im Ordner anzeigen'],
-    omniInsertMention: ['作为 @引用 填入输入框', '作為 @引用 填入輸入框', 'Insert as @Mention', '@参照として入力欄へ挿入', '@멘션으로 입력창에 삽입', 'Insertar como @mención', 'Insérer comme @mention', 'Als @Erwähnung einfügen'],
-    omniCopyLink: ['复制链接地址', '複製連結位址', 'Copy Link URL', 'リンクURLをコピー', '링크 URL 복사', 'Copiar enlace', 'Copier le lien', 'Link-URL kopieren'],
-    omniCopyAbsPath: ['复制绝对路径', '複製絕對路徑', 'Copy Absolute Path', '絶対パスをコピー', '절대 경로 복사', 'Copiar ruta absoluta', 'Copier le chemin absolu', 'Absoluten Pfad kopieren'],
-    omniCopyRelPath: ['复制相对路径', '複製相對路徑', 'Copy Relative Path', '相対パスをコピー', '상대 경로 복사', 'Copiar ruta relativa', 'Copier le chemin relatif', 'Relativen Pfad kopieren'],
-    omniCopyText: ['复制文本', '複製文字', 'Copy Text', 'テキストをコピー', '텍스트 복사', 'Copiar texto', 'Copier le texte', 'Text kopieren'],
-    omniZoomDiagram: ['放大查看图表', '放大檢視圖表', 'Zoom Diagram', '図を拡大表示', '다이어그램 확대', 'Ampliar diagrama', 'Agrandir le diagramme', 'Diagramm vergrößern'],
-    omniViewWorkbench: ['检视台视图', '檢視台檢視', 'Workbench View', 'プレビュー表示', '워크벤치 보기', 'Vista Workbench', 'Vue Workbench', 'Workbench-Ansicht'],
-    omniViewRaw: ['原始视图', '原始檢視', 'Raw View', 'ソース表示', '원본 보기', 'Vista sin formato', 'Vue brute', 'Rohansicht'],
-    omniViewPreview: ['预览', '預覽', 'Preview', 'プレビュー', '미리보기', 'Vista previa', 'Aperçu', 'Vorschau'],
-    omniViewSource: ['源码', '原始碼', 'Source', 'ソース', '소스', 'Código fuente', 'Code source', 'Quelltext'],
-    omniSandboxIsolated: ['沙盒隔离', '沙盒隔離', 'Sandbox Isolated', 'サンドボックス隔離', '샌드박스 격리', 'Aislado en sandbox', 'Isolé en sandbox', 'Sandbox-isoliert'],
-    omniCopied: ['已复制', '已複製', 'Copied', 'コピー済', '복사됨', 'Copiado', 'Copié', 'Kopiert'],
-    omniMermaidDiagram: ['Mermaid 图表', 'Mermaid 圖表', 'Mermaid Diagram', 'Mermaid 図', 'Mermaid 다이어그램', 'Diagrama Mermaid', 'Diagramme Mermaid', 'Mermaid-Diagramm'],
-    omniMermaidSvg: ['Mermaid SVG 图表', 'Mermaid SVG 圖表', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG'],
-    omniHintClick: ['单击', '單擊', 'Click', 'クリック', '클릭', 'Clic', 'Clic', 'Klick'],
-    omniHintCtrlClick: ['Ctrl+单击', 'Ctrl+單擊', 'Ctrl+Click', 'Ctrl+クリック', 'Ctrl+클릭', 'Ctrl+Clic', 'Ctrl+Clic', 'Strg+Klick'],
+    omniOpenBuiltin: ['在右侧面板打开', '在右側面板開啟', 'Open in Side Pane', '右パネルで開く', '오른쪽 패널에서 열기', 'Abrir en panel lateral', 'Ouvrir dans le panneau latéral', 'Im Seitenbereich öffnen', 'Yan panelde aç'],
+    omniOpenPreview: ['在右侧检视台预览', '在右側檢視台預覽', 'Preview in Workbench', 'ワークベンチでプレビュー', '워크벤치에서 미리보기', 'Previsualizar en Workbench', 'Aperçu dans Workbench', 'In Workbench vorschauen', 'Çalışma alanında önizle'],
+    omniOpenExternal: ['使用系统默认程序打开', '使用系統預設程式開啟', 'Open in Default App', '既定のアプリで開く', '기본 앱으로 열기', 'Abrir en app predeterminada', 'Ouvrir avec l’app par défaut', 'In Standard-App öffnen', 'Varsayılan uygulamada aç'],
+    omniOpenBrowser: ['在系统浏览器中打开', '在系統瀏覽器中開啟', 'Open in System Browser', '標準ブラウザで開く', '시스템 브라우저에서 열기', 'Abrir en el navegador', 'Ouvrir dans le navigateur', 'Im Systembrowser öffnen', 'Sistem tarayıcısında aç'],
+    omniRevealFolder: ['在文件夹中显示', '在資料夾中顯示', 'Reveal in Folder', 'フォルダに表示', '폴더에서 보기', 'Mostrar en carpeta', 'Afficher dans le dossier', 'Im Ordner anzeigen', 'Klasörde göster'],
+    omniInsertMention: ['作为 @引用 填入输入框', '作為 @引用 填入輸入框', 'Insert as @Mention', '@参照として入力欄へ挿入', '@멘션으로 입력창에 삽입', 'Insertar como @mención', 'Insérer comme @mention', 'Als @Erwähnung einfügen', '@Bahsetme olarak ekle'],
+    omniCopyLink: ['复制链接地址', '複製連結位址', 'Copy Link URL', 'リンクURLをコピー', '링크 URL 복사', 'Copiar enlace', 'Copier le lien', 'Link-URL kopieren', 'Bağlantı adresini kopyala'],
+    omniCopyAbsPath: ['复制绝对路径', '複製絕對路徑', 'Copy Absolute Path', '絶対パスをコピー', '절대 경로 복사', 'Copiar ruta absoluta', 'Copier le chemin absolu', 'Absoluten Pfad kopieren', 'Mutlak yolu kopyala'],
+    omniCopyRelPath: ['复制相对路径', '複製相對路徑', 'Copy Relative Path', '相対パスをコピー', '상대 경로 복사', 'Copiar ruta relativa', 'Copier le chemin relatif', 'Relativen Pfad kopieren', 'Göreli yolu kopyala'],
+    omniCopyText: ['复制文本', '複製文字', 'Copy Text', 'テキストをコピー', '텍스트 복사', 'Copiar texto', 'Copier le texte', 'Text kopieren', 'Metni kopyala'],
+    omniZoomDiagram: ['放大查看图表', '放大檢視圖表', 'Zoom Diagram', '図を拡大表示', '다이어그램 확대', 'Ampliar diagrama', 'Agrandir le diagramme', 'Diagramm vergrößern', 'Diyagramı yakınlaştır'],
+    omniViewWorkbench: ['检视台视图', '檢視台檢視', 'Workbench View', 'プレビュー表示', '워크벤치 보기', 'Vista Workbench', 'Vue Workbench', 'Workbench-Ansicht', 'Çalışma alanı görünümü'],
+    omniViewRaw: ['原始视图', '原始檢視', 'Raw View', 'ソース表示', '원본 보기', 'Vista sin formato', 'Vue brute', 'Rohansicht', 'Ham görünüm'],
+    omniViewPreview: ['预览', '預覽', 'Preview', 'プレビュー', '미리보기', 'Vista previa', 'Aperçu', 'Vorschau', 'Önizleme'],
+    omniViewSource: ['源码', '原始碼', 'Source', 'ソース', '소스', 'Código fuente', 'Code source', 'Quelltext', 'Kaynak'],
+    omniSandboxIsolated: ['沙盒隔离', '沙盒隔離', 'Sandbox Isolated', 'サンドボックス隔離', '샌드박스 격리', 'Aislado en sandbox', 'Isolé en sandbox', 'Sandbox-isoliert', 'Yalıtılmış sandbox'],
+    omniCopied: ['已复制', '已複製', 'Copied', 'コピー済', '복사됨', 'Copiado', 'Copié', 'Kopiert', 'Kopyalandı'],
+    omniMermaidDiagram: ['Mermaid 图表', 'Mermaid 圖表', 'Mermaid Diagram', 'Mermaid 図', 'Mermaid 다이어그램', 'Diagrama Mermaid', 'Diagramme Mermaid', 'Mermaid-Diagramm', 'Mermaid Diyagramı'],
+    omniMermaidSvg: ['Mermaid SVG 图表', 'Mermaid SVG 圖表', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG', 'Mermaid SVG'],
+    omniHintClick: ['单击', '單擊', 'Click', 'クリック', '클릭', 'Clic', 'Clic', 'Klick', 'Tıkla'],
+    omniHintCtrlClick: ['Ctrl+单击', 'Ctrl+單擊', 'Ctrl+Click', 'Ctrl+クリック', 'Ctrl+클릭', 'Ctrl+Clic', 'Ctrl+Clic', 'Strg+Klick', 'Ctrl+Tıkla'],
   };
 
   const PREVIEW_KIND_BY_EXT = {
@@ -179,6 +179,7 @@
     if (/^es\b/.test(s) || s === 'spanish') return 'es';
     if (/^fr\b/.test(s) || s === 'french') return 'fr';
     if (/^de\b/.test(s) || s === 'german') return 'de';
+    if (/^tr\b/.test(s) || s === 'turkish' || s === 'türkçe' || s === 'turkce') return 'tr';
     if (/^en\b/.test(s) || s === 'english') return 'en';
     return '';
   }
@@ -298,8 +299,17 @@
 
   function mayContainBareToken(raw) {
     if (!raw || raw.length < 4 || raw.length > 32000) return false;
-    if (raw.indexOf('http') !== -1 || raw.indexOf('localhost:') !== -1) return true;
-    return raw.indexOf('.') !== -1 && (raw.indexOf('/') !== -1 || raw.indexOf('\\') !== -1);
+    const hasSlash = raw.indexOf('/') >= 0;
+    const hasDot = raw.indexOf('.') >= 0;
+    if (!hasSlash && !hasDot && raw.indexOf('\\') < 0 && raw.indexOf('localhost:') < 0) return false;
+    if (hasSlash && (raw.indexOf('http://') >= 0 || raw.indexOf('https://') >= 0)) return true;
+    if (raw.indexOf('localhost:') >= 0) return true;
+    if (!hasDot || (!hasSlash && raw.indexOf('\\') < 0)) return false;
+    for (let i = raw.indexOf('.'); i >= 0; i = raw.indexOf('.', i + 1)) {
+      const next = i + 1 < raw.length ? raw.charCodeAt(i + 1) : 0;
+      if ((next >= 65 && next <= 90) || (next >= 97 && next <= 122) || (next >= 48 && next <= 57)) return true;
+    }
+    return false;
   }
 
   function tokenizeBareText(text) {
@@ -659,6 +669,7 @@
     '.ag-omni-autolink:hover{background:color-mix(in srgb,var(--ag-cs-accent,var(--primary,#669DF6)) 16%,transparent);text-decoration-color:var(--ag-cs-accent,var(--primary,#669DF6))}',
     'html[data-ag-cs-motion="off"] .ag-omni-autolink,html[data-ag-cs-motion="off"] .ag-omni-menu,html[data-ag-cs-motion="off"] .ag-omni-mermaid-zoom-btn{transition:none!important;animation:none!important}',
     '.ag-omni-menu{position:fixed;z-index:2147483640;min-width:208px;max-width:300px;padding:5px;border-radius:var(--ag-cs-r-lg,10px);background:var(--ag-cs-popover-bg,var(--card,rgba(23,24,30,.95)));color:var(--foreground,#F2F2F5);border:1px solid var(--ag-cs-border-2,var(--card-border,rgba(255,255,255,.12)));box-shadow:var(--ag-cs-surface-sh,0 14px 36px rgba(0,0,0,.38));backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12.5px;line-height:1.35;user-select:none;outline:none}',
+    'html[data-ag-cs-style]:is([data-ag-cs-win-blur="1"],[data-ag-cs-perf-mode="performance"],[data-ag-cs-motion="off"]) :is(.ag-omni-menu,.ag-prism-omni-menu){backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
     '.ag-omni-menu-header{padding:4px 8px 5px;font-size:11px;color:var(--muted-foreground,rgba(148,163,184,.85));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid var(--ag-cs-border-1,var(--border,rgba(148,163,184,.14)));margin-bottom:4px;font-family:var(--ag-cs-mono-stack,var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace))}',
     '.ag-omni-menu-sep{height:1px;margin:4px;background:var(--ag-cs-border-1,var(--border,rgba(148,163,184,.15)))}',
     '.ag-omni-menu-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:6px 9px;border:0;border-radius:var(--ag-cs-r-sm,4px);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}',
@@ -2295,6 +2306,7 @@
 
     function decorateMermaidContainers(scopeEl) {
       if (!D || !scopeEl || typeof scopeEl.querySelectorAll !== 'function') return;
+      if (scopeEl.nodeType === 1 && !scopeEl.firstElementChild && !isMermaidContainer(scopeEl)) return;
       const candidates = scopeEl.querySelectorAll(
         '[data-testid*="mermaid"], .mermaid, svg[id^="mermaid"], svg[aria-roledescription]'
       );
@@ -2741,439 +2753,409 @@
         }
       }
       decorateMermaidContainers(root);
-      decorateAuxUnsupportedViews(root);
-    }
-
-    function isIgnoredMutationTarget(node) {
-      let cur = node && node.nodeType === 1 ? node : node?.parentElement;
-      let sawExplicitScan = false;
-      for (let d = 0; cur && d < 24; d++, cur = cur.parentElement) {
-        const scanAttr = cur.getAttribute?.('data-omni-scan');
-        if (scanAttr !== null && scanAttr !== undefined && scanAttr !== 'false' && scanAttr !== '0') {
-          sawExplicitScan = true;
-        }
-        const id = cur.id;
-        if (
-          id === 'ag-prism-pulse-bar' ||
-          id === 'ag-pulse-status-bar' ||
-          id === 'ag-cs-settings-sec' ||
-          id === 'agy-theme-switcher' ||
-          id === 'agy-theme-menu' ||
-          id === 'antigravity-quota-widget' ||
-          id === 'antigravity-translation-audit'
-        ) {
-          return true;
-        }
-        if (cur.hasAttribute?.('data-agy-hans-ui')) {
-          return true;
-        }
-        if (!sawExplicitScan && cur.getAttribute?.('role') === 'dialog') {
-          return true;
-        }
-        if (cur.hasAttribute?.('data-hover-card-popup') || cur.tagName === 'ASIDE') return true;
-        if (d === 0) {
-          const f = cur.firstElementChild;
-          if (f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup')) return true;
-          if (cur.hasAttribute?.('data-base-ui-portal') && cur.querySelector?.('[data-hover-card-popup]')) return true;
-        }
-        const tid = cur.getAttribute?.('data-testid');
-        if (tid === 'agent-input-box' || tid === 'conversation-row-sidebar' || tid === 'conversation-list-sidebar' || tid === 'project-header') return true;
-        if (cur.parentElement?.getAttribute?.('data-testid') === 'sidebar-split' && cur === cur.parentElement.firstElementChild) return true;
-        const cls = typeof cur.className === 'string' ? cur.className : '';
-        if (
-          cls &&
-          (cls.indexOf('ag-prism-thought-') !== -1 ||
-            cls.indexOf('ag-omni-') !== -1 ||
-            cls.indexOf('ces-root') !== -1 ||
-            cls.indexOf('ag-cs-stream-chunk') !== -1 ||
-            cls.indexOf('ag-cs-code-scan') !== -1 ||
-            cls.indexOf('ag-cs-crab') !== -1 ||
-            cls.indexOf('ag-cs-conv-aura-host') !== -1 ||
-            cls.indexOf('ag-cs-ripple-host') !== -1 ||
-            cls.indexOf('ag-anim-icon') !== -1 ||
-            cls.indexOf('ag-cs-thinking-spark') !== -1 ||
-            cls.indexOf('ag-cs-prism-rim-cv') !== -1 ||
-            cls.indexOf('ag-cs-smooth-caret') !== -1 ||
-            cls.indexOf('ag-v2-mascot-') !== -1 ||
-            cls.indexOf('ag-v2-chroma-fx') !== -1)
-        ) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    function scheduleTextNodeHighlight(textNode) {
-      if (!enabled || !textNode || textNode.nodeType !== 3) return;
-      const raw = textNode.nodeValue || '';
-      const tracked = textNodeTokenMap.has(textNode);
-      if (!mayContainBareToken(raw) && !tracked) return;
-      if (!tracked && (!textNode.parentElement || !findClosest(textNode.parentElement, SCAN_CONTAINER_SELECTOR))) {
-        return;
-      }
-      pendingTextNodes.add(textNode);
-      if (textScanTimer) return;
-      const delay = D?.documentElement?.hasAttribute?.('data-ag-cs-stream-active') ? 480 : 120;
-      textScanTimer = setTimeout(() => {
-        textScanTimer = null;
-        if (!enabled) {
-          pendingTextNodes.clear();
-          return;
-        }
-        const batch = Array.from(pendingTextNodes);
-        pendingTextNodes.clear();
-        for (let i = 0; i < batch.length; i++) {
-          const tn = batch[i];
-          if (!tn.isConnected) clearHighlightEntryForNode(tn);
-          else registerHighlightOnTextNode(tn);
-        }
-      }, delay);
-    }
-
-    function hasPendingAncestor(el, set) {
-      let cur = el?.parentElement;
-      while (cur) {
-        if (set.has(cur)) return true;
-        cur = cur.parentElement;
-      }
-      return false;
-    }
-
-    function scheduleIncrementalScan(node) {
-      if (!enabled || !D) return;
-      const el = node && node.nodeType === 1 ? node : node?.parentElement;
-      if (el) pendingScanRoots.add(el);
-      if (scanTimer) return;
-      const delay = D.documentElement?.hasAttribute?.('data-ag-cs-stream-active') ? 280 : 60;
-      scanTimer = setTimeout(() => {
-        scanTimer = null;
-        if (!enabled) {
-          pendingScanRoots.clear();
-          return;
-        }
-        pruneDisconnectedHighlights();
-        const rootSet = new Set(pendingScanRoots);
-        pendingScanRoots.clear();
-        let scannedAuxSplit = false;
-        for (const r of rootSet) {
-          if (!r || !r.isConnected) continue;
-          if (rootSet.size > 1 && hasPendingAncestor(r, rootSet)) continue;
-          if (findClosest(r, SCAN_CONTAINER_SELECTOR)) {
-            scanContainerForBareTokens(r);
-          } else if (typeof r.querySelectorAll === 'function') {
-            for (const c of r.querySelectorAll(SCAN_CONTAINER_SELECTOR)) {
-              scanContainerForBareTokens(c);
-            }
-          }
-          decorateMermaidContainers(r);
-          if (!findClosest(r, '[data-testid="conversation-view"]')) {
-            const auxRoot = !scannedAuxSplit && (findClosest(r, '[data-testid="aux-pane-split"]') || r.querySelector?.('[data-testid="aux-pane-split"]'));
-            if (auxRoot) {
-              scannedAuxSplit = true;
-              decorateAuxUnsupportedViews(auxRoot);
-            } else if (
-              (typeof r.matches === 'function' && r.matches(AUX_FILE_VIEW_SELECTOR)) ||
-              r.querySelector?.(AUX_FILE_VIEW_SELECTOR)
-            ) {
-              decorateAuxUnsupportedViews(r);
-            }
-          }
-        }
-      }, delay);
-    }
-
-    // ── Lifecycle & Zero-Residue Teardown ────────────────────────────────────
-    function ensureStyleInjected() {
-      if (!D) return;
-      let styleEl = D.getElementById?.(STYLE_EL_ID);
-      if (!styleEl) {
-        styleEl = D.createElement('style');
-        styleEl.id = STYLE_EL_ID;
-        styleEl.textContent = OMNI_CSS;
-        (D.head || D.documentElement)?.appendChild?.(styleEl);
-      }
-    }
-
-    function unwrapAllModifications() {
-      if (textScanTimer) {
-        clearTimeout(textScanTimer);
-        textScanTimer = null;
-      }
-      pendingTextNodes.clear();
-      // 1. Clear CSS Custom Highlights (zero DOM changes needed)
-      for (const tn of Array.from(trackedHighlightNodes)) {
-        clearHighlightEntryForNode(tn);
-      }
-      trackedHighlightNodes.clear();
-      if (urlHighlight) {
-        try { urlHighlight.clear(); } catch (_) {}
-        urlHighlight = null;
-      }
-      if (pathHighlight) {
-        try { pathHighlight.clear(); } catch (_) {}
-        pathHighlight = null;
-      }
-      try {
-        W?.CSS?.highlights?.delete?.(HL_URL_NAME);
-        W?.CSS?.highlights?.delete?.(HL_PATH_NAME);
-      } catch (_) {}
-      setHoverTokenCursor(false);
-
-      // 2. Unwrap fallback autolink spans if any were created
-      const parentsToNormalize = new Set();
-      for (const span of Array.from(createdAutolinks)) {
-        const p = span.parentNode;
-        if (p && D) {
-          const tn = D.createTextNode(span.textContent || '');
-          p.replaceChild(tn, span);
-          parentsToNormalize.add(p);
-        } else {
-          try { span.remove?.(); } catch (_) {}
-        }
-      }
-      createdAutolinks.clear();
-      for (const p of parentsToNormalize) {
-        try { p.normalize?.(); } catch (_) {}
-      }
-
-      // 3. Remove Mermaid zoom buttons
-      for (const box of Array.from(decoratedMermaidBoxes)) {
-        box.querySelectorAll?.('.ag-omni-mermaid-zoom-btn').forEach((b) => b.remove());
-        const origPos = box.getAttribute?.('data-omni-orig-pos') || '';
-        if (box.style) box.style.position = origPos;
-        box.removeAttribute?.('data-omni-orig-pos');
-        box.removeAttribute?.('data-omni-mermaid-box');
-      }
-      decoratedMermaidBoxes.clear();
-
-      // 4. Remove Aux view switchers & restore shell styles
-      for (const rec of Array.from(mountedAuxSwitches)) {
-        unmountSingleAuxSwitch(rec);
-      }
-      mountedAuxSwitches.clear();
-    }
-
-    function ensureRootAttrObserver() {
-      if (!D?.documentElement || !W || typeof W.MutationObserver !== 'function' || rootAttrObserver) return;
-      rootAttrObserver = new W.MutationObserver((mutations) => {
-        let needSync = false;
-        for (const m of mutations) {
-          const attr = m.attributeName;
-          if (attr === 'data-ag-prism-omni') {
-            const v = D.documentElement.getAttribute('data-ag-prism-omni');
-            if (v === 'off' && enabled) { sync({ omniModule: 'off' }); return; }
-            if (v === 'on' && !enabled) { sync({ omniModule: 'on' }); return; }
-          } else if (attr === 'data-ag-prism-link-target') {
-            const lt = D.documentElement.getAttribute('data-ag-prism-link-target');
-            if (lt === 'builtin' || lt === 'external') linkTarget = lt;
-          } else {
-            needSync = true;
-          }
-        }
-        if (needSync && enabled) broadcastThemeAndLocaleSync();
-      });
-      rootAttrObserver.observe(D.documentElement, {
-        attributes: true,
-        attributeFilter: [
-          'data-ag-cs-theme', 'data-ag-cs-palette', 'data-ag-cs-light-preset',
-          'data-ag-cs-accent', 'data-ag-cs-corners', 'data-ag-cs-motion',
-          'data-ag-cs-lang', 'data-ag-prism-omni', 'data-ag-prism-link-target',
-        ],
-      });
-    }
-
-    function attachRuntime() {
-      if (mounted || !D || !W) return;
-      mounted = true;
-      installRpcResolver();
-      ensureStyleInjected();
-      ensureRootAttrObserver();
-
-      D.addEventListener('click', onDocClickCapture, true);
-      D.addEventListener('contextmenu', onDocContextMenu, true);
-      D.addEventListener('keydown', onDocKeyDown, true);
-      D.addEventListener('mousemove', onDocPointerMove, { passive: true });
-      D.addEventListener('visibilitychange', onWindowBlurOrScroll);
-      D.addEventListener('scroll', onWindowBlurOrScroll, true);
-      W.addEventListener?.('blur', onWindowBlurOrScroll);
-      W.addEventListener?.('resize', onWindowBlurOrScroll);
-      W.addEventListener?.('message', onWindowMessage);
-
-      if (typeof W.MutationObserver === 'function') {
-        domObserver = new W.MutationObserver((mutations) => {
-          for (let i = 0; i < mutations.length; i++) {
-            const m = mutations[i];
-            if (isIgnoredMutationTarget(m.target)) continue;
-            if (m.type === 'childList') {
-              const useHl = supportsHighlightApi();
-              let queuedTargetAux = false;
-              for (let j = 0; j < m.addedNodes.length; j++) {
-                const n = m.addedNodes[j];
-                if (n.nodeType !== 1 && n.nodeType !== 3) continue;
-                if (isIgnoredMutationTarget(n)) continue;
-                if (useHl && n.nodeType === 3) {
-                  scheduleTextNodeHighlight(n);
-                  if (!queuedTargetAux && mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) {
-                    queuedTargetAux = true;
-                    scheduleIncrementalScan(m.target);
-                  }
-                } else {
-                  scheduleIncrementalScan(n);
-                }
-              }
-              if (
-                !queuedTargetAux &&
-                m.removedNodes.length > 0 &&
-                mountedAuxSwitches.size > 0 &&
-                findClosest(m.target, '[data-testid="aux-pane-split"]')
-              ) {
-                scheduleIncrementalScan(m.target);
-              }
-            } else if (m.type === 'characterData' && m.target) {
-              if (supportsHighlightApi() && m.target.nodeType === 3) {
-                scheduleTextNodeHighlight(m.target);
-                if (mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) {
-                  scheduleIncrementalScan(m.target);
-                }
-              } else {
-                scheduleIncrementalScan(m.target);
-              }
-            } else if (m.type === 'attributes') {
-              const attrName = m.attributeName;
-              if (
-                (attrName === 'data-ag-cs-spark-streaming' || attrName === 'data-ag-cs-thought-streaming') &&
-                m.target &&
-                !m.target.hasAttribute?.(attrName)
-              ) {
-                scheduleIncrementalScan(m.target);
-              } else if (
-                (attrName === 'data-active-file-uri' ||
-                  attrName === 'data-file-uri' ||
-                  attrName === 'data-uri' ||
-                  attrName === 'data-file-path') &&
-                m.target &&
-                findClosest(m.target, '[data-testid="aux-pane-split"]')
-              ) {
-                scheduleIncrementalScan(m.target);
-              }
-            }
-          }
-        });
-        const obsRoot = D.body || D.documentElement;
-        if (obsRoot) {
-          domObserver.observe(obsRoot, {
-            childList: true,
-            subtree: true,
-            characterData: true,
-            attributes: true,
-            attributeFilter: [
-              'data-ag-cs-spark-streaming',
-              'data-ag-cs-thought-streaming',
-              'data-active-file-uri',
-              'data-file-uri',
-              'data-uri',
-              'data-file-path',
-            ],
-          });
-        }
-      }
-
-      runScanNow(D.body || D.documentElement);
-    }
-
-    function detachRuntime(removeRootAttrs = false) {
-      if (scanTimer) {
-        clearTimeout(scanTimer);
-        scanTimer = null;
-      }
-      if (textScanTimer) {
-        clearTimeout(textScanTimer);
-        textScanTimer = null;
-      }
-      cancelPendingPointerRaf();
-      pendingScanRoots.clear();
-      pendingTextNodes.clear();
-
-      if (domObserver) {
-        try { domObserver.disconnect(); } catch (_) {}
-        domObserver = null;
-      }
-      if (removeRootAttrs && rootAttrObserver) {
-        try { rootAttrObserver.disconnect(); } catch (_) {}
-        rootAttrObserver = null;
-      }
-      closeContextMenu();
-      purgeLegacyOmniDock();
-      unwrapAllModifications();
-
-      if (D) {
-        D.removeEventListener('click', onDocClickCapture, true);
-        D.removeEventListener('contextmenu', onDocContextMenu, true);
-        D.removeEventListener('keydown', onDocKeyDown, true);
-        D.removeEventListener('mousemove', onDocPointerMove, { passive: true });
-        D.removeEventListener('visibilitychange', onWindowBlurOrScroll);
-        D.removeEventListener('scroll', onWindowBlurOrScroll, true);
-        try { D.getElementById?.(STYLE_EL_ID)?.remove?.(); } catch (_) {}
-        if (D.documentElement) {
-          D.documentElement.removeAttribute?.('data-ag-omni-hover-token');
-          if (removeRootAttrs) {
-            D.documentElement.removeAttribute?.('data-ag-prism-omni');
-            D.documentElement.removeAttribute?.('data-ag-prism-link-target');
-          }
-        }
-      }
-      if (W) {
-        W.removeEventListener?.('blur', onWindowBlurOrScroll);
-        W.removeEventListener?.('resize', onWindowBlurOrScroll);
-        W.removeEventListener?.('message', onWindowMessage);
-      }
-      mounted = false;
-    }
-
-    function sync(cfg = null, incomingServerMeta = null) {
-      purgeLegacyOmniDock();
-      if (incomingServerMeta && typeof incomingServerMeta === 'object' && incomingServerMeta.baseUrl) {
-        serverMeta = {
-          baseUrl: String(incomingServerMeta.baseUrl).replace(/\/+$/, ''),
-          token: String(incomingServerMeta.token || ''),
-          port: incomingServerMeta.port || null,
-        };
-      }
-
-      const rootEl = D?.documentElement;
-      const rawOmni =
-        cfg && cfg.omniModule !== undefined
-          ? cfg.omniModule
-          : rootEl?.getAttribute?.('data-ag-prism-omni') || 'on';
-      const nextEnabled = rawOmni !== 'off' && rawOmni !== false;
-
-      if (destroyed && !nextEnabled) return getState();
-      destroyed = false;
-
-      const rawTarget =
-        cfg && cfg.linkTarget !== undefined
-          ? cfg.linkTarget
-          : rootEl?.getAttribute?.('data-ag-prism-link-target') || linkTarget || 'builtin';
-      linkTarget = rawTarget === 'external' ? 'external' : 'builtin';
-
-      enabled = nextEnabled;
-      if (!enabled) {
-        detachRuntime(true);
-        return getState();
-      }
-
-      ensureRootAttrObserver();
-      if (rootEl?.setAttribute) {
-        if (rootEl.getAttribute('data-ag-prism-omni') !== 'on') {
-          rootEl.setAttribute('data-ag-prism-omni', 'on');
-        }
-        if (rootEl.getAttribute('data-ag-prism-link-target') !== linkTarget) {
-          rootEl.setAttribute('data-ag-prism-link-target', linkTarget);
-        }
-      }
-
-      attachRuntime();
-      broadcastThemeAndLocaleSync();
+decorateAuxUnsupportedViews(root);
+}
+function isIgnoredMutationTarget(node, batchCache) {
+let cur = node && node.nodeType === 1 ? node : node?.parentElement, sawExplicitScan = false, trail = null;
+const finish = (val) => { if (batchCache && !sawExplicitScan && trail) for (let i = 0; i < trail.length; i++) batchCache.set(trail[i], val); return val; };
+for (let d = 0; cur && d < 24; d++, cur = cur.parentElement) {
+if (batchCache && !sawExplicitScan) {
+const cached = batchCache.get(cur);
+if (cached !== undefined) return finish(cached);
+(trail || (trail = [])).push(cur);
+}
+const scanAttr = cur.getAttribute?.('data-omni-scan');
+if (scanAttr !== null && scanAttr !== undefined && scanAttr !== 'false' && scanAttr !== '0') sawExplicitScan = true;
+if (!sawExplicitScan && cur.hasAttribute?.('data-ag-owned')) return finish(true);
+const id = cur.id;
+if (id === 'ag-prism-pulse-bar' || id === 'ag-pulse-status-bar' || id === 'ag-cs-settings-sec' || id === 'agy-theme-switcher' || id === 'agy-theme-menu' || id === 'antigravity-quota-widget' || id === 'antigravity-translation-audit') return finish(true);
+if (cur.hasAttribute?.('data-agy-hans-ui')) return finish(true);
+if (!sawExplicitScan && cur.getAttribute?.('role') === 'dialog') return finish(true);
+if (cur.hasAttribute?.('data-hover-card-popup') || cur.tagName === 'ASIDE') return finish(true);
+if (d === 0) {
+const f = cur.firstElementChild;
+if (f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup')) return finish(true);
+if (cur.hasAttribute?.('data-base-ui-portal') && cur.querySelector?.('[data-hover-card-popup]')) return finish(true);
+}
+const tid = cur.getAttribute?.('data-testid');
+if (tid === 'agent-input-box' || tid === 'conversation-row-sidebar' || tid === 'conversation-list-sidebar' || tid === 'project-header') return finish(true);
+if (cur.parentElement?.getAttribute?.('data-testid') === 'sidebar-split' && cur === cur.parentElement.firstElementChild) return finish(true);
+const cls = typeof cur.className === 'string' ? cur.className : '';
+if (cls && (cls.indexOf('ag-prism-thought-') !== -1 || cls.indexOf('ag-omni-') !== -1 || cls.indexOf('ces-root') !== -1 || cls.indexOf('ag-cs-stream-chunk') !== -1 || cls.indexOf('ag-cs-code-scan') !== -1 || cls.indexOf('ag-cs-crab') !== -1 || cls.indexOf('ag-cs-conv-aura-host') !== -1 || cls.indexOf('ag-cs-ripple-host') !== -1 || cls.indexOf('ag-anim-icon') !== -1 || cls.indexOf('ag-cs-thinking-spark') !== -1 || cls.indexOf('ag-cs-prism-rim-cv') !== -1 || cls.indexOf('ag-cs-smooth-caret') !== -1 || cls.indexOf('ag-v2-mascot-') !== -1 || cls.indexOf('ag-v2-chroma-fx') !== -1)) return finish(true);
+}
+return finish(false);
+}
+function scheduleTextNodeHighlight(textNode) {
+if (!enabled || !textNode || textNode.nodeType !== 3) return;
+const raw = textNode.nodeValue || '';
+const tracked = textNodeTokenMap.has(textNode);
+if (!mayContainBareToken(raw) && !tracked) return;
+if (!tracked && (!textNode.parentElement || !findClosest(textNode.parentElement, SCAN_CONTAINER_SELECTOR))) {
+return;
+}
+pendingTextNodes.add(textNode);
+if (textScanTimer) return;
+const delay = D?.documentElement?.hasAttribute?.('data-ag-cs-stream-active') ? 480 : 120;
+textScanTimer = setTimeout(() => {
+textScanTimer = null;
+if (!enabled) {
+pendingTextNodes.clear();
+return;
+}
+const batch = Array.from(pendingTextNodes);
+pendingTextNodes.clear();
+for (let i = 0; i < batch.length; i++) {
+const tn = batch[i];
+if (!tn.isConnected) clearHighlightEntryForNode(tn);
+else registerHighlightOnTextNode(tn);
+}
+}, delay);
+}
+function hasPendingAncestor(el, set) {
+let cur = el?.parentElement;
+while (cur) {
+if (set.has(cur)) return true;
+cur = cur.parentElement;
+}
+return false;
+}
+function scheduleIncrementalScan(node) {
+if (!enabled || !D) return;
+const el = node && node.nodeType === 1 ? node : node?.parentElement;
+if (el) pendingScanRoots.add(el);
+if (scanTimer) return;
+const delay = D.documentElement?.hasAttribute?.('data-ag-cs-stream-active') ? 280 : 60;
+scanTimer = setTimeout(() => {
+scanTimer = null;
+if (!enabled) {
+pendingScanRoots.clear();
+return;
+}
+pruneDisconnectedHighlights();
+const rootSet = new Set(pendingScanRoots);
+pendingScanRoots.clear();
+let scannedAuxSplit = false;
+for (const r of rootSet) {
+if (!r || !r.isConnected) continue;
+if (rootSet.size > 1 && hasPendingAncestor(r, rootSet)) continue;
+if (findClosest(r, SCAN_CONTAINER_SELECTOR)) {
+scanContainerForBareTokens(r);
+} else if (typeof r.querySelectorAll === 'function') {
+for (const c of r.querySelectorAll(SCAN_CONTAINER_SELECTOR)) {
+scanContainerForBareTokens(c);
+}
+}
+decorateMermaidContainers(r);
+if (!findClosest(r, '[data-testid="conversation-view"]')) {
+const auxRoot = !scannedAuxSplit && (findClosest(r, '[data-testid="aux-pane-split"]') || r.querySelector?.('[data-testid="aux-pane-split"]'));
+if (auxRoot) {
+scannedAuxSplit = true;
+decorateAuxUnsupportedViews(auxRoot);
+} else if (
+(typeof r.matches === 'function' && r.matches(AUX_FILE_VIEW_SELECTOR)) ||
+r.querySelector?.(AUX_FILE_VIEW_SELECTOR)
+) {
+decorateAuxUnsupportedViews(r);
+}
+}
+}
+}, delay);
+}
+// ── Lifecycle & Zero-Residue Teardown ────────────────────────────────────
+function ensureStyleInjected() {
+if (!D) return;
+let styleEl = D.getElementById?.(STYLE_EL_ID);
+if (!styleEl) {
+styleEl = D.createElement('style');
+styleEl.id = STYLE_EL_ID;
+styleEl.textContent = OMNI_CSS;
+(D.head || D.documentElement)?.appendChild?.(styleEl);
+}
+}
+function unwrapAllModifications() {
+if (textScanTimer) {
+clearTimeout(textScanTimer);
+textScanTimer = null;
+}
+pendingTextNodes.clear();
+// 1. Clear CSS Custom Highlights (zero DOM changes needed)
+for (const tn of Array.from(trackedHighlightNodes)) {
+clearHighlightEntryForNode(tn);
+}
+trackedHighlightNodes.clear();
+if (urlHighlight) {
+try { urlHighlight.clear(); } catch (_) {}
+urlHighlight = null;
+}
+if (pathHighlight) {
+try { pathHighlight.clear(); } catch (_) {}
+pathHighlight = null;
+}
+try {
+W?.CSS?.highlights?.delete?.(HL_URL_NAME);
+W?.CSS?.highlights?.delete?.(HL_PATH_NAME);
+} catch (_) {}
+setHoverTokenCursor(false);
+// 2. Unwrap fallback autolink spans if any were created
+const parentsToNormalize = new Set();
+for (const span of Array.from(createdAutolinks)) {
+const p = span.parentNode;
+if (p && D) {
+const tn = D.createTextNode(span.textContent || '');
+p.replaceChild(tn, span);
+parentsToNormalize.add(p);
+} else {
+try { span.remove?.(); } catch (_) {}
+}
+}
+createdAutolinks.clear();
+for (const p of parentsToNormalize) {
+try { p.normalize?.(); } catch (_) {}
+}
+// 3. Remove Mermaid zoom buttons
+for (const box of Array.from(decoratedMermaidBoxes)) {
+box.querySelectorAll?.('.ag-omni-mermaid-zoom-btn').forEach((b) => b.remove());
+const origPos = box.getAttribute?.('data-omni-orig-pos') || '';
+if (box.style) box.style.position = origPos;
+box.removeAttribute?.('data-omni-orig-pos');
+box.removeAttribute?.('data-omni-mermaid-box');
+}
+decoratedMermaidBoxes.clear();
+// 4. Remove Aux view switchers & restore shell styles
+for (const rec of Array.from(mountedAuxSwitches)) {
+unmountSingleAuxSwitch(rec);
+}
+mountedAuxSwitches.clear();
+}
+function getDomBus() {
+return (W && (W.__agDomBus || W.__agPrismDomBus)) || null;
+}
+function ensureRootAttrObserver() {
+if (!D?.documentElement || !W || rootAttrObserver) return;
+const rootAttrFilter = [
+'data-ag-cs-theme', 'data-ag-cs-palette', 'data-ag-cs-light-preset',
+'data-ag-cs-accent', 'data-ag-cs-corners', 'data-ag-cs-motion',
+'data-ag-cs-lang', 'data-ag-prism-omni', 'data-ag-prism-link-target',
+];
+const onRootAttrs = (mutations) => {
+let needSync = false;
+for (const m of mutations) {
+const attr = m.attributeName;
+if (attr === 'data-ag-prism-omni') {
+const v = D.documentElement.getAttribute('data-ag-prism-omni');
+if (v === 'off' && enabled) { sync({ omniModule: 'off' }); return; }
+if (v === 'on' && !enabled) { sync({ omniModule: 'on' }); return; }
+} else if (attr === 'data-ag-prism-link-target') {
+const lt = D.documentElement.getAttribute('data-ag-prism-link-target');
+if (lt === 'builtin' || lt === 'external') linkTarget = lt;
+} else {
+needSync = true;
+}
+}
+if (needSync && enabled) broadcastThemeAndLocaleSync();
+};
+const bus = getDomBus();
+if (bus && typeof bus.subscribe === 'function') {
+const unsub = bus.subscribe('omni-root-attr', onRootAttrs, {
+doc: D, win: W, priority: 'high',
+observeOptions: { childList: false, subtree: false, attributes: true, attributeFilter: rootAttrFilter },
+});
+rootAttrObserver = { disconnect: unsub };
+return;
+}
+if (typeof W.MutationObserver !== 'function') return;
+rootAttrObserver = new W.MutationObserver(onRootAttrs);
+rootAttrObserver.observe(D.documentElement, { attributes: true, attributeFilter: rootAttrFilter });
+}
+function attachRuntime() {
+if (mounted || !D || !W) return;
+mounted = true;
+installRpcResolver();
+ensureStyleInjected();
+ensureRootAttrObserver();
+D.addEventListener('click', onDocClickCapture, true);
+D.addEventListener('contextmenu', onDocContextMenu, true);
+D.addEventListener('keydown', onDocKeyDown, true);
+D.addEventListener('mousemove', onDocPointerMove, { passive: true });
+D.addEventListener('visibilitychange', onWindowBlurOrScroll);
+D.addEventListener('scroll', onWindowBlurOrScroll, { capture: true, passive: true });
+W.addEventListener?.('blur', onWindowBlurOrScroll);
+W.addEventListener?.('resize', onWindowBlurOrScroll);
+W.addEventListener?.('message', onWindowMessage);
+const domAttrFilter = [
+'data-ag-cs-spark-streaming',
+'data-ag-cs-thought-streaming',
+'data-active-file-uri',
+'data-file-uri',
+'data-uri',
+'data-file-path',
+];
+const onDomMutations = (mutations) => {
+const batchIgnored = typeof WeakMap === 'function' ? new WeakMap() : null;
+for (let i = 0; i < mutations.length; i++) {
+const m = mutations[i];
+if (isIgnoredMutationTarget(m.target, batchIgnored)) continue;
+if (m.type === 'childList') {
+const useHl = supportsHighlightApi();
+let queuedTargetAux = false;
+for (let j = 0; j < m.addedNodes.length; j++) {
+const n = m.addedNodes[j];
+if (n.nodeType !== 1 && n.nodeType !== 3) continue;
+if (isIgnoredMutationTarget(n, batchIgnored)) continue;
+if (useHl && n.nodeType === 3) {
+scheduleTextNodeHighlight(n);
+if (!queuedTargetAux && mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) {
+queuedTargetAux = true;
+scheduleIncrementalScan(m.target);
+}
+} else {
+scheduleIncrementalScan(n);
+}
+}
+if (
+!queuedTargetAux &&
+m.removedNodes.length > 0 &&
+mountedAuxSwitches.size > 0 &&
+findClosest(m.target, '[data-testid="aux-pane-split"]')
+) {
+scheduleIncrementalScan(m.target);
+}
+} else if (m.type === 'characterData' && m.target) {
+if (supportsHighlightApi() && m.target.nodeType === 3) {
+scheduleTextNodeHighlight(m.target);
+if (mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) {
+scheduleIncrementalScan(m.target);
+}
+} else {
+scheduleIncrementalScan(m.target);
+}
+} else if (m.type === 'attributes') {
+const attrName = m.attributeName;
+if (
+(attrName === 'data-ag-cs-spark-streaming' || attrName === 'data-ag-cs-thought-streaming') &&
+m.target &&
+!m.target.hasAttribute?.(attrName)
+) {
+scheduleIncrementalScan(m.target);
+} else if (
+(attrName === 'data-active-file-uri' ||
+attrName === 'data-file-uri' ||
+attrName === 'data-uri' ||
+attrName === 'data-file-path') &&
+m.target &&
+findClosest(m.target, '[data-testid="aux-pane-split"]')
+) {
+scheduleIncrementalScan(m.target);
+}
+}
+}
+};
+const bus = getDomBus();
+if (bus && typeof bus.subscribe === 'function') {
+const unsubDom = bus.subscribe('omni-dom', onDomMutations, {
+doc: D, win: W, priority: 'low',
+observeOptions: { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: domAttrFilter },
+});
+domObserver = { disconnect: unsubDom };
+} else if (typeof W.MutationObserver === 'function') {
+domObserver = new W.MutationObserver(onDomMutations);
+const obsRoot = D.body || D.documentElement;
+if (obsRoot) {
+domObserver.observe(obsRoot, {
+childList: true,
+subtree: true,
+characterData: true,
+attributes: true,
+attributeFilter: domAttrFilter,
+});
+}
+}
+runScanNow(D.body || D.documentElement);
+}
+function detachRuntime(removeRootAttrs = false) {
+if (scanTimer) {
+clearTimeout(scanTimer);
+scanTimer = null;
+}
+if (textScanTimer) {
+clearTimeout(textScanTimer);
+textScanTimer = null;
+}
+cancelPendingPointerRaf();
+pendingScanRoots.clear();
+pendingTextNodes.clear();
+if (domObserver) {
+try { domObserver.disconnect(); } catch (_) {}
+domObserver = null;
+}
+if (removeRootAttrs && rootAttrObserver) {
+try { rootAttrObserver.disconnect(); } catch (_) {}
+rootAttrObserver = null;
+}
+closeContextMenu();
+purgeLegacyOmniDock();
+unwrapAllModifications();
+if (D) {
+D.removeEventListener('click', onDocClickCapture, true);
+D.removeEventListener('contextmenu', onDocContextMenu, true);
+D.removeEventListener('keydown', onDocKeyDown, true);
+D.removeEventListener('mousemove', onDocPointerMove, { passive: true });
+D.removeEventListener('visibilitychange', onWindowBlurOrScroll);
+D.removeEventListener('scroll', onWindowBlurOrScroll, { capture: true, passive: true });
+try { D.getElementById?.(STYLE_EL_ID)?.remove?.(); } catch (_) {}
+if (D.documentElement) {
+D.documentElement.removeAttribute?.('data-ag-omni-hover-token');
+if (removeRootAttrs) {
+D.documentElement.removeAttribute?.('data-ag-prism-omni');
+D.documentElement.removeAttribute?.('data-ag-prism-link-target');
+}
+}
+}
+if (W) {
+W.removeEventListener?.('blur', onWindowBlurOrScroll);
+W.removeEventListener?.('resize', onWindowBlurOrScroll);
+W.removeEventListener?.('message', onWindowMessage);
+}
+mounted = false;
+}
+function sync(cfg = null, incomingServerMeta = null) {
+purgeLegacyOmniDock();
+if (incomingServerMeta && typeof incomingServerMeta === 'object' && incomingServerMeta.baseUrl) {
+serverMeta = {
+baseUrl: String(incomingServerMeta.baseUrl).replace(/\/+$/, ''),
+token: String(incomingServerMeta.token || ''),
+port: incomingServerMeta.port || null,
+};
+}
+const rootEl = D?.documentElement;
+const rawOmni =
+cfg && cfg.omniModule !== undefined
+? cfg.omniModule
+: rootEl?.getAttribute?.('data-ag-prism-omni') || 'on';
+const nextEnabled = rawOmni !== 'off' && rawOmni !== false;
+if (destroyed && !nextEnabled) return getState();
+destroyed = false;
+const rawTarget =
+cfg && cfg.linkTarget !== undefined
+? cfg.linkTarget
+: rootEl?.getAttribute?.('data-ag-prism-link-target') || linkTarget || 'builtin';
+linkTarget = rawTarget === 'external' ? 'external' : 'builtin';
+enabled = nextEnabled;
+if (!enabled) {
+detachRuntime(true);
+return getState();
+}
+ensureRootAttrObserver();
+if (rootEl?.setAttribute) {
+if (rootEl.getAttribute('data-ag-prism-omni') !== 'on') {
+rootEl.setAttribute('data-ag-prism-omni', 'on');
+}
+if (rootEl.getAttribute('data-ag-prism-link-target') !== linkTarget) {
+rootEl.setAttribute('data-ag-prism-link-target', linkTarget);
+}
+}
+attachRuntime();
+broadcastThemeAndLocaleSync();
       return getState();
     }
 

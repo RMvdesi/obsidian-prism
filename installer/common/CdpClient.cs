@@ -176,7 +176,7 @@ namespace AgyClaudeStyle
             string manifestPath = Path.Combine(baseDir, "manifest.json");
             Dictionary<string, object> raw = MiniJson.ParseObject(File.ReadAllText(manifestPath, Encoding.UTF8));
             PluginManifest m = new PluginManifest();
-            m.Version = GetString(raw, "version", "1.0.8-beta.3");
+            m.Version = GetString(raw, "version", "1.0.8-beta.4");
             m.StyleId = GetString(raw, "styleId", "ag-prism-css");
             m.SettingBinding = GetString(raw, "settingBinding", "__agPrismSetting");
             m.RemoveExpression = GetString(raw, "removeExpression", "");
@@ -190,12 +190,26 @@ namespace AgyClaudeStyle
                     if (!string.IsNullOrEmpty(s)) m.Parts.Add(s);
                 }
             }
-            m.DefaultConfig = raw.ContainsKey("defaultConfig") && raw["defaultConfig"] is Dictionary<string, object>
-                ? (Dictionary<string, object>)raw["defaultConfig"]
-                : new Dictionary<string, object>(StringComparer.Ordinal);
-            m.Validators = raw.ContainsKey("validators") && raw["validators"] is Dictionary<string, object>
-                ? (Dictionary<string, object>)raw["validators"]
-                : new Dictionary<string, object>(StringComparer.Ordinal);
+            Dictionary<string, object> defaults = CdpHelper.CreateDefaultConfig();
+            Dictionary<string, object> rawDefaults = raw.ContainsKey("defaultConfig") ? raw["defaultConfig"] as Dictionary<string, object> : null;
+            if (rawDefaults != null)
+            {
+                foreach (KeyValuePair<string, object> kv in rawDefaults)
+                {
+                    if (kv.Value != null) defaults[kv.Key] = kv.Value;
+                }
+            }
+            m.DefaultConfig = defaults;
+            Dictionary<string, object> validators = CdpHelper.CreateDefaultValidators();
+            Dictionary<string, object> rawValidators = raw.ContainsKey("validators") ? raw["validators"] as Dictionary<string, object> : null;
+            if (rawValidators != null)
+            {
+                foreach (KeyValuePair<string, object> kv in rawValidators)
+                {
+                    if (kv.Value != null) validators[kv.Key] = kv.Value;
+                }
+            }
+            m.Validators = validators;
             return m;
         }
 
@@ -817,11 +831,153 @@ namespace AgyClaudeStyle
             return pages;
         }
 
+        private static readonly string[] CanonicalLangValues = new string[] { "auto", "zh-CN", "zh-TW", "en", "ja", "ko", "es", "fr", "de", "tr" };
+        private static readonly string[] OnOffValues = new string[] { "on", "off" };
+        private static readonly string[] AutoOnOffValues = new string[] { "auto", "on", "off" };
+        private static readonly string[] StrictOnBoolKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
+        private static readonly string[] NotOffBoolKeys = new string[] { "smoothCaret", "contextMenu" };
+        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "omniModule", "sidebarStudio", "autoUpdate" };
+
+        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 54 键 100% 对齐：40 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
+        private static readonly string[,] EnumSchemaSpecs = new string[,]
+        {
+            { "language", "auto", "L" }, { "lang", "auto", "L" },
+            { "palette", "obsidian", "host,obsidian,warm,claude" }, { "lightPreset", "crystal", "crystal,alabaster" },
+            { "darkAuraStyle", "prism", "prism,neon" }, { "motionLevel", "ultra", "off,subtle,standard,ultra" },
+            { "performanceMode", "balanced", "balanced,performance,quality,auto,eco" }, { "targetFps", "180", "60,120,180,native" },
+            { "telemetryModule", "auto", "A" }, { "telemetryQuotaMode", "compact", "compact,both" },
+            { "effortSliderModule", "auto", "A" }, { "effortMemory", "on", "O" }, { "periodicModelPicker", "on", "O" },
+            { "thoughtTranslate", "off", "off,machine,ai" }, { "thoughtTrigger", "preload", "preload,expand" },
+            { "homeLayout", "studio", "studio,classic,off" }, { "homeMode", "studio", "studio,classic,off" },
+            { "convRipple", "off", "off,subtle,medium,full" }, { "ripple", "on", "O" }, { "composer", "on", "O" },
+            { "placeholderStyle", "studio", "studio,host" }, { "promptStyle", "studio", "studio,host" },
+            { "mascot", "crab", "crab,minis,quad,quad-minis,dual,off" }, { "logoInk", "accent", "accent,foreground" },
+            { "sidebar", "on", "O" }, { "sidebarNavFold", "off", "off,on" },
+            { "scrollBottomMotion", "smooth", "smooth,instant" }, { "accentTone", "follow", "follow,cobalt,iris,amber,mono" },
+            { "cornerStyle", "balanced", "sharp,balanced,soft" }, { "chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom" },
+            { "codeFont", "default", "default,jetbrains,cascadia,sfmono,custom" }, { "ambientIntensity", "100", "0,35,70,100" },
+            { "darkAura", "balanced", "subtle,balanced,vivid" }, { "thoughtView", "immersive", "immersive,bilingual" },
+            { "omniModule", "on", "O" }, { "linkTarget", "builtin", "builtin,external" },
+            { "sidebarStudio", "off", "O" }, { "hostLocalization", "auto", "A" },
+            { "autoUpdate", "off", "O" }, { "updateChannel", "stable", "stable,beta" }
+        };
+        private static readonly string[] BoolSchemaDefaultTrueKeys = new string[] { "homeRipple", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu" };
+        private static readonly string[] BoolSchemaDefaultFalseKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
+        private static readonly string[] StringSchemaKeys = new string[] { "chatFontCustom", "codeFontCustom" };
+
+        private static List<object> ExpandEnumSpec(string spec)
+        {
+            string[] items = spec == "L" ? CanonicalLangValues : (spec == "A" ? AutoOnOffValues : (spec == "O" ? OnOffValues : spec.Split(',')));
+            List<object> list = new List<object>(items.Length);
+            for (int i = 0; i < items.Length; i++) list.Add(items[i]);
+            return list;
+        }
+
+        public static Dictionary<string, object> CreateDefaultConfig()
+        {
+            Dictionary<string, object> d = new Dictionary<string, object>(StringComparer.Ordinal);
+            for (int i = 0; i < EnumSchemaSpecs.GetLength(0); i++) d[EnumSchemaSpecs[i, 0]] = EnumSchemaSpecs[i, 1];
+            for (int i = 0; i < BoolSchemaDefaultTrueKeys.Length; i++) d[BoolSchemaDefaultTrueKeys[i]] = true;
+            for (int i = 0; i < BoolSchemaDefaultFalseKeys.Length; i++) d[BoolSchemaDefaultFalseKeys[i]] = false;
+            for (int i = 0; i < StringSchemaKeys.Length; i++) d[StringSchemaKeys[i]] = "";
+            d["pollIntervalMs"] = 2500L;
+            return d;
+        }
+
+        public static Dictionary<string, object> CreateDefaultValidators()
+        {
+            Dictionary<string, object> v = new Dictionary<string, object>(StringComparer.Ordinal);
+            for (int i = 0; i < EnumSchemaSpecs.GetLength(0); i++) v[EnumSchemaSpecs[i, 0]] = ExpandEnumSpec(EnumSchemaSpecs[i, 2]);
+            for (int i = 0; i < BoolSchemaDefaultTrueKeys.Length; i++) v[BoolSchemaDefaultTrueKeys[i]] = "boolean";
+            for (int i = 0; i < BoolSchemaDefaultFalseKeys.Length; i++) v[BoolSchemaDefaultFalseKeys[i]] = "boolean";
+            for (int i = 0; i < StringSchemaKeys.Length; i++) v[StringSchemaKeys[i]] = "string";
+            return v;
+        }
+
+        private static readonly Dictionary<string, object> BuiltinValidators = CreateDefaultValidators();
+
+        public static string NormalizeMascotConfigValue(string raw)
+        {
+            if (raw == null) return null;
+            if (raw == "dual") return "crab";
+            if (raw == "off" || raw == "crab" || raw == "minis" || raw == "quad" || raw == "quad-minis") return raw;
+            if (!raw.StartsWith("r:", StringComparison.Ordinal) || raw.Length <= 2) return null;
+            string body = raw.Substring(2);
+            bool minis = body.EndsWith("+m", StringComparison.Ordinal);
+            if (minis) body = body.Substring(0, body.Length - 2);
+            int[] counts = new int[4];
+            bool[] seen = new bool[4];
+            int rawTotal = 0;
+            int total = 0;
+            if (body.Length > 0)
+            {
+                string[] tokens = body.Split(',');
+                for (int i = 0; i < tokens.Length; i++)
+                {
+                    string tok = tokens[i];
+                    if (tok.Length != 2) return null;
+                    int idx = tok[0] == 'c' ? 0 : (tok[0] == 'k' ? 1 : (tok[0] == 'd' ? 2 : (tok[0] == 'w' ? 3 : -1)));
+                    int cnt = tok[1] - '0';
+                    if (idx < 0 || seen[idx] || cnt < 0 || cnt > 4) return null;
+                    seen[idx] = true;
+                    rawTotal += cnt;
+                    int clamped = cnt > 0 ? 1 : 0;
+                    counts[idx] = clamped;
+                    total += clamped;
+                }
+            }
+            if (rawTotal > 6 || total > 4) return null;
+            if (total == 0 && !minis) return "off";
+            if (counts[0] == 1 && counts[1] == 1 && counts[2] == 0 && counts[3] == 0) return minis ? "minis" : "crab";
+            if (counts[0] == 1 && counts[1] == 1 && counts[2] == 1 && counts[3] == 1) return minis ? "quad-minis" : "quad";
+            char[] species = new char[] { 'c', 'k', 'd', 'w' };
+            List<string> parts = new List<string>(4);
+            for (int i = 0; i < 4; i++)
+            {
+                if (counts[i] > 0) parts.Add(species[i].ToString() + counts[i].ToString(CultureInfo.InvariantCulture));
+            }
+            return "r:" + string.Join(",", parts.ToArray()) + (minis ? "+m" : "");
+        }
+
+        private static bool TryGetSchemaInteger(object value, out long intVal)
+        {
+            intVal = 0L;
+            if (value is int) { intVal = (int)value; return true; }
+            if (value is long) { intVal = (long)value; return true; }
+            if (value is short) { intVal = (short)value; return true; }
+            if (value is byte) { intVal = (byte)value; return true; }
+            if (value is double)
+            {
+                double d = (double)value;
+                if (!double.IsNaN(d) && !double.IsInfinity(d) && Math.Truncate(d) == d && d >= -9007199254740991.0 && d <= 9007199254740991.0)
+                {
+                    intVal = (long)d;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static string SanitizeCustomFont(object value)
+        {
+            string s = value as string;
+            if (s == null) return "";
+            string cleaned = s.Replace("\0", "").Replace("\r", "").Replace("\n", "");
+            return cleaned.Length > 160 ? cleaned.Substring(0, 160) : cleaned;
+        }
+
         private static bool ToBoolOnOff(object v)
         {
             if (v is bool) return (bool)v;
             string s = v as string;
             return s != null && !string.Equals(s, "off", StringComparison.OrdinalIgnoreCase) && !string.Equals(s, "false", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ToStrictOnBool(object v)
+        {
+            if (v is bool) return (bool)v;
+            string s = v as string;
+            return s != null && (string.Equals(s, "on", StringComparison.OrdinalIgnoreCase) || string.Equals(s, "true", StringComparison.OrdinalIgnoreCase));
         }
 
         public static Dictionary<string, object> ReconcileConfigAliases(Dictionary<string, object> raw)
@@ -833,6 +989,17 @@ namespace AgyClaudeStyle
             }
             if (res.ContainsKey("language")) res["lang"] = res["language"];
             else if (res.ContainsKey("lang")) res["language"] = res["lang"];
+
+            object langObj;
+            if (res.TryGetValue("language", out langObj) && langObj is string)
+            {
+                string lowLang = ((string)langObj).Trim().ToLowerInvariant().Replace('_', '-');
+                if (lowLang == "yue" || lowLang.StartsWith("yue-", StringComparison.Ordinal) || lowLang == "zh-yue" || lowLang.IndexOf("cantonese", StringComparison.Ordinal) >= 0)
+                {
+                    res["language"] = "zh-CN";
+                    res["lang"] = "zh-CN";
+                }
+            }
 
             if (res.ContainsKey("homeLayout")) res["homeMode"] = res["homeLayout"];
             else if (res.ContainsKey("homeMode")) res["homeLayout"] = res["homeMode"];
@@ -858,18 +1025,6 @@ namespace AgyClaudeStyle
                 res["sidebarRestyle"] = on;
                 res["sidebar"] = on ? "on" : "off";
             }
-            if (res.ContainsKey("sidebarCompact"))
-            {
-                res["sidebarCompact"] = ToBoolOnOff(res["sidebarCompact"]);
-            }
-            if (res.ContainsKey("smoothCaret"))
-            {
-                res["smoothCaret"] = ToBoolOnOff(res["smoothCaret"]);
-            }
-            if (res.ContainsKey("contextMenu"))
-            {
-                res["contextMenu"] = ToBoolOnOff(res["contextMenu"]);
-            }
             if (res.ContainsKey("convRipple"))
             {
                 object cr = res["convRipple"];
@@ -889,23 +1044,27 @@ namespace AgyClaudeStyle
                     }
                 }
             }
-            if (res.ContainsKey("codeLigatures"))
+            for (int i = 0; i < StrictOnBoolKeys.Length; i++)
             {
-                object cl = res["codeLigatures"];
-                if (cl is bool)
+                string k = StrictOnBoolKeys[i];
+                object sv;
+                if (res.TryGetValue(k, out sv) && (sv is bool || sv is string))
                 {
-                    res["codeLigatures"] = (bool)cl;
-                }
-                else
-                {
-                    string cls = cl as string;
-                    res["codeLigatures"] = cls != null && (string.Equals(cls, "on", StringComparison.OrdinalIgnoreCase) || string.Equals(cls, "true", StringComparison.OrdinalIgnoreCase));
+                    res[k] = ToStrictOnBool(sv);
                 }
             }
-            string[] boolOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold" };
-            for (int i = 0; i < boolOnOffKeys.Length; i++)
+            for (int i = 0; i < NotOffBoolKeys.Length; i++)
             {
-                string k = boolOnOffKeys[i];
+                string k = NotOffBoolKeys[i];
+                object sv;
+                if (res.TryGetValue(k, out sv) && (sv is bool || sv is string))
+                {
+                    res[k] = ToBoolOnOff(sv);
+                }
+            }
+            for (int i = 0; i < BoolToOnOffKeys.Length; i++)
+            {
+                string k = BoolToOnOffKeys[i];
                 object bv;
                 if (res.TryGetValue(k, out bv) && bv is bool)
                 {
@@ -917,20 +1076,47 @@ namespace AgyClaudeStyle
             {
                 res["palette"] = "warm";
             }
-            object mascotVal;
-            if (res.TryGetValue("mascot", out mascotVal) && string.Equals(mascotVal as string, "dual", StringComparison.Ordinal))
+            object perfVal;
+            if (res.TryGetValue("performanceMode", out perfVal) && perfVal is string)
             {
-                res["mascot"] = "crab";
+                string ps = (string)perfVal;
+                if (ps == "auto") res["performanceMode"] = "balanced";
+                else if (ps == "eco") res["performanceMode"] = "performance";
+            }
+            object mascotVal;
+            if (res.TryGetValue("mascot", out mascotVal) && mascotVal is string)
+            {
+                string ms = (string)mascotVal;
+                if (string.Equals(ms, "dual", StringComparison.Ordinal))
+                {
+                    res["mascot"] = "crab";
+                }
+                else
+                {
+                    string normMascot = NormalizeMascotConfigValue(ms);
+                    if (normMascot != null) res["mascot"] = normMascot;
+                }
+            }
+            if (res.ContainsKey("chatFontCustom")) res["chatFontCustom"] = SanitizeCustomFont(res["chatFontCustom"]);
+            if (res.ContainsKey("codeFontCustom")) res["codeFontCustom"] = SanitizeCustomFont(res["codeFontCustom"]);
+            object pollObj;
+            long pollInt;
+            if (res.TryGetValue("pollIntervalMs", out pollObj) && TryGetSchemaInteger(pollObj, out pollInt))
+            {
+                res["pollIntervalMs"] = pollInt;
             }
             return res;
         }
 
         public static Dictionary<string, object> ReadConfig(string baseDir, PluginManifest manifest)
         {
-            Dictionary<string, object> cfg = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (KeyValuePair<string, object> kv in manifest.DefaultConfig)
+            Dictionary<string, object> cfg = CreateDefaultConfig();
+            if (manifest != null && manifest.DefaultConfig != null)
             {
-                cfg[kv.Key] = kv.Value;
+                foreach (KeyValuePair<string, object> kv in manifest.DefaultConfig)
+                {
+                    if (kv.Value != null) cfg[kv.Key] = kv.Value;
+                }
             }
             try
             {
@@ -940,7 +1126,23 @@ namespace AgyClaudeStyle
                     Dictionary<string, object> userCfg = ReconcileConfigAliases(MiniJson.ParseObject(File.ReadAllText(cfgPath, Encoding.UTF8)));
                     foreach (KeyValuePair<string, object> kv in userCfg)
                     {
-                        cfg[kv.Key] = kv.Value;
+                        if (kv.Value == null) continue;
+                        if (kv.Key == "pollIntervalMs")
+                        {
+                            long iv;
+                            if (TryGetSchemaInteger(kv.Value, out iv) && iv >= 500L && iv <= 60000L) cfg[kv.Key] = iv;
+                            continue;
+                        }
+                        if (kv.Key == "autoPromptCdpRelaunch" || kv.Key == "autoRelaunchOnBareLaunch")
+                        {
+                            if (kv.Value is bool) cfg[kv.Key] = kv.Value;
+                            continue;
+                        }
+                        bool isKnown = BuiltinValidators.ContainsKey(kv.Key) || (manifest != null && manifest.Validators != null && manifest.Validators.ContainsKey(kv.Key));
+                        if (!isKnown || ValidateConfigEntry(manifest, kv.Key, kv.Value))
+                        {
+                            cfg[kv.Key] = kv.Value;
+                        }
                     }
                 }
             }
@@ -950,9 +1152,25 @@ namespace AgyClaudeStyle
 
         public static bool ValidateConfigEntry(PluginManifest manifest, string key, object value)
         {
-            if (manifest == null || manifest.Validators == null || string.IsNullOrEmpty(key)) return false;
-            object rule;
-            if (!manifest.Validators.TryGetValue(key, out rule)) return false;
+            if (string.IsNullOrEmpty(key)) return false;
+            if (key == "mascot")
+            {
+                return value is string && NormalizeMascotConfigValue((string)value) != null;
+            }
+            if (key == "pollIntervalMs")
+            {
+                long iv;
+                return TryGetSchemaInteger(value, out iv) && iv >= 500L && iv <= 60000L;
+            }
+            if (key == "autoPromptCdpRelaunch" || key == "autoRelaunchOnBareLaunch")
+            {
+                return value is bool;
+            }
+            object rule = null;
+            if (manifest == null || manifest.Validators == null || !manifest.Validators.TryGetValue(key, out rule))
+            {
+                if (!BuiltinValidators.TryGetValue(key, out rule)) return false;
+            }
             string ruleStr = rule as string;
             if (ruleStr == "boolean")
             {
@@ -963,6 +1181,11 @@ namespace AgyClaudeStyle
                 }
                 return true;
             }
+            if (ruleStr == "string")
+            {
+                string sv = value as string;
+                return sv != null && sv.Length <= 160 && sv.IndexOf('\0') < 0 && sv.IndexOf('\r') < 0 && sv.IndexOf('\n') < 0;
+            }
             if (rule is List<object>)
             {
                 string strVal = value as string;
@@ -970,10 +1193,7 @@ namespace AgyClaudeStyle
                 List<object> allowed = (List<object>)rule;
                 for (int i = 0; i < allowed.Count; i++)
                 {
-                    if (string.Equals(allowed[i] as string, strVal, StringComparison.Ordinal))
-                    {
-                        return true;
-                    }
+                    if (string.Equals(allowed[i] as string, strVal, StringComparison.Ordinal)) return true;
                 }
             }
             return false;
@@ -1337,10 +1557,8 @@ namespace AgyClaudeStyle
             catch { }
         }
 
-        private static void AtomicWriteJson(string cfgPath, Dictionary<string, object> next)
+        private static void AssertSafeJsonWriteTarget(string parentDir, string cfgPath, bool isFallback)
         {
-            if (string.IsNullOrEmpty(cfgPath)) return;
-            string parentDir = Path.GetDirectoryName(cfgPath);
             if (!string.IsNullOrEmpty(parentDir))
             {
                 string badDir;
@@ -1348,8 +1566,8 @@ namespace AgyClaudeStyle
                 if (HasUnsafeReparsePointInChain(parentDir, out badDir, out badTag))
                 {
                     throw new InvalidOperationException(InstallerI18n.TrFormat(
-                        "目标目录链路包含符号链接或重解析点 [{0}]，已拒绝写入: {1}",
-                        "Target directory chain contains a symbolic link or reparse point [{0}]; write refused: {1}",
+                        isFallback ? "目标目录链路包含符号链接或重解析点 [{0}]，已拒绝回退写入: {1}" : "目标目录链路包含符号链接或重解析点 [{0}]，已拒绝写入: {1}",
+                        isFallback ? "Target directory chain contains a symbolic link or reparse point [{0}]; fallback write refused: {1}" : "Target directory chain contains a symbolic link or reparse point [{0}]; write refused: {1}",
                         DescribeReparseTag(badTag),
                         badDir
                     ));
@@ -1358,11 +1576,18 @@ namespace AgyClaudeStyle
             if (IsUnsafeReparsePoint(cfgPath))
             {
                 throw new InvalidOperationException(InstallerI18n.TrFormat(
-                    "目标文件为符号链接或重解析点，已拒绝覆盖: {0}",
-                    "Target file is a symbolic link or reparse point; overwrite refused: {0}",
+                    isFallback ? "目标文件为符号链接或重解析点，已拒绝回退覆盖: {0}" : "目标文件为符号链接或重解析点，已拒绝覆盖: {0}",
+                    isFallback ? "Target file is a symbolic link or reparse point; fallback overwrite refused: {0}" : "Target file is a symbolic link or reparse point; overwrite refused: {0}",
                     cfgPath
                 ));
             }
+        }
+
+        private static void AtomicWriteJson(string cfgPath, Dictionary<string, object> next)
+        {
+            if (string.IsNullOrEmpty(cfgPath)) return;
+            string parentDir = Path.GetDirectoryName(cfgPath);
+            AssertSafeJsonWriteTarget(parentDir, cfgPath, false);
             int seq = Interlocked.Increment(ref _atomicWriteSeq);
             string tmpPath = cfgPath + ".tmp." + Process.GetCurrentProcess().Id + "." + seq;
             string content = MiniJson.Stringify(next, true) + "\n";
@@ -1373,28 +1598,7 @@ namespace AgyClaudeStyle
             {
                 try
                 {
-                    if (!string.IsNullOrEmpty(parentDir))
-                    {
-                        string curBadDir;
-                        uint curBadTag;
-                        if (HasUnsafeReparsePointInChain(parentDir, out curBadDir, out curBadTag))
-                        {
-                            throw new InvalidOperationException(InstallerI18n.TrFormat(
-                                "目标目录链路包含符号链接或重解析点 [{0}]，已拒绝写入: {1}",
-                                "Target directory chain contains a symbolic link or reparse point [{0}]; write refused: {1}",
-                                DescribeReparseTag(curBadTag),
-                                curBadDir
-                            ));
-                        }
-                    }
-                    if (IsUnsafeReparsePoint(cfgPath))
-                    {
-                        throw new InvalidOperationException(InstallerI18n.TrFormat(
-                            "目标文件为符号链接或重解析点，已拒绝覆盖: {0}",
-                            "Target file is a symbolic link or reparse point; overwrite refused: {0}",
-                            cfgPath
-                        ));
-                    }
+                    AssertSafeJsonWriteTarget(parentDir, cfgPath, false);
                     if (IsUnsafeReparsePoint(tmpPath))
                     {
                         throw new InvalidOperationException(InstallerI18n.TrFormat(
@@ -1403,10 +1607,7 @@ namespace AgyClaudeStyle
                             tmpPath
                         ));
                     }
-                    if (File.Exists(tmpPath))
-                    {
-                        File.Delete(tmpPath);
-                    }
+                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
                     using (FileStream tmpFs = new FileStream(tmpPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     {
                         tmpFs.Write(utf8Bytes, 0, utf8Bytes.Length);
@@ -1420,36 +1621,8 @@ namespace AgyClaudeStyle
                         }
                         catch (Exception replaceEx)
                         {
-                            if (!(replaceEx is IOException) && !(replaceEx is UnauthorizedAccessException))
-                            {
-                                throw;
-                            }
-                            if (attempt < backoffs.Length)
-                            {
-                                throw;
-                            }
-                            if (!string.IsNullOrEmpty(parentDir))
-                            {
-                                string fbBadDir;
-                                uint fbBadTag;
-                                if (HasUnsafeReparsePointInChain(parentDir, out fbBadDir, out fbBadTag))
-                                {
-                                    throw new InvalidOperationException(InstallerI18n.TrFormat(
-                                        "目标目录链路包含符号链接或重解析点 [{0}]，已拒绝回退写入: {1}",
-                                        "Target directory chain contains a symbolic link or reparse point [{0}]; fallback write refused: {1}",
-                                        DescribeReparseTag(fbBadTag),
-                                        fbBadDir
-                                    ));
-                                }
-                            }
-                            if (IsUnsafeReparsePoint(cfgPath))
-                            {
-                                throw new InvalidOperationException(InstallerI18n.TrFormat(
-                                    "目标文件为符号链接或重解析点，已拒绝回退覆盖: {0}",
-                                    "Target file is a symbolic link or reparse point; fallback overwrite refused: {0}",
-                                    cfgPath
-                                ));
-                            }
+                            if ((!(replaceEx is IOException) && !(replaceEx is UnauthorizedAccessException)) || attempt < backoffs.Length) throw;
+                            AssertSafeJsonWriteTarget(parentDir, cfgPath, true);
                             ClearReadOnlyAndHiddenAttributes(cfgPath);
                             using (FileStream fs = new FileStream(cfgPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
                             {
@@ -1460,14 +1633,7 @@ namespace AgyClaudeStyle
                     }
                     else
                     {
-                        if (IsUnsafeReparsePoint(cfgPath))
-                        {
-                            throw new InvalidOperationException(InstallerI18n.TrFormat(
-                                "目标文件为符号链接或重解析点，已拒绝覆盖: {0}",
-                                "Target file is a symbolic link or reparse point; overwrite refused: {0}",
-                                cfgPath
-                            ));
-                        }
+                        AssertSafeJsonWriteTarget(null, cfgPath, false);
                         File.Move(tmpPath, cfgPath);
                     }
                     return;
@@ -1512,6 +1678,7 @@ namespace AgyClaudeStyle
             {
                 next[kv.Key] = kv.Value;
             }
+            next = ReconcileConfigAliases(next);
             AtomicWriteJson(Path.Combine(baseDir, "config.json"), next);
             return true;
         }
@@ -3398,7 +3565,7 @@ namespace AgyClaudeStyle
             sb.Append("    } else {\n");
             sb.Append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n");
             sb.Append("    }\n");
-            sb.Append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n");
+            sb.Append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'tr' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n");
             sb.Append("    if (document.documentElement) {\n");
             sb.Append("      if (effectiveCfg && effectiveCfg.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n");
             sb.Append("      else document.documentElement.removeAttribute('data-ag-prism-thought-view');\n");
@@ -3479,7 +3646,7 @@ namespace AgyClaudeStyle
             return raw == "machine" || raw == "ai" || raw == "on" || raw == "auto";
         }
 
-        private static string ResolveSafePluginFile(string pluginDir, string relPath)
+        public static string ResolveSafePluginFile(string pluginDir, string relPath)
         {
             if (string.IsNullOrEmpty(pluginDir) || string.IsNullOrEmpty(relPath)) return null;
             try
@@ -3516,6 +3683,42 @@ namespace AgyClaudeStyle
             return BuildThoughtExpression(baseDir, config);
         }
 
+        private const string SubchannelHostGuardPrefix =
+            "(() => {\n" +
+            "  try { if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' }; } catch { return { ok: false, status: 'skipped-subframe' }; }\n" +
+            "  const hasDomMarker = () => {\n" +
+            "    try {\n" +
+            "      if (document.body && document.body.classList && (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))) return true;\n" +
+            "      return Boolean(typeof document.querySelector === 'function' && document.querySelector('.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'));\n" +
+            "    } catch { return false; }\n" +
+            "  };\n" +
+            "  let needDomMarkerOnReady = false;\n" +
+            "  let isPlainHttpLocalhost = false;\n" +
+            "  try {\n" +
+            "    const loc = typeof window !== 'undefined' && window.location;\n" +
+            "    const href = loc && typeof loc.href === 'string' ? loc.href : '';\n" +
+            "    if (href) {\n" +
+            "      const low = href.toLowerCase();\n" +
+            "      if (low.startsWith('devtools://') || low.startsWith('data:') || low.startsWith('chrome:') || low.startsWith('chrome-extension:') || low.startsWith('edge:') || low.startsWith('blob:') || low.startsWith('plugin:')) return { ok: false, status: 'skipped-non-host' };\n" +
+            "      if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) {\n" +
+            "        const ttl = String(document.title || '').trim();\n" +
+            "        if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(low)) return { ok: false, status: 'skipped-non-host' };\n" +
+            "      }\n" +
+            "      if (low.startsWith('http:') || low.startsWith('https:')) {\n" +
+            "        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n" +
+            "        if (!m) return { ok: false, status: 'skipped-non-host' };\n" +
+            "        const pathname = (m[3] || '/').toLowerCase();\n" +
+            "        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) return { ok: false, status: 'skipped-non-host' };\n" +
+            "        if (!hasDomMarker()) {\n" +
+            "          isPlainHttpLocalhost = m[1].toLowerCase() === 'http';\n" +
+            "          const rs = String(document.readyState || '');\n" +
+            "          if (isPlainHttpLocalhost) { if (rs === 'loading') needDomMarkerOnReady = true; else return { ok: false, status: 'skipped-non-host' }; }\n" +
+            "          else if (!/\\bantigravity\\b/i.test(String(document.title || ''))) { if (rs === 'loading') needDomMarkerOnReady = true; else return { ok: false, status: 'skipped-non-host' }; }\n" +
+            "        }\n" +
+            "      }\n" +
+            "    }\n" +
+            "  } catch {}\n";
+
         public static string BuildThoughtExpression(string pluginDir, Dictionary<string, object> cfg)
         {
             if (!ShouldEnableThought(cfg)) return "";
@@ -3530,22 +3733,25 @@ namespace AgyClaudeStyle
                 clientSource = File.ReadAllText(clientPath, Encoding.UTF8);
                 settingsUiSource = File.ReadAllText(settingsUiPath, Encoding.UTF8);
             }
-            catch
-            {
-                return "";
-            }
+            catch { return ""; }
             if (string.IsNullOrEmpty(clientSource) || string.IsNullOrEmpty(settingsUiSource)) return "";
+            string verbsPath = ResolveSafePluginFile(pluginDir, "vendor/thought-translator/tool-step-verbs.js");
+            if (!string.IsNullOrEmpty(verbsPath))
+            {
+                try
+                {
+                    string verbsSource = File.ReadAllText(verbsPath, Encoding.UTF8);
+                    if (!string.IsNullOrEmpty(verbsSource)) clientSource = verbsSource + ";\n" + clientSource;
+                }
+                catch { }
+            }
 
             Dictionary<string, object> reconciled = ReconcileConfigAliases(cfg);
             Dictionary<string, object> bootCfg = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (KeyValuePair<string, object> kv in reconciled)
-            {
-                bootCfg[kv.Key] = kv.Value;
-            }
+            foreach (KeyValuePair<string, object> kv in reconciled) bootCfg[kv.Key] = kv.Value;
             object rawModeObj;
             string rawMode = (reconciled.TryGetValue("thoughtTranslate", out rawModeObj) && rawModeObj is string)
-                ? ((string)rawModeObj).Trim().ToLowerInvariant()
-                : "";
+                ? ((string)rawModeObj).Trim().ToLowerInvariant() : "";
             bootCfg["thoughtTranslate"] = (rawMode == "machine") ? "machine" : "ai";
 
             string bootCfgJson = MiniJson.Stringify(bootCfg, false);
@@ -3553,154 +3759,53 @@ namespace AgyClaudeStyle
             string hashJson = MiniJson.StringifyString(codeHash);
 
             StringBuilder sb = new StringBuilder(clientSource.Length + settingsUiSource.Length + bootCfgJson.Length + 3072);
-            sb.Append("(() => {\n");
-            sb.Append("  try {\n");
-            sb.Append("    if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' };\n");
-            sb.Append("  } catch {\n");
-            sb.Append("    return { ok: false, status: 'skipped-subframe' };\n");
-            sb.Append("  }\n");
-            sb.Append("  const hasDomMarker = () => {\n");
-            sb.Append("    try {\n");
-            sb.Append("      if (\n");
-            sb.Append("        document.body &&\n");
-            sb.Append("        document.body.classList &&\n");
-            sb.Append("        (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))\n");
-            sb.Append("      ) {\n");
-            sb.Append("        return true;\n");
-            sb.Append("      }\n");
-            sb.Append("      return Boolean(\n");
-            sb.Append("        typeof document.querySelector === 'function' &&\n");
-            sb.Append("          document.querySelector(\n");
-            sb.Append("            '.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'\n");
-            sb.Append("          )\n");
-            sb.Append("      );\n");
-            sb.Append("    } catch {\n");
-            sb.Append("      return false;\n");
-            sb.Append("    }\n");
-            sb.Append("  };\n");
-            sb.Append("  let needDomMarkerOnReady = false;\n");
-            sb.Append("  let isPlainHttpLocalhost = false;\n");
-            sb.Append("  try {\n");
-            sb.Append("    const loc = typeof window !== 'undefined' && window.location;\n");
-            sb.Append("    const href = loc && typeof loc.href === 'string' ? loc.href : '';\n");
-            sb.Append("    if (href) {\n");
-            sb.Append("      const low = href.toLowerCase();\n");
-            sb.Append("      if (low.startsWith('devtools://') || low.startsWith('data:') || low.startsWith('chrome:') || low.startsWith('chrome-extension:') || low.startsWith('edge:') || low.startsWith('blob:') || low.startsWith('plugin:')) {\n");
-            sb.Append("        return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("      }\n");
-            sb.Append("      if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) {\n");
-            sb.Append("        const ttl = String(document.title || '').trim();\n");
-            sb.Append("        if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(low)) {\n");
-            sb.Append("          return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("        }\n");
-            sb.Append("      }\n");
-            sb.Append("      if (low.startsWith('http:') || low.startsWith('https:')) {\n");
-            sb.Append("        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n");
-            sb.Append("        if (!m) return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("        const pathname = (m[3] || '/').toLowerCase();\n");
-            sb.Append("        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) {\n");
-            sb.Append("          return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("        }\n");
-            sb.Append("        if (!hasDomMarker()) {\n");
-            sb.Append("          isPlainHttpLocalhost = m[1].toLowerCase() === 'http';\n");
-            sb.Append("          const rs = String(document.readyState || '');\n");
-            sb.Append("          if (isPlainHttpLocalhost) {\n");
-            sb.Append("            if (rs === 'loading') needDomMarkerOnReady = true;\n");
-            sb.Append("            else return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("          } else if (!/\\bantigravity\\b/i.test(String(document.title || ''))) {\n");
-            sb.Append("            if (rs === 'loading') needDomMarkerOnReady = true;\n");
-            sb.Append("            else return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("          }\n");
-            sb.Append("        }\n");
-            sb.Append("      }\n");
-            sb.Append("    }\n");
-            sb.Append("  } catch {}\n");
-            sb.Append("  const getSettingsSec = () => {\n");
-            sb.Append("    try {\n");
-            sb.Append("      return document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec') || null;\n");
-            sb.Append("    } catch {\n");
-            sb.Append("      return null;\n");
-            sb.Append("    }\n");
-            sb.Append("  };\n");
-            sb.Append("  const cleanupThought = () => {\n");
-            sb.Append("    try { window.__agPrismThought?.destroy?.(); } catch {}\n");
-            sb.Append("    try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n");
-            sb.Append("    try { delete window.__agPrismThought; } catch {}\n");
-            sb.Append("    try { delete globalThis.__agPrismThought; } catch {}\n");
-            sb.Append("    try { delete window.__agPrismThoughtSettingsUi; } catch {}\n");
-            sb.Append("    try { delete globalThis.__agPrismThoughtSettingsUi; } catch {}\n");
-            sb.Append("    try {\n");
-            sb.Append("      const sec = getSettingsSec();\n");
-            sb.Append("      if (sec) {\n");
-            sb.Append("        sec.__prismThoughtUiHandle = null;\n");
-            sb.Append("        sec.__prismMountThoughtUi?.();\n");
-            sb.Append("      }\n");
-            sb.Append("    } catch {}\n");
-            sb.Append("  };\n");
-            sb.Append("  const getLiveCfg = () => {\n");
-            sb.Append("    try {\n");
-            sb.Append("      const st = window.__agPrism?.getState?.();\n");
-            sb.Append("      return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null;\n");
-            sb.Append("    } catch {\n");
-            sb.Append("      return null;\n");
-            sb.Append("    }\n");
-            sb.Append("  };\n");
-            sb.Append("  const bootCfg = ").Append(bootCfgJson).Append(";\n");
-            sb.Append("  const initialLiveCfg = getLiveCfg();\n");
-            sb.Append("  if (initialLiveCfg && initialLiveCfg.thoughtTranslate === 'off') {\n");
-            sb.Append("    cleanupThought();\n");
-            sb.Append("    return { ok: true, status: 'off', skippedByLiveCfg: true };\n");
-            sb.Append("  }\n");
-            sb.Append("  const targetHash = ").Append(hashJson).Append(";\n");
-            sb.Append("  const mountOrReuse = () => {\n");
-            sb.Append("    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {\n");
-            sb.Append("      return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("    }\n");
-            sb.Append("    const liveCfg = getLiveCfg();\n");
-            sb.Append("    if (liveCfg && liveCfg.thoughtTranslate === 'off') {\n");
-            sb.Append("      cleanupThought();\n");
-            sb.Append("      return { ok: true, status: 'off', skippedByLiveCfg: true };\n");
-            sb.Append("    }\n");
-            sb.Append("    const effectiveCfg = liveCfg || bootCfg;\n");
-            sb.Append("    const existingThought = window.__agPrismThought;\n");
-            sb.Append("    const existingUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n");
-            sb.Append("    if (\n");
-            sb.Append("      existingThought &&\n");
-            sb.Append("      existingThought.__prismCodeHash === targetHash &&\n");
-            sb.Append("      existingUi &&\n");
-            sb.Append("      existingUi.__prismCodeHash === targetHash\n");
-            sb.Append("    ) {\n");
-            sb.Append("      try { existingThought.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("      try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n");
-            sb.Append("      try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n");
-            sb.Append("      return { ok: true, reused: true, codeHash: targetHash };\n");
-            sb.Append("    }\n");
-            sb.Append("    cleanupThought();\n");
-            sb.Append("    ;").Append(clientSource).Append(";\n");
-            sb.Append("    ;").Append(settingsUiSource).Append(";\n");
-            sb.Append("    const mountedThought = window.__agPrismThought || globalThis.__agPrismThought;\n");
-            sb.Append("    const mountedUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n");
-            sb.Append("    if (mountedThought && typeof mountedThought === 'object') {\n");
-            sb.Append("      mountedThought.__prismCodeHash = targetHash;\n");
-            sb.Append("      try { window.__agPrismThought = mountedThought; } catch {}\n");
-            sb.Append("      try { globalThis.__agPrismThought = mountedThought; } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("    if (mountedUi && typeof mountedUi === 'object') {\n");
-            sb.Append("      mountedUi.__prismCodeHash = targetHash;\n");
-            sb.Append("      try { window.__agPrismThoughtSettingsUi = mountedUi; } catch {}\n");
-            sb.Append("      try { globalThis.__agPrismThoughtSettingsUi = mountedUi; } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("    try { mountedThought?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("    try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n");
-            sb.Append("    try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n");
-            sb.Append("    return { ok: true, status: 'mounted', codeHash: targetHash };\n");
-            sb.Append("  };\n");
-            sb.Append("  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n");
-            sb.Append("    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n");
-            sb.Append("    return { ok: true, status: 'deferred', codeHash: targetHash };\n");
-            sb.Append("  }\n");
-            sb.Append("  return mountOrReuse();\n");
-            sb.Append("})()");
+            sb.Append(SubchannelHostGuardPrefix).Append(
+                "  const getSettingsSec = () => { try { return document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec') || null; } catch { return null; } };\n" +
+                "  const cleanupThought = () => {\n" +
+                "    try { window.__agPrismThought?.destroy?.(); } catch {}\n" +
+                "    try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n" +
+                "    try { delete window.__agPrismThought; } catch {}\n" +
+                "    try { delete globalThis.__agPrismThought; } catch {}\n" +
+                "    try { delete window.__agPrismThoughtSettingsUi; } catch {}\n" +
+                "    try { delete globalThis.__agPrismThoughtSettingsUi; } catch {}\n" +
+                "    try { const sec = getSettingsSec(); if (sec) { sec.__prismThoughtUiHandle = null; sec.__prismMountThoughtUi?.(); } } catch {}\n" +
+                "  };\n" +
+                "  const getLiveCfg = () => { try { const st = window.__agPrism?.getState?.(); return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null; } catch { return null; } };\n" +
+                "  const bootCfg = ").Append(bootCfgJson).Append(";\n" +
+                "  const initialLiveCfg = getLiveCfg();\n" +
+                "  if (initialLiveCfg && initialLiveCfg.thoughtTranslate === 'off') { cleanupThought(); return { ok: true, status: 'off', skippedByLiveCfg: true }; }\n" +
+                "  const targetHash = ").Append(hashJson).Append(";\n" +
+                "  const mountOrReuse = () => {\n" +
+                "    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) return { ok: false, status: 'skipped-non-host' };\n" +
+                "    const liveCfg = getLiveCfg();\n" +
+                "    if (liveCfg && liveCfg.thoughtTranslate === 'off') { cleanupThought(); return { ok: true, status: 'off', skippedByLiveCfg: true }; }\n" +
+                "    const effectiveCfg = liveCfg || bootCfg;\n" +
+                "    const existingThought = window.__agPrismThought;\n" +
+                "    const existingUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n" +
+                "    if (existingThought && existingThought.__prismCodeHash === targetHash && existingUi && existingUi.__prismCodeHash === targetHash) {\n" +
+                "      try { existingThought.sync?.(effectiveCfg); } catch {}\n" +
+                "      try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n" +
+                "      try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n" +
+                "      return { ok: true, reused: true, codeHash: targetHash };\n" +
+                "    }\n" +
+                "    cleanupThought();\n" +
+                "    ;").Append(clientSource).Append(";\n" +
+                "    ;").Append(settingsUiSource).Append(";\n" +
+                "    const mountedThought = window.__agPrismThought || globalThis.__agPrismThought;\n" +
+                "    const mountedUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n" +
+                "    if (mountedThought && typeof mountedThought === 'object') { mountedThought.__prismCodeHash = targetHash; try { window.__agPrismThought = mountedThought; } catch {} try { globalThis.__agPrismThought = mountedThought; } catch {} }\n" +
+                "    if (mountedUi && typeof mountedUi === 'object') { mountedUi.__prismCodeHash = targetHash; try { window.__agPrismThoughtSettingsUi = mountedUi; } catch {} try { globalThis.__agPrismThoughtSettingsUi = mountedUi; } catch {} }\n" +
+                "    try { mountedThought?.sync?.(effectiveCfg); } catch {}\n" +
+                "    try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n" +
+                "    try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n" +
+                "    return { ok: true, status: 'mounted', codeHash: targetHash };\n" +
+                "  };\n" +
+                "  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n" +
+                "    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n" +
+                "    return { ok: true, status: 'deferred', codeHash: targetHash };\n" +
+                "  }\n" +
+                "  return mountOrReuse();\n" +
+                "})()");
             return sb.ToString();
         }
 
@@ -3729,14 +3834,8 @@ namespace AgyClaudeStyle
             if (string.IsNullOrEmpty(clientPath)) return "";
 
             string clientSource;
-            try
-            {
-                clientSource = File.ReadAllText(clientPath, Encoding.UTF8);
-            }
-            catch
-            {
-                return "";
-            }
+            try { clientSource = File.ReadAllText(clientPath, Encoding.UTF8); }
+            catch { return ""; }
             if (string.IsNullOrEmpty(clientSource)) return "";
 
             Dictionary<string, object> bootCfg = ReconcileConfigAliases(cfg);
@@ -3745,123 +3844,44 @@ namespace AgyClaudeStyle
             string hashJson = MiniJson.StringifyString(codeHash);
 
             StringBuilder sb = new StringBuilder(clientSource.Length + bootCfgJson.Length + 2560);
-            sb.Append("(() => {\n");
-            sb.Append("  try {\n");
-            sb.Append("    if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' };\n");
-            sb.Append("  } catch {\n");
-            sb.Append("    return { ok: false, status: 'skipped-subframe' };\n");
-            sb.Append("  }\n");
-            sb.Append("  const hasDomMarker = () => {\n");
-            sb.Append("    try {\n");
-            sb.Append("      if (\n");
-            sb.Append("        document.body &&\n");
-            sb.Append("        document.body.classList &&\n");
-            sb.Append("        (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))\n");
-            sb.Append("      ) {\n");
-            sb.Append("        return true;\n");
-            sb.Append("      }\n");
-            sb.Append("      return Boolean(\n");
-            sb.Append("        typeof document.querySelector === 'function' &&\n");
-            sb.Append("          document.querySelector(\n");
-            sb.Append("            '.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'\n");
-            sb.Append("          )\n");
-            sb.Append("      );\n");
-            sb.Append("    } catch {\n");
-            sb.Append("      return false;\n");
-            sb.Append("    }\n");
-            sb.Append("  };\n");
-            sb.Append("  let needDomMarkerOnReady = false;\n");
-            sb.Append("  let isPlainHttpLocalhost = false;\n");
-            sb.Append("  try {\n");
-            sb.Append("    const loc = typeof window !== 'undefined' && window.location;\n");
-            sb.Append("    const href = loc && typeof loc.href === 'string' ? loc.href : '';\n");
-            sb.Append("    if (href) {\n");
-            sb.Append("      const low = href.toLowerCase();\n");
-            sb.Append("      if (low.startsWith('devtools://') || low.startsWith('data:') || low.startsWith('chrome:') || low.startsWith('chrome-extension:') || low.startsWith('edge:') || low.startsWith('blob:') || low.startsWith('plugin:')) {\n");
-            sb.Append("        return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("      }\n");
-            sb.Append("      if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) {\n");
-            sb.Append("        const ttl = String(document.title || '').trim();\n");
-            sb.Append("        if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(low)) {\n");
-            sb.Append("          return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("        }\n");
-            sb.Append("      }\n");
-            sb.Append("      if (low.startsWith('http:') || low.startsWith('https:')) {\n");
-            sb.Append("        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n");
-            sb.Append("        if (!m) return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("        const pathname = (m[3] || '/').toLowerCase();\n");
-            sb.Append("        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) {\n");
-            sb.Append("          return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("        }\n");
-            sb.Append("        if (!hasDomMarker()) {\n");
-            sb.Append("          isPlainHttpLocalhost = m[1].toLowerCase() === 'http';\n");
-            sb.Append("          const rs = String(document.readyState || '');\n");
-            sb.Append("          if (isPlainHttpLocalhost) {\n");
-            sb.Append("            if (rs === 'loading') needDomMarkerOnReady = true;\n");
-            sb.Append("            else return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("          } else if (!/\\bantigravity\\b/i.test(String(document.title || ''))) {\n");
-            sb.Append("            if (rs === 'loading') needDomMarkerOnReady = true;\n");
-            sb.Append("            else return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("          }\n");
-            sb.Append("        }\n");
-            sb.Append("      }\n");
-            sb.Append("    }\n");
-            sb.Append("  } catch {}\n");
-            sb.Append("  const cleanupInlineDiff = () => {\n");
-            sb.Append("    try { (window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff)?.destroy?.(); } catch {}\n");
-            sb.Append("    try { document.getElementById?.('ag-prism-inline-diff-css')?.remove?.(); } catch {}\n");
-            sb.Append("    try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n");
-            sb.Append("    try { delete window.__agPrismInlineDiff; } catch {}\n");
-            sb.Append("    try { delete globalThis.__agPrismInlineDiff; } catch {}\n");
-            sb.Append("    try { delete window.__agPrismInlineDiffFactory; } catch {}\n");
-            sb.Append("    try { delete globalThis.__agPrismInlineDiffFactory; } catch {}\n");
-            sb.Append("    try { delete window.__agPrismInlineDiffResolve; } catch {}\n");
-            sb.Append("  };\n");
-            sb.Append("  const getLiveCfg = () => {\n");
-            sb.Append("    try {\n");
-            sb.Append("      const st = window.__agPrism?.getState?.();\n");
-            sb.Append("      return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null;\n");
-            sb.Append("    } catch {\n");
-            sb.Append("      return null;\n");
-            sb.Append("    }\n");
-            sb.Append("  };\n");
-            sb.Append("  const bootCfg = ").Append(bootCfgJson).Append(";\n");
-            sb.Append("  const targetHash = ").Append(hashJson).Append(";\n");
-            sb.Append("  const mountOrReuse = () => {\n");
-            sb.Append("    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {\n");
-            sb.Append("      return { ok: false, status: 'skipped-non-host' };\n");
-            sb.Append("    }\n");
-            sb.Append("    const effectiveCfg = getLiveCfg() || bootCfg;\n");
-            sb.Append("    const existing = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n");
-            sb.Append("    if (existing && !existing.getDebugState?.()?.destroyed && existing.__prismCodeHash === targetHash && typeof existing.sync === 'function') {\n");
-            sb.Append("      try { existing.sync(effectiveCfg); } catch {}\n");
-            sb.Append("      return { ok: true, reused: true, codeHash: targetHash };\n");
-            sb.Append("    }\n");
-            sb.Append("    cleanupInlineDiff();\n");
-            sb.Append("    ;").Append(clientSource).Append(";\n");
-            sb.Append("    let mounted = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n");
-            sb.Append("    const factory = window.__agPrismInlineDiffFactory || globalThis.__agPrismInlineDiffFactory;\n");
-            sb.Append("    if (!mounted && typeof factory === 'function') {\n");
-            sb.Append("      try { mounted = factory({ window, document }); } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("    if (mounted && typeof mounted === 'object') {\n");
-            sb.Append("      mounted.__prismCodeHash = targetHash;\n");
-            sb.Append("      try { window.__agPrismInlineDiff = mounted; } catch {}\n");
-            sb.Append("      try { globalThis.__agPrismInlineDiff = mounted; } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("    if (typeof factory === 'function') {\n");
-            sb.Append("      try { window.__agPrismInlineDiffFactory = factory; } catch {}\n");
-            sb.Append("      try { globalThis.__agPrismInlineDiffFactory = factory; } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("    try { mounted?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("    return { ok: true, status: 'mounted', codeHash: targetHash };\n");
-            sb.Append("  };\n");
-            sb.Append("  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n");
-            sb.Append("    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n");
-            sb.Append("    return { ok: true, status: 'deferred', codeHash: targetHash };\n");
-            sb.Append("  }\n");
-            sb.Append("  return mountOrReuse();\n");
-            sb.Append("})()");
+            sb.Append(SubchannelHostGuardPrefix).Append(
+                "  const cleanupInlineDiff = () => {\n" +
+                "    try { (window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff)?.destroy?.(); } catch {}\n" +
+                "    try { document.getElementById?.('ag-prism-inline-diff-css')?.remove?.(); } catch {}\n" +
+                "    try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n" +
+                "    try { delete window.__agPrismInlineDiff; } catch {}\n" +
+                "    try { delete globalThis.__agPrismInlineDiff; } catch {}\n" +
+                "    try { delete window.__agPrismInlineDiffFactory; } catch {}\n" +
+                "    try { delete globalThis.__agPrismInlineDiffFactory; } catch {}\n" +
+                "    try { delete window.__agPrismInlineDiffResolve; } catch {}\n" +
+                "  };\n" +
+                "  const getLiveCfg = () => { try { const st = window.__agPrism?.getState?.(); return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null; } catch { return null; } };\n" +
+                "  const bootCfg = ").Append(bootCfgJson).Append(";\n" +
+                "  const targetHash = ").Append(hashJson).Append(";\n" +
+                "  const mountOrReuse = () => {\n" +
+                "    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) return { ok: false, status: 'skipped-non-host' };\n" +
+                "    const effectiveCfg = getLiveCfg() || bootCfg;\n" +
+                "    const existing = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n" +
+                "    if (existing && !existing.getDebugState?.()?.destroyed && existing.__prismCodeHash === targetHash && typeof existing.sync === 'function') {\n" +
+                "      try { existing.sync(effectiveCfg); } catch {}\n" +
+                "      return { ok: true, reused: true, codeHash: targetHash };\n" +
+                "    }\n" +
+                "    cleanupInlineDiff();\n" +
+                "    ;").Append(clientSource).Append(";\n" +
+                "    let mounted = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n" +
+                "    const factory = window.__agPrismInlineDiffFactory || globalThis.__agPrismInlineDiffFactory;\n" +
+                "    if (!mounted && typeof factory === 'function') { try { mounted = factory({ window, document }); } catch {} }\n" +
+                "    if (mounted && typeof mounted === 'object') { mounted.__prismCodeHash = targetHash; try { window.__agPrismInlineDiff = mounted; } catch {} try { globalThis.__agPrismInlineDiff = mounted; } catch {} }\n" +
+                "    if (typeof factory === 'function') { try { window.__agPrismInlineDiffFactory = factory; } catch {} try { globalThis.__agPrismInlineDiffFactory = factory; } catch {} }\n" +
+                "    try { mounted?.sync?.(effectiveCfg); } catch {}\n" +
+                "    return { ok: true, status: 'mounted', codeHash: targetHash };\n" +
+                "  };\n" +
+                "  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n" +
+                "    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n" +
+                "    return { ok: true, status: 'deferred', codeHash: targetHash };\n" +
+                "  }\n" +
+                "  return mountOrReuse();\n" +
+                "})()");
             return sb.ToString();
         }
 
@@ -3884,115 +3904,79 @@ namespace AgyClaudeStyle
             string styleIdJson = MiniJson.StringifyString(manifest.StyleId);
             string verJson = MiniJson.StringifyString(manifest.Version);
             StringBuilder sb = new StringBuilder(css.Length + bundle.Length + 4608);
-            sb.Append("(() => {\n");
-            sb.Append("    const css = ");
-            sb.Append(MiniJson.StringifyString(css));
-            sb.Append(";\n");
-            sb.Append("    const migrateLegacyStorage = () => {\n");
-            sb.Append("      try {\n");
-            sb.Append("        if (typeof localStorage === 'undefined' || !localStorage) return;\n");
-            sb.Append("        const legacyRaw = localStorage.getItem('ag-claude-style:config');\n");
-            sb.Append("        const v3Raw = localStorage.getItem('agClaudeStyle.settings.v3');\n");
-            sb.Append("        const prismRaw = localStorage.getItem('ag-prism:config');\n");
-            sb.Append("        if (!prismRaw && (legacyRaw || v3Raw)) localStorage.setItem('ag-prism:config', legacyRaw || v3Raw);\n");
-            sb.Append("        if (!v3Raw && (prismRaw || legacyRaw)) localStorage.setItem('agClaudeStyle.settings.v3', prismRaw || legacyRaw);\n");
-            sb.Append("      } catch {}\n");
-            sb.Append("    };\n");
-            sb.Append("    const cleanupLegacyResidue = () => {\n");
-            sb.Append("      try { const oldStyle = document.getElementById('ag-claude-style-css'); if (oldStyle) oldStyle.remove(); } catch {}\n");
-            sb.Append("      try { const oldApi = window.__agClaudeStyle; if (oldApi && (!window.__agPrism || Number(oldApi.version) <= 2)) { if (typeof oldApi.destroy === 'function') oldApi.destroy(); delete window.__agClaudeStyle; } } catch {}\n");
-            sb.Append("    };\n");
-            sb.Append("    const applyStyle = () => {\n");
-            sb.Append("      const targetParent = document.head || document.documentElement;\n");
-            sb.Append("      if (!targetParent) return;\n");
-            sb.Append("      cleanupLegacyResidue();\n");
-            sb.Append("      let style = document.getElementById(").Append(styleIdJson).Append(");\n");
-            sb.Append("      if (!style) {\n");
-            sb.Append("        style = document.createElement('style');\n");
-            sb.Append("        style.id = ").Append(styleIdJson).Append(";\n");
-            sb.Append("      }\n");
-            sb.Append("      if (style.textContent !== css) { style.textContent = css; style.removeAttribute?.('data-ag-cs-flat'); }\n");
-            sb.Append("      if (style.parentNode !== targetParent || targetParent.lastElementChild !== style) {\n");
-            sb.Append("        targetParent.appendChild(style);\n");
-            sb.Append("      }\n");
-            sb.Append("    };\n\n");
-            sb.Append("    let status = 'ok';\n");
-            sb.Append("    let mounted = false;\n");
-            sb.Append("    const stripForeignMount = () => {\n");
-            sb.Append("      try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n");
-            sb.Append("      try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n");
-            sb.Append("      try { window.__agPrismThought?.destroy?.(); } catch {}\n");
-            sb.Append("      try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n");
-            sb.Append("      try { window.__agPrismInlineDiff?.destroy?.(); } catch {}\n");
-            sb.Append("      try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n");
-            sb.Append("      try { window.__agPrismOmni?.destroy?.(); } catch {}\n");
-            sb.Append("      try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n");
-            sb.Append("      try { document.querySelectorAll?.('.ag-cs-ctx-menu, .ag-cs-ctx-toast')?.forEach?.((el) => el.remove()); } catch {}\n");
-            sb.Append("      try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}\n");
-            sb.Append("      try { document.documentElement?.removeAttribute?.('data-ag-cs-model-menu'); document.querySelectorAll?.('[data-ag-cs-aux-dual],[data-ag-cs-model-overlay]').forEach((el) => { el.removeAttribute('data-ag-cs-aux-dual'); el.removeAttribute('data-ag-cs-model-overlay'); }); } catch {}\n");
-            sb.Append("      try { window.__agPrism?.destroy?.(); } catch {}\n");
-            sb.Append("      try { document.getElementById(").Append(styleIdJson).Append(")?.remove(); } catch {}\n");
-            sb.Append("      try { document.getElementById('ag-claude-style-css')?.remove(); } catch {}\n");
-            sb.Append("      try { document.getElementById('ag-prism-settings-v101-css')?.remove(); } catch {}\n");
-            sb.Append("      try { document.getElementById('ag-prism-omni-css')?.remove(); } catch {}\n");
-            sb.Append("      try { document.getElementById('ag-prism-inline-diff-css')?.remove(); } catch {}\n");
-            sb.Append("      delete window.__agPrismThought; delete window.__agPrismThoughtSettingsUi; delete globalThis.__agPrismThoughtSettingsUi; delete window.__agPrismInlineDiff; delete globalThis.__agPrismInlineDiff; delete window.__agPrismInlineDiffFactory; delete globalThis.__agPrismInlineDiffFactory; delete window.__agPrismInlineDiffResolve; delete window.__agPrismOmni; delete window.__agPrismContextMenu; delete globalThis.__agPrismContextMenu; delete window.__agPrism; delete window.__agClaudeStyle;\n");
-            sb.Append("    };\n");
-            sb.Append("    const hasDomWorkbenchMarkers = () => {\n");
-            sb.Append("      try {\n");
-            sb.Append("        if (document.body?.classList && (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))) return true;\n");
-            sb.Append("        return Boolean(document.querySelector('.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'));\n");
-            sb.Append("      } catch { return false; }\n");
-            sb.Append("    };\n");
-            sb.Append("    const checkHostIdentity = () => {\n");
-            sb.Append("      try {\n");
-            sb.Append("        const href = String((typeof window !== 'undefined' && window.location && window.location.href) || '');\n");
-            sb.Append("        if (!href) return 'ok';\n");
-            sb.Append("        const low = href.toLowerCase();\n");
-            sb.Append("        if (/^(devtools:|data:|chrome:|chrome-extension:|edge:|blob:|plugin:)/.test(low)) return 'reject';\n");
-            sb.Append("        const ttl = String(document.title || '').trim();\n");
-            sb.Append("        const bareAux = /^(?:untitled|launchpad)$/i.test(ttl) || /(?:^|\\/)launchpad(?:\\.html)?(?:[?#]|$)/i.test(href);\n");
-            sb.Append("        if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) return bareAux ? 'reject' : 'ok';\n");
-            sb.Append("        if (bareAux) return 'reject';\n");
-            sb.Append("        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n");
-            sb.Append("        if (!m) return low.startsWith('http:') || low.startsWith('https:') ? 'reject' : 'ok';\n");
-            sb.Append("        const pathname = (m[3] || '/').toLowerCase();\n");
-            sb.Append("        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) return 'reject';\n");
-            sb.Append("        if (hasDomWorkbenchMarkers()) return 'ok';\n");
-            sb.Append("        const rs = String(document.readyState || '');\n");
-            sb.Append("        if (m[1].toLowerCase() === 'http') return rs === 'loading' ? 'defer' : 'reject';\n");
-            sb.Append("        if (/\\bantigravity\\b/i.test(ttl)) return 'ok';\n");
-            sb.Append("        return rs === 'complete' ? 'reject' : 'ok';\n");
-            sb.Append("      } catch { return 'ok'; }\n");
-            sb.Append("    };\n");
-            sb.Append("    const mount = () => {\n");
-            sb.Append("      if (mounted || !document.documentElement) return;\n");
-            sb.Append("      const hostVerdict = checkHostIdentity();\n");
-            sb.Append("      if (hostVerdict === 'reject') { status = 'skipped-non-host'; stripForeignMount(); return; }\n");
-            sb.Append("      if (hostVerdict === 'defer') { status = 'deferred'; document.addEventListener('DOMContentLoaded', () => mount(), { once: true }); return; }\n");
-            sb.Append("      mounted = true;\n");
-            sb.Append("      try {\n");
-            sb.Append("        cleanupLegacyResidue();\n");
-            sb.Append("        if (!window.__agPrismRepoBridge) {\n");
-            sb.Append("          const fn = (a) => Promise.resolve({ ok: false, offline: true, action: typeof a === 'string' ? a : (a && a.action) || 'status', noRemote: true, hasRemote: false, branch: 'local', commit: ").Append(verJson).Append(", shortHash: ").Append(verJson).Append(" });\n");
-            sb.Append("          fn.call = fn; fn.request = fn; fn.status = () => fn('status'); fn.pull = () => fn('pull'); fn.sync = () => fn('pull'); fn.resolve = () => {};\n");
-            sb.Append("          window.__agPrismRepoBridge = fn;\n");
-            sb.Append("        }\n");
-            sb.Append("        if (document.head) applyStyle();\n");
-            sb.Append("        else document.addEventListener('DOMContentLoaded', applyStyle, { once: true });\n");
-            sb.Append("        const bootCfg = ").Append(MiniJson.Stringify(initCfg, false)).Append(";\n");
-            sb.Append("        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n");
+            sb.Append("(() => {\n    const css = ").Append(MiniJson.StringifyString(css)).Append(
+                ";\n    const migrateLegacyStorage = () => {\n      try {\n" +
+                "        if (typeof localStorage === 'undefined' || !localStorage) return;\n" +
+                "        const legacyRaw = localStorage.getItem('ag-claude-style:config');\n" +
+                "        const v3Raw = localStorage.getItem('agClaudeStyle.settings.v3');\n" +
+                "        const prismRaw = localStorage.getItem('ag-prism:config');\n" +
+                "        if (!prismRaw && (legacyRaw || v3Raw)) localStorage.setItem('ag-prism:config', legacyRaw || v3Raw);\n" +
+                "        if (!v3Raw && (prismRaw || legacyRaw)) localStorage.setItem('agClaudeStyle.settings.v3', prismRaw || legacyRaw);\n" +
+                "      } catch {}\n    };\n" +
+                "    const cleanupLegacyResidue = () => {\n" +
+                "      try { const oldStyle = document.getElementById('ag-claude-style-css'); if (oldStyle) oldStyle.remove(); } catch {}\n" +
+                "      try { const oldApi = window.__agClaudeStyle; if (oldApi && (!window.__agPrism || Number(oldApi.version) <= 2)) { if (typeof oldApi.destroy === 'function') oldApi.destroy(); delete window.__agClaudeStyle; } } catch {}\n" +
+                "    };\n    const applyStyle = () => {\n      const targetParent = document.head || document.documentElement;\n" +
+                "      if (!targetParent) return;\n      cleanupLegacyResidue();\n      let style = document.getElementById("
+            ).Append(styleIdJson).Append(");\n      if (!style) { style = document.createElement('style'); style.id = ").Append(styleIdJson).Append(
+                "; }\n      if (style.textContent !== css) { style.textContent = css; style.removeAttribute?.('data-ag-cs-flat'); }\n" +
+                "      if (style.parentNode !== targetParent || targetParent.lastElementChild !== style) targetParent.appendChild(style);\n" +
+                "    };\n\n    let status = 'ok';\n    let mounted = false;\n    const stripForeignMount = () => {\n" +
+                "      try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n" +
+                "      try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n" +
+                "      try { window.__agPrismThought?.destroy?.(); } catch {}\n" +
+                "      try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n" +
+                "      try { window.__agPrismInlineDiff?.destroy?.(); } catch {}\n" +
+                "      try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n" +
+                "      try { window.__agPrismOmni?.destroy?.(); } catch {}\n" +
+                "      try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n" +
+                "      try { document.querySelectorAll?.('.ag-cs-ctx-menu, .ag-cs-ctx-toast')?.forEach?.((el) => el.remove()); } catch {}\n" +
+                "      try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}\n" +
+                "      try { document.documentElement?.removeAttribute?.('data-ag-cs-model-menu'); document.querySelectorAll?.('[data-ag-cs-aux-dual],[data-ag-cs-model-overlay]').forEach((el) => { el.removeAttribute('data-ag-cs-aux-dual'); el.removeAttribute('data-ag-cs-model-overlay'); }); } catch {}\n" +
+                "      try { window.__agPrism?.destroy?.(); } catch {}\n      try { document.getElementById("
+            ).Append(styleIdJson).Append(
+                ")?.remove(); } catch {}\n" +
+                "      try { document.getElementById('ag-claude-style-css')?.remove(); document.getElementById('ag-prism-settings-v101-css')?.remove(); document.getElementById('ag-prism-omni-css')?.remove(); document.getElementById('ag-prism-inline-diff-css')?.remove(); } catch {}\n" +
+                "      delete window.__agPrismThought; delete window.__agPrismThoughtSettingsUi; delete globalThis.__agPrismThoughtSettingsUi; delete window.__agPrismInlineDiff; delete globalThis.__agPrismInlineDiff; delete window.__agPrismInlineDiffFactory; delete globalThis.__agPrismInlineDiffFactory; delete window.__agPrismInlineDiffResolve; delete window.__agPrismOmni; delete window.__agPrismContextMenu; delete globalThis.__agPrismContextMenu; delete window.__agPrism; delete window.__agClaudeStyle;\n" +
+                "    };\n    const hasDomWorkbenchMarkers = () => {\n      try {\n" +
+                "        if (document.body?.classList && (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))) return true;\n" +
+                "        return Boolean(document.querySelector('.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'));\n" +
+                "      } catch { return false; }\n    };\n    const checkHostIdentity = () => {\n      try {\n" +
+                "        const href = String((typeof window !== 'undefined' && window.location && window.location.href) || '');\n" +
+                "        if (!href) return 'ok';\n        const low = href.toLowerCase();\n" +
+                "        if (/^(devtools:|data:|chrome:|chrome-extension:|edge:|blob:|plugin:)/.test(low)) return 'reject';\n" +
+                "        const ttl = String(document.title || '').trim();\n" +
+                "        const bareAux = /^(?:untitled|launchpad)$/i.test(ttl) || /(?:^|\\/)launchpad(?:\\.html)?(?:[?#]|$)/i.test(href);\n" +
+                "        if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) return bareAux ? 'reject' : 'ok';\n" +
+                "        if (bareAux) return 'reject';\n" +
+                "        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n" +
+                "        if (!m) return low.startsWith('http:') || low.startsWith('https:') ? 'reject' : 'ok';\n" +
+                "        const pathname = (m[3] || '/').toLowerCase();\n" +
+                "        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) return 'reject';\n" +
+                "        if (hasDomWorkbenchMarkers()) return 'ok';\n        const rs = String(document.readyState || '');\n" +
+                "        if (m[1].toLowerCase() === 'http') return rs === 'loading' ? 'defer' : 'reject';\n" +
+                "        if (/\\bantigravity\\b/i.test(ttl)) return 'ok';\n        return rs === 'complete' ? 'reject' : 'ok';\n" +
+                "      } catch { return 'ok'; }\n    };\n    const mount = () => {\n      if (mounted || !document.documentElement) return;\n" +
+                "      const hostVerdict = checkHostIdentity();\n" +
+                "      if (hostVerdict === 'reject') { status = 'skipped-non-host'; stripForeignMount(); return; }\n" +
+                "      if (hostVerdict === 'defer') { status = 'deferred'; document.addEventListener('DOMContentLoaded', () => mount(), { once: true }); return; }\n" +
+                "      mounted = true;\n      try {\n        cleanupLegacyResidue();\n        if (!window.__agPrismRepoBridge) {\n" +
+                "          const fn = (a) => Promise.resolve({ ok: false, offline: true, action: typeof a === 'string' ? a : (a && a.action) || 'status', noRemote: true, hasRemote: false, branch: 'local', commit: "
+            ).Append(verJson).Append(", shortHash: ").Append(verJson).Append(
+                " });\n          fn.call = fn; fn.request = fn; fn.status = () => fn('status'); fn.pull = () => fn('pull'); fn.sync = () => fn('pull'); fn.resolve = () => {};\n" +
+                "          window.__agPrismRepoBridge = fn;\n        }\n" +
+                "        if (document.head) applyStyle();\n        else document.addEventListener('DOMContentLoaded', applyStyle, { once: true });\n        const bootCfg = "
+            ).Append(MiniJson.Stringify(initCfg, false)).Append(";\n        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n");
             sb.Append("        const bundleUnchanged = Boolean(\n");
             sb.Append("          existingPrism &&\n");
             sb.Append("          existingPrism.version === ").Append(verJson).Append(" &&\n");
             sb.Append("          existingPrism.codeHash === bootCfg.codeHash &&\n");
-            sb.Append("          typeof existingPrism.refreshConfig === 'function' &&\n");
-            sb.Append("          window.__agPrismTelemetry &&\n");
-            sb.Append("          window.__agPrismEffortSlider\n");
+            sb.Append("          typeof existingPrism.refreshConfig === 'function'\n");
             sb.Append("        );\n");
             sb.Append("        if (bundleUnchanged) {\n");
             sb.Append("          existingPrism.refreshConfig(bootCfg);\n");
             sb.Append("        } else {\n");
+            sb.Append("          try { existingPrism?.destroy?.(); } catch {}\n");
             sb.Append("          try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n");
             sb.Append("          try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n");
             sb.Append("          try { window.__agPrismThought?.destroy?.(); } catch {}\n");
@@ -4004,47 +3988,26 @@ namespace AgyClaudeStyle
             sb.Append("            globalThis.__agCsUiMain(bootCfg);\n");
             sb.Append("          }\n");
             sb.Append("        }\n");
-            sb.Append("        migrateLegacyStorage();\n");
-            sb.Append("        if (window.__agClaudeStyle && !window.__agPrism) window.__agPrism = window.__agClaudeStyle;\n");
-            sb.Append("        else if (window.__agPrism) window.__agClaudeStyle = window.__agPrism;\n");
-            sb.Append("        const liveState = window.__agPrism && typeof window.__agPrism.getState === 'function' ? window.__agPrism.getState() : null;\n");
-            sb.Append("        const effectiveCfg = (liveState && liveState.cfg) || bootCfg;\n");
-            sb.Append("        try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("        try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("        try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("        try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n");
-            sb.Append("        if (document.documentElement && !document.documentElement.hasAttribute('data-ag-prism')) {\n");
-            sb.Append("          document.documentElement.setAttribute('data-ag-prism', ").Append(verJson).Append(");\n");
-            sb.Append("        }\n");
-            sb.Append("      } catch (e) {\n");
-            sb.Append("        status = 'error: ' + (e && e.message ? e.message : String(e));\n");
-            sb.Append("        if (typeof console !== 'undefined' && console.error) {\n");
-            sb.Append("          console.error('[obsidian-prism] init error:', e);\n");
-            sb.Append("        }\n");
-            sb.Append("      }\n");
-            sb.Append("    };\n\n");
-            sb.Append("    if (document.documentElement) {\n");
-            sb.Append("      mount();\n");
-            sb.Append("    } else {\n");
-            sb.Append("      status = 'deferred';\n");
-            sb.Append("      const onReady = () => {\n");
-            sb.Append("        if (document.documentElement) {\n");
-            sb.Append("          document.removeEventListener('readystatechange', onReady);\n");
-            sb.Append("          document.removeEventListener('DOMContentLoaded', onReady);\n");
-            sb.Append("          mount();\n");
-            sb.Append("        }\n");
-            sb.Append("      };\n");
-            sb.Append("      document.addEventListener('readystatechange', onReady);\n");
-            sb.Append("      document.addEventListener('DOMContentLoaded', onReady);\n");
-            sb.Append("    }\n");
-            sb.Append("    const api = window.__agPrism || window.__agClaudeStyle;\n");
-            sb.Append("    const st = api && typeof api.getState === 'function' ? api.getState() : null;\n");
-            sb.Append("    return {\n");
-            sb.Append("      version: ").Append(verJson).Append(",\n");
-            sb.Append("      status,\n");
-            sb.Append("      state: st,\n");
-            sb.Append("    };\n");
-            sb.Append("  })()");
+            sb.Append(
+                "        migrateLegacyStorage();\n" +
+                "        if (window.__agClaudeStyle && !window.__agPrism) window.__agPrism = window.__agClaudeStyle;\n" +
+                "        else if (window.__agPrism) window.__agClaudeStyle = window.__agPrism;\n" +
+                "        const liveState = window.__agPrism && typeof window.__agPrism.getState === 'function' ? window.__agPrism.getState() : null;\n" +
+                "        const effectiveCfg = (liveState && liveState.cfg) || bootCfg;\n" +
+                "        try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n" +
+                "        try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n" +
+                "        try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n" +
+                "        try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n" +
+                "        if (document.documentElement && !document.documentElement.hasAttribute('data-ag-prism')) document.documentElement.setAttribute('data-ag-prism', "
+            ).Append(verJson).Append(
+                ");\n      } catch (e) {\n        status = 'error: ' + (e && e.message ? e.message : String(e));\n" +
+                "        if (typeof console !== 'undefined' && console.error) console.error('[obsidian-prism] init error:', e);\n" +
+                "      }\n    };\n\n    if (document.documentElement) mount();\n    else {\n      status = 'deferred';\n" +
+                "      const onReady = () => { if (document.documentElement) { document.removeEventListener('readystatechange', onReady); document.removeEventListener('DOMContentLoaded', onReady); mount(); } };\n" +
+                "      document.addEventListener('readystatechange', onReady);\n      document.addEventListener('DOMContentLoaded', onReady);\n    }\n" +
+                "    const api = window.__agPrism || window.__agClaudeStyle;\n    const st = api && typeof api.getState === 'function' ? api.getState() : null;\n" +
+                "    return { version: "
+            ).Append(verJson).Append(", status, state: st };\n  })()");
             return sb.ToString();
         }
 

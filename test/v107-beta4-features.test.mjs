@@ -1049,13 +1049,13 @@ test('v1.0.7 / Issue #58: full-body gentle crouch peek (no hard bottom clip) + p
   });
 
   try {
-    // Enter peek mode: actor gently crouches (+3px) at zIndex 8 with data-ag-mascot-peek="1" and ZERO hard bottom clip()
+    // Enter peek mode: actor crouches deeper (+7px) at zIndex 8 with data-ag-mascot-peek="1" and ZERO Canvas ctx.clip()
     clipCalls = 0;
     rig.setState({ yieldMode: 'peek' });
     const peekSnap = rig.getLayoutSnapshot();
     assert.equal(host.getAttribute('data-ag-mascot-peek'), '1', 'peek must preserve data-ag-mascot-peek="1" contract');
     assert.equal(peekSnap.perf.timerIntervalMs, 0, 'reducedMotion must keep 0fps sleep');
-    assert.equal(peekSnap.actors[0].renderCache.lastY, 3, 'gentle crouch peek must lower actor by +3px without hard clipping');
+    assert.equal(peekSnap.actors[0].renderCache.lastY, 7, 'deepened peek crouch must lower actor by +7px without Canvas ctx.clip()');
     assert.equal(clipCalls, 0, 'Issue #58 Bug 1: peek mode must NOT hard-clip lower body via ctx.clip()');
     assert.equal(host.querySelector('.ag-v2-mascot-actor')?.style?.zIndex, '8', 'peek actor z-index must sit at 8 above rim (7) and below cards (12)');
     assert.equal(host.querySelector('.ag-v2-mascot-actor')?.getAttribute('tabindex'), '-1', 'peek actor must keep tabindex="-1"');
@@ -1081,11 +1081,20 @@ test('v1.0.7 / Issue #58: full-body gentle crouch peek (no hard bottom clip) + p
     rig.setRimLight({ active: true, localX: catCx + 1, strength: 0.905, toneKey: 'cobalt', dark: true });
     assert.equal(rig.getLayoutSnapshot().perf.canvasDraws, drawsLit, 'micro-jitter inside same quantized bucket must not redraw');
 
-    // While periodic picker is open (data-ag-pp-open="1"), setRimLight must preserve 0fps sleep & skip repaint
+    // While periodic picker is open in balanced/quality mode, mascot rim bounce stays responsive (no freeze);
+    // in performance/eco mode (or win-blur), setRimLight must enforce 0fps sleep & skip repaint
+    doc.documentElement.setAttribute('data-ag-cs-perf-mode', 'balanced');
     doc.documentElement.setAttribute('data-ag-pp-open', '1');
     rig.setRimLight({ active: true, localX: catCx, strength: 0.5, toneKey: 'iris', dark: true });
-    assert.equal(rig.getLayoutSnapshot().perf.canvasDraws, drawsLit, 'setRimLight must skip repaint while periodic picker is open');
-    assert.equal(rig.getLayoutSnapshot().perf.timerIntervalMs, 0, 'periodic picker open must preserve 0fps sleep');
+    const drawsBalancedPp = rig.getLayoutSnapshot().perf.canvasDraws;
+    assert.ok(drawsBalancedPp > drawsLit, 'balanced mode must keep mascot rim bounce responsive while periodic picker is open');
+    assert.equal(rig.getLayoutSnapshot().perf.timerIntervalMs, 0, 'reducedMotion test fixture stays 0fps');
+
+    doc.documentElement.setAttribute('data-ag-cs-perf-mode', 'performance');
+    rig.setRimLight({ active: true, localX: catCx, strength: 0.75, toneKey: 'amber', dark: true });
+    assert.equal(rig.getLayoutSnapshot().perf.canvasDraws, drawsBalancedPp, 'performance mode + periodic picker open must skip repaint');
+    assert.equal(rig.getLayoutSnapshot().perf.timerIntervalMs, 0, 'performance mode + periodic picker open must preserve 0fps sleep');
+    doc.documentElement.removeAttribute('data-ag-cs-perf-mode');
     doc.documentElement.removeAttribute('data-ag-pp-open');
 
     // Clearing rim light resets tintState cleanly and stays 0fps

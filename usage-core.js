@@ -2,23 +2,11 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.__agCsUsageCore = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
-  const HOME_HEAT_WEEKS = 26;
-  const HOME_HEAT_RAMP = [8, 28, 52, 76, 100];
-  const HOME_HEAT_STEPS = HOME_HEAT_RAMP.length;
-  const HOME_CHART_DAYS = 30;
-  const HOME_MODEL_ROWS = 6;
-  const HOME_MODEL_COLOUR_COUNT = 10;
+  const HOME_HEAT_WEEKS = 26, HOME_HEAT_RAMP = [8, 28, 52, 76, 100], HOME_HEAT_STEPS = HOME_HEAT_RAMP.length, HOME_CHART_DAYS = 30, HOME_MODEL_ROWS = 6, HOME_MODEL_COLOUR_COUNT = 10;
 
-  function numOr(v) {
-    return typeof v === 'bigint' ? Number(v) : v;
-  }
-
-  function toNum(v) {
-    const n = typeof v === 'number' || typeof v === 'bigint' || typeof v === 'string' ? Number(v) : 0;
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  const L8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+  const numOr = (v) => (typeof v === 'bigint' ? Number(v) : v);
+  function toNum(v) { const n = typeof v === 'number' || typeof v === 'bigint' || typeof v === 'string' ? Number(v) : 0; return Number.isFinite(n) ? n : 0; }
+  const L8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
   function resolveLang(langOrZh) {
     if (langOrZh === true) return 'zh-CN';
     if (!langOrZh) return 'en';
@@ -26,20 +14,15 @@
     if (!lo) return 'en';
     if (/^yue(?:$|[-_])/.test(lo)) return 'zh-CN';
     if (/^zh(?:$|[-_])/.test(lo)) return /tw|hk|mo|hant/.test(lo) ? 'zh-TW' : 'zh-CN';
-    const m = lo.match(/^(en|ja|ko|es|fr|de)(?:$|[-_])/);
+    const m = lo.match(/^(en|ja|ko|es|fr|de|tr)(?:$|[-_])/);
     return m ? m[1] : 'en';
   }
-
-  function pick8(arr, langOrZh) {
-    const i = L8.indexOf(resolveLang(langOrZh));
-    return arr[i >= 0 ? i : 2] ?? arr[2];
-  }
-
+  function pick8(arr, langOrZh) { const i = L8.indexOf(resolveLang(langOrZh)); return arr[i >= 0 ? i : 2] ?? arr[2]; }
   const mkLbls = (a) => Object.fromEntries(L8.map((k, i) => [k, a[i]]));
   const HOME_RANGES = [
-    ['all', 0, ['全部', '全部', 'All', '全期間', '전체', 'Todo', 'Tout', 'Alle']],
-    ['30d', 30, ['30 天', '30 天', '30d', '30日間', '30일', '30d', '30j', '30T']],
-    ['7d', 7, ['7 天', '7 天', '7d', '7日間', '7일', '7d', '7j', '7T']],
+    ['all', 0, ['全部', '全部', 'All', '全期間', '전체', 'Todo', 'Tout', 'Alle', 'Tümü']],
+    ['30d', 30, ['30 天', '30 天', '30d', '30日間', '30일', '30d', '30j', '30T', '30 gün']],
+    ['7d', 7, ['7 天', '7 天', '7d', '7日間', '7일', '7d', '7j', '7T', '7 gün']],
   ].map(([id, days, a]) => ({ id, days, labelZh: a[0], labelEn: a[2], labels: mkLbls(a) }));
 
   const wrapTitle = (s, l, r) => (s[0] === l ? s : l + s + r);
@@ -168,14 +151,13 @@ losttime|1647000|追忆似水年华|追憶似水年華|失われた時を求め�
     const l = resolveLang(langOrZh);
     if (l === 'fr') return h + 'h';
     if (l === 'de') return h + ' Uhr';
-    if (l === 'es') return h + ':00';
+    if (l === 'es' || l === 'tr') return h + ':00';
     if (l === 'en') return h12 + (pm ? ' PM' : ' AM');
     const [a, b, s] = pick8(['上午 |下午 | 点', '上午 |下午 | 點', '', '午前 |午後 | 時', '오전 |오후 |시'], l).split('|');
     return (pm ? b : a) + h12 + s;
   }
-
   function homeShortDateFormat(langOrZh) {
-    return new Intl.DateTimeFormat(pick8('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE'.split(','), langOrZh), { month: 'short', day: 'numeric' });
+    return new Intl.DateTimeFormat(pick8('zh-CN,zh-TW,en-US,ja-JP,ko-KR,es-ES,fr-FR,de-DE,tr-TR'.split(','), langOrZh), { month: 'short', day: 'numeric' });
   }
 
   function homeShortDate(format, day) {

@@ -798,10 +798,12 @@ test('P0-2 pulse inline-fallback: tierRo uses entry.contentRect.width without ex
   assert.equal(footer._rectReads, 0, 'tierRo with contentRect.width must perform 0 getBoundingClientRect calls');
   assert.equal(footer.getAttribute('data-t'), '0');
 
-  // Verify narrow width transitions to tier 5 and 0-width entry skips getBoundingClientRect
+  // Verify narrow width transitions outer footer to '1 2' and inner bar to tier 5 ('1 2 3 4 5'), and 0-width entry skips getBoundingClientRect
   roCb([{ target: footer, contentRect: { width: 300, height: 32 } }]);
   env.flushRafs(16);
-  assert.equal(footer.getAttribute('data-t'), '1 2 3 4 5');
+  assert.equal(footer.getAttribute('data-t'), '1 2');
+  const mountedBar = sb.__agPrismTelemetry.getPrimaryBar();
+  assert.equal(mountedBar?.getAttribute('data-t'), '1 2 3 4 5');
   roCb([{ target: footer, contentRect: { width: 0, height: 0 } }]);
   env.flushRafs(16);
   assert.equal(footer._rectReads, 0, '0-width contentRect must NOT fall back to getBoundingClientRect');
@@ -989,12 +991,14 @@ test('style.css hygiene & PR #10 / P0-1 / P0-2 CSS contracts (0 :has(), 0 non-AS
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
   assert.equal((css.match(/:has\(/g) || []).length, 0, 'style.css must have 0 :has() selectors');
   assert.equal(/[^\x00-\x7F]/.test(css), false, 'style.css must have 0 non-ASCII characters');
-  assert.ok(
-    css.includes('.ag-cs-sidebar-glide-pill[data-ag-cs-glide-running="1"]::after{background:var(--_rb);box-shadow:0 0 6px rgba(49,134,255,.35);}'),
+  assert.match(
+    css,
+    /\.ag-cs-sidebar-glide-pill\[data-ag-cs-glide-running="1"\]::after\{background:var\(--_rb\);box-shadow:0 0 6px rgba\(49,134,255,\.35\);?\}/,
     'style.css must style running glide pill accent bar with var(--_rb)'
   );
-  assert.ok(
-    css.includes('.ag-cs-sidebar-glide-pill[data-ag-cs-glide-running="1"]{background-image:var(--ag-cs-run-wash);}'),
+  assert.match(
+    css,
+    /\.ag-cs-sidebar-glide-pill\[data-ag-cs-glide-running="1"\]\{background-image:var\(--ag-cs-run-wash\);?\}/,
     'style.css must blend running wash on running glide pill'
   );
   assert.ok(

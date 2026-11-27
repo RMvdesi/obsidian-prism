@@ -11,6 +11,7 @@
     { id: 'es', label: 'Español', htmlLang: 'es', intl: 'es-ES' },
     { id: 'fr', label: 'Français', htmlLang: 'fr', intl: 'fr-FR' },
     { id: 'de', label: 'Deutsch', htmlLang: 'de', intl: 'de-DE' },
+    { id: 'tr', label: 'Türkçe', htmlLang: 'tr', intl: 'tr-TR' },
   ]);
 
   const SUPPORTED_LANG_IDS = Object.freeze(LANG_OPTIONS.map((opt) => opt.id));
@@ -18,7 +19,7 @@
   const LANG_META = Object.fromEntries(LANG_OPTIONS.map((opt) => [opt.id, opt]));
 
   /**
-   * 规范化界面语言标识至插件支持的 8 种本地化语言之一（历史 yue 平滑迁移至 zh-CN）。
+   * 规范化界面语言标识至插件支持的 9 种本地化语言之一（历史 yue 平滑迁移至 zh-CN）。
    */
   function normalizeLanguage(lang, fallback = 'zh-CN') {
     if (lang === true) return 'zh-CN';
@@ -37,6 +38,7 @@
       return 'fr';
     }
     if (clean === 'de' || clean.startsWith('de-') || clean === 'german' || clean === 'deutsch') return 'de';
+    if (clean === 'tr' || clean.startsWith('tr-') || clean === 'turkish' || clean === 'türkçe' || clean === 'turkce') return 'tr';
     if (clean === 'yue' || clean.startsWith('yue-') || clean === 'zh-yue' || clean.includes('cantonese')) {
       return 'zh-CN';
     }

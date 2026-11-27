@@ -8,26 +8,13 @@
   'use strict';
   const M = Math;
 
-  const PROXIMITY_RADIUS_PX = 105;
+  const PROXIMITY_RADIUS_PX = 105, PROXIMITY_ATTACK_SEC = 0.045, PROXIMITY_RELEASE_SEC = 0.28, WAKE_DURATION_SEC = 0.7;
 
-  // 近场光强非对称指数平滑时间常数（秒）：靠近快速点亮、离开缓慢复归纯白水晶
-  const PROXIMITY_ATTACK_SEC = 0.045;
-  const PROXIMITY_RELEASE_SEC = 0.28;
-  // 「光学唤醒」冷白扫光时长（秒）
-  const WAKE_DURATION_SEC = 0.7;
-
-  function clamp(v, lo, hi) {
-    return M.min(hi, M.max(lo, v));
-  }
+  const clamp = (v, lo, hi) => M.min(hi, M.max(lo, v));
 
   function resolveCrystalAccentCode(raw) {
     const k = String(raw || 'default').trim().toLowerCase();
-    if (k === 'mono' || k === 'monochrome') return 5;
-    if (k === 'amber') return 4;
-    if (k === 'iris') return 3;
-    if (k === 'cobalt') return 2;
-    if (k === 'warm' || k === 'claude' || k === 'alabaster') return 1;
-    return 0;
+    return k === 'mono' || k === 'monochrome' ? 5 : k === 'amber' ? 4 : k === 'iris' ? 3 : k === 'cobalt' ? 2 : k === 'warm' || k === 'claude' || k === 'alabaster' ? 1 : 0;
   }
 
   const FALLBACK_SPECTRA = {
@@ -38,46 +25,35 @@
     4: ['#b45309', '#d97706', '#f2b84b', '#fde68a'],
     5: ['#94a3b8', '#cbd5e1', '#e2e8f0', '#f8fafc'],
   };
+  const GL_SPECTRA = [
+    [[0.298, 0.553, 0.965], [0.608, 0.447, 0.796], [0.851, 0.396, 0.439], [0.949, 0.722, 0.294]],
+    [[0.761, 0.349, 0.204], [0.851, 0.467, 0.341], [0.898, 0.576, 0.467], [0.965, 0.741, 0.376]],
+    [[0.114, 0.306, 0.847], [0.192, 0.525, 1.0], [0.361, 0.776, 0.988], [0.549, 0.878, 1.0]],
+    [[0.427, 0.157, 0.851], [0.545, 0.361, 0.965], [0.647, 0.541, 0.973], [0.867, 0.839, 0.996]],
+    [[0.706, 0.325, 0.035], [0.851, 0.467, 0.024], [0.949, 0.722, 0.294], [0.992, 0.902, 0.541]],
+    [[0.76, 0.8, 0.865], [0.8317, 0.8617, 0.9133], [0.9033, 0.9233, 0.9617], [0.975, 0.985, 1.01]],
+  ];
 
-  /**
-   * 计算鼠标局部坐标 (localX, localY) 到圆角胶囊轨道 [0..width, 0..height] 的光学近场权重 (0..1)。
-   * 感应半径显著小于输入框大棱镜边框 (220px)，仅在靠近约 105px 内激活色散反应。
-   */
+  // 计算鼠标局部坐标到圆角胶囊轨道的近场权重 (0..1)
   function computeProximityFactor(localX, localY, width, height, radius = PROXIMITY_RADIUS_PX) {
-    if (!Number.isFinite(localX) || !Number.isFinite(localY) || localX < -2000 || localY < -2000) {
-      return 0;
-    }
-    const w = M.max(2, Number(width) || 0);
-    const h = M.max(2, Number(height) || 0);
-    const r = M.max(1, Number(radius) || PROXIMITY_RADIUS_PX);
-    const capR = M.min(w, h) * 0.5;
-    const cx = localX - w * 0.5;
-    const cy = localY - h * 0.5;
-    const halfInnerW = M.max(0, w * 0.5 - capR);
-    const dx = M.max(0, M.abs(cx) - halfInnerW);
-    const dy = M.abs(cy);
-    const dist = M.hypot(dx, dy) - capR;
-
+    if (!Number.isFinite(localX) || !Number.isFinite(localY) || localX < -2000 || localY < -2000) return 0;
+    const w = M.max(2, Number(width) || 0), h = M.max(2, Number(height) || 0), r = M.max(1, Number(radius) || PROXIMITY_RADIUS_PX);
+    const capR = M.min(w, h) * 0.5, cx = localX - w * 0.5, cy = localY - h * 0.5;
+    const dx = M.max(0, M.abs(cx) - M.max(0, w * 0.5 - capR)), dist = M.hypot(dx, M.abs(cy)) - capR;
     if (dist <= 0) return 1;
     if (dist >= r) return 0;
     const u = 1 - dist / r;
-    // 平滑二次 S 曲线，外缘自然收敛
     return u * u * (3 - 2 * u);
   }
 
-  /**
-   * 4 路星芒锚点（u, v 为左上原点的归一化坐标，着色器与 2D 降级共用同一份数据源）。
-   * 主频取黄金比 / 无理数系（e/10、(3-√5)/2、√5/10、π/10），两两不可公度，永不进入同步节拍；
-   * 再叠加一层缓慢的相位抖动（wobFreq / wobAmp），打破机械等距的闪烁节奏。
-   */
+  // 4 路异步星芒锚点（着色器与 2D 降级共用）
   const GLINT_ANCHORS = [
     { u: 0.17, v: 0.30, freq: 0.2718282, phase: 0.15, wobFreq: 0.0713, wobAmp: 0.55, wobPhase: 0.4, scale: 1.0 },
     { u: 0.41, v: 0.64, freq: 0.3819660, phase: 1.72, wobFreq: 0.0527, wobAmp: 0.62, wobPhase: 2.1, scale: 0.92 },
     { u: 0.63, v: 0.32, freq: 0.2236068, phase: 3.29, wobFreq: 0.0891, wobAmp: 0.48, wobPhase: 4.3, scale: 1.05 },
     { u: 0.83, v: 0.62, freq: 0.3141593, phase: 4.86, wobFreq: 0.0618, wobAmp: 0.58, wobPhase: 5.6, scale: 0.88 },
   ];
-  const REDUCED_GLINT_INTENSITY = [0, 0.42, 0.24, 0];
-  const TWO_PI = M.PI * 2;
+  const REDUCED_GLINT_INTENSITY = [0, 0.42, 0.24, 0], TWO_PI = M.PI * 2;
 
   // 单路星芒强度（纯函数、零分配）
   function glintIntensityAt(a, t) {
@@ -150,9 +126,13 @@ uniform float u_reduce;
 uniform vec4 u_glints;      // 4 路异步星芒强度
 uniform vec4 u_glintU;      // 星芒锚点 u（左原点）
 uniform vec4 u_glintV;      // 星芒锚点 v（上原点）
-uniform vec2 u_wake;        // x: 扫光中心（u 空间），y: 扫光包络强度（0 表示未激活）
-uniform float u_accent;     // 0:default 1:warm 2:cobalt 3:iris 4:amber 5:mono
-uniform float u_ambient;    // 0..1 环境氛围光缩放
+uniform vec2 u_wake;
+uniform float u_accent;
+uniform float u_ambient;
+uniform vec3 u_sp0;
+uniform vec3 u_sp1;
+uniform vec3 u_sp2;
+uniform vec3 u_sp3;
 
 vec2 hash22(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -166,7 +146,7 @@ float hash21(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
-// 网格空间 Voronoi：返回所在切面 id、最近棱所属邻面 id、最近棱的网格空间法线与距离
+// 网格空间 Voronoi：3x3 邻域 + inversesqrt 无分支提速
 void fVor(vec2 p, out vec2 cId, out vec2 nbId, out vec2 eN, out float eD) {
   vec2 n = floor(p);
   vec2 f = fract(p);
@@ -186,14 +166,16 @@ void fVor(vec2 p, out vec2 cId, out vec2 nbId, out vec2 eN, out float eD) {
   nbId = cId;
   eN = vec2(1.0, 0.0);
   eD = 8.0;
-  for (int j = -2; j <= 2; j++) {
-    for (int i = -2; i <= 2; i++) {
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      if (i == 0 && j == 0) continue;
       vec2 g = mg + vec2(float(i), float(j));
       vec2 o = 0.12 + 0.76 * hash22(n + g);
       vec2 r = g + o - f;
       vec2 dr = r - mr;
-      if (dot(dr, dr) > 0.00001) {
-        vec2 nn = normalize(dr);
+      float d2 = dot(dr, dr);
+      if (d2 > 0.00001) {
+        vec2 nn = dr * inversesqrt(d2);
         float d = dot(0.5 * (mr + r), nn);
         if (d < eD) { eD = d; eN = nn; nbId = n + g; }
       }
@@ -214,41 +196,12 @@ float etchedLockMask(vec2 q, float halfStroke, float aa) {
   return 1.0 - smoothstep(-aa, aa, min(min(dBody, dSh), dKey));
 }
 
-// 柯西四色光谱与强调色模式映射（0:四色 1:暖岩 2:钴蓝 3:鸢尾紫 4:琥珀金 5:纯银钛单色）
-vec3 cSp(float t, float ac) {
-  float u = clamp(t, 0.0, 1.0);
-  if (ac > 4.5) {
-    return mix(vec3(0.760, 0.800, 0.865), vec3(0.975, 0.985, 1.010), u);
-  }
-  vec3 c0 = vec3(0.298, 0.553, 0.965);
-  vec3 c1 = vec3(0.608, 0.447, 0.796);
-  vec3 c2 = vec3(0.851, 0.396, 0.439);
-  vec3 c3 = vec3(0.949, 0.722, 0.294);
-  if (ac > 3.5) {
-    c0 = vec3(0.706, 0.325, 0.035);
-    c1 = vec3(0.851, 0.467, 0.024);
-    c2 = vec3(0.949, 0.722, 0.294);
-    c3 = vec3(0.992, 0.902, 0.541);
-  } else if (ac > 2.5) {
-    c0 = vec3(0.427, 0.157, 0.851);
-    c1 = vec3(0.545, 0.361, 0.965);
-    c2 = vec3(0.647, 0.541, 0.973);
-    c3 = vec3(0.867, 0.839, 0.996);
-  } else if (ac > 1.5) {
-    c0 = vec3(0.114, 0.306, 0.847);
-    c1 = vec3(0.192, 0.525, 1.000);
-    c2 = vec3(0.361, 0.776, 0.988);
-    c3 = vec3(0.549, 0.878, 1.000);
-  } else if (ac > 0.5) {
-    c0 = vec3(0.761, 0.349, 0.204);
-    c1 = vec3(0.851, 0.467, 0.341);
-    c2 = vec3(0.898, 0.576, 0.467);
-    c3 = vec3(0.965, 0.741, 0.376);
-  }
-  float s = u * 3.0;
-  if (s < 1.0) return mix(c0, c1, s);
-  if (s < 2.0) return mix(c1, c2, s - 1.0);
-  return mix(c2, c3, s - 2.0);
+// CPU 预传四色停点无分支插值
+vec3 cSp(float t) {
+  float s = clamp(t, 0.0, 1.0) * 3.0;
+  vec3 a = mix(u_sp0, u_sp1, clamp(s, 0.0, 1.0));
+  vec3 b = mix(a, u_sp2, clamp(s - 1.0, 0.0, 1.0));
+  return mix(b, u_sp3, clamp(s - 2.0, 0.0, 1.0));
 }
 
 // 冰透明度梯度色带：TIR 暗渊 -> 冷钢灰 -> 冰透银白 -> 刀锋纯白
@@ -301,9 +254,10 @@ void main() {
   float cEn = clamp((abs(px.x) - (hs.x - capR)) / max(1.0, capR), 0.0, 1.0);
   vec3 Nr = vec3(sign(px.x) * cEn * 0.55, yN * 0.62, 1.0);
   vec3 N = normalize(Nr + vec3((h1 - 0.5) * 1.10, (h2 - 0.5) * 0.70, 0.0));
-  vec3 V = vec3(0.0, 0.0, 1.0);
-  vec3 Lk = normalize(vec3(-0.38, 0.62, 0.68));
-  vec3 Hk = normalize(Lk + V);
+  const vec3 V = vec3(0.0, 0.0, 1.0);
+  const vec3 Lk = vec3(-0.382012, 0.623283, 0.683601);
+  const vec3 Hk = vec3(-0.207807, 0.339053, 0.915843);
+  const vec2 LkXY = vec2(-0.522670, 0.852535);
   vec3 rD = refract(-V, N, 1.0 / 1.54);
 
   float crn = smoothstep(-0.20, 0.80, yN);
@@ -311,7 +265,8 @@ void main() {
   float lit = clamp((dot(N, Lk) - 0.62) * 2.6, -1.0, 1.0);
   float inr = sin((px.x + rD.x * 42.0) * 0.040 + (px.y + rD.y * 30.0) * 0.11 + 1.3);
   float lum = 0.48 + 0.34 * crn + 0.30 * lit + 0.09 * inr - 0.10 * pav;
-  lum += exp(-pow((yN - 0.58) / 0.20, 2.0)) * (0.20 + 0.12 * lit);
+  float dyC = (yN - 0.58) * 5.0;
+  lum += exp(-dyC * dyC) * (0.20 + 0.12 * lit);
 
   float tSl = smoothstep(0.50, 0.85, h3) * smoothstep(0.15, -0.35, lit + 0.2 * crn);
   float tir = clamp(pav * (0.30 + 0.75 * tSl), 0.0, 1.0);
@@ -321,9 +276,10 @@ void main() {
   float cZ = (1.0 - crn) * (1.0 - pav) * smoothstep(0.30, 0.70, lum);
   vec3 cT = u_accent > 4.5
     ? vec3(0.84, 0.87, 0.92)
-    : (u_accent > 0.5 ? mix(vec3(0.82, 0.85, 0.90), cSp(0.55, u_accent), 0.55) : vec3(0.72, 0.82, 0.97));
+    : (u_accent > 0.5 ? mix(vec3(0.82, 0.85, 0.90), cSp(0.55), 0.55) : vec3(0.72, 0.82, 0.97));
   col = mix(col, cT * (0.55 + 0.5 * lum), cZ * (dk > 0.5 ? 0.22 : 0.16) * (0.35 + 0.65 * u_ambient));
-  col += vec3(0.92, 0.95, 1.0) * pow(max(dot(N, Hk), 0.0), 38.0) * (dk > 0.5 ? 0.42 : 0.28);
+  float hk1 = max(dot(N, Hk), 0.0), hk2 = hk1 * hk1, hk4 = hk2 * hk2, hk8 = hk4 * hk4, hk16 = hk8 * hk8;
+  col += vec3(0.92, 0.95, 1.0) * (hk16 * hk16 * hk4 * hk2) * (dk > 0.5 ? 0.42 : 0.28);
 
   // ── 3. 内部斜棱带 ──
   if (u_ambient > 0.01) {
@@ -336,7 +292,7 @@ void main() {
       vec3 tn = u_accent > 4.5
         ? vec3(0.86, 0.89, 0.94)
         : (u_accent > 0.5
-          ? cSp(d < 0.0 ? 0.28 : 0.72, u_accent)
+          ? cSp(d < 0.0 ? 0.28 : 0.72)
           : (d < 0.0 ? vec3(0.50, 0.68, 1.00) : vec3(0.68, 0.58, 0.98)));
       col = mix(col, tn * (0.62 + 0.40 * clamp(lum, 0.0, 1.0)), 0.15 * exp(-d * d / 4.5) * vf * st);
       col += vec3(0.86, 0.90, 0.98) * exp(-d * d / 1.2) * vf * st * 0.08;
@@ -345,8 +301,9 @@ void main() {
 
   // ── 4. 刀锋菲涅尔棱线 ──
   vec3 Nb = normalize(vec3(nE * 0.45, 0.89) + vec3(Nr.xy * 0.12, 0.0));
-  float rSp = pow(max(dot(Nb, Hk), 0.0), 12.0);
-  float fM = 0.55 + 0.45 * pow(abs(yN), 2.0);
+  float rs1 = max(dot(Nb, Hk), 0.0), rs2 = rs1 * rs1, rs4 = rs2 * rs2;
+  float rSp = rs4 * rs4 * rs4;
+  float fM = 0.55 + 0.45 * yN * yN;
   float eG = mix(0.18, 1.0, step(0.32, hash21(cId + nbId)));
   float aaPx = max(0.75, 1.15 / dpr);
   float bld = 1.0 - smoothstep(max(0.0, 0.85 - aaPx), 0.85 + aaPx, pxD);
@@ -357,18 +314,21 @@ void main() {
   // ── 5. 近场追光 + 柯西色散 ──
   if (u_proximity > 0.004) {
     vec2 dp = px - u_pointer;
-    float sp = pow(1.0 - smoothstep(0.0, max(cr.y * 3.0, 84.0), length(dp * vec2(0.85, 1.2))), 1.5);
+    float sp0 = 1.0 - smoothstep(0.0, max(cr.y * 3.0, 84.0), length(dp * vec2(0.85, 1.2)));
+    float sp = sp0 * sqrt(sp0);
     float rc = u_proximity * (0.22 + 0.78 * sp);
     vec3 Lp = normalize(vec3(-dp, capR * 2.6));
     vec3 Hp = normalize(Lp + V);
-    col += vec3(0.94, 0.97, 1.0) * (pow(max(dot(N, Hp), 0.0), 26.0) * 0.42 + sp * 0.10) * rc;
+    float hp1 = max(dot(N, Hp), 0.0), hp2 = hp1 * hp1, hp4 = hp2 * hp2, hp8 = hp4 * hp4;
+    col += vec3(0.94, 0.97, 1.0) * ((hp8 * hp8 * hp8 * hp2) * 0.42 + sp * 0.10) * rc;
     float fiM = smoothstep(0.60, 0.95, dot(N, Lp)) * (0.30 + 0.70 * h2);
-    vec3 fi = cSp(fract(h1 * 1.7 + dot(N.xy, Lp.xy) * 1.4 + 0.2), u_accent);
+    vec3 fi = cSp(fract(h1 * 1.7 + dot(N.xy, Lp.xy) * 1.4 + 0.2));
     col = mix(col, col * mix(vec3(1.0), fi * 1.55, 0.40), fiM * rc * (u_accent > 4.5 ? 0.18 : 0.38));
-    float eL = pow(max(dot(Nb, Hp), 0.0), 9.0) * eG;
+    float el1 = max(dot(Nb, Hp), 0.0), el2 = el1 * el1, el4 = el2 * el2;
+    float eL = el4 * el4 * el1 * eG;
     float fT = (pxD - 0.55) / 2.2;
     float fMk = smoothstep(0.0, 0.12, fT) * (1.0 - smoothstep(0.82, 1.0, fT));
-    col += cSp(fT, u_accent) * fMk * eL * rc * (u_accent > 4.5 ? 0.25 : 1.0) * (0.6 + 0.8 * sp) * (dk > 0.5 ? 1.70 : 1.25);
+    col += cSp(fT) * fMk * eL * rc * (u_accent > 4.5 ? 0.25 : 1.0) * (0.6 + 0.8 * sp) * (dk > 0.5 ? 1.70 : 1.25);
     col += vec3(1.0) * bld * eL * rc * 0.55;
   }
 
@@ -384,8 +344,8 @@ void main() {
       float spY = exp(-rg.x * rg.x * 2.4) * exp(-sy * 0.40);
       float co = exp(-dot(g, g) * 0.42) + exp(-length(g) * 0.55) * 0.30;
       float tM = u_accent > 4.5 ? 0.0 : 0.70;
-      vec3 tX = mix(vec3(1.0), cSp(fract(sx * 0.085 + float(i) * 0.23), u_accent) * 1.25, smoothstep(2.5, 7.0, sx) * tM);
-      vec3 tY = mix(vec3(1.0), cSp(fract(sy * 0.120 + float(i) * 0.31), u_accent) * 1.25, smoothstep(2.0, 5.0, sy) * tM);
+      vec3 tX = mix(vec3(1.0), cSp(fract(sx * 0.085 + float(i) * 0.23)) * 1.25, smoothstep(2.5, 7.0, sx) * tM);
+      vec3 tY = mix(vec3(1.0), cSp(fract(sy * 0.120 + float(i) * 0.31)) * 1.25, smoothstep(2.0, 5.0, sy) * tM);
       col += (vec3(0.96, 0.98, 1.0) * co * 1.20 + tX * spX * 0.78 + tY * spY * 0.62) * gi * (dk > 0.5 ? 1.15 : 0.80);
     }
   }
@@ -398,7 +358,7 @@ void main() {
 
   // ── 8. 胶囊外缘：厚玻璃侧壁暗化 + 内移菲涅尔亮缘（避开 rimD<1px 半透明抗锯齿带防白毛边） ──
   vec2 rN = normalize(vec2(sign(px.x) * max(0.0, abs(px.x) - (hs.x - capR)), px.y) + vec2(0.0001));
-  float rL = 0.20 + 0.80 * smoothstep(-0.3, 0.85, dot(rN, normalize(Lk.xy)));
+  float rL = 0.20 + 0.80 * smoothstep(-0.3, 0.85, dot(rN, LkXY));
   float wS = 1.0 - smoothstep(0.0, 3.2, rimD);
   float rimLine = smoothstep(1.0, 1.8, rimD) * (1.0 - smoothstep(1.8, 3.0, rimD));
   if (dk > 0.5) {
@@ -415,19 +375,22 @@ void main() {
   if (u_reduce > 1.5) {
     float fU = clamp(u_reduce > 3.5 ? (u_reduce - 4.0) : (u_reduce - 2.0), 0.0, 1.0);
     float aM = 1.0 - smoothstep(fU - 0.012, fU + 0.012, vUv.x);
-    vec3 sT = u_accent > 4.5 ? vec3(0.90, 0.95, 1.0) : cSp(clamp(vUv.x * 0.82 + 0.08, 0.0, 1.0), u_accent);
+    vec3 sT = u_accent > 4.5 ? vec3(0.90, 0.95, 1.0) : cSp(clamp(vUv.x * 0.82 + 0.08, 0.0, 1.0));
 
     float tSh = smoothstep(0.14, 0.96, yN);
     float wSh = 1.0 - smoothstep(0.0, 5.2, rimD);
-    float bBv = exp(-pow((yN + 0.86) / 0.14, 2.0));
-    float kCs = exp(-pow(max(0.0, vUv.x - fU) / 0.065, 2.0));
+    float dBv = (yN + 0.86) / 0.14;
+    float bBv = exp(-dBv * dBv);
+    float dCs = max(0.0, vUv.x - fU) / 0.065;
+    float kCs = exp(-dCs * dCs);
     float bW = (1.0 - smoothstep(0.0, 1.15 + aaPx, pxD)) * (0.30 + 0.50 * eG);
     float tLq = u_reduce > 3.5 ? 0.0 : u_time * 0.65;
     float w1 = sin(px.x * 0.056 - tLq * 1.15 + sin(px.y * 0.16 + tLq * 0.72) * 1.35);
     float w2 = sin(px.x * 0.094 + px.y * 0.13 + tLq * 0.84 + h1 * 1.5);
     float lFl = 0.5 + 0.5 * (w1 * 0.58 + w2 * 0.42);
     float lCs = pow(clamp(lFl, 0.0, 1.0), 2.8);
-    float lBd = exp(-pow((yN + 0.10 - 0.16 * sin(px.x * 0.044 - tLq)) / 0.48, 2.0));
+    float dBd = (yN + 0.10 - 0.16 * sin(px.x * 0.044 - tLq)) / 0.48;
+    float lBd = exp(-dBd * dBd);
     float lAm = 0.32 + 0.68 * u_ambient;
     vec3 lTn = mix(vec3(0.36, 0.52, 0.82), sT, u_accent > 4.5 ? 0.15 : 0.42);
     vec3 gC;
@@ -452,14 +415,15 @@ void main() {
     float eB = 0.25 + 0.75 * fU;
     float gM = dk > 0.5 ? 1.0 : 0.72;
     vec3 aC = pow(max(col, vec3(0.0)), vec3(1.06)) * (dk > 0.5 ? 1.08 : 1.02);
-    float tBr = exp(-pow((yN - 0.52 - N.x * 0.14) / 0.16, 2.0));
-    float tKn = exp(-pow((yN - 0.62 - N.x * 0.07) / 0.085, 2.0));
-    float bBn = exp(-pow((yN + 0.72 - N.x * 0.06) / 0.10, 2.0));
+    float dTr = (yN - 0.52 - N.x * 0.14) / 0.16, tBr = exp(-dTr * dTr);
+    float dKn = (yN - 0.62 - N.x * 0.07) / 0.085, tKn = exp(-dKn * dKn);
+    float dBn = (yN + 0.72 - N.x * 0.06) / 0.10, bBn = exp(-dBn * dBn);
     aC += vec3(0.95, 0.98, 1.0) * (tBr * 0.12 + tKn * 0.22) * gM;
     aC += mix(vec3(0.72, 0.86, 1.0), sT, 0.50) * bBn * 0.22 * eB * gM;
     aC += vec3(0.96, 0.98, 1.0) * bld * rSp * eG * (dk > 0.5 ? 0.36 : 0.24);
     aC += sT * (0.10 + 0.16 * eB) * (0.40 + 0.60 * crn) * (0.35 + 0.65 * u_ambient) * gM;
-    aC += mix(vec3(0.90, 0.96, 1.0), sT, 0.42) * exp(-pow(max(0.0, fU - vUv.x) / 0.07, 2.0)) * aM * (dk > 0.5 ? 0.26 : 0.16);
+    float dEg = max(0.0, fU - vUv.x) / 0.07;
+    aC += mix(vec3(0.90, 0.96, 1.0), sT, 0.42) * exp(-dEg * dEg) * aM * (dk > 0.5 ? 0.26 : 0.16);
     col = mix(gC, aC, aM);
   }
 
@@ -745,48 +709,15 @@ void main() {
     let reduceMotion = Boolean(options.reduceMotion);
     const force2D = Boolean(options.force2D);
 
-    let pointerClientX = -9999;
-    let pointerClientY = -9999;
-    // 指针在画布左上原点坐标系下的局部位置（仅在指针事件 / 低频校准时读取 rect）
-    let pointerLocalX = -9999;
-    let pointerLocalY = -9999;
-    let rectAge = 0;
-    let currentProximity = 0;
-    let targetProximity = 0;
-    let elapsedTime = 0.25;
-    let lastCssW = 0;
-    let lastCssH = 0;
-    let wakeT = -1;
-    let hasDrawnFrame = false;
-    let lastDrawW = -1;
-    let lastDrawH = -1;
-    let lastDrawDpr = -1;
-    let lastDrawDark = null;
-    let lastDrawStrength = -1;
-    let lastDrawAccent = -1;
-    let lastDrawAmbient = -1;
-    let lastDrawReduce = null;
-    let lastDrawHideLock = null;
-    let lastDrawFillRatio = -1;
-    let fillSettleSec = 0;
-    let liquidAccumSec = 0;
-    let wasLiquidFlow = false;
-    let wasProximityActive = false;
-    let wasGlintActive = false;
-    let wasWaking = false;
-    let glintAccumSec = 0;
-    let drawCount = 0;
-    let skippedCount = 0;
-    const glintBuf = new Float32Array(4);
-    const lastDrawnGlint = new Float32Array(4);
+    let pointerClientX = -9999, pointerClientY = -9999, pointerLocalX = -9999, pointerLocalY = -9999;
+    let rectAge = 0, currentProximity = 0, targetProximity = 0, elapsedTime = 0.25, lastCssW = 0, lastCssH = 0, wakeT = -1;
+    let hasDrawnFrame = false, lastDrawW = -1, lastDrawH = -1, lastDrawDpr = -1, lastDrawDark = null;
+    let lastDrawStrength = -1, lastDrawAccent = -1, lastDrawAmbient = -1, lastDrawReduce = null, lastDrawHideLock = null;
+    let lastDrawFillRatio = -1, fillSettleSec = 0, liquidAccumSec = 0, wasLiquidFlow = false, wasProximityActive = false;
+    let wasGlintActive = false, wasWaking = false, glintAccumSec = 0, drawCount = 0, skippedCount = 0;
+    const glintBuf = new Float32Array(4), lastDrawnGlint = new Float32Array(4);
 
-    // ── 尺寸缓存：ResizeObserver 推送，取消每帧 getBoundingClientRect ──
-    let cachedW = 0;
-    let cachedH = 0;
-    let cachedL = 0;
-    let cachedT = 0;
-    let hasRect = false;
-    let resizeObserver = null;
+    let cachedW = 0, cachedH = 0, cachedL = 0, cachedT = 0, hasRect = false, resizeObserver = null;
     const seedSizeFromRect = () => {
       const rect = typeof canvas.getBoundingClientRect === 'function' ? canvas.getBoundingClientRect() : null;
       cachedW = rect ? rect.width : canvas.width || 0;
@@ -834,44 +765,36 @@ void main() {
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      const uloc = (name) => gl.getUniformLocation(prog, name);
+      const ul = (name) => gl.getUniformLocation(prog, name);
       return {
-        gl,
-        prog,
-        buf,
+        gl, prog, buf,
         u: {
-          res: uloc('u_res'),
-          dpr: uloc('u_dpr'),
-          time: uloc('u_time'),
-          dark: uloc('u_dark'),
-          pointer: uloc('u_pointer'),
-          proximity: uloc('u_proximity'),
-          reduce: uloc('u_reduce'),
-          glints: uloc('u_glints'),
-          glintU: uloc('u_glintU'),
-          glintV: uloc('u_glintV'),
-          wake: uloc('u_wake'),
-          accent: uloc('u_accent'),
-          ambient: uloc('u_ambient'),
+          res: ul('u_res'), dpr: ul('u_dpr'), time: ul('u_time'), dark: ul('u_dark'),
+          pointer: ul('u_pointer'), proximity: ul('u_proximity'), reduce: ul('u_reduce'),
+          glints: ul('u_glints'), glintU: ul('u_glintU'), glintV: ul('u_glintV'),
+          wake: ul('u_wake'), accent: ul('u_accent'), ambient: ul('u_ambient'),
+          sp0: ul('u_sp0'), sp1: ul('u_sp1'), sp2: ul('u_sp2'), sp3: ul('u_sp3'),
         },
       };
     };
 
+    const readPerfMode = () => {
+      const rw = typeof globalThis !== 'undefined' && globalThis.__agPrismRippleWorker;
+      if (rw && typeof rw.getPerfMode === 'function') return rw.getPerfMode();
+      const h = typeof document !== 'undefined' && document.documentElement;
+      const raw = (h && ((h.dataset && h.dataset.agCsPerfMode) || (h.getAttribute && h.getAttribute('data-ag-cs-perf-mode')))) || '';
+      const v = String(raw).trim().toLowerCase();
+      return v === 'performance' || v === 'quality' || v === 'balanced' ? v : 'balanced';
+    };
     if (!force2D) {
       try {
+        const pm = readPerfMode();
         const gl = canvas.getContext('webgl2', {
-          alpha: true,
-          antialias: true,
-          premultipliedAlpha: true,
-          powerPreference: 'high-performance',
+          alpha: true, antialias: pm === 'quality', premultipliedAlpha: true, preserveDrawingBuffer: false,
+          powerPreference: pm === 'performance' ? 'low-power' : 'default',
         });
-        if (gl) {
-          glState = initWebGL2(gl);
-          rendererMode = 'webgl2';
-        }
-      } catch {
-        glState = null;
-      }
+        if (gl) { glState = initWebGL2(gl); rendererMode = 'webgl2'; }
+      } catch { glState = null; }
     }
 
     if (!glState) {
@@ -964,7 +887,8 @@ void main() {
         }
       }
 
-      const dpr = M.min(2.5, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+      const maxDpr = readPerfMode() === 'performance' ? 1.0 : 1.5;
+      const dpr = M.min(maxDpr, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
       const targetW = M.max(4, M.round(cssW * dpr));
       const targetH = M.max(4, M.round(cssH * dpr));
 
@@ -1076,6 +1000,13 @@ void main() {
         gl.uniform2f(u.wake, wakeU, wakeAmp);
         gl.uniform1f(u.accent, accentCode);
         gl.uniform1f(u.ambient, ambientVal);
+        const spBank = GL_SPECTRA[accentCode] || GL_SPECTRA[0];
+        if (typeof gl.uniform3f === 'function') {
+          gl.uniform3f(u.sp0, spBank[0][0], spBank[0][1], spBank[0][2]);
+          gl.uniform3f(u.sp1, spBank[1][0], spBank[1][1], spBank[1][2]);
+          gl.uniform3f(u.sp2, spBank[2][0], spBank[2][1], spBank[2][2]);
+          gl.uniform3f(u.sp3, spBank[3][0], spBank[3][1], spBank[3][2]);
+        }
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       } else if (ctx2d) {
         ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);

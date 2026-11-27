@@ -403,9 +403,12 @@ test('v2.35.1: ui-runtime MutationObserver routes mid-conversation sidecar-ifram
   doc.defaultView = sandbox;
 
   const expr = cdp.buildInjectExpression({ ...cdp.DEFAULT_CONFIG, hostLocalization: 'off', language: 'en' });
-  assert.ok(Buffer.byteLength(expr, 'utf8') < 549500, 'Channel 1 payload must remain under 549,500 B budget');
+  assert.ok(Buffer.byteLength(expr, 'utf8') < 390000, 'Channel 1 payload must remain under 390,000 B budget');
   const res = vm.runInNewContext(expr, sandbox);
   assert.equal(res.status, 'ok');
+  const enhExpr = cdp.buildWorkbenchEnhancerChannelExpression({ ...cdp.DEFAULT_CONFIG, hostLocalization: 'off', language: 'en' });
+  assert.ok(enhExpr.length > 0, 'Channel 15 workbenchEnhancer must compile when enabled');
+  vm.runInNewContext(enhExpr, sandbox);
 
   const flushRafs = () => {
     let guard = 0;

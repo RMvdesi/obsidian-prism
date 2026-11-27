@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const cdp = require(path.join(ROOT_DIR, 'cdp.js'));
-const patchAsar = require(path.join(ROOT_DIR, 'tools', 'patch-asar.cjs'));
+const processProbe = require(path.join(ROOT_DIR, 'src', 'platform', 'process-probe.cjs'));
 
 const LNK_CLSID = Buffer.from([
   0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -22,7 +22,7 @@ const LNK_CLSID = Buffer.from([
 ]);
 
 function mkTempDir(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
 function encodeCountedString(str, isUnicode) {
@@ -279,10 +279,10 @@ async function waitFor(fn, timeoutMs = 8000, intervalMs = 80) {
   throw new Error('Timed out waiting for condition');
 }
 
-test('静态红线门禁: cdp.js / tools/patch-asar.cjs / tools/install-plugin.cjs 零隐藏 PowerShell / 零 WMI / 零 WScript.Shell / 0 BOM / 0 CRLF / Ch1 体积红线', () => {
+test('静态红线门禁: cdp.js / src/platform/process-probe.cjs / tools/install-plugin.cjs 零隐藏 PowerShell / 零 WMI / 零 WScript.Shell / 0 BOM / 0 CRLF / Ch1 体积红线', () => {
   const targetFiles = [
     'cdp.js',
-    path.join('tools', 'patch-asar.cjs'),
+    path.join('src', 'platform', 'process-probe.cjs'),
     path.join('tools', 'install-plugin.cjs'),
   ];
   const forbiddenPatterns = [
@@ -315,15 +315,19 @@ test('静态红线门禁: cdp.js / tools/patch-asar.cjs / tools/install-plugin.c
     }
   }
 
-  // cdp.js 与 tools/patch-asar.cjs 额外要求 0 SIGKILL
-  for (const rel of ['cdp.js', path.join('tools', 'patch-asar.cjs')]) {
+  // cdp.js 与 src/platform/process-probe.cjs 额外要求 0 SIGKILL
+  for (const rel of ['cdp.js', path.join('src', 'platform', 'process-probe.cjs')]) {
     const text = fs.readFileSync(path.join(ROOT_DIR, rel), 'utf8');
     assert.equal(/\bSIGKILL\b/i.test(text), false, `${rel} must not contain SIGKILL`);
   }
 
-  // Channel 1 auto 字节必须 <= 546,954 B（本次纯服务端改造增量 <= 0 B）
+  // Channel 1 auto 字节必须 < 390,000 B（Phase 3B 下沉 4 组大体积模块后的收紧红线）
   const ch1Bytes = Buffer.byteLength(cdp.buildInjectExpression(), 'utf8');
-  assert.ok(ch1Bytes <= 546954, `Channel 1 auto bytes must be <= 546954, got ${ch1Bytes}`);
+  assert.ok(ch1Bytes < 390000, `Channel 1 auto bytes must be < 390000, got ${ch1Bytes}`);
+  for (const offId of ['telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu']) {
+    const ch = cdp.findChannel(offId);
+    assert.ok(ch && Number.isInteger(ch.budgetBytes) && ch.budgetBytes > 0, `Missing declarative channel ${offId}`);
+  }
 });
 
 test('纯 Node MS-SHLLINK .lnk 读写器: Unicode/ANSI/中文/带参往返无损保留 Header/IDList/LinkInfo/StringData/ExtraData，拒绝非法与超大文件', () => {
@@ -802,7 +806,7 @@ test('runWindowsDetachedRelaunchTask 事务时序: suspend -> CDP Browser.close 
   }
 });
 
-test('端到端纯 Node 脱离重启 Helper (cdp.js --run-relaunch-task) + tools/patch-asar.cjs spawnBreakawayNodeProcess', async () => {
+test('端到端纯 Node 脱离重启 Helper (cdp.js --run-relaunch-task) + src/platform/process-probe.cjs spawnBreakawayNodeProcess', async () => {
   const tmpDir = mkTempDir('prism-e2e-relaunch-');
   let dummyHost = null;
   let mockCdp = null;
@@ -873,9 +877,9 @@ test('端到端纯 Node 脱离重启 Helper (cdp.js --run-relaunch-task) + tools
     assert.equal(markerData.exitFlushPreserved, true);
     assert.equal(fs.existsSync(spawnRes.taskFile), false, 'One-shot relaunch task file must be cleaned up');
 
-    // 验证 tools/patch-asar.cjs spawnBreakawayNodeProcess 使用纯 Node detached 模式（零 PowerShell / 零 WMI）
+    // 验证 src/platform/process-probe.cjs spawnBreakawayNodeProcess 使用纯 Node detached 模式（零 PowerShell / 零 WMI）
     const breakawayMarker = path.join(tmpDir, 'breakaway-ok.txt');
-    const bRes = patchAsar.spawnBreakawayNodeProcess(
+    const bRes = processProbe.spawnBreakawayNodeProcess(
       ['-e', `require('node:fs').writeFileSync(${JSON.stringify(breakawayMarker)}, 'OK', 'utf8')`],
       { cwd: os.tmpdir() }
     );
@@ -884,7 +888,7 @@ test('端到端纯 Node 脱离重启 Helper (cdp.js --run-relaunch-task) + tools
     assert.ok(bRes.pid > 0);
     const bText = await waitFor(() => (fs.existsSync(breakawayMarker) ? fs.readFileSync(breakawayMarker, 'utf8') : null), 5000, 60);
     assert.equal(bText, 'OK');
-    await waitFor(() => !patchAsar.isPidAlive(bRes.pid) && !patchAsar.isPidAlive(spawnRes.pid), 5000, 40);
+    await waitFor(() => !processProbe.isPidAlive(bRes.pid) && !processProbe.isPidAlive(spawnRes.pid), 5000, 40);
   } finally {
     if (dummyHost) {
       try { dummyHost.kill(); } catch {}

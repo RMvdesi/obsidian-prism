@@ -853,8 +853,8 @@ test('CSS hygiene, dual-split :not([data-split-overlaid]), dead brand SVG CSS re
   assert.equal((css.match(/\{/g) || []).length, (css.match(/\}/g) || []).length, 'style.css braces must be balanced');
 
   // #1 CSS double-insurance
-  assert.ok(css.includes('&>div:first-child:not([data-split-overlaid="true"]){min-width:min(332px,46%) !important;}'));
-  assert.ok(css.includes('&>div:last-child:not([data-split-overlaid="true"]){max-width:calc(100% - min(332px,46%) - 1px) !important;}'));
+  assert.match(css, /&>div:first-child:not\(\[data-split-overlaid="true"\]\)\{min-width:min\(332px,46%\)\s*!important;?\}/);
+  assert.match(css, /&>div:last-child:not\(\[data-split-overlaid="true"\]\)\{max-width:calc\(100% - min\(332px,46%\) - 1px\)\s*!important;?\}/);
 
   // 2-3 dead logoInk settings brand rect/stroke rules removed, mono grayscale preserved
   assert.equal(css.includes('.ag-cs-settings-brand-mark svg) path:nth-of-type(n+2)'), false, 'Dead brand SVG path stroke rule must be removed');

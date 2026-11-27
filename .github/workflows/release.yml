@@ -21,8 +21,45 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Build standalone Windows installer
+      # Default unsigned build path (active whenever SignPath Foundation repo variable is not enabled)
+      - name: Build standalone Windows installer (unsigned default)
+        if: ${{ vars.SIGNPATH_ENABLED != 'true' }}
         run: npm run build:installer
+
+      # Optional SignPath Foundation two-step code signing pipeline:
+      # Enable by setting repository variable SIGNPATH_ENABLED=true plus:
+      #   secrets.SIGNPATH_API_TOKEN, vars.SIGNPATH_ORGANIZATION_ID,
+      #   vars.SIGNPATH_PROJECT_SLUG, vars.SIGNPATH_SIGNING_POLICY_SLUG
+      # Critical order: sign watcher.exe FIRST -> embed signed watcher.exe into AGY_PAYLOAD.zip -> build & sign installer.exe.
+      - name: "[SignPath Step 1/4] Build unsigned watcher.exe"
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        run: node scripts/build-installer.mjs --watcher-only --out dist/unsigned/obsidian-prism-watcher.exe
+      - name: "[SignPath Step 2/4] Sign watcher.exe via SignPath Foundation"
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'obsidian-prism' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          input-artifact-path: dist/unsigned/obsidian-prism-watcher.exe
+          output-artifact-path: dist/signed/obsidian-prism-watcher.exe
+          wait-for-completion: true
+      - name: "[SignPath Step 3/4] Build installer.exe embedding signed watcher.exe"
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        run: node scripts/build-installer.mjs --prebuilt-watcher dist/signed/obsidian-prism-watcher.exe --out dist/unsigned/obsidian-prism-installer.exe
+      - name: "[SignPath Step 4/4] Sign installer.exe via SignPath Foundation"
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'obsidian-prism' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          input-artifact-path: dist/unsigned/obsidian-prism-installer.exe
+          output-artifact-path: dist/obsidian-prism-installer.exe
+          wait-for-completion: true
+
       - uses: actions/upload-artifact@v7
         with:
           name: windows-installer

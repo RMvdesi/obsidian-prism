@@ -87,12 +87,12 @@ test('Issue #15: style.css obeys zero :has(), zero non-ASCII, balanced braces, h
   );
   assert.match(
     rootBlock,
-    /&\[data-ag-cs-palette="host"\][\s\S]*?\[data-ag-cs-theme="light"\][^{]*\{color-scheme:light;\}/,
+    /&\[data-ag-cs-palette="host"\][\s\S]*?\[data-ag-cs-theme="light"\][^{]*\{[^}]*color-scheme:light[;}]/,
     'palette="host" must declare light color-scheme for [data-ag-cs-theme="light"]'
   );
   // Existing obsidian & claude/warm palettes keep both dark & light color-scheme
-  assert.ok(rootBlock.includes('color-scheme:dark !important;'));
-  assert.ok(rootBlock.includes('color-scheme:light !important;'));
+  assert.match(rootBlock, /color-scheme:dark\s*!important;/);
+  assert.match(rootBlock, /color-scheme:light\s*!important;/);
 
   // 3) Both .ag-cs-home-ws-select & .ag-cs-thought-select inherit color-scheme and paint opaque high-contrast option/optgroup colors
   const selRuleMatch = rootBlock.match(
@@ -126,7 +126,7 @@ test('Issue #15: home-studio-panel.js STUDIO_EXTRA_CSS includes fallback dark-co
   // Verify cdp.minifyCss preserves both host color-scheme and shared select/option contrast rules
   const minCss = cdp.minifyCss(cdp.readCss());
   assert.ok(minCss.includes('&[data-ag-cs-palette="host"]{color-scheme:dark;'), 'Minified CSS must keep host dark color-scheme');
-  assert.match(minCss, /\[data-ag-cs-theme="light"\][^{]*\{color-scheme:light;?\}/, 'Minified CSS must keep host light color-scheme');
+  assert.match(minCss, /\[data-ag-cs-theme="light"\][^{]*\{[^}]*color-scheme:light[;}]/, 'Minified CSS must keep host light color-scheme');
   assert.ok(
     minCss.includes(':is(.ag-cs-home-ws-select,.ag-cs-thought-select){color-scheme:inherit;& :is(option,optgroup){background-color:color-mix(in srgb,var(--background,#141418) 68%,var(--card,#141418));color:var(--foreground,#F2F2F5)}}'),
     'Minified CSS must keep shared select color-scheme:inherit and opaque option/optgroup colors'

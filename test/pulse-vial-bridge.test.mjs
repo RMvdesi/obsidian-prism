@@ -1283,6 +1283,8 @@ test('OP-5.2 / HS-8.3 / UX-9 & <31,000B gate: light+warm alabaster alignment, ta
       ['es', 'Tubo', /Principal .* Swarm\/Sub\(3\)/, /Salida/],
       ['fr', 'Fiole', /Principal .* Swarm\/Sous\(3\)/, /Outils/],
       ['de', 'Gefäß', /Haupt .* Swarm\/Sub\(3\)/, /Ausgabe/],
+      ['tr', 'Tüp', /Ana .* Swarm\/Alt\(3\)/, /Araç Çıktısı/],
+      ['tr-TR', 'Tüp', /Ana .* Swarm\/Alt\(3\)/, /Araç Çıktısı/],
     ]) {
       env.doc.documentElement.setAttribute('data-ag-cs-lang', langAttr);
       for (const rec of observerRecords) rec.cb([]);
@@ -1618,6 +1620,481 @@ test('WO-MAIN-001B: pulse-vial-bridge writes data-pv-warn="1" at >=80% and clear
     assert.equal(bridge.getDebugState().rafActive, false, 'data-ag-cs-win-blur="1" must stop vial rAF');
   } finally {
     bridge?.destroy();
+    if (prevDoc !== undefined) globalThis.document = prevDoc;
+  }
+});
+
+test('Issue #94 regression: narrow sidebar (Tier 4 <450px & ultra-narrow <396px) converges without MutationObserver microtask loop and clamps card safely', async () => {
+  // 场景 A：Tier 4 窄侧边栏（footer < 450px，right: -84px，空行内 left/right）
+  // 同时验证真实 attributeFilter（不含 style）与强制 style 同步+微任务触发下的双重收敛性
+  async function runNarrowScenario({ viewportW, composerRight, cardWidth, baseLx, forceSyncOnStyle }) {
+    const env = createPulseMockEnv();
+    env.win.innerWidth = viewportW;
+
+    const composer = env.doc.createElement('div');
+    composer.className = 'surface-composer-card';
+    composer.getBoundingClientRect = () => ({ left: 12, top: 480, width: composerRight - 12, height: 120, right: composerRight });
+    const host = env.getPulseHost();
+    host.remove();
+    composer.appendChild(host);
+    env.cascadeWrap.appendChild(composer);
+
+    const sr = host.shadowRoot;
+    const card = sr.getElementById('context-card');
+    // 初始关闭且空行内 left/right（真实 inline-fallback / 窄侧边栏中位置由 <style> 决定）
+    card.hidden = true;
+    card.style.left = '';
+    card.style.right = '';
+    card.style.removeProperty('--pv-cx');
+
+    // 真实模拟 Chromium MutationObserver（支持按 attributeFilter 过滤与可选同步/微任务自激压力模式）
+    const observers = [];
+    env.win.MutationObserver = class {
+      constructor(cb) {
+        this.cb = cb;
+        this.targets = [];
+        observers.push(this);
+      }
+      observe(target, opts) {
+        this.targets.push({ target, opts: opts || {} });
+      }
+      disconnect() {
+        this.targets = [];
+      }
+    };
+
+    const notifyAttr = (target, attrName, { ignoreFilter = false, asyncMicrotask = false } = {}) => {
+      for (const obs of [...observers]) {
+        const hit = obs.targets.some((rec) => {
+          if (rec.target !== target || !rec.opts.attributes) return false;
+          if (ignoreFilter) return true;
+          return !Array.isArray(rec.opts.attributeFilter) || rec.opts.attributeFilter.includes(attrName);
+        });
+        if (hit) {
+          if (asyncMicrotask) {
+            queueMicrotask(() => {
+              if (rectCalls < 20) obs.cb([{ type: 'attributes', target, attributeName: attrName }]);
+            });
+          } else {
+            obs.cb([{ type: 'attributes', target, attributeName: attrName }]);
+          }
+        }
+      }
+    };
+
+    let rectCalls = 0;
+    let pvCxWrites = 0;
+    let microtaskFeedbackOnStyle = false;
+    let curBaseLx = baseLx;
+    let curCardWidth = cardWidth;
+    let curComposerRight = composerRight;
+    composer.getBoundingClientRect = () => ({ left: 12, top: 480, width: curComposerRight - 12, height: 120, right: curComposerRight });
+
+    // getBoundingClientRect() 动态叠加当前 --pv-cx 平移值（还原真实渲染坐标）
+    card.getBoundingClientRect = () => {
+      rectCalls++;
+      const cur = parseFloat(card.style.getPropertyValue('--pv-cx')) || 0;
+      const left = curBaseLx + cur;
+      return { left, top: 220, width: curCardWidth, height: 284, right: left + curCardWidth };
+    };
+
+    // 拦截 style.setProperty / removeProperty（注意 createStyleObj 是 Proxy，需在外层包 Proxy 才能真正拦截方法调用）
+    const origStyle = card.style;
+    card.style = new Proxy(origStyle, {
+      get(target, prop) {
+        if (prop === 'setProperty') {
+          return (k, v) => {
+            const prev = origStyle.getPropertyValue(k);
+            origStyle.setProperty(k, v);
+            if (k === '--pv-cx' && prev !== String(v)) {
+              pvCxWrites++;
+              if (rectCalls < 20) {
+                notifyAttr(card, 'style', {
+                  ignoreFilter: forceSyncOnStyle || microtaskFeedbackOnStyle,
+                  asyncMicrotask: microtaskFeedbackOnStyle,
+                });
+              }
+            }
+          };
+        }
+        if (prop === 'removeProperty') {
+          return (k) => {
+            const prev = origStyle.getPropertyValue(k);
+            origStyle.removeProperty(k);
+            if (k === '--pv-cx' && prev) {
+              pvCxWrites++;
+              if (rectCalls < 20) {
+                notifyAttr(card, 'style', {
+                  ignoreFilter: forceSyncOnStyle || microtaskFeedbackOnStyle,
+                  asyncMicrotask: microtaskFeedbackOnStyle,
+                });
+              }
+            }
+          };
+        }
+        const val = target[prop];
+        return typeof val === 'function' ? val.bind(target) : val;
+      },
+      set(target, prop, value) {
+        target[prop] = value;
+        return true;
+      },
+    });
+
+    const prevDoc = globalThis.document;
+    delete globalThis.document;
+    const bridge = bridgeMod.mountPulseVialBridge({
+      win: env.win,
+      doc: env.doc,
+      storage: env.storage,
+      vialCore,
+      autoPoll: false,
+      allowMultiple: true,
+    });
+
+    try {
+      await bridge.sync();
+
+      // 校验 ob 注册在 #context-card 上只监听 hidden，彻底移除 style
+      const cardObsRec = observers
+        .flatMap((o) => o.targets)
+        .find((rec) => rec.target === card && rec.opts.attributes);
+      assert.ok(cardObsRec, 'MutationObserver must observe #context-card attributes');
+      assert.ok(cardObsRec.opts.attributeFilter?.includes('hidden'), '#context-card filter must include hidden');
+      assert.equal(cardObsRec.opts.attributeFilter?.includes('style'), false, '#context-card filter must exclude style to prevent self-triggering');
+
+      // 清零计数器，模拟用户点击展开 #context-card
+      rectCalls = 0;
+      pvCxWrites = 0;
+      card.hidden = false;
+      notifyAttr(card, 'hidden');
+      // 排空多轮微任务队列，验证绝无微任务乒乓死循环
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+
+      const callsAfterOpen = rectCalls;
+      const writesAfterOpen = pvCxWrites;
+      const pvCxVal = card.style.getPropertyValue('--pv-cx');
+      const curOffset = parseFloat(pvCxVal) || 0;
+      const finalLeft = curBaseLx + curOffset;
+      const finalRight = finalLeft + curCardWidth;
+
+      // 再次触发一次外部通知，验证幂等且无额外 style 写入
+      notifyAttr(card, 'hidden');
+      for (let i = 0; i < 3; i++) await Promise.resolve();
+      const writesAfterReentry = pvCxWrites;
+
+      // 额外验证：即使模拟旧版 Chromium 异步微任务自激（忽略 attributeFilter，setProperty 后微任务唤醒 ob），
+      // cX() 依靠 baseLx = rc.left - cur 与 |dx - cur| > 1 也在 <=2 次内彻底收敛、0 乒乓！
+      origStyle.removeProperty('--pv-cx');
+      rectCalls = 0;
+      pvCxWrites = 0;
+      microtaskFeedbackOnStyle = true;
+      notifyAttr(card, 'hidden');
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+      const callsUnderForcedMicrotaskLoop = rectCalls;
+      const writesUnderForcedMicrotaskLoop = pvCxWrites;
+      microtaskFeedbackOnStyle = false;
+
+      // 测试拉宽回宽屏且未越界时，targetCx === 0 自动清除 --pv-cx
+      env.win.innerWidth = 1280;
+      curComposerRight = 1268;
+      curBaseLx = 400;
+      curCardWidth = 396;
+      notifyAttr(card, 'hidden');
+      for (let i = 0; i < 3; i++) await Promise.resolve();
+      const pvCxAfterWiden = card.style.getPropertyValue('--pv-cx');
+
+      return {
+        callsAfterOpen,
+        writesAfterOpen,
+        writesAfterReentry,
+        callsUnderForcedMicrotaskLoop,
+        writesUnderForcedMicrotaskLoop,
+        pvCxVal,
+        finalLeft,
+        finalRight,
+        pvCxAfterWiden,
+      };
+    } finally {
+      bridge.destroy();
+      if (prevDoc !== undefined) globalThis.document = prevDoc;
+    }
+  }
+
+  // 1) Tier 4 窄侧边栏（footer = 420px < 450px，right: -84px -> baseLx = 108，width = 396，右缘 504 溢出 mxR = 418 共 86px）
+  const tier4 = await runNarrowScenario({
+    viewportW: 430,
+    composerRight: 420,
+    cardWidth: 396,
+    baseLx: 108,
+    forceSyncOnStyle: false,
+  });
+  assert.ok(tier4.callsAfterOpen >= 1 && tier4.callsAfterOpen <= 2, `Tier 4 cX() calls must converge in <=2, got ${tier4.callsAfterOpen}`);
+  assert.equal(tier4.writesAfterOpen, 1, 'Tier 4 must write --pv-cx exactly once');
+  assert.equal(tier4.writesAfterReentry, 1, 'Re-running cX() on Tier 4 must be idempotent with 0 extra writes');
+  assert.ok(tier4.callsUnderForcedMicrotaskLoop <= 2 && tier4.writesUnderForcedMicrotaskLoop === 1, `Tier 4 forced microtask feedback must converge in <=2 calls / 1 write, got ${tier4.callsUnderForcedMicrotaskLoop}/${tier4.writesUnderForcedMicrotaskLoop}`);
+  assert.equal(tier4.pvCxVal, '-86px');
+  assert.ok(tier4.finalLeft >= 12 && tier4.finalRight <= 418, `Tier 4 card [${tier4.finalLeft}, ${tier4.finalRight}] must sit inside [12, 418]`);
+  assert.equal(tier4.pvCxAfterWiden, '', 'Widening back into safe bounds must clear --pv-cx via cx0()');
+
+  // 2) 极窄侧边栏（< 396px，vw = 360，composerRight = 340，cardWidth = 336 => mxR - tw = 4 < 12）
+  //    并开启 style.setProperty 同步强制回调 MutationObserver：验证防重入锁 + baseLx 还原在 <= 2 次内收敛且优先保左缘 >= 12
+  const ultraNarrow = await runNarrowScenario({
+    viewportW: 360,
+    composerRight: 340,
+    cardWidth: 336,
+    baseLx: 96,
+    forceSyncOnStyle: true,
+  });
+  assert.ok(ultraNarrow.callsAfterOpen >= 1 && ultraNarrow.callsAfterOpen <= 2, `Ultra-narrow cX() calls must converge in <=2 even under forced sync style MO feedback, got ${ultraNarrow.callsAfterOpen}`);
+  assert.equal(ultraNarrow.writesAfterOpen, 1, 'Ultra-narrow must write --pv-cx once without ping-pong');
+  assert.equal(ultraNarrow.writesAfterReentry, 1, 'Ultra-narrow re-entry must perform 0 extra writes');
+  assert.ok(ultraNarrow.callsUnderForcedMicrotaskLoop <= 2 && ultraNarrow.writesUnderForcedMicrotaskLoop === 1, `Ultra-narrow forced microtask feedback must converge in <=2 calls / 1 write, got ${ultraNarrow.callsUnderForcedMicrotaskLoop}/${ultraNarrow.writesUnderForcedMicrotaskLoop}`);
+  assert.equal(ultraNarrow.pvCxVal, '-84px');
+  assert.equal(ultraNarrow.finalLeft, 12, 'Ultra-narrow container must prioritize left-edge safety at 12px');
+  assert.ok(ultraNarrow.finalRight <= 348, `Ultra-narrow right edge ${ultraNarrow.finalRight} must stay within viewport margin 348`);
+  assert.equal(ultraNarrow.pvCxAfterWiden, '', 'Widening from ultra-narrow back to wide must clear --pv-cx');
+});
+
+test('inline-fallback renders 5h and weekly quota chips in composer bar, hides unavailable windows, warns at <=35%/<=15%, and opens context card on click', async () => {
+  const inlineMod = require('../vendor/pulse-dashboard/inline-fallback.js');
+  const env = createPulseMockEnv();
+  const footer = env.doc.createElement('div');
+  footer.className = 'agy-composer-footer flex items-center';
+  footer.appendChild(env.doc.createElement('div'));
+  footer.appendChild(env.doc.createElement('button'));
+  env.doc.body.appendChild(footer);
+
+  let mockGroups = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      windows: {
+        '5h': { available: true, remaining: 0.92, resetAt: Date.now() + 2 * 3600 * 1000 },
+        weekly: { available: true, remaining: 0.34, resetAt: Date.now() + 3 * 86400 * 1000 },
+      },
+    },
+    {
+      id: 'claude',
+      name: 'Claude / GPT',
+      windows: {
+        '5h': { available: true, remaining: 0.14, resetAt: Date.now() + 3600 * 1000 },
+        weekly: { available: false, reason: 'unavailable' },
+      },
+    },
+  ];
+  let mockModel = 'Gemini 4 Hydrogen (High)';
+
+  env.win.__agPrismMetricsCall = (payloadStr) => {
+    const req = JSON.parse(payloadStr);
+    env.win.__agPrismMetricsResolve?.(req.id, {
+      connection: 'live',
+      speed: {
+        model: mockModel,
+        tps: 64.2,
+        latestTps: 64.2,
+        ttftSeconds: 0.9,
+        cacheHitRate: 0.95,
+        context: { model: mockModel, usedFraction: 0.38, usedTokens: 194560, maxTokens: 512000, sampledAt: Date.now() },
+      },
+      groups: mockGroups,
+    });
+  };
+
+  const ctrl = inlineMod.createTelemetryController({ window: env.win, document: env.doc });
+  try {
+    ctrl.sync({ telemetryModule: 'on', language: 'zh-CN' });
+    await ctrl.refresh();
+
+    const bar = env.doc.getElementById('ag-prism-pulse-bar');
+    assert.ok(bar && bar.shadowRoot);
+    const sr = bar.shadowRoot;
+    const fChip = sr.querySelector('[data-card="five"]');
+    const wChip = sr.querySelector('[data-card="week"]');
+    const sChip = sr.querySelector('[data-card="speed"]');
+    assert.ok(fChip && wChip && sChip);
+
+    const barChildren = sr.querySelector('.bar').children;
+    assert.equal(barChildren[0], fChip, '5h quota chip sits first in bar (left of speed)');
+    assert.equal(barChildren[1], wChip, 'weekly quota chip sits before speed chip');
+    assert.equal(barChildren[2], sChip);
+
+    // Default compact mode picks the tighter window (weekly 34% < 5h 92%) while detail card shows both
+    assert.equal(fChip.hidden, true, 'default compact mode hides looser 5h chip when weekly is tighter');
+    assert.equal(sr.getElementById('five-balance').textContent, '92%');
+    assert.equal(fChip.getAttribute('data-warn'), null);
+
+    assert.equal(wChip.hidden, false);
+    assert.equal(sr.getElementById('week-balance').textContent, '34%');
+    assert.equal(wChip.getAttribute('data-warn'), '1', '<= 35% must mark data-warn="1"');
+    assert.ok((wChip.getAttribute('title') || '').includes('周 34%'));
+    assert.match(sr.getElementById('context-five-quota').textContent, /^92% · /);
+    assert.match(sr.getElementById('context-week-quota').textContent, /^34% · /);
+
+    // telemetryQuotaMode='both' displays both 5h and weekly chips simultaneously
+    ctrl.sync({ telemetryModule: 'on', telemetryQuotaMode: 'both', language: 'zh-CN' });
+    assert.equal(fChip.hidden, false, 'both mode shows 5h chip');
+    assert.equal(wChip.hidden, false, 'both mode shows weekly chip');
+
+    // Click weekly chip -> opens context/quota detail card cleanly
+    const ctxCard = sr.getElementById('context-card');
+    assert.equal(ctxCard.hidden, true);
+    wChip.dispatchEvent({ type: 'click' });
+    assert.equal(ctxCard.hidden, false, 'clicking quota chip opens detail card');
+    assert.equal(wChip.getAttribute('aria-expanded'), 'true');
+
+    // Switch active model to Claude (critical 5h 14%, unavailable weekly) in compact mode
+    ctrl.sync({ telemetryModule: 'on', telemetryQuotaMode: 'compact', language: 'zh-CN' });
+    mockModel = 'Claude Opus';
+    await ctrl.refresh();
+    assert.equal(fChip.hidden, false, 'compact mode shows sole available 5h chip');
+    assert.equal(sr.getElementById('five-balance').textContent, '14%');
+    assert.equal(fChip.getAttribute('data-warn'), '2', '<= 15% must mark data-warn="2"');
+    assert.equal(wChip.hidden, true, 'unavailable weekly window must hide week chip');
+
+    // Responsive TIER_CSS retains progressive fold hooks for speed/cache/week/five
+    const cssText = sr.querySelector('style').textContent;
+    assert.ok(cssText.includes('[data-card="speed"]'), 'shadow CSS must keep tier-1 fold rule for speed chip');
+    assert.ok(cssText.includes('[data-card="cache"]'), 'shadow CSS must keep tier-2 fold rule for cache chip');
+    assert.ok(cssText.includes('[data-card="week"]'), 'shadow CSS must keep tier-3 fold rule for week chip');
+    assert.ok(cssText.includes('[data-card="five"]'), 'shadow CSS must keep tier-3 fold rule for five chip');
+  } finally {
+    ctrl.destroy();
+  }
+});
+
+test('Turkish (tr / tr-TR) 9th locale in pulse-vial-bridge: full 19-row coverage, auto navigator fallback, 0 CJK & 0 forbidden terms', async () => {
+  const CJK_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+  const FORBIDDEN_RE = /八方旅人|octopath/i;
+  const src = fs.readFileSync(BRIDGE_PATH, 'utf8');
+  const mL0 = src.match(/,L0=Z\('([^']+)'\.replace/);
+  assert.ok(mL0, 'L0 dictionary must exist in pulse-vial-bridge.js');
+  const rows = mL0[1].replace(/~/g, '/compact').replace(/\^/g, 'Swarm/').split('|').map((r) => {
+    let p = '';
+    return r.split(',').map((c) => (p = c || p));
+  });
+  assert.equal(rows.length, 19, 'L0 must contain all 19 localization rows');
+  for (let i = 0; i < rows.length; i++) {
+    assert.equal(rows[i].length, 9, `L0 row ${i} must have exactly 9 locale columns`);
+    const trText = rows[i][8];
+    assert.ok(typeof trText === 'string' && trText.length > 0, `L0[${i}][tr] must be non-empty`);
+    assert.equal(CJK_RE.test(trText), false, `L0[${i}][tr] must contain 0 CJK chars: "${trText}"`);
+    assert.equal(FORBIDDEN_RE.test(trText), false, `L0[${i}][tr] must contain 0 forbidden terms: "${trText}"`);
+  }
+
+  const env = createPulseMockEnv();
+  const host = env.getPulseHost();
+  const sr = host.shadowRoot;
+  const composerInput = env.doc.createElement('textarea');
+  env.doc.body.appendChild(composerInput);
+
+  let remaining5h = 0.72;
+  let remainingWk = 0.80;
+  let groupId = 'gemini';
+  let groupName = 'Gemini';
+  env.win.navigator = { language: 'tr-TR' };
+  env.win.agPulseHost = {
+    getMetrics: async () => ({
+      connection: 'live',
+      speed: {
+        tps: 60.0,
+        latestTps: 0,
+        ttftSeconds: 0.45,
+        rounds: 4,
+        modelSeconds: 5.0,
+        toolSeconds: 2.5,
+        taskUsage: {
+          subagents: 2,
+          own: { totalTokens: 120000 },
+          delegated: { totalTokens: 60000 },
+          total: { totalTokens: 180000 },
+        },
+        context: {
+          usedTokens: 430080,
+          maxTokens: 512000,
+          usedFraction: 0.84,
+          model: 'Gemini 4 Carbon (High)',
+          sampledAt: '2020-01-01T00:00:00Z',
+        },
+      },
+      groups: [
+        {
+          id: groupId,
+          name: groupName,
+          windows: {
+            '5h': { available: true, remaining: remaining5h, resetAt: new Date(Date.now() + 3600e3).toISOString() },
+            weekly: { available: true, remaining: remainingWk, resetAt: new Date(Date.now() + 3 * 86400e3).toISOString() },
+          },
+        },
+      ],
+    }),
+  };
+
+  const prevDoc = globalThis.document;
+  delete globalThis.document;
+  const bridge = bridgeMod.mountPulseVialBridge({
+    win: env.win,
+    doc: env.doc,
+    storage: env.storage,
+    vialCore,
+    autoPoll: false,
+    allowMultiple: true,
+  });
+
+  try {
+    // 1) auto + navigator.language='tr-TR' resolves cleanly to Turkish (index 8)
+    env.doc.documentElement.setAttribute('data-ag-cs-lang', 'auto');
+    await bridge.sync();
+
+    const toggleBtn = sr.querySelector('[data-ag-pulse-vial-toggle="1"]');
+    const cmpBtn = sr.querySelector('[data-ag-pulse-compact="1"]');
+    const paceBadge = sr.querySelector('[data-ag-pulse-pace="1"]');
+    const qLabels = [...sr.querySelectorAll('.pv-qlbl')].map((n) => n.textContent);
+    const taskSplit = sr.querySelector('[data-ag-pulse-qtask="1"]');
+    const segs = sr.querySelectorAll('[data-layer-slice]');
+    const telReadout = sr.querySelector('[data-ag-pulse-telemetry="1"]');
+
+    assert.equal(toggleBtn.textContent, 'Tüp');
+    assert.equal(cmpBtn.getAttribute('title'), '/compact ekle');
+    assert.equal(paceBadge.textContent, 'Yeterli');
+    assert.deepEqual(qLabels, ['5s', 'Haftalık']);
+    assert.match(taskSplit.textContent, /Ana .* Swarm\/Alt\(2\)/);
+
+    const expectedSlices = [/Sistem ve Kurallar/, /Mesajlar/, /Araç Çıktısı/];
+    const renderedTexts = [toggleBtn.textContent, cmpBtn.getAttribute('title'), paceBadge.textContent, ...qLabels, taskSplit.textContent];
+    for (let i = 0; i < 3; i++) {
+      segs[i].dispatchEvent({ type: 'pointerenter' });
+      assert.match(telReadout.textContent, expectedSlices[i]);
+      renderedTexts.push(telReadout.textContent);
+      segs[i].dispatchEvent({ type: 'pointerleave' });
+    }
+
+    // 2) Explicit tr-TR & tight/low quota badges + /compact click feedback + Bar mode label
+    env.doc.documentElement.setAttribute('data-ag-cs-lang', 'tr-TR');
+    remaining5h = 0.25;
+    await bridge.sync();
+    assert.equal(paceBadge.textContent, 'Azalıyor');
+    renderedTexts.push(paceBadge.textContent);
+
+    remaining5h = 0.10;
+    await bridge.sync();
+    assert.equal(paceBadge.textContent, 'Düşük Kota');
+    renderedTexts.push(paceBadge.textContent);
+
+    cmpBtn.dispatchEvent({ type: 'click' });
+    assert.equal(cmpBtn.textContent, '✓ Eklendi');
+    renderedTexts.push(cmpBtn.textContent);
+
+    toggleBtn.dispatchEvent({ type: 'click' });
+    assert.equal(toggleBtn.textContent, 'Çubuk');
+    renderedTexts.push(toggleBtn.textContent);
+
+    for (const txt of renderedTexts) {
+      assert.equal(CJK_RE.test(txt), false, `Turkish UI leaked CJK: "${txt}"`);
+      assert.equal(FORBIDDEN_RE.test(txt), false, `Turkish UI leaked forbidden term: "${txt}"`);
+    }
+  } finally {
+    bridge.destroy();
     if (prevDoc !== undefined) globalThis.document = prevDoc;
   }
 });

@@ -331,69 +331,74 @@ test('mountPhysicalWaterVial mounts WebGL2 borosilicate daylight + deep-sea ioni
   let lostContextCalled = 0;
   let programDeleted = 0;
   let bufferDeleted = 0;
+  let textureDeleted = 0;
+  let scaleUploads = 0;
   let drawArraysCount = 0;
   let shouldFailCompile = false;
+
+  const makeMockGl = () => ({
+    VERTEX_SHADER: 0x8b31, FRAGMENT_SHADER: 0x8b30, COMPILE_STATUS: 0x8b81, LINK_STATUS: 0x8b82,
+    ARRAY_BUFFER: 0x8892, STATIC_DRAW: 0x88e4, FLOAT: 0x1406, COLOR_BUFFER_BIT: 0x4000,
+    TRIANGLE_STRIP: 0x0005, TEXTURE_2D: 0x0de1, TEXTURE0: 0x84c0, TEXTURE1: 0x84c1,
+    RGBA: 0x1908, UNSIGNED_BYTE: 0x1401, NEAREST: 0x2600, LINEAR: 0x2601, CLAMP_TO_EDGE: 0x812f,
+    TEXTURE_MIN_FILTER: 0x2801, TEXTURE_MAG_FILTER: 0x2800, TEXTURE_WRAP_S: 0x2802, TEXTURE_WRAP_T: 0x2803,
+    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
+    createShader: (type) => ({ type }),
+    shaderSource: (_sh, src) => shaderSources.push(src),
+    compileShader() {},
+    getShaderParameter: () => !shouldFailCompile,
+    getShaderInfoLog: () => 'mock compile failure',
+    deleteShader() {},
+    createProgram: () => ({ id: 'prog' }),
+    attachShader() {},
+    linkProgram() {},
+    getProgramParameter: () => true,
+    getProgramInfoLog: () => '',
+    deleteProgram: () => { programDeleted++; },
+    createBuffer: () => ({ id: 'buf' }),
+    bindBuffer() {},
+    bufferData() {},
+    deleteBuffer: () => { bufferDeleted++; },
+    createTexture: () => ({ id: 'tex' }),
+    activeTexture() {},
+    bindTexture() {},
+    texParameteri() {},
+    pixelStorei() {},
+    texImage2D(_t, _l, _if, w) { if (typeof w === 'object' || w > 24) scaleUploads++; },
+    texSubImage2D() {},
+    deleteTexture: () => { textureDeleted++; },
+    getAttribLocation: () => 0,
+    enableVertexAttribArray() {},
+    vertexAttribPointer() {},
+    getUniformLocation: (_p, name) => ({ name }),
+    viewport() {},
+    clearColor() {},
+    clear() {},
+    useProgram() {},
+    uniform1i() {},
+    uniform1f() {},
+    uniform2f() {},
+    uniform3f() {},
+    uniform3fv() {},
+    uniform1fv() {},
+    uniform2fv() {},
+    uniform4fv() {},
+    drawArrays: () => { drawArraysCount++; },
+    getExtension: (ext) => (ext === 'WEBGL_lose_context' ? { loseContext() { lostContextCalled++; } } : null),
+  });
 
   globalThis.document = {
     createElement(tag) {
       assert.equal(String(tag).toLowerCase(), 'canvas');
-      return {
-        width: 96,
-        height: 220,
-        getContext(kind) {
-          if (kind !== 'webgl2') return null;
-          return {
-            VERTEX_SHADER: 0x8b31,
-            FRAGMENT_SHADER: 0x8b30,
-            COMPILE_STATUS: 0x8b81,
-            LINK_STATUS: 0x8b82,
-            ARRAY_BUFFER: 0x8892,
-            STATIC_DRAW: 0x88e4,
-            FLOAT: 0x1406,
-            COLOR_BUFFER_BIT: 0x4000,
-            TRIANGLE_STRIP: 0x0005,
-            createShader: (type) => ({ type }),
-            shaderSource: (_sh, src) => shaderSources.push(src),
-            compileShader() {},
-            getShaderParameter: () => !shouldFailCompile,
-            getShaderInfoLog: () => 'mock compile failure',
-            deleteShader() {},
-            createProgram: () => ({ id: 'prog' }),
-            attachShader() {},
-            linkProgram() {},
-            getProgramParameter: () => true,
-            getProgramInfoLog: () => '',
-            deleteProgram: () => { programDeleted++; },
-            createBuffer: () => ({ id: 'buf' }),
-            bindBuffer() {},
-            bufferData() {},
-            deleteBuffer: () => { bufferDeleted++; },
-            getAttribLocation: () => 0,
-            enableVertexAttribArray() {},
-            vertexAttribPointer() {},
-            getUniformLocation: (_p, name) => ({ name }),
-            viewport() {},
-            clearColor() {},
-            clear() {},
-            useProgram() {},
-            uniform1f() {},
-            uniform2f() {},
-            uniform3f() {},
-            uniform3fv() {},
-            uniform1fv() {},
-            uniform2fv() {},
-            uniform4fv() {},
-            drawArrays: () => { drawArraysCount++; },
-            getExtension: (ext) => (ext === 'WEBGL_lose_context' ? { loseContext() { lostContextCalled++; } } : null),
-          };
-        },
-      };
+      return createMock2DCanvas();
     },
   };
 
   try {
-    const canvas = createMock2DCanvas();
-    const inst = vialCore.mountPhysicalWaterVial(canvas, {
+    const baseCanvas = createMock2DCanvas();
+    const origGetCtx = baseCanvas.getContext.bind(baseCanvas);
+    baseCanvas.getContext = (kind) => (kind === 'webgl2' ? makeMockGl() : origGetCtx(kind));
+    const inst = vialCore.mountPhysicalWaterVial(baseCanvas, {
       fill: 0.48,
       streaming: true,
       getState: () => ({
@@ -408,6 +413,8 @@ test('mountPhysicalWaterVial mounts WebGL2 borosilicate daylight + deep-sea ioni
     });
 
     assert.equal(inst.getDebugState().rendererMode, 'webgl2');
+    assert.equal(inst.getDebugState().singleCanvas, true);
+    assert.equal(inst.getDebugState().zeroCopy, true);
     assert.equal(shaderSources.length, 2);
     assert.match(shaderSources[1], /#version 300 es/);
     assert.match(shaderSources[1], /RC_OUT = 14\.5/);
@@ -418,7 +425,8 @@ test('mountPhysicalWaterVial mounts WebGL2 borosilicate daylight + deep-sea ioni
     assert.match(shaderSources[1], /DAY_VIOLET = vec3\(0\.486, 0\.227, 0\.929\)/);
     assert.match(shaderSources[1], /DAY_AMBER_RED = vec3\(0\.918, 0\.345, 0\.047\)/);
     assert.ok(drawArraysCount >= 1);
-    assert.ok(canvas.getDrawImageCalls() >= 1);
+    assert.equal(baseCanvas.getDrawImageCalls(), 0, 'Single-canvas WebGL2 vial must perform 0 drawImage(glCanvas) blits');
+    assert.ok(scaleUploads >= 1, 'Static scale marks must upload as u_scaleTex texture');
 
     inst.impulse(1.8);
     inst.spawnDroplet();
@@ -428,10 +436,13 @@ test('mountPhysicalWaterVial mounts WebGL2 borosilicate daylight + deep-sea ioni
     inst.dispose();
     assert.equal(programDeleted, 1);
     assert.equal(bufferDeleted, 1);
+    assert.equal(textureDeleted, 2);
     assert.equal(lostContextCalled, 1);
 
     shouldFailCompile = true;
     const fbCanvas = createMock2DCanvas();
+    const origFbCtx = fbCanvas.getContext.bind(fbCanvas);
+    fbCanvas.getContext = (kind) => (kind === 'webgl2' ? makeMockGl() : origFbCtx(kind));
     const origWarn = console.warn;
     console.warn = () => {};
     let fbInst;
@@ -779,17 +790,17 @@ test('Issue #2/#4/#5 high-Hz & win-blur guards: pulse-vial-bridge (<31,000B) 33m
     rimRaf(2006);
     assert.equal(rimGradCalls, 2, 'flushPrismPointer must render 180Hz +6ms tick once gap >= 4.8ms');
 
-    // At +20ms, micro-movement < 1.5px from (180,140) -> (181.1, 140.8) skips redundant canvas redraw
-    rimCtl.onPointerMove({ clientX: 181.1, clientY: 140.8 });
+    // At +20ms, sub-0.5px micro-jitter from (180,140) -> (180.3, 140.2) skips redundant canvas redraw
+    rimCtl.onPointerMove({ clientX: 180.3, clientY: 140.2 });
     nowT = 2020;
     rimRaf(2020);
-    assert.equal(rimGradCalls, 2, '<1.5px pointer micro-jitter with unchanged signature must skip redraw');
+    assert.equal(rimGradCalls, 2, '<0.5px pointer micro-jitter with unchanged signature must skip redraw');
 
-    // Real pointer move >= 1.5px redraws cleanly
-    rimCtl.onPointerMove({ clientX: 170, clientY: 145 });
+    // Fine pointer move >= 0.5px (e.g. 1.0px) triggers crisp high-DPI redraw cleanly
+    rimCtl.onPointerMove({ clientX: 181.3, clientY: 140.2 });
     nowT = 2040;
     rimRaf(2040);
-    assert.equal(rimGradCalls, 3);
+    assert.equal(rimGradCalls, 3, '1.0px fine pointer move must redraw smoothly without 1.5px sticky deadzone');
 
     // data-ag-cs-win-blur="1" skips scheduling rAF on pointermove
     rimRaf = null;

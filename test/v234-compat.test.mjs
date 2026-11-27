@@ -523,6 +523,18 @@ test('v2.34.0 Orchestrator patch: Claude planner shows Claude icon & tunable Orc
   assert.equal(cssSrc.includes('32px circle at var(--knob-px'), true);
   assert.equal(cssSrc.includes('.ces-tick.is-on'), true);
   assert.equal(cssSrc.includes('.ces-knob-notch'), true);
+
+  // 5) ZCode / GLM / Z.ai & DeepSeek brand vector marks & row matching (PR #96)
+  assert.equal(typeof mgc.BRAND_PATHS.zcode, 'string');
+  assert.ok(mgc.BRAND_PATHS.zcode.length > 20);
+  const glmRow = mgc.parseModelLabelInfo('GLM 5.3 · Mistral');
+  assert.deepEqual(glmRow, { brand: 'zcode', tier: 'medium', isOrchestrator: false, camp: 'gemini' });
+  const zcodeRow = mgc.parseModelLabelInfo('GLM-5.4 · ZCode (高)');
+  assert.deepEqual(zcodeRow, { brand: 'zcode', tier: 'high', isOrchestrator: false, camp: 'gemini' });
+  assert.equal(typeof mgc.BRAND_PATHS.deepseek, 'string');
+  assert.ok(mgc.BRAND_PATHS.deepseek.length > 100);
+  const dsRow = mgc.parseModelLabelInfo('DeepSeek V4.1 Flash · routing group Max');
+  assert.deepEqual(dsRow, { brand: 'deepseek', tier: 'high', isOrchestrator: false, camp: 'gemini' });
 });
 
 test('v2.34.0 renderer-proxy perf: WeakRef LS cache, stale fallback rescan, in-flight coalescing & settled/summary TTL avoid redundant full trajectory deserializations', async () => {

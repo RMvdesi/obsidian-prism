@@ -13,15 +13,21 @@ import {
   SIDEBAR_BINDING,
   THOUGHT_BINDING,
   WALLPAPER_BINDING,
+  copyUpdatedRuntimeFromRepo,
   writeFileAtomicSync,
 } from '../sidecars/daemon/main.mjs';
+import { sanitizeLogLine } from '../sidecars/daemon/redact.mjs';
+import { QuotaForceRefreshGuard, MIN_QUOTA_FORCE_REFRESH_COOLDOWN_MS } from '../src/daemon/quota-guard.mjs';
+import { AntigravityClient } from '../vendor/pulse-dashboard/sidecars/panel/client.mjs';
+import { collectNativePluginEntries } from '../scripts/build-common.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT_DIR = path.resolve(import.meta.dirname, '..');
+const cdpMod = require(path.join(ROOT_DIR, 'cdp.js'));
 const installPluginTool = require(path.join(ROOT_DIR, 'tools', 'install-plugin.cjs'));
 
 function makeTempDir(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
 test('security-daemon 1: isLanguageServerRunning detects platform-suffixed Windows/POSIX host processes, excludes self, and fails closed on query errors', () => {
@@ -523,10 +529,10 @@ test('security-daemon 6: writeFileAtomicSync rejects symlink parent directory an
     }
 
     // 静态核验 Windows copyFileSync 回退分支前存在父目录与目标文件 lstatSync 符号链接守卫
-    const mainSrc = fs.readFileSync(path.join(ROOT_DIR, 'sidecars', 'daemon', 'main.mjs'), 'utf8');
-    const copyIdx = mainSrc.indexOf('fs.copyFileSync(tmpPath, resolvedTarget)');
+    const fsAtomicSrc = fs.readFileSync(path.join(ROOT_DIR, 'src', 'daemon', 'fs-atomic.mjs'), 'utf8');
+    const copyIdx = fsAtomicSrc.indexOf('fs.copyFileSync(tmpPath, resolvedTarget)');
     assert.ok(copyIdx > 0, '应保留 Windows copyFileSync 回退逻辑');
-    const beforeCopyWindow = mainSrc.slice(Math.max(0, copyIdx - 220), copyIdx);
+    const beforeCopyWindow = fsAtomicSrc.slice(Math.max(0, copyIdx - 220), copyIdx);
     assert.ok(
       beforeCopyWindow.includes("assertNotSymlinkSync(dir, 'target directory')") &&
         beforeCopyWindow.includes("assertNotSymlinkSync(resolvedTarget, 'target file')"),
@@ -1262,7 +1268,7 @@ test('security-daemon 11 (#229 P1-2, P1-4, P2-4): WALLPAPER_BINDING 禁内联 To
             ready: true,
             isHostDom: domAliveIsHost,
             href: 'vscode-file://vscode-app/workbench.html',
-            prismAttr: '1.0.8-beta.3',
+            prismAttr: cdpMod.PLUGIN_VERSION,
             hasPrism: domAliveIsHost,
             hasRepoBridge: domAliveIsHost,
             hasThoughtBridge: domAliveIsHost,
@@ -1624,5 +1630,249 @@ test('Privacy hardline: autoUpdate="off" performs 0 background git fetch / GitHu
     delete global.__prismPrivacyCfg;
     if (daemon) await daemon.stop(false).catch(() => {});
     fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test('security-daemon 24: RetrieveUserQuotaSummary({ forceRefresh: true }) enforces non-bypassable >=60s cooldown in PrismDaemon and AntigravityClient', async () => {
+  // 1) Guard 自身不可绕过 60s 下限
+  assert.equal(MIN_QUOTA_FORCE_REFRESH_COOLDOWN_MS, 60_000);
+  let now = 10_000;
+  const guard = new QuotaForceRefreshGuard({ cooldownMs: 500, now: () => now });
+  assert.equal(guard.cooldownMs, 60_000, 'Cooldown must clamp up to >= 60s');
+  const first = guard.prepare({ forceRefresh: true });
+  assert.equal(first.action, 'forward');
+  assert.equal(first.body.forceRefresh, true);
+  assert.equal(first.downgraded, false);
+
+  // 无缓存且仍在冷却期 -> 降级为非强制刷新（剥离 forceRefresh）
+  now += 15_000;
+  const noCacheDowngraded = guard.prepare({ forceRefresh: true, tag: 'x' });
+  assert.equal(noCacheDowngraded.action, 'forward');
+  assert.equal('forceRefresh' in noCacheDowngraded.body, false);
+  assert.equal(noCacheDowngraded.downgraded, true);
+
+  // 写入缓存后冷却期内再次 forceRefresh -> 直接短路复用缓存
+  guard.recordSuccess({ credits: 42 });
+  now += 15_000;
+  const cachedHit = guard.prepare({ forceRefresh: true });
+  assert.equal(cachedHit.action, 'cached');
+  assert.deepEqual(cachedHit.result, { credits: 42 });
+
+  // 超过 60s 后再次放行 forceRefresh: true
+  now += 31_000;
+  const afterCooldown = guard.prepare({ forceRefresh: true });
+  assert.equal(afterCooldown.action, 'forward');
+  assert.equal(afterCooldown.body.forceRefresh, true);
+
+  // 2) PrismDaemon._invokeRendererLsRpc 端到端强制节流
+  let daemonClock = 100_000;
+  const workDir = makeTempDir('prism-quota-guard-');
+  const daemon = new PrismDaemon({
+    rootDir: ROOT_DIR,
+    logFile: path.join(workDir, 'daemon.log'),
+    quotaCooldownNow: () => daemonClock,
+  });
+  const sentBodies = [];
+  daemon._getRendererRpcCandidates = () => [
+    {
+      session: {
+        evaluate: async (expr) => {
+          const m = /const body = (.*?);/.exec(String(expr || '')) || /body:\s*JSON\.stringify\((.*?)\)/.exec(String(expr || ''));
+          let parsed = {};
+          if (m) {
+            try { parsed = JSON.parse(m[1]); } catch {}
+          } else {
+            parsed = { forceRefresh: /"forceRefresh"\s*:\s*true/.test(String(expr || '')) };
+          }
+          sentBodies.push(parsed);
+          return { ok: true, data: { userStatus: { cascadeModelConfigData: { clientModelConfigs: [{ label: `q-${sentBodies.length}` }] } }, seq: sentBodies.length } };
+        },
+      },
+    },
+  ];
+  try {
+    const r1 = await daemon._invokeRendererLsRpc('RetrieveUserQuotaSummary', { forceRefresh: true });
+    assert.equal(sentBodies.length, 1);
+    assert.equal(sentBodies[0].forceRefresh, true);
+    assert.ok(r1);
+
+    // 30s 后高频重刷 -> 复用缓存，0 新 RPC
+    daemonClock += 30_000;
+    const r2 = await daemon._invokeRendererLsRpc('RetrieveUserQuotaSummary', { forceRefresh: true });
+    assert.equal(sentBodies.length, 1, 'Repeated forceRefresh within 60s must reuse cached result without hitting host RPC');
+    assert.deepEqual(r2, r1);
+
+    // 61s 后恢复放行
+    daemonClock += 31_000;
+    const r3 = await daemon._invokeRendererLsRpc('RetrieveUserQuotaSummary', { forceRefresh: true });
+    assert.equal(sentBodies.length, 2);
+    assert.equal(sentBodies[1].forceRefresh, true);
+    assert.ok(r3);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+
+  // 3) AntigravityClient.call 代理层同样强制 >= 60s 节流
+  let clientClock = 200_000;
+  const clientCalls = [];
+  const client = new AntigravityClient({
+    now: () => clientClock,
+    rendererRpc: async (method, body) => {
+      clientCalls.push({ method, body });
+      return { plan: 'pro', seq: clientCalls.length };
+    },
+  });
+  client.server = { port: 0, csrf: '', pid: 0, mode: 'renderer-proxy' };
+  client.discoveredAt = clientClock;
+
+  const c1 = await client.call('RetrieveUserQuotaSummary', { forceRefresh: true });
+  assert.equal(clientCalls.length, 1);
+  assert.equal(clientCalls[0].body.forceRefresh, true);
+  assert.equal(c1.seq, 1);
+
+  clientClock += 20_000;
+  const c2 = await client.call('RetrieveUserQuotaSummary', { forceRefresh: true });
+  assert.equal(clientCalls.length, 1, 'AntigravityClient must throttle repeated forceRefresh within 60s');
+  assert.equal(c2.seq, 1);
+
+  clientClock += 45_000;
+  const c3 = await client.call('RetrieveUserQuotaSummary', { forceRefresh: true });
+  assert.equal(clientCalls.length, 2);
+  assert.equal(clientCalls[1].body.forceRefresh, true);
+  assert.equal(c3.seq, 2);
+});
+
+test('security-daemon 25: app_storage.json pending runInBackground marker recovers on PrismDaemon.start() and rejects symlink markers', async () => {
+  const workDir = makeTempDir('prism-runinbg-rec-');
+  let daemon = null;
+  try {
+    const appDir = path.join(workDir, 'Antigravity');
+    fs.mkdirSync(appDir, { recursive: true });
+    const appStoragePath = path.join(appDir, 'app_storage.json');
+    fs.writeFileSync(appStoragePath, JSON.stringify({ runInBackground: true, theme: 'obsidian' }, null, 2), 'utf8');
+
+    // 1) suspend 写入崩溃恢复标记并把 runInBackground 设为 false
+    const snap = cdpMod.suspendAntigravityRunInBackground(appStoragePath);
+    assert.equal(snap.modified, true);
+    const markerPath = path.join(appDir, '.pending-restore-run-in-bg.json');
+    assert.equal(fs.existsSync(markerPath), true, 'suspend must write .pending-restore-run-in-bg.json');
+    assert.equal(JSON.parse(fs.readFileSync(appStoragePath, 'utf8')).runInBackground, false);
+
+    // 模拟崩溃前宿主又写入了新字段
+    const mutated = JSON.parse(fs.readFileSync(appStoragePath, 'utf8'));
+    mutated.newHostSetting = 'preserved';
+    fs.writeFileSync(appStoragePath, JSON.stringify(mutated, null, 2), 'utf8');
+
+    // 2) Daemon 启动阶段检测到遗留恢复标记 -> 自动补偿还原 runInBackground 且保留新字段并删除标记
+    daemon = new PrismDaemon({
+      rootDir: ROOT_DIR,
+      logFile: path.join(workDir, 'daemon.log'),
+      pendingRunInBgMarkerPath: markerPath,
+      port: 0,
+      pollIntervalMs: 60_000,
+    });
+    daemon._runUpdateCheckOnBoot = () => {};
+    daemon.tick = async () => {};
+    daemon.start();
+
+    const recovered = JSON.parse(fs.readFileSync(appStoragePath, 'utf8'));
+    assert.equal(recovered.runInBackground, true, 'Daemon boot must restore runInBackground=true from pending marker');
+    assert.equal(recovered.newHostSetting, 'preserved', 'Daemon recovery must preserve newly written host settings');
+    assert.equal(fs.existsSync(markerPath), false, 'Pending restore marker must be removed after recovery');
+
+    // 3) 正常 suspend -> restore 后自动清理标记
+    const snap2 = cdpMod.suspendAntigravityRunInBackground(appStoragePath);
+    assert.equal(snap2.modified, true);
+    assert.equal(fs.existsSync(markerPath), true);
+    const restored = await cdpMod.restoreAntigravityRunInBackground(appStoragePath, snap2);
+    assert.equal(restored.restored, true);
+    assert.equal(fs.existsSync(markerPath), false, 'Normal restore must clear pending marker');
+    assert.equal(JSON.parse(fs.readFileSync(appStoragePath, 'utf8')).runInBackground, true);
+
+    // 4) 拒绝通过 symlink/junction 路径读取恢复标记
+    const recMod = require(path.join(ROOT_DIR, 'src', 'platform', 'run-in-bg-recovery.cjs'));
+    const realMarkerDir = path.join(workDir, 'real-marker-dir');
+    fs.mkdirSync(realMarkerDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(realMarkerDir, '.pending-restore-run-in-bg.json'),
+      JSON.stringify({ version: 1, appStoragePath, originalValue: true }),
+      'utf8'
+    );
+    const linkMarkerDir = path.join(workDir, 'link-marker-dir');
+    fs.symlinkSync(realMarkerDir, linkMarkerDir, process.platform === 'win32' ? 'junction' : 'dir');
+    const symRes = recMod.recoverPendingRunInBgRestoreFromMarker(
+      path.join(linkMarkerDir, '.pending-restore-run-in-bg.json')
+    );
+    assert.equal(symRes.recovered, false);
+    assert.equal(symRes.reason, 'symlink-marker');
+  } finally {
+    if (daemon) await daemon.stop(false).catch(() => {});
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test('security-daemon 26: daemon.log and watch.log enforce 0o600 permissions and redact user home directory to <USER_HOME>', () => {
+  const workDir = makeTempDir('prism-log-redact-');
+  try {
+    const fakeHome = process.platform === 'win32' ? 'C:\\Users\\AliceDemo' : '/Users/alicedemo';
+    const sample = `failed reading ${fakeHome}${path.sep}.antigravity${path.sep}config.json with Bearer secret_token_12345`;
+    const redacted = sanitizeLogLine(sample, fakeHome);
+    assert.equal(redacted.includes('AliceDemo') || redacted.includes('alicedemo'), false);
+    assert.equal(redacted.includes('secret_token_12345'), false);
+    assert.match(redacted, /<USER_HOME>/);
+    assert.match(redacted, /\*\*\*REDACTED\*\*\*/);
+
+    const logFile = path.join(workDir, 'daemon.log');
+    const daemon = new PrismDaemon({ rootDir: ROOT_DIR, logFile, silent: false });
+    daemon.silent = false;
+    daemon.logFile = logFile;
+    const realHome = os.homedir();
+    daemon.log(`Opened ${path.join(realHome, 'secret-project', 'file.txt')} token=sk-abc123456789`);
+    const written = fs.readFileSync(logFile, 'utf8');
+    assert.equal(written.includes(realHome), false, 'daemon.log must never leak os.homedir()');
+    assert.match(written, /<USER_HOME>/);
+    assert.equal(written.includes('sk-abc123456789'), false);
+
+    // 静态验证 daemon.log (src/daemon/logger.mjs) 与 watch.log (inject.js) 落盘均显式设置 mode: 0o600
+    const loggerSrc = fs.readFileSync(path.join(ROOT_DIR, 'src', 'daemon', 'logger.mjs'), 'utf8');
+    const injectSrc = fs.readFileSync(path.join(ROOT_DIR, 'inject.js'), 'utf8');
+    assert.match(loggerSrc, /appendFileSync\(this\.logFile,[\s\S]{0,120}mode:\s*0o600/);
+    assert.match(injectSrc, /appendFileSync\(LOG_FILE,[\s\S]{0,120}mode:\s*0o600/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test('security-daemon 27: build-common, install-plugin.cjs and copyUpdatedRuntimeFromRepo all package/sync src/ runtime modules', () => {
+  // 1) build-common.mjs collectNativePluginEntries 包含 src/daemon/* 全部核心模块
+  const entries = collectNativePluginEntries();
+  const relSet = new Set(
+    entries.map((e) => String(e?.name || '').replace(/\\/g, '/').replace(/^native-plugin\//, ''))
+  );
+  const allSrcDaemonModules = fs
+    .readdirSync(path.join(ROOT_DIR, 'src', 'daemon'))
+    .filter((f) => f.endsWith('.mjs') || f.endsWith('.cjs'))
+    .map((f) => `src/daemon/${f}`);
+  for (const requiredRel of [
+    ...allSrcDaemonModules,
+    'src/security/net-guard.mjs',
+    'src/security/win-picker.mjs',
+  ]) {
+    assert.equal(relSet.has(requiredRel), true, `collectNativePluginEntries must include ${requiredRel}`);
+  }
+
+  // 2) tools/install-plugin.cjs 的 DIRS_TO_SYNC 包含 "src"
+  const installSrc = fs.readFileSync(path.join(ROOT_DIR, 'tools', 'install-plugin.cjs'), 'utf8');
+  assert.match(installSrc, /DIRS_TO_SYNC\s*=\s*\[[^\]]*["']src["']/);
+
+  // 3) copyUpdatedRuntimeFromRepo 同步 src/ 目录到目标插件目录
+  const dstDir = makeTempDir('prism-sync-src-');
+  try {
+    copyUpdatedRuntimeFromRepo(ROOT_DIR, dstDir, []);
+    assert.equal(fs.existsSync(path.join(dstDir, 'src', 'daemon', 'uninstall-runner.mjs')), true);
+    assert.equal(fs.existsSync(path.join(dstDir, 'src', 'daemon', 'quota-guard.mjs')), true);
+    assert.equal(fs.existsSync(path.join(dstDir, 'src', 'security', 'net-guard.mjs')), true);
+  } finally {
+    fs.rmSync(dstDir, { recursive: true, force: true });
   }
 });

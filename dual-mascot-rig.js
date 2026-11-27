@@ -62,7 +62,6 @@
     PALETTES[name] = decodePal(spec, sh === '1' ? SHARED_PROP_PALETTE : null);
   }
 
-  // 棱镜边环境反光调色表（6色调：[darkCore,darkWash,lightCore,lightWash]）
   const RIM_PALS = Object.fromEntries(
     'default:164,208,255;155,114,203;37,99,235;124,58,237|warm:255,220,176;240,163,126;194,89,52;217,119,6|cobalt:148,228,255;66,133,244;29,78,216;2,132,199|iris:221,214,254;165,138,248;91,33,182;139,92,246|amber:253,230,138;242,184,75;180,83,9;245,158,11|mono:236,242,248;148,163,184;51,65,85;100,116,139'
       .split('|')
@@ -89,7 +88,6 @@
     };
   }
 
-  // ── 紧凑 RLE 图集（去重派生 + 自动进入 cdp.js 共享 LZ 压缩池，纯函数解码还原同构对象）──
   const SPRITE_ATLAS_RAW =
     'c.shadow!w12=2,10,g:12h;w14=1,10,g:14h;w10=3,10,g:10h|c.body!stand=2,0:12#*8;tall=2,-1:12#*9;squash=1,2:.12s./14#*6;squash2=1,4:.12s./14#*4;flat=2,7:12s/12#*2;turnL=2,0:11#s*8;turnR=~turnL;leanR=2,0:.12#*4/12#.*4;leanL=~leanR;peek=2,2:12#*6|c.eyes!open=4,2:o6.o*2;openL=@open,3,2;openR=@open,5,2;half=4,3:o6.o;shut=3,3:oo6.oo;happy=3,2:.o6.o./o.o4.o.o;squint=4,2:o6.o/.o4.o./o6.o;wide=3,2:oo6.oo*2;peekOpen=@open,4,4;peekHalf=@half,4,5;flatEyes=4,8:oo4.oo;blink=3,3:ss6.ss;upL=@open,3,1;up=@open,4,1;upR=@open,5,1|c.mouth!small=6,5:.ss.;yawn=6,5:4s/.ss.|c.legs!stand=2,8:.#.#4.#.#.*2;crouch=2,9:.#.#4.#.#.;tuck=2,8:..#.#..#.#..*2;walkA=2,8:.#.s4.#.s./.#6.#3.;walkB=~walkA;dangle=2,8:.#.#4.#.#./.#.#8.*2;dangle2=~dangle;flailA=2,8:#3.#..#3.#/#10.#;flailB=2,8:..#.#..#.#../4.#..#4.;flailC=2,8:#..#4.#..#/3.#4.#..#|c.clawL!stub=0,5:##*2;front=0,5:ss*2;up=0,-2:##*2/#.;peekGrip=1,7:ss;flatLeft=@peekGrip,0,8;open=0,4:##/.#/##|c.clawR!stub=14,5:##*2;front=14,5:ss*2;up=14,-2:##*2/.#;low=14,8:3#*2;reach1=14,4:3.##/5#;write1=@front,13,6;write2=@front;peekGrip=13,7:ss;flatRight=@peekGrip,14,8;open=14,4:##/#./##;waveOut=14,-1:.##*2/#..|k.ears!stand=2,-1:#10.#/##8.##;nod=@stand,2,0;loaf=@stand,2,2;airplane=0,0:##12.##/3#10.3#;peek=@stand,2,1;flat=1,6:#12.#;twitchL=2,-1:11.#/##8.##;twitchR=~twitchL|k.body!stand=2,1:12#*7;loaf=1,4:.12s./14#*5;stretch=2,0:s11#/12#*2/.11#*2/..10#/12#*2;turnL=2,1:11#s*7;turnR=~turnL;leanR=2,1:.12#*4/12#.*3;leanL=~leanR|k.eyes!loafShut=3,6:oo6.oo;loafHalf=4,6:o6.o|k.paws!none=0,0:;groom1=12,4:ss*2;groom2=@groom1,12,3;cheer=0,2:#14.#*2;up=0,-1:##12.##*2;peekGrip=1,7:ss10.ss;write1=@groom1,13,5;write2=@groom1,14,6;upR=14,0:##*2|' +
     'k.tail!up=14,3:.s/.#*2/##;sway=14,3:.#*2/s#/#.;curl=14,4:##/.#/s#;loaf=14,6:.#*2/s#;puff=14,2:.#/##*2/s#/#.|' +
@@ -186,7 +184,6 @@
     PROPS[k + 'B'] = recolorFrame(PROPS[k], { L: 'A', H: 'E', x: 'C', j: 'i', J: 'I' });
   });
 
-  // 背后火海算法生成（保留轮廓白光 'V'）
   (() => {
     const sil = new Set();
     for (let y = 0; y <= 7; y++) for (let x = 2; x <= 13; x++) sil.add(`${x},${y}`);
@@ -236,7 +233,6 @@
     });
   })();
 
-  // ── 刚体层与符号层登记（符号层水平镜像时仅翻转锚点，字符正向绘制）────────
   const RIGID_LAYERS = new WeakSet();
   const SYM_LAYERS = new WeakSet();
   Object.values(PROPS).forEach((l) => RIGID_LAYERS.add(l));
@@ -245,7 +241,6 @@
     SYM_LAYERS.add(l);
   });
 
-  // 整格平移帧（带缓存，传递刚体与符号标记）
   const SHIFT_CACHE = new WeakMap();
   function shiftFrame(fr, dx, dy) {
     if (!fr || (!dx && !dy)) return fr;
@@ -314,10 +309,6 @@
     }
   }
 
-  // ── 整数格挤压（替代 ctx.scale 浮点缩放）─────────────────────────────────
-  // 思路：把弹性身体部件合成为一张字符点阵，再按「中心接缝最近邻」在整格层面
-  // 增删行/列（优先选纯色体块行列、靠近中心、保护眼睛 o 与暗面 s 特征和着地腿），
-  // 水平中心与底边锚定。这样每个方块永远是精确 PX×PX，边缘锐利不糊。
   function compositeGrid(layers) {
     let minX = Infinity;
     let minY = Infinity;
@@ -355,7 +346,6 @@
     return { g, minX, minY, W, H };
   }
 
-  // 选择要删除/复制的接缝线（行或列）；lines 为字符串数组
   function pickSeams(lines, count, remove, protectTail) {
     const n = lines.length;
     if (!count || n < 3) return new Set();
@@ -375,7 +365,6 @@
     cand.sort((a, b) => a.score - b.score || a.i - b.i);
     const chosen = new Set();
     const limit = min(count, n - 2);
-    // 第一轮：删除非纯色线时必须保留一条未被删除的同形邻线，防止特征整体消失
     for (const c of cand) {
       if (chosen.size >= limit) break;
       if (remove && !c.pure) {
@@ -422,7 +411,6 @@
     const left = minX + round((W - newW) / 2); // 水平中心锚定
     const top = minY + (H - newH); // 底边锚定
     const rows = rowMap.map((ry) => colMap.map((cx) => g[ry][cx]).join(''));
-    // 源行/列 → 目标位置（被删除的线映射到其下方/右方最近保留线）
     const targetOf = (map, src, n) => {
       for (let s = src; s < n; s++) {
         const t = map.indexOf(s);
@@ -472,11 +460,9 @@
     ctx.imageSmoothingEnabled = false;
 
     const mirror = !!options.mirror;
-    // 垂直位移吸附到整格，保证方块网格不出现亚格错位
     const tyPx = round(Number(options.tyPx || 0) / pxSize) * pxSize;
     const rotDeg = Number(options.rotDeg || 0);
     const clipBottomY = options.clipBottomY;
-    // 兼容旧入参 sxScale/syScale：换算为 16×10 画框上的整数格增量
     const sqW =
       options.sqW !== undefined ? round(options.sqW) : round(16 * (Number(options.sxScale || 1) - 1));
     const sqH =
@@ -495,7 +481,6 @@
       else bodyLayers.push(layer);
     }
 
-    // 弹性层最终列表：挤压时身体合成为一张整格点阵，道具/符号整格平移随行
     let elasticLayers;
     if ((sqW || sqH) && bodyLayers.length) {
       const sq = squashLayersToGrid(bodyLayers, sqW, sqH);
@@ -503,7 +488,6 @@
         elasticLayers = [sq.layer];
         for (const r of rigidLayers) {
           const w = max(1, ...r.rows.map((row) => row.length));
-          // 左右边缘平移量取均值：加宽时居中符号保持居中，偏侧道具随该侧移动
           const dx = round((sq.shiftX(r.ox) + sq.shiftX(r.ox + w - 1)) / 2);
           const dy = sq.shiftY(r.oy + r.rows.length - 1);
           elasticLayers.push(shiftFrame(r, dx, dy));
@@ -511,7 +495,6 @@
       }
     }
     if (!elasticLayers) elasticLayers = [...bodyLayers, ...rigidLayers];
-    // 保持原有绘制顺序：身体部件 → 道具 → 符号（rigid 本就位于末尾）
 
     ctx.save();
     if (typeof clipBottomY === 'number' && isFn(ctx.clip)) {
@@ -528,7 +511,6 @@
       ctx.clip();
     }
 
-    // 地面/背景独立层（影子、火海衬底、生长节点、地面激光、立麦架）不随挤压或歪头旋转
     if (groundedLayers.length) {
       ctx.save();
       if (mirror) {
@@ -579,7 +561,6 @@
     if (!rotDeg) {
       paintElastic(ctx);
     } else {
-      // 拖拽摆角：先在离屏画布上按整格绘制，再整体旋转贴图（关闭平滑，避免逐块缝隙与模糊）
       let off = canvas.__agRotOff;
       const docRef = canvas.ownerDocument;
       if (!off && docRef && isFn(docRef.createElement)) {
@@ -611,25 +592,19 @@
     ctx.restore();
   }
 
-  // 可被随机眨眼覆盖眼部的姿态；小紫猫慢摆尾的姿态
   const BLINKABLE_POSES = new Set(['idle', 'walk', 'lookNod', 'readAlong', 'gaze']);
   const SLOW_TAIL_POSES = new Set(['idle', 'lookNod', 'readAlong', 'gaze']);
-  // 冰晶让位：头顶已有道具的姿态不挂冰晶；居中符号出现时冰晶暂隐，仅侧边汗滴与打盹 z 可共存
   const CRYSTAL_HIDE_POSES = new Set([
     'siren', 'onFire', 'cheerSticks', 'peek', 'flat', 'rickroll', 'carry', 'whaleSpout',
     'slashGoal', 'slashBoost', 'slashSchedule', 'slashGrill', 'slashLearnBulb',
   ]);
   const CRYSTAL_OK_SYMS = new Set([SYMS.sweat, SYMS.z1, SYMS.z2, SYMS.dozeZ0, SYMS.dozeZ1, SYMS.dozeZ2, SYMS.sleepBubble0, SYMS.sleepBubble1]);
-  // 哈欠接伸懒腰：前 10 拍打哈欠，之后伸懒腰
   const YAWN_STRETCH_SPLIT = 10;
 
-  // ── 紧凑数据驱动姿态配方引擎（24 个常规姿态走极简字符串表进入 LZ 池，复杂时间轴保留短函数）──
   const PLANT_STAGES_C = [[5, 'seed'], [9, 'p1'], [13, 'p2'], [17, 'p3'], [23, 'p4'], [27, 'wilt1'], [31, 'wilt2']];
   const PLANT_STAGES_K = [[5, 'seed'], [9, 'p1'], [13, 'p2'], [17, 'p3'], [23, 'p4']];
   const pickStage = (t, v, fb) => { for (const [lim, k] of t) if (v < lim) return k; return fb; };
 
-  // DSL 字段码: 0=backProp sh=shadow b=body e=eyes l=legs L=clawL R=clawR a=ears w=paws t=tail m=mouth 1=prop1 2=prop2 y=extraSym(无sym时) Y=extraSym(强制) z=sink
-  // 值后缀: ~f (frameMod?A:B), ~c (clipMod?A:B), ~4 (phase4), ~3 (tickIdx%3), ~l (lt%len), ~a-b (a<=lt<b?A:B); ~ 表示 null, 空串跳过; 前缀 C:/K:/S:/W:/N: 对应蟹/猫龙鲸/猫/鲸/非鲸
   const POSE_DSL_RAW =
     'flat:sh=w14,b=flat,e=flatEyes,l=~,C:L=flatLeft,C:R=flatRight,K:a=flat,K:w=~,K:t=curl|' +
     'dangle:sh=~,e=wide,l=dangle/flailA/dangle2/flailB~4,C:b=turnL/turnR~f,C:L=up,C:R=up,K:a=airplane,K:t=puff|' +
@@ -725,11 +700,11 @@
       s.shadow = 'w14'; s.body = 'squash'; s.legs = isWhale ? null : 'crouch';
       if (isFelineRig) { s.ears = 'nod'; s.eyes = 'half'; if (isWhale) s.paws = 'tuck'; } else s.eyes = shiftFrame(p.eyes.squint, 0, 1);
     },
-    loaf(s, { isCat, isWhale, poseKey, phase4, tickIdx }) {
+    loaf(s, { isCat, isWhale, poseKey, tickIdx }) {
       if (!isCat && !isWhale) return;
       s.shadow = 'w14'; s.ears = 'loaf'; s.body = 'loaf'; s.legs = null;
       if (isWhale) s.paws = 'tuck';
-      s.eyes = poseKey === 'sleep' || phase4 === 3 ? 'loafShut' : 'loafHalf';
+      s.eyes = 'loafShut';
       s.tail = poseKey === 'sleep' || isWhale ? 'loaf' : floor(tickIdx / 4) % 2 ? 'loaf' : 'curl';
     },
     sleep(s, c) {
@@ -936,7 +911,6 @@
     return [backProp, shadow, tail, legs, body, mouth, ears, eyes, paws, prop1, prop2, extraSym].filter(Boolean);
   }
 
-  // 随机眨眼过渡：1×2 竖瞳 → 1×1 → 闭（s 暗面横线）→ 1×1 → 1×2
   const BLINK_SINGLE = ['half', 'closed', 'half'];
   const BLINK_DOUBLE = ['half', 'closed', 'half', 'closed', 'half'];
   // 迷你蟹眨眼帧缓存：把竖瞳 o 替换为暗面色 s
@@ -1314,10 +1288,13 @@
     const WB = 'data-ag-cs-win-blur';
     const PM = 'data-ag-prism-mode';
     const PP_OPEN = 'data-ag-pp-open';
+    const PERF_M = 'data-ag-cs-perf-mode';
     const isDocHidden = () => !!(doc?.hidden);
     const isPpOpen = () => {
       const root = doc?.documentElement;
-      return Boolean(root && isFn(root.getAttribute) && root.getAttribute(PP_OPEN) === '1');
+      if (!root || !isFn(root.getAttribute) || root.getAttribute(PP_OPEN) !== '1') return false;
+      const pm = String(root.dataset?.agCsPerfMode || root.getAttribute(PERF_M) || '').trim().toLowerCase();
+      return pm === 'performance' || pm === 'eco';
     };
     const isAttrB = () => {
       const root = doc?.documentElement;
@@ -1351,30 +1328,28 @@
       return el;
     };
 
-    // ── prefers-reduced-motion：无 window / matchMedia 时安全降级为 false ──
-    let reducedMotion = false;
-    let reducedMq = null;
+    // prefers-reduced-motion（协同 data-ag-cs-ignore-rm 契约；无 matchMedia 安全降级 false）
+    const IGN_RM = 'data-ag-cs-ignore-rm', MOT_A = 'data-ag-cs-motion';
+    const getHopApi = () => win?.__agPrismMascotHop || G?.__agPrismMascotHop || null;
+    const resolveRm = (v) => {
+      const r = doc?.documentElement;
+      return r?.getAttribute?.(MOT_A) === 'off' ? true : r?.getAttribute?.(IGN_RM) === '1' ? false : !!v;
+    };
+    let reducedMotion = false, reducedMq = null;
     const onReducedChange = (e) => {
-      reducedMotion = !!(e?.matches);
-      if (reducedMotion) freezeMotion();
-      else lastActivityAt = nowMs();
+      reducedMotion = resolveRm((e || reducedMq)?.matches);
+      if (reducedMotion) freezeMotion(); else lastActivityAt = nowMs();
       syncHeartbeat();
     };
     try {
       if (win && isFn(win.matchMedia)) {
         reducedMq = win.matchMedia('(prefers-reduced-motion: reduce)');
-        reducedMotion = !!(reducedMq?.matches);
-        if (reducedMq && isFn(reducedMq.addEventListener)) {
-          reducedMq.addEventListener('change', onReducedChange);
-        } else if (reducedMq && isFn(reducedMq.addListener)) {
-          reducedMq.addListener(onReducedChange);
-        }
+        reducedMotion = resolveRm(reducedMq?.matches);
+        if (isFn(reducedMq?.addEventListener)) reducedMq.addEventListener('change', onReducedChange);
+        else if (isFn(reducedMq?.addListener)) reducedMq.addListener(onReducedChange);
       }
-    } catch {
-      reducedMotion = false;
-      reducedMq = null;
-    }
-    if (options.reducedMotion !== undefined) reducedMotion = !!options.reducedMotion;
+    } catch { reducedMotion = false; reducedMq = null; }
+    if (options.reducedMotion !== undefined) reducedMotion = resolveRm(options.reducedMotion);
 
     // 统一托管的延时器（剧目分镜 / 起跳预备），dispose 时全部清理
     const pendingTimers = new Set();
@@ -1577,36 +1552,65 @@
       domTransformSkips: 0,
     };
 
-    // 扩大至 96x84px (32x28 格, PX=3), OX=8, OY=17 -> y=10 脚底在 81px, 头顶留满 51px 放火舌/立麦/节点花!
-    const CANVAS_W = 96;
-    const CANVAS_H = 84;
-    const OX = 8;
-    const OY = 17;
-    const PEEK_Y = 3;
-    const MINI_PEEK_Y = 2;
+    const CANVAS_W = 96, CANVAS_H = 84, OX = 8, OY = 17, PEEK_Y = 7, MINI_PEEK_Y = 2;
+    if (isFn(hostEl.replaceChildren)) hostEl.replaceChildren();
+    else if (isFn(hostEl.removeChild)) { let c; while ((c = hostEl.firstChild || hostEl.children?.[0])) hostEl.removeChild(c); }
+    else if (Array.isArray(hostEl.children)) hostEl.children.length = 0;
 
-    if (isFn(hostEl.removeChild)) {
-      while (hostEl.firstChild) hostEl.removeChild(hostEl.firstChild);
-    } else {
-      hostEl.innerHTML = '';
-    }
+    const zeroCv = (cv, drop) => {
+      if (!cv) return;
+      cv.width = cv.height = 0;
+      if (drop) {
+        cv._ctx = null;
+        if (cv.__agRotOff) { zeroCv(cv.__agRotOff, 1); cv.__agRotOff = null; }
+      }
+    };
+    const rmNode = (n) => {
+      if (!n) return;
+      if (isFn(n.remove)) n.remove();
+      else if (n.parentNode?.removeChild) n.parentNode.removeChild(n);
+      else if (hostEl?.removeChild) try { hostEl.removeChild(n); } catch {}
+    };
 
     const miniGroupEl = markNoTrOwned(doc.createElement('div'));
     miniGroupEl.className = 'ag-v2-mini-pile';
     if (miniGroupEl.style) miniGroupEl.style.zIndex = 'auto';
-    miniCrabs.forEach((mc) => {
+    hostEl.appendChild(miniGroupEl);
+    const mountMiniDom = (mc) => {
+      if (mc.canvas) return;
       const cv = markNoTrOwned(doc.createElement('canvas'));
       cv.className = 'ag-v2-mini-crab-canvas';
-      cv.width = round(40 * dpr);
-      cv.height = round(32 * dpr);
+      cv.width = round(40 * dpr); cv.height = round(32 * dpr);
       cv.dataset.miniCrab = mc.id;
       if (cv.style) Object.assign(cv.style, { pointerEvents: 'auto', cursor: 'grab', touchAction: 'none', transformOrigin: '20px 26px' });
       miniGroupEl.appendChild(cv);
-      mc.canvas = cv;
+      mc.canvas = mc.el = cv;
       mc._ctx = isFn(cv.getContext) ? (cv._ctx = cv.getContext('2d')) : null;
-      mc.el = cv;
-    });
-    hostEl.appendChild(miniGroupEl);
+      mc.lastFrameKey = null;
+    };
+    const unmountMiniDom = (mc) => {
+      if (!mc.canvas && !mc.el) return;
+      if (isFn(mc._pointerCleanup)) {
+        const idx = cleanups.indexOf(mc._pointerCleanup);
+        if (idx >= 0) cleanups.splice(idx, 1);
+        try { mc._pointerCleanup(); } catch {}
+        mc._pointerCleanup = null;
+      }
+      zeroCv(mc.canvas, true); rmNode(mc.canvas || mc.el);
+      mc.canvas = mc._ctx = mc.el = mc.lastFrameKey = mc.lastDomX = mc.lastDomY = mc.lastDomZ = null;
+      mc.lastDomRot = 0; mc.lastDomDirect = mc.lastDomDrag = undefined;
+    };
+    const syncMiniDom = (bindPtr = true) => {
+      for (const mc of miniCrabs) {
+        if (miniPileEnabled) {
+          const had = !!mc.canvas;
+          mountMiniDom(mc);
+          if (!had && (vramReclaimed || isVramSleepState())) zeroCv(mc.canvas);
+          if (bindPtr && !mc._pointerCleanup && mc.el) bindEntityPointer(mc);
+        } else unmountMiniDom(mc);
+      }
+    };
+    if (miniPileEnabled) miniCrabs.forEach(mountMiniDom);
 
     const createActorDom = (actor, beforeNode = null) => {
       if (actor.el) return;
@@ -1639,61 +1643,49 @@
     releaseFxCanvas();
     hostEl.appendChild(fxCanvas);
 
-    // ── 右侧角落微缩像素栖息地摆件（图层 z-index:14 在双宠背后，仅状态切换绘制 1 帧，日常 0fps）──
-    const habitatCanvas = markNoTrOwned(doc.createElement('canvas'));
-    habitatCanvas.className = 'ag-v2-habitat-prop';
-    habitatCanvas.setAttribute('aria-hidden', 'true');
-    if (habitatCanvas.style) Object.assign(habitatCanvas.style, { position: 'absolute', right: '10px', bottom: '2px', width: '24px', height: '30px', pointerEvents: 'none', zIndex: '14', imageRendering: 'pixelated' });
-    hostEl.appendChild(habitatCanvas);
-    let habitatPreview = 'auto';
-    let scheduleWatchUntil = 0;
-    let lastHabitatKey = '';
+    // 右侧角落微缩像素栖息地摆件（纯 CSS SVG DataURI，0 Canvas 0 innerHTML）
+    const habitatEl = markNoTrOwned(doc.createElement('div'));
+    habitatEl.className = 'ag-v2-habitat-prop';
+    habitatEl.setAttribute('aria-hidden', 'true');
+    if (habitatEl.style) Object.assign(habitatEl.style, { position: 'absolute', right: '10px', bottom: '2px', width: '24px', height: '30px', pointerEvents: 'none', zIndex: '14', imageRendering: 'pixelated', backgroundRepeat: 'no-repeat', backgroundSize: '24px 30px' });
+    hostEl.appendChild(habitatEl);
+    let habitatPreview = 'auto', scheduleWatchUntil = 0, lastHabitatKey = '';
+    const habSvgCache = {};
     const resolveHabitatMode = () => {
       if (habitatPreview !== 'auto') return habitatPreview;
       if (Date.now() < scheduleWatchUntil) return 'hourglass';
       const h = new Date().getHours();
       return h >= 23 || h < 5 ? 'lamp' : 'cactus';
     };
+    const buildHabitatSvgUri = (mode) => {
+      if (habSvgCache[mode]) return habSvgCache[mode];
+      const spr = PROPS[mode === 'lamp' ? 'habLamp' : mode === 'hourglass' ? 'habHourglass' : 'habCactus'];
+      if (!spr || !spr.rows) return '';
+      const cell = 3, oy = max(0, floor(30 / cell) - spr.rows.length), pal = PALETTES.clawd, rects = [];
+      for (let ry = 0; ry < spr.rows.length; ry++) {
+        const row = spr.rows[ry], py = (oy + spr.oy + ry) * cell;
+        for (let rx = 0; rx < row.length; rx++) {
+          const ch = row[rx], col = ch !== '.' && ch !== ' ' ? pal[ch] : '';
+          if (!col) continue;
+          let r = 1;
+          while (rx + r < row.length && row[rx + r] === ch) r++;
+          rects.push(`<rect x="${(spr.ox + rx) * cell}" y="${py}" width="${cell * r}" height="${cell}" fill="${col}"/>`);
+          rx += r - 1;
+        }
+      }
+      return (habSvgCache[mode] = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="30" viewBox="0 0 24 30" shape-rendering="crispEdges">${rects.join('')}</svg>`)}")`);
+    };
     const renderHabitatProp = (force = false) => {
       if (isVramSleepState()) return;
       const mode = resolveHabitatMode();
-      const key = `${mode}:${dpr}`;
-      if (!force && key === lastHabitatKey && habitatCanvas.width > 0 && habitatCanvas.height > 0) return;
-      lastHabitatKey = key;
-      const cssW = 24;
-      const cssH = 30;
-      habitatCanvas.width = round(cssW * dpr);
-      habitatCanvas.height = round(cssH * dpr);
-      const ctx = habitatCanvas._ctx || (habitatCanvas._ctx = habitatCanvas.getContext('2d'));
-      if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      ctx.imageSmoothingEnabled = false;
-      const propKey = mode === 'lamp' ? 'habLamp' : mode === 'hourglass' ? 'habHourglass' : 'habCactus';
-      const spr = PROPS[propKey];
-      if (!spr) return;
-      const cell = 3;
-      const hCells = spr.rows.length;
-      const oy = max(0, floor(cssH / cell) - hCells);
-      drawLayerSet(ctx, 0, oy, cell, PALETTES.clawd, [spr]);
-      habitatCanvas.setAttribute('data-habitat-mode', mode);
+      if (!force && mode === lastHabitatKey) return;
+      lastHabitatKey = mode;
+      const uri = buildHabitatSvgUri(mode);
+      if (uri && habitatEl.style) habitatEl.style.backgroundImage = uri;
+      habitatEl.setAttribute('data-habitat-mode', mode);
     };
     renderHabitatProp(true);
 
-    const zeroCv = (cv, drop) => {
-      if (!cv) return;
-      cv.width = cv.height = 0;
-      if (drop) {
-        cv._ctx = null;
-        if (cv.__agRotOff) { zeroCv(cv.__agRotOff, 1); cv.__agRotOff = null; }
-      }
-    };
-    const rmNode = (n) => {
-      if (!n) return;
-      if (isFn(n.remove)) n.remove();
-      else if (n.parentNode?.removeChild) n.parentNode.removeChild(n);
-      else if (hostEl?.removeChild) try { hostEl.removeChild(n); } catch {}
-    };
     const resizeStageCvs = () => {
       for (const a of activeMainActors()) {
         if (a?.canvas) { a.canvas.width = round(CANVAS_W * dpr); a.canvas.height = round(CANVAS_H * dpr); }
@@ -1710,7 +1702,6 @@
       if (vramReclaimed) return;
       vramReclaimed = true;
       releaseFxCanvas();
-      if (habitatCanvas) { zeroCv(habitatCanvas); lastHabitatKey = ''; }
       for (const a of activeMainActors()) {
         zeroCv(a?.canvas);
         if (a?.lastRender) { a.lastRender.poseKey = null; a.lastRender.cw = a.lastRender.ch = 0; }
@@ -2298,6 +2289,7 @@
 
     const resolvePoseFor = (actor, now) => {
       if (actor.dragging) return 'dangle';
+      if (yieldMode === 'peek') return 'peek';
       const st = seqStep(actor);
       if (st) return st.pose;
       if (actor.overridePose && now < actor.overrideUntil) return actor.overridePose;
@@ -2308,7 +2300,6 @@
         actor.faceDir = null;
         actor.clipParam = null;
       }
-      if (yieldMode === 'peek') return 'peek';
       const isWorker = isWorkingActor(actor);
       if (hasError && isWorker) return 'angry';
       if (streaming) {
@@ -3039,6 +3030,7 @@
         miniGroupEl.style.display = nextMiniDisplay;
       }
       if (miniPileEnabled) {
+        syncMiniDom(true);
         const safeRight = max(48, (stageBoundsX().maxX || 680) - 48);
         if (!reducedMotion && !dozing && yieldMode !== 'peek' && lastCrabStepTick !== tickIdx) {
           lastCrabStepTick = tickIdx;
@@ -3174,6 +3166,7 @@
           }
 
           const mz = miniZ(mc);
+          if (!mc.canvas) return;
           const mKey = `${computeLayersFrameIdx([targetSprite])}|${targetMirror ? 1 : 0}|${targetTy}|${mc.canvas.width}`;
           if (mc.lastFrameKey !== mKey) {
             mc.lastFrameKey = mKey;
@@ -4347,13 +4340,14 @@
       activeIds = nextIds;
       quadEnabled = roster.d > 0 || roster.w > 0;
       miniPileEnabled = !!roster.minis;
+      syncMiniDom(true);
       mascotSpec = encodeMascotSpec(roster);
       syncMascotDragRootAttr();
       return domChanged;
     };
 
     for (const a of activeMainActors()) bindEntityPointer(a);
-    miniCrabs.forEach(bindEntityPointer);
+    if (miniPileEnabled) miniCrabs.forEach((mc) => mc.el && bindEntityPointer(mc));
 
     const hasDozeTransition = (now) =>
       activeMainActors().some((a) => a.overridePose && now < a.overrideUntil);
@@ -4393,26 +4387,38 @@
       win.addEventListener('focus', onWFocus);
       cleanups.push(() => { win.removeEventListener?.('blur', onWBlur); win.removeEventListener?.('focus', onWFocus); });
     }
-    const MO0 = win?.MutationObserver || (typeof MutationObserver === 'function' ? MutationObserver : null);
-    if (MO0 && doc?.documentElement) {
-      try {
-        let wasResizingAttr = Boolean(doc.documentElement.getAttribute?.(RESIZE_ATTR) === '1');
-        const mo = new MO0((records) => {
-          if (disposed) return;
-          const nowResizingAttr = Boolean(doc.documentElement.getAttribute?.(RESIZE_ATTR) === '1');
-          const resizeEnded = wasResizingAttr && !nowResizingAttr;
-          wasResizingAttr = nowResizingAttr;
-          if (resizeEnded) onStageResizeReleased();
-          const hasPowerMut =
-            !Array.isArray(records) ||
-            records.some(
-              (r) => !r || !r.attributeName || r.attributeName === WB || r.attributeName === PM || r.attributeName === PP_OPEN
-            );
-          if (hasPowerMut) syncPwr();
-        });
-        mo.observe(doc.documentElement, { attributes: true, attributeFilter: [WB, PM, PP_OPEN, RESIZE_ATTR] });
-        cleanups.push(() => mo.disconnect());
-      } catch {}
+    const rootAttrs = [WB, PM, PP_OPEN, PERF_M, RESIZE_ATTR, IGN_RM, MOT_A];
+    if (doc?.documentElement) {
+      let wasResizingAttr = Boolean(doc.documentElement.getAttribute?.(RESIZE_ATTR) === '1');
+      const onRootMut = (records) => {
+        if (disposed) return;
+        const nowResizingAttr = Boolean(doc.documentElement.getAttribute?.(RESIZE_ATTR) === '1');
+        const resizeEnded = wasResizingAttr && !nowResizingAttr;
+        wasResizingAttr = nowResizingAttr;
+        if (resizeEnded) onStageResizeReleased();
+        if (Array.isArray(records) && records.some((r) => r && (r.attributeName === IGN_RM || r.attributeName === MOT_A))) onReducedChange(reducedMq);
+        if (!Array.isArray(records) || records.some((r) => !r || !r.attributeName || r.attributeName === WB || r.attributeName === PM || r.attributeName === PP_OPEN || r.attributeName === PERF_M)) syncPwr();
+      };
+      const dBus = win && (win.__agDomBus || win.__agPrismDomBus);
+      let unBus = null;
+      if (dBus?.subscribe) {
+        try {
+          unBus = dBus.subscribe('dual-mascot-root', onRootMut, {
+            priority: 'high', attributes: true, attributeFilter: rootAttrs,
+            filter: (m) => m?.type === 'attributes' && m.target === doc.documentElement && rootAttrs.includes(m.attributeName),
+            observeOptions: { childList: false, subtree: false, attributes: true, attributeFilter: rootAttrs },
+          });
+          cleanups.push(unBus);
+        } catch { unBus = null; }
+      }
+      const MO0 = !unBus ? (win?.MutationObserver || (typeof MutationObserver === 'function' ? MutationObserver : null)) : null;
+      if (MO0) {
+        try {
+          const mo = new MO0(onRootMut);
+          mo.observe(doc.documentElement, { attributes: true, attributeFilter: rootAttrs });
+          cleanups.push(() => mo.disconnect());
+        } catch {}
+      }
     }
 
     // ── 生态联动：活动唤醒 / 打盹 / 领衔交接 / 外部事件 notify ───────────────
@@ -4926,14 +4932,21 @@
           renderAllFrames();
         }
       },
+      'roof-land'() {
+        if (reducedMotion || dozing || yieldMode === 'peek' || isVramSleepState()) return;
+        for (const a of activeMainActors()) {
+          if (!a.dragging && !a.seq) startClip(a, 'squash', 240);
+        }
+      },
     };
     const handleNotify = (event, payload) => {
       if (disposed) return;
       const fn = hasOwn(NOTIFY, event) ? NOTIFY[event] : null;
       if (!fn) return;
       const pl = payload && typeof payload === 'object' ? payload : {};
-      if (event === 'host-sleep') {
+      if (event === 'host-sleep' || event === 'roof-land') {
         fn(pl);
+        if (event === 'roof-land' && !reducedMotion && !dozing && yieldMode !== 'peek' && !isVramSleepState()) renderAllFrames();
         return;
       }
       const wasDozing = dozing;
@@ -4948,6 +4961,7 @@
 
     // 鼠标靠近舞台或切回可见标签页时，0ms 恢复 100ms 灵敏心跳
     const onApproach = () => {
+      if (yieldMode === 'peek') return;
       markActivity();
     };
     if (isFn(hostEl.addEventListener)) {
@@ -5011,12 +5025,17 @@
       if (hostEl) {
         if (isPeek) hostEl.setAttribute?.('data-ag-mascot-peek', '1');
         else hostEl.removeAttribute?.('data-ag-mascot-peek');
+        if (hostEl.style) {
+          hostEl.style.pointerEvents = isPeek ? 'none' : '';
+          hostEl.style.zIndex = isPeek ? '8' : '';
+        }
       }
       if (isPeek) {
         dragReleaseHooks.forEach((fn) => { try { fn(); } catch {} });
       }
       for (const a of activeMainActors()) {
         if (!a?.el) continue;
+        if (isPeek && !a.dragging) { a.seq = null; a.overridePose = null; a.overrideUntil = 0; }
         a.el.setAttribute?.('tabindex', '-1');
         if (isPeek) a.el.setAttribute?.('aria-hidden', 'true');
         else a.el.removeAttribute?.('aria-hidden');
@@ -5051,63 +5070,39 @@
         if (next.popoverRightWidth !== undefined) popoverRightWidth = Number(next.popoverRightWidth || 0);
         if (next.orchestrator !== undefined) orchestrator = !!next.orchestrator;
         if (next.reducedMotion !== undefined) {
-          reducedMotion = !!next.reducedMotion;
+          reducedMotion = resolveRm(next.reducedMotion);
           if (reducedMotion && !prev[10]) freezeMotion();
           else if (!reducedMotion && prev[10]) lastActivityAt = nowMs();
         }
-
-        let nextRoster = { ...roster };
-        let rosterFromSpec = false;
+        let nextRoster = { ...roster }, rosterFromSpec = false;
         if (next.mascot !== undefined) {
           const parsed = parseMascotSpec(next.mascot);
-          if (parsed) {
-            nextRoster = parsed;
-            rosterFromSpec = true;
-          }
+          if (parsed) { nextRoster = parsed; rosterFromSpec = true; }
         }
         if (!rosterFromSpec) {
           if (next.quadEnabled !== undefined) {
-            const q = !!next.quadEnabled;
-            if (q) {
-              if (nextRoster.c === 0 && nextRoster.k === 0 && nextRoster.d === 0 && nextRoster.w === 0) {
-                nextRoster.c = 1;
-                nextRoster.k = 1;
-              }
-              nextRoster.d = 1;
-              nextRoster.w = 1;
+            if (next.quadEnabled) {
+              if (!nextRoster.c && !nextRoster.k && !nextRoster.d && !nextRoster.w) { nextRoster.c = 1; nextRoster.k = 1; }
+              nextRoster.d = 1; nextRoster.w = 1;
             } else {
-              nextRoster.d = 0;
-              nextRoster.w = 0;
-              if (nextRoster.c === 0 && nextRoster.k === 0) {
-                nextRoster.c = 1;
-                nextRoster.k = 1;
-              }
+              nextRoster.d = 0; nextRoster.w = 0;
+              if (!nextRoster.c && !nextRoster.k) { nextRoster.c = 1; nextRoster.k = 1; }
             }
           }
           if (next.miniPileEnabled !== undefined) nextRoster.minis = !!next.miniPileEnabled;
         }
-        const nextMascotSpec = encodeMascotSpec(nextRoster);
-        const nextQuad = nextRoster.d > 0 || nextRoster.w > 0;
-        const nextMinis = !!nextRoster.minis;
-        roster = nextRoster;
-        mascotSpec = nextMascotSpec;
-        quadEnabled = nextQuad;
-        miniPileEnabled = nextMinis;
-
+        roster = nextRoster; mascotSpec = encodeMascotSpec(nextRoster);
+        quadEnabled = nextRoster.d > 0 || nextRoster.w > 0; miniPileEnabled = !!nextRoster.minis;
         const cur = [popoverRightWidth, camp, streaming, streamTier, hasError, yieldMode, leapOffsetY, miniPileEnabled, quadEnabled, orchestrator, reducedMotion, mascotSpec];
         if (cur.every((v, i) => v === prev[i])) return;
-
         if (mascotSpec !== prev[11] || quadEnabled !== prev[8]) {
-          const domChanged = syncRosterActors();
-          if (domChanged) {
-            resetHomePositions(false);
-            syncPeekInteractivity();
-          }
+          if (syncRosterActors()) { resetHomePositions(false); syncPeekInteractivity(); }
+        } else if (miniPileEnabled !== prev[7]) {
+          syncMiniDom(true);
+          syncPeekInteractivity();
         }
         if (camp !== prev[1]) {
-          // 挂载后阵营实际变化：自动播放领衔交接（站位交换在其内部完成）
-          markActivity();
-          campHandoff(prev[1]);
+          markActivity(); campHandoff(prev[1]);
           if (nowMs() - lastHandoffAt > 50) resetHomePositions(popoverRightWidth !== prev[0]);
         } else if (popoverRightWidth !== prev[0] || miniPileEnabled !== prev[7]) {
           resetHomePositions(popoverRightWidth !== prev[0]);
@@ -5166,7 +5161,7 @@
             campHandoff(prevC);
           },
           streamDone: () => { markActivity(); NOTIFY.streamDone({ error: false }); },
-          crabRide: () => { markActivity(); miniPileEnabled = true; roster.minis = true; mascotSpec = encodeMascotSpec(roster); resetHomePositions(false); runCrabRide(true); },
+          crabRide: () => { markActivity(); miniPileEnabled = true; roster.minis = true; mascotSpec = encodeMascotSpec(roster); syncMiniDom(true); resetHomePositions(false); runCrabRide(true); },
           bump: () => {
             markActivity();
             const mains = activeMainActors();
@@ -5315,7 +5310,7 @@
           miniPileEnabled,
           quadEnabled,
           reducedMotion,
-          // 生态联动与按需渲染遥测只读诊断
+          yieldMode,
           dozing,
           orchestrator,
           rimLight: { active: rim.on, strength: round(rim.s * 100) / 100, toneKey: rim.t },
@@ -5405,40 +5400,29 @@
         if (!isVramSleepState() && !isWindowBlurred() && !isPpOpen()) renderAllFrames();
       },
       syncPowerState: syncPwr,
+      getHopBridge: getHopApi,
       dispose() {
         disposed = true;
-        rim.on = false;
-        rim.s = 0;
-        rimSig = '0';
+        rim.on = false; rim.s = 0; rimSig = '0';
+        try { getHopApi()?.cancelForStage?.(hostEl); } catch {}
         const liveMains = activeMainActors();
-        for (const e of [...liveMains, ...miniCrabs]) {
-          if (e) { e.dragging = e.ballisticActive = false; e.rot = 0; }
-        }
+        for (const e of [...liveMains, ...miniCrabs]) if (e) { e.dragging = e.ballisticActive = false; e.rot = 0; }
         syncMascotDragRootAttr();
         if (tickTimer !== null) { clearInterval(tickTimer); tickTimer = null; }
         currentTickMs = 0;
         if (dragRafId && cAF) { try { cAF(dragRafId); } catch {} dragRafId = 0; }
         dragRafPending = false;
         if (resizeRaf && cAF) { try { cAF(resizeRaf); } catch {} resizeRaf = 0; }
-        clearTimeout(pauseTimer);
-        clearTimeout(theaterTimer);
-        pendingTimers.forEach((t) => clearTimeout(t));
-        pendingTimers.clear();
-        try {
-          if (reducedMq?.removeEventListener) reducedMq.removeEventListener('change', onReducedChange);
-          else if (reducedMq?.removeListener) reducedMq.removeListener(onReducedChange);
-        } catch {}
+        clearTimeout(pauseTimer); clearTimeout(theaterTimer);
+        pendingTimers.forEach((t) => clearTimeout(t)); pendingTimers.clear();
+        try { reducedMq?.removeEventListener?.('change', onReducedChange) ?? reducedMq?.removeListener?.(onReducedChange); } catch {}
         pairCooldowns.clear();
         try {
-          reclaimStageVram();
-          zeroCv(fxCanvas, 1);
-          zeroCv(habitatCanvas, 1);
-          for (const e of [...liveMains, ...miniCrabs]) {
-            if (e) { e._ctx = null; zeroCv(e.canvas, 1); }
-          }
+          reclaimStageVram(); zeroCv(fxCanvas, 1);
+          for (const e of [...liveMains, ...miniCrabs]) if (e) { e._ctx = null; zeroCv(e.canvas, 1); }
         } catch {}
         cleanups.forEach((fn) => fn());
-        for (const n of [miniGroupEl, ...liveMains.map((a) => a.el), fxCanvas, habitatCanvas]) rmNode(n);
+        for (const n of [miniGroupEl, ...liveMains.map((a) => a.el), fxCanvas, habitatEl]) rmNode(n);
       },
     };
   }

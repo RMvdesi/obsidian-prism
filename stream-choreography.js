@@ -411,10 +411,8 @@
         sa(spark, 'data-brand', brand);
         sa(spark, 'data-state', st);
         sa(spark, 'data-mono', mv);
-        const svgStr = buildBrandMarkSvg(brand, 13, 'auto', isMono);
-        const cloned = cloneCachedSvgElement(`spark:${brand}:${mv}`, svgStr);
-        if (cloned && typeof spark.replaceChildren === 'function') spark.replaceChildren(cloned);
-        else spark.innerHTML = svgStr;
+        const c = cloneCachedSvgElement(`spark:${brand}:${mv}`, buildBrandMarkSvg(brand, 13, 'auto', isMono));
+        if (c) (G.__agPrismSvgUtil ? G.__agPrismSvgUtil.mount(spark, c) : spark.replaceChildren?.(c));
       }
     };
 
@@ -916,6 +914,7 @@
       const curCid = getSidebarRowCid(selRow);
       if (sbInit && sbRect && (curCid && sbCid ? curCid === sbCid : selIdx === sbIndex)) return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: sbRect, st: states };
       const list = peOf(selRow);
+      if (getBus()?.isSkipped?.(selRow)) return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: sbRect, st: states };
       const rr = rectOf(selRow);
       const lr = rectOf(list);
       const stTop = list ? list.scrollTop || 0 : 0;
@@ -1047,11 +1046,12 @@
       }, 920);
     };
 
+    const getBus = () => G.__agDomBus || G.__agPrismDomBus || (typeof window !== 'undefined' && (window.__agDomBus || window.__agPrismDomBus)) || null;
     const measureVisibleChangedHeaders = () => {
-      const out = [];
+      const out = [], bus = getBus();
       const vh = typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 1080;
       for (const hdr of qsa(docOf(), '[data-testid="changed-files-card-header"]')) {
-        if (seenHeaders.has(hdr)) continue;
+        if (seenHeaders.has(hdr) || bus?.isSkipped?.(hdr)) continue;
         const r = rectOf(hdr);
         if (!r || r.height <= 0 || (r.bottom > 0 && r.top < vh)) out.push(hdr);
       }
@@ -1068,18 +1068,25 @@
       }
     };
 
-    const syncHeroCCaustics = (measuredHeaders) => {
-      const d = docOf();
-      const now = nowOf();
-      syncHeaderOpenStates(d);
+    const applyCausticHeaders = (list) => {
       let sawNew = false;
-      for (const hdr of measuredHeaders || measureVisibleChangedHeaders()) {
+      for (const hdr of list) {
         if (seenHeaders.has(hdr)) continue;
-        seenHeaders.add(hdr);
-        sawNew = true;
+        seenHeaders.add(hdr); sawNew = true;
         if (isMotionUltra()) applyCaustic(hdr);
       }
       if (sawNew) notifyMascot('files-changed');
+    };
+
+    const syncHeroCCaustics = (measuredHeaders) => {
+      const d = docOf(), now = nowOf(), bus = getBus();
+      syncHeaderOpenStates(d);
+      if (measuredHeaders) applyCausticHeaders(measuredHeaders);
+      else if (bus?.measure && bus?.mutate) {
+        let mHdrs = null;
+        bus.measure('sc:caustics-r', () => { mHdrs = measureVisibleChangedHeaders(); });
+        bus.mutate('sc:caustics-w', () => { if (!isDestroyed() && mHdrs?.length) guardMut(() => applyCausticHeaders(mHdrs)); });
+      } else applyCausticHeaders(measureVisibleChangedHeaders());
 
       const PANE_RUN_SEL = '[data-testid="input-cancel-button"],[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
       const views = findFormalConvViews();
@@ -1402,6 +1409,7 @@
         const baseEl = isEl(target) ? target : peOf(target);
         if (
           !baseEl ||
+          getBus()?.isSkipped?.(baseEl) ||
           closestOf(
             baseEl,
             '.ag-prism-thought-overlay, .ag-cs-smooth-caret, .ag-cs-crab, .ag-cs-conv-aura-host, [data-testid="agent-input-box"], script, style'
@@ -1534,240 +1542,224 @@
             markStreamClass(added, 'ag-cs-stream-chunk', 310);
           } else {
             fadeLeafTexts(added, now, 4);
-          }
-        }
-      }
-    };
-
-    const syncDualStreamEngine = () => {
-      const active = canStreamMotion() && isConvRunning();
-      const views = active ? findFormalConvViews() : [];
-      if (!active || views.length === 0) {
-        if (streamObs) {
-          try {
-            streamObs.disconnect();
-          } catch {}
-          streamRoots.clear();
-        }
-        flushAllStreamArtifacts(!canStreamMotion());
-        return;
-      }
-
-      const trigByView = [];
-      for (let v = 0; v < views.length; v++) {
-        const conv = views[v];
-        const triggers = qsa(conv, '[data-testid="thinking-collapsible-trigger"]');
-        trigByView.push([conv, triggers]);
-        for (let i = 0; i < triggers.length; i++) {
-          const trig = triggers[i];
-          const bodyDiv = trig.nextElementSibling;
-          if (!bodyDiv || tagOf(bodyDiv) !== 'DIV') continue;
-          const streaming =
-            ga(trig, 'aria-expanded') === 'true' &&
-            isStreamingThoughtTrigger(trig, i === triggers.length - 1);
-          if (streaming) setAttrIfChanged(bodyDiv, 'data-ag-cs-thought-streaming', '1');
-          else if (ha(bodyDiv, 'data-ag-cs-thought-streaming')) ra(bodyDiv, 'data-ag-cs-thought-streaming');
-        }
-      }
-
-      if (!streamObs && typeof MutationObserver === 'function') streamObs = new MutationObserver(onStreamMutations);
-      if (streamObs) {
-        let changed = streamRoots.size !== views.length;
-        if (!changed) {
-          for (let v = 0; v < views.length; v++) {
-            if (!streamRoots.has(views[v])) { changed = true; break; }
-          }
-        }
-        if (changed) {
-          try {
-            streamObs.disconnect();
-            streamRoots.clear();
-            for (let v = 0; v < trigByView.length; v++) {
-              const [conv, triggers] = trigByView[v];
-              const resps = qsa(conv, PROSE_SEL);
-              if (resps.length > 0) snapTextLens(resps[resps.length - 1], 24);
-              if (triggers.length > 0) {
-                const lb = triggers[triggers.length - 1]?.nextElementSibling;
-                if (lb && !isManagedThoughtPanel(lb)) snapTextLens(lb, 16);
-              }
-              streamObs.observe(conv, { childList: true, characterData: true, subtree: true });
-              streamRoots.add(conv);
-            }
-          } catch {}
-        }
-      }
-    };
-
-    const isFreshTriggerOrigin = (trig) => {
-      if (!trig || !isFin(trig.at)) return false;
-      const age = nowOf() - trig.at;
-      return age >= 0 && age <= 900;
-    };
-
-    const resolveTriggerOriginCoords = (trig) => {
-      if (!isFreshTriggerOrigin(trig)) return null;
-      if (trig.el && !trig._measured) {
-        trig._measured = true;
-        if (trig.el.isConnected !== false) {
-          const r = rectOf(trig.el);
-          if (r && r.width > 0 && r.height > 0) {
-            trig.x = r.left + r.width / 2;
-            trig.y = r.top + r.height / 2;
-          }
-        }
-        trig.el = null;
-      }
-      return isFin(trig.x) && isFin(trig.y) ? trig : null;
-    };
-
-    const measureNewLensOverlays = () => {
-      const d = docOf();
-      if (!isMotionStandardOrUltra() || !d) return [];
-      const cands = new Set([
-        ...qsa(d, '.agy-overlay, .agy-fastpick, [data-testid="context-menu-popup"], [data-testid="context-menu-submenu-popup"]'),
-      ]);
-      for (const el of qsa(d, '[data-testid="overview-panel"]')) {
-        const p = peOf(el);
-        if (p && tagOf(p) === 'DIV') cands.add(p);
-      }
-      const freshNew = [];
-      for (const ov of cands) {
-        if (!ha(ov, 'data-hover-card-popup') && !seenOverlays.has(ov)) freshNew.push(ov);
-      }
-      if (freshNew.length === 0) return [];
-      // 仅在真有新浮层弹出时才懒测距点击源，消除普通正文点击时的同步回流
-      const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
-      const out = [];
-      for (const ov of freshNew) {
-        out.push({ ov, rect: trig ? rectOf(ov) : null });
-      }
-      return out;
-    };
-
-    const syncLensOverlayOrigins = (measuredOverlays) => {
-      const d = docOf();
-      if (!d) return;
-      for (const el of qsa(d, '[data-testid="overview-panel"]')) {
-        const p = peOf(el);
-        if (p && tagOf(p) === 'DIV') {
-          setAttrIfChanged(p, 'data-ag-cs-overview-shell', '1');
-          setAttrIfChanged(p, 'data-ag-cs-prism-box', '1');
-          setAttrIfChanged(p, 'data-ag-cs-prism-mirror', '1');
-        }
-      }
-      if (!isMotionStandardOrUltra()) return;
-      const list = measuredOverlays || measureNewLensOverlays();
-      if (!list.length) return;
-      const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
-      for (const { ov, rect: r } of list) {
-        if (seenOverlays.has(ov)) continue;
-        if (trig && r && (r.width <= 0 || r.height <= 0)) continue;
-        seenOverlays.add(ov);
-        if (trig && r && r.width > 0 && r.height > 0) {
+}
+}
+}
+};
+const syncStreamActiveAttr = (on) => {
+const h = docOf()?.documentElement;
+if (h) { if (on) { if (ga(h, 'data-ag-cs-stream-active') !== '1' && typeof h.setAttribute === 'function') setAttrIfChanged(h, 'data-ag-cs-stream-active', '1'); } else if (ha(h, 'data-ag-cs-stream-active') && typeof h.removeAttribute === 'function') ra(h, 'data-ag-cs-stream-active'); }
+try { getBus()?.setStreaming?.(on); } catch {}
+};
+const syncDualStreamEngine = () => {
+const running = isConvRunning();
+const views = running ? findFormalConvViews() : [];
+syncStreamActiveAttr(running && views.length > 0);
+const active = canStreamMotion() && running;
+if (!active || views.length === 0) {
+if (streamObs) { try { streamObs.disconnect(); } catch {} streamRoots.clear(); }
+getBus()?.cancelGroup?.('conv:stream');
+flushAllStreamArtifacts(!canStreamMotion());
+return;
+}
+const trigByView = [];
+for (let v = 0; v < views.length; v++) {
+const conv = views[v];
+const triggers = qsa(conv, '[data-testid="thinking-collapsible-trigger"]');
+trigByView.push([conv, triggers]);
+for (let i = 0; i < triggers.length; i++) {
+const trig = triggers[i];
+const bodyDiv = trig.nextElementSibling;
+if (!bodyDiv || tagOf(bodyDiv) !== 'DIV') continue;
+const streaming =
+ga(trig, 'aria-expanded') === 'true' &&
+isStreamingThoughtTrigger(trig, i === triggers.length - 1);
+if (streaming) setAttrIfChanged(bodyDiv, 'data-ag-cs-thought-streaming', '1');
+else if (ha(bodyDiv, 'data-ag-cs-thought-streaming')) ra(bodyDiv, 'data-ag-cs-thought-streaming');
+}
+}
+if (!streamObs && typeof MutationObserver === 'function') streamObs = new MutationObserver(onStreamMutations);
+if (streamObs) {
+let changed = streamRoots.size !== views.length;
+if (!changed) {
+for (let v = 0; v < views.length; v++) {
+if (!streamRoots.has(views[v])) { changed = true; break; }
+}
+}
+if (changed) {
+try {
+streamObs.disconnect();
+streamRoots.clear();
+for (let v = 0; v < trigByView.length; v++) {
+const [conv, triggers] = trigByView[v];
+const resps = qsa(conv, PROSE_SEL);
+if (resps.length > 0) snapTextLens(resps[resps.length - 1], 24);
+if (triggers.length > 0) {
+const lb = triggers[triggers.length - 1]?.nextElementSibling;
+if (lb && !isManagedThoughtPanel(lb)) snapTextLens(lb, 16);
+}
+streamObs.observe(conv, { childList: true, characterData: true, subtree: true });
+streamRoots.add(conv);
+}
+} catch {}
+}
+}
+};
+const isFreshTriggerOrigin = (trig) => {
+if (!trig || !isFin(trig.at)) return false;
+const age = nowOf() - trig.at;
+return age >= 0 && age <= 900;
+};
+const resolveTriggerOriginCoords = (trig) => {
+if (!isFreshTriggerOrigin(trig)) return null;
+if (trig.el && !trig._measured) {
+trig._measured = true;
+if (trig.el.isConnected !== false) {
+const r = rectOf(trig.el);
+if (r && r.width > 0 && r.height > 0) {
+trig.x = r.left + r.width / 2;
+trig.y = r.top + r.height / 2;
+}
+}
+trig.el = null;
+}
+return isFin(trig.x) && isFin(trig.y) ? trig : null;
+};
+const measureNewLensOverlays = () => {
+const d = docOf();
+if (!isMotionStandardOrUltra() || !d) return [];
+const cands = new Set([
+...qsa(d, '.agy-overlay, .agy-fastpick, [data-testid="context-menu-popup"], [data-testid="context-menu-submenu-popup"]'),
+]);
+for (const el of qsa(d, '[data-testid="overview-panel"]')) {
+const p = peOf(el);
+if (p && tagOf(p) === 'DIV') cands.add(p);
+}
+const freshNew = [], bus = getBus();
+for (const ov of cands) {
+if (!ha(ov, 'data-hover-card-popup') && !seenOverlays.has(ov) && !bus?.isSkipped?.(ov)) freshNew.push(ov);
+}
+if (freshNew.length === 0) return [];
+// 仅在真有新浮层弹出时才懒测距点击源，消除普通正文点击时的同步回流
+const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
+const out = [];
+for (const ov of freshNew) out.push({ ov, rect: trig ? rectOf(ov) : null });
+return out;
+};
+const applyLensOverlays = (list) => {
+if (!list || !list.length) return;
+const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
+for (const { ov, rect: r } of list) {
+if (seenOverlays.has(ov)) continue;
+if (trig && r && (r.width <= 0 || r.height <= 0)) continue;
+seenOverlays.add(ov);
+if (trig && r && r.width > 0 && r.height > 0) {
           setProp(ov, '--ag-origin-x', `${Math.round(Math.max(-40, Math.min(r.width + 40, trig.x - r.left)))}px`);
           setProp(ov, '--ag-origin-y', `${Math.round(Math.max(-40, Math.min(r.height + 40, trig.y - r.top)))}px`);
-        }
-        let idx = 0;
-        for (const item of qsa(ov, '[role="option"], [role="menuitem"], [data-testid]')) {
-          const role = ga(item, 'role');
-          const tid = ga(item, 'data-testid') || '';
-          if (
-            role === 'option' ||
-            role === 'menuitem' ||
-            tid.startsWith('overview-panel-row-') ||
-            tid === 'subagent-node' ||
-            tid === 'artifact-row'
-          ) {
-            setProp(item, '--ag-row-i', String(idx++));
-            setAttrIfChanged(item, 'data-ag-row-stagger', '1');
-            if (idx >= 12) break;
-          }
-        }
-      }
-    };
-
-    const scheduleDeferredConvEntry = (fn, delayMs = 65, frame2Fn = null) => {
-      const seq = ++convEntrySeq;
-      if (convEntryTimer) CT(convEntryTimer);
-      if (convEntryRaf) {
-        cAF(convEntryRaf);
-        convEntryRaf = 0;
-      }
-      convEntryTimer = ST(() => {
-        convEntryTimer = 0;
-        if (isDestroyed() || seq !== convEntrySeq) return;
-        const cont = fn();
-        if (cont !== false && seq === convEntrySeq && typeof frame2Fn === 'function') {
-          convEntryRaf = rAF(() => {
-            convEntryRaf = 0;
-            if (!isDestroyed() && seq === convEntrySeq) frame2Fn();
-          });
-        }
-      }, delayMs);
-    };
-
-    const disconnectStreamObserver = () => {
-      if (streamObs) {
-        try {
-          streamObs.disconnect();
-        } catch {}
-        streamObs = null;
-        streamRoots.clear();
-      }
-      flushAllStreamArtifacts(true);
-    };
-
-    return {
-      heroState,
-      scheduleTransient,
-      clearTransientTimers,
-      cancelDeferredHydration,
-      enqueueDeferredIcons,
-      syncThinkingSparks,
-      clearWorkedForAutoUnfoldAttrs,
-      syncWorkedForAutoUnfold,
-      scheduleWorkedForClickSync,
-      findFormalConvView,
-      findFormalConvViews,
-      sampleHomeComposerRect,
-      triggerHomeLiftoffRippleBurst,
-      triggerHeroDFiberPulse,
-      triggerHeroESonar,
-      isSidebarRowRunning,
-      lockSidebarRowRunningOnPointerDown,
-      stampSidebarRowRunningImmediate,
-      measureSidebarSelectionSnapshot,
-      syncSidebarSelectionGlide,
-      measureVisibleChangedHeaders,
-      syncHeaderOpenStates,
-      syncHeroCCaustics,
-      syncHeroRouteChoreography,
-      flushAllStreamArtifacts,
-      onStreamMutations,
-      syncDualStreamEngine,
-      disconnectStreamObserver,
-      measureNewLensOverlays,
-      syncLensOverlayOrigins,
-      scheduleDeferredConvEntry,
-      suppressEntryMotion(ms) {
-        suppressEntryMotionUntil = M.max(suppressEntryMotionUntil, nowOf() + M.max(120, Number(ms) || 900));
-        liftoffBubbleUntil = 0;
-        const d = docOf();
-        if (d) for (const n of qsa(d, '.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill')) n.remove();
-      },
-      isEntryMotionSuppressed: () => suppressEntryMotionUntil > nowOf(),
-      isStreamMutating: () => streamMutating,
-      hasStreamObserver: () => !!(streamObs && streamRoots.size > 0),
-      stepHighlightFade,
-      clearHighlightFade,
-      getHighlightFadeState: () => ({
-        activeCount: fadeItems.length,
-        rafActive: !!(fadeRaf || fadeTimer),
-        buckets: hlBuckets ? hlBuckets.map((h) => h.size ?? 0) : [],
-      }),
-    };
-  };
-
+}
+let idx = 0;
+for (const item of qsa(ov, '[role="option"], [role="menuitem"], [data-testid]')) {
+const role = ga(item, 'role'), tid = ga(item, 'data-testid') || '';
+if (role === 'option' || role === 'menuitem' || tid.startsWith('overview-panel-row-') || tid === 'subagent-node' || tid === 'artifact-row') {
+setProp(item, '--ag-row-i', String(idx++));
+setAttrIfChanged(item, 'data-ag-row-stagger', '1');
+if (idx >= 12) break;
+}
+}
+}
+};
+const syncLensOverlayOrigins = (measuredOverlays) => {
+const d = docOf();
+if (!d) return;
+for (const el of qsa(d, '[data-testid="overview-panel"]')) {
+const p = peOf(el);
+if (p && tagOf(p) === 'DIV') { setAttrIfChanged(p, 'data-ag-cs-overview-shell', '1'); setAttrIfChanged(p, 'data-ag-cs-prism-box', '1'); setAttrIfChanged(p, 'data-ag-cs-prism-mirror', '1'); }
+}
+if (!isMotionStandardOrUltra()) return;
+if (measuredOverlays) { applyLensOverlays(measuredOverlays); return; }
+const bus = getBus();
+if (bus?.measure && bus?.mutate) {
+let mList = null;
+bus.measure('sc:lens-r', () => { mList = measureNewLensOverlays(); });
+bus.mutate('sc:lens-w', () => { if (!isDestroyed() && mList?.length) guardMut(() => applyLensOverlays(mList)); });
+return;
+}
+applyLensOverlays(measureNewLensOverlays());
+};
+const scheduleDeferredConvEntry = (fn, delayMs = 65, frame2Fn = null) => {
+const seq = ++convEntrySeq;
+if (convEntryTimer) CT(convEntryTimer);
+if (convEntryRaf) {
+cAF(convEntryRaf);
+convEntryRaf = 0;
+}
+convEntryTimer = ST(() => {
+convEntryTimer = 0;
+if (isDestroyed() || seq !== convEntrySeq) return;
+const cont = fn();
+if (cont !== false && seq === convEntrySeq && typeof frame2Fn === 'function') {
+convEntryRaf = rAF(() => {
+convEntryRaf = 0;
+if (!isDestroyed() && seq === convEntrySeq) frame2Fn();
+});
+}
+}, delayMs);
+};
+const disconnectStreamObserver = () => {
+syncStreamActiveAttr(false);
+if (streamObs) { try { streamObs.disconnect(); } catch {} streamObs = null; streamRoots.clear(); }
+flushAllStreamArtifacts(true);
+};
+return {
+heroState,
+scheduleTransient,
+clearTransientTimers,
+cancelDeferredHydration,
+enqueueDeferredIcons,
+syncThinkingSparks,
+clearWorkedForAutoUnfoldAttrs,
+syncWorkedForAutoUnfold,
+scheduleWorkedForClickSync,
+findFormalConvView,
+findFormalConvViews,
+sampleHomeComposerRect,
+triggerHomeLiftoffRippleBurst,
+triggerHeroDFiberPulse,
+triggerHeroESonar,
+isSidebarRowRunning,
+lockSidebarRowRunningOnPointerDown,
+stampSidebarRowRunningImmediate,
+measureSidebarSelectionSnapshot,
+syncSidebarSelectionGlide,
+measureVisibleChangedHeaders,
+syncHeaderOpenStates,
+syncHeroCCaustics,
+syncHeroRouteChoreography,
+flushAllStreamArtifacts,
+onStreamMutations,
+syncDualStreamEngine,
+disconnectStreamObserver,
+measureNewLensOverlays,
+syncLensOverlayOrigins,
+scheduleDeferredConvEntry,
+suppressEntryMotion(ms) {
+suppressEntryMotionUntil = M.max(suppressEntryMotionUntil, nowOf() + M.max(120, Number(ms) || 900));
+liftoffBubbleUntil = 0;
+const d = docOf();
+if (d) for (const n of qsa(d, '.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill')) n.remove();
+},
+isEntryMotionSuppressed: () => suppressEntryMotionUntil > nowOf(),
+isStreamMutating: () => streamMutating,
+hasStreamObserver: () => !!(streamObs && streamRoots.size > 0),
+stepHighlightFade,
+clearHighlightFade,
+getHighlightFadeState: () => ({
+activeCount: fadeItems.length,
+rafActive: !!(fadeRaf || fadeTimer),
+buckets: hlBuckets ? hlBuckets.map((h) => h.size ?? 0) : [],
+}),
+};
+};
   const api = { STREAM_BATCH_MS, STREAM_FADE_MS, SIDEBAR_RUN_HOLD_MS, HIGHLIGHT_NAMES, createStreamChoreographyController };
   if (typeof module === 'object' && module.exports) module.exports = api;
   G.__agPrismStreamChoreography = api;

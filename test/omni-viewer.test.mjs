@@ -1118,7 +1118,7 @@ test('Bitmap Image pan-zoom, JSONL grid mounting & 5-locale + host theme-change 
   assert.equal(imgEnv.badgeEl.textContent, 'IMAGE');
   assert.match(imgEnv.pillsEl.textContent, /1024×512/);
   const btns = imgEnv.toolsEl.querySelectorAll('button');
-  assert.ok(btns.some((b) => b.textContent === '棋盤格'), 'Cantonese (yue) locale label should render');
+  assert.ok(btns.some((b) => b.textContent === '棋盘格'), 'Legacy yue locale must migrate smoothly to zh-CN label');
   btns.find((b) => b.textContent === '1:1').click();
   assert.match(imgEnv.toolsEl.textContent, /100%/);
 
@@ -1346,7 +1346,7 @@ test('Security & resilience regressions: opaque HTML sandbox, foreignObject/SMIL
   const styleCss = fs.readFileSync(path.resolve(__dirname, '../style.css'), 'utf8');
   assert.match(styleCss, /body:not\(\[data-has-browser-hole="true"\]\)/);
   assert.match(styleCss, /\.agy-shell[\s\S]{0,120}:not\(\[data-has-browser-hole="true"\]\)/);
-  assert.match(styleCss, /\.browser-hole-ancestor\[data-has-browser-hole="true"\][\s\S]{0,360}background-color:transparent !important/);
+  assert.match(styleCss, /\.browser-hole-ancestor\[data-has-browser-hole="true"\][\s\S]{0,360}background-color:transparent\s*!important/);
 });
 
 test('Compliance & copy hygiene: zero machine path leaks, zero secret patterns, zero hyperbolic copy', () => {
@@ -1572,14 +1572,14 @@ test('Battle 3: strict HTML sandbox="allow-scripts", srcdoc CSP meta, /sandbox-i
   await svgEnv.settle();
   assert.equal(svgMetaCalls, callsBeforeReload + 1, 'Visible document must reload on parent reload message');
 
-  // 5. Full 8+1 locales coverage & strict 0 CJK in non-CJK locales (en/ko/es/fr/de)
+  // 5. Full 9 locales coverage (zero yue column) & strict 0 CJK in non-CJK locales (en/ko/es/fr/de/tr)
   const cjkRe = /[\u3400-\u9FFF\uF900-\uFAFF]/;
-  const localeCols = ['zh-CN', 'zh-TW', 'yue', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+  const localeCols = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
   for (const [key, row] of Object.entries(WORKBENCH_I18N)) {
     assert.equal(row.length, localeCols.length, `WORKBENCH_I18N.${key} must provide all 9 locale columns`);
     for (let i = 0; i < localeCols.length; i++) {
       assert.ok(typeof row[i] === 'string' && row[i].length > 0, `WORKBENCH_I18N.${key}[${localeCols[i]}] must be non-empty`);
-      if (['en', 'ko', 'es', 'fr', 'de'].includes(localeCols[i])) {
+      if (['en', 'ko', 'es', 'fr', 'de', 'tr'].includes(localeCols[i])) {
         assert.equal(cjkRe.test(row[i]), false, `WORKBENCH_I18N.${key}[${localeCols[i]}] must contain 0 CJK chars: ${row[i]}`);
       }
     }
@@ -1590,6 +1590,7 @@ test('Battle 3: strict HTML sandbox="allow-scripts", srcdoc CSP meta, /sandbox-i
     ['es', 'Aislado en sandbox', 'Damero claro'],
     ['fr', 'Isolé en sandbox', 'Damier clair'],
     ['de', 'Sandbox-isoliert', 'Helles Raster'],
+    ['tr', 'Yalıtılmış sandbox', 'Açık dama'],
   ]) {
     const p = renderWorkbenchHtml({
       kind: 'svg',
