@@ -56,8 +56,12 @@ function splitLong(piece, max) {
   for (let i = 0; i < piece.length; ) {
     let end = Math.min(piece.length, i + max);
     if (end < piece.length) {
-      const cut = i + Math.floor(max * 0.6), nl = piece.lastIndexOf('\n', end), sp = piece.lastIndexOf(' ', end);
+      const cut = i + Math.floor(max * 0.6), nl = piece.lastIndexOf('\n', end - 1), sp = piece.lastIndexOf(' ', end - 1);
       end = nl >= cut ? nl + 1 : sp >= cut ? sp + 1 : end;
+      if (/[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(piece.slice(end - 1, end + 1))) {
+        // With a one-unit budget, the pair needs a chunk of its own.
+        end += end === i + 1 ? 1 : -1;
+      }
     }
     out.push(piece.slice(i, end));
     i = end;
@@ -280,7 +284,9 @@ export class MachineTranslateClient {
     const res = await this._fetchMt(url, { method: 'GET', headers: UA }, route, REQ_MS, sig);
     if (!res.ok) { await cancelBody(res); throw httpErr(route.id, res.status); }
     const json = JSON.parse(await this._readText(res, 4 * 1024 * 1024));
-    return (Array.isArray(json?.[0]) ? json[0] : []).map((s) => (Array.isArray(s) && s[0] ? String(s[0]) : '')).join('');
+    const text = (Array.isArray(json?.[0]) ? json[0] : []).map((s) => (Array.isArray(s) && typeof s[0] === 'string' ? s[0] : '')).join('');
+    if (!text.trim()) throw httpErr(route.id, 502, 'empty Google translation');
+    return text;
   }
 
   async _viaBing(masked, tl, route, sig) {
@@ -288,8 +294,13 @@ export class MachineTranslateClient {
     let out = '';
     for (const g of buildBingRequestGroups(masked, 900, 1)) {
       for (let i = 0; i < g.items.length; i++) {
-        const arr = await this._postBingTranslate(g.items[i], to, route, REQ_MS, sig);
-        out += typeof arr?.[0]?.translations?.[0]?.text === 'string' ? arr[0].translations[0].text : g.items[i];
+        let text = g.items[i];
+        if (text.trim()) {
+          const arr = await this._postBingTranslate(text, to, route, REQ_MS, sig);
+          text = arr?.[0]?.translations?.[0]?.text;
+          if (typeof text !== 'string' || !text.trim()) throw httpErr(route.id, 502, 'empty Bing translation');
+        }
+        out += text;
         if (i < g.seps.length) out += g.seps[i];
       }
       out += g.trailingSep || '';
@@ -309,6 +320,7 @@ export class MachineTranslateClient {
   async translateBatch(text, targetLang = 'zh-CN', sig = null) {
     if (sig?.aborted) throw new Error('Translation aborted');
     const { masked, spans, tag } = maskCode(String(text || ''));
+    if (!masked.trim()) return '';
     const routes = await this.planRoutes(null);
     if (!routes.length) throw new Error('Machine translate proxy not configured');
     const active = [], cooled = [];
