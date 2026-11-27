@@ -10,6 +10,7 @@ import {
   ALLOWED_MT_HOSTS,
   BING_TARGET_LANG_MAP,
   GTX_TARGET_LANG_MAP,
+  MachineTranslateClient,
   assertAllowedMtUrl,
   buildBingRequestGroups,
   mapBingTargetLang,
@@ -302,6 +303,72 @@ test('1) HTTPS allowlist (anti-SSRF), exact 9-locale Bing/GTX maps & safe Bing b
     rebuilt += g.trailingSep || '';
   }
   assert.equal(rebuilt, longText, 'Reassembled Bing chunks must match source text verbatim');
+});
+
+test('Bing fallback keeps surrogate pairs and boundary whitespace within the request budget', async () => {
+  const posted = [];
+  const client = new MachineTranslateClient({
+    getProxyMode: () => 'direct',
+    minIntervalMs: 0,
+    sendRequest: async ({ engine, init }) => {
+      if (engine === 'google') return new Response(null, { status: 503 });
+      if (init.method === 'GET') return new Response(makeMockBingPageHtml());
+      const text = new URLSearchParams(init.body).get('text');
+      posted.push(text);
+      return Response.json([{ translations: [{ text }] }]);
+    },
+  });
+  try {
+    const emoji = 'A'.repeat(899) + '\u{1F680}B';
+    const separator = 'C'.repeat(900) + ' D';
+    const lineBreak = 'E'.repeat(900) + '\nF';
+    for (const text of [emoji, separator, lineBreak]) {
+      posted.length = 0;
+      assert.equal(await client.translateBatch(text), text);
+      assert.equal(posted.length, 2);
+      assert.ok(posted.every((chunk) => chunk.length <= 900));
+    }
+    assert.deepEqual(buildBingRequestGroups('\u{1F680}x', 1).flatMap((group) => group.items), ['\u{1F680}', 'x']);
+  } finally {
+    client.dispose();
+  }
+});
+
+test('Empty Google output falls back and an incomplete Bing translation fails the whole route', async () => {
+  for (const bingText of [undefined, '', ' \t', 'translated second part']) {
+    const posted = [];
+    const client = new MachineTranslateClient({
+      getProxyMode: () => 'direct',
+      minIntervalMs: 0,
+      sendRequest: async ({ engine, init }) => {
+        if (engine === 'google') return Response.json(bingText === '' ? [[[' ']]] : []);
+        if (init.method === 'GET') return new Response(makeMockBingPageHtml());
+        const text = new URLSearchParams(init.body).get('text');
+        posted.push(text);
+        if (posted.length === 1) return Response.json([{ translations: [{ text: 'translated first part' }] }]);
+        return Response.json(bingText === undefined ? [] : [{ translations: [{ text: bingText }] }]);
+      },
+    });
+    try {
+      const text = 'A'.repeat(900) + '\n\n \n\nSecond part\n\n';
+      if (bingText?.trim()) {
+        assert.equal(await client.translateBatch(text), 'translated first part\n\n \n\ntranslated second part');
+      } else {
+        await assert.rejects(client.translateBatch(text), (err) => {
+          assert.deepEqual(err.routeErrors.map(({ routeId, status }) => [routeId, status]), [
+            ['google:direct', 502],
+            ['bing:direct', 502],
+          ]);
+          return true;
+        });
+      }
+      assert.deepEqual(posted, ['A'.repeat(900), 'Second part']);
+      assert.equal(await client.translateBatch(' \n\t'), '');
+      assert.equal(posted.length, 2);
+    } finally {
+      client.dispose();
+    }
+  }
 });
 
 test('2) google:proxy 429 cools down only google:proxy, seamlessly falls back to bing:proxy, caches Bing token, handles 205 refresh & chunks >900 chars', async () => {
