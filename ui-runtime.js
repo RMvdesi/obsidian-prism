@@ -649,7 +649,7 @@ onComposerRimUpdate: (info) => { try { msRig?.setRimLight?.(info); } catch {} },
 
 const smoothCaretCtl = smoothCaretMod?.createSmoothCaretController
 ? smoothCaretMod.createSmoothCaretController({ isDestroyed: () => destroyed, isEnabled: () => cfg.smoothCaret !== false, setAttrIfChanged, runGuardedMut })
-: mkStub('queue|sync|applyMutations|measureSnapshot|bumpMetricsEpoch|teardown');
+: mkStub('queue|sync|applyMutations|measureSnapshot|bumpMetricsEpoch|invalidateSelection|teardown');
 
 const iconPendSig = new WeakMap(), A_IC = 'data-ag-cs-icon-injected', A_OS = 'data-ag-cs-orig-svg', A_OD = 'data-ag-cs-orig-disp';
 const applySingleHostIcon = (btn, iconName, origSvg, size, eqSig) => {
@@ -2252,7 +2252,7 @@ const node = list[j];
 if (!isElementLike(node) || isThoughtIsolatedNode(node) || isOwnPluginNode(node, !!pCtx) || isHoverCardNode(node)) continue;
 if (isAdd && tidOf(node) === 'conversation-row-sidebar' && ga(node, 'data-selected') === 'true') streamChoreoCtl.stampSidebarRowRunningImmediate?.(node);
 classifyDirtySubtree(node, isAdd, pCtx);
-if (inComposerBox) dirtyFlags.c = dirtyFlags.r = true;
+if (inComposerBox) { dirtyFlags.c = dirtyFlags.r = true; smoothCaretCtl.invalidateSelection?.(); }
 if (isTkOrQHit(node) || isSibHost) { dirtyFlags.c = dirtyFlags.o = urgentTk = true; }
 anyRelevant = true;
 }
