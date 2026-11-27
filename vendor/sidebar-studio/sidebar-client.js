@@ -787,11 +787,11 @@
                 descEn: rawDesc || (preset ? preset.descEn : 'Google Gemini conversational model'),
                 efforts: new Set(),
                 modelEnums: {},
-                defaultEffort: preset ? preset.defaultEffort : 'High',
-              });
-              order.push(key);
+                defaultEffort:preset?preset.defaultEffort:'High',available:false,
+              });order.push(key);
             }
-            const entry = grouped.get(key);
+            const entry=grouped.get(key),rawD=typeof m.tagDescription==='string'?m.tagDescription:'';
+            if(!m.disabled&&!/not included|paid .*plan/i.test(rawD)&&!(m.quotaInfo&&Number(m.quotaInfo.remainingFraction)<=0))entry.available=true;
             if (effort) {
               entry.efforts.add(effort);
               if (modelEnum !== null) entry.modelEnums[effort] = modelEnum;
@@ -802,27 +802,15 @@
         }
         if (order.length > 0) {
           const nextList = order.map((k) => {
-            const g = grouped.get(k);
-            const preset = MODEL_DESC_BY_ID.get(k);
-            const arr = g.efforts.size
-              ? [...g.efforts].sort((x, y) => (EFFORT_RANK[x] ?? 9) - (EFFORT_RANK[y] ?? 9))
-              : preset
-                ? preset.efforts.slice()
-                : ['Low', 'Medium', 'High'];
-            return {
-              id: g.id,
-              desc: g.desc,
-              descEn: g.descEn,
-              efforts: arr,
-              modelEnums: g.modelEnums,
-              defaultEffort: arr.includes(g.defaultEffort) ? g.defaultEffort : arr[arr.length - 1] || 'High',
+            const g=grouped.get(k),preset=MODEL_DESC_BY_ID.get(k);
+            const arr=g.efforts.size?[...g.efforts].sort((x,y)=>(EFFORT_RANK[x]??9)-(EFFORT_RANK[y]??9)):preset?preset.efforts.slice():['Low','Medium','High'];
+            return{id:g.id,desc:g.desc,descEn:g.descEn,efforts:arr,modelEnums:g.modelEnums,
+              defaultEffort:arr.includes(g.defaultEffort)?g.defaultEffort:arr[arr.length-1]||'High',available:g.available,
             };
           });
-          liveGeminiModels = nextList;
-          if (!liveGeminiModels.some((x) => x.id === selectedModel)) {
-            selectedModel = liveGeminiModels[0].id;
-            selectedEffort = liveGeminiModels[0].defaultEffort;
-          }
+          liveGeminiModels=nextList;
+          const curM=liveGeminiModels.find(x=>x.id===selectedModel);
+          if(!curM||curM.available===false){const ok=liveGeminiModels.find(x=>x.available!==false)||liveGeminiModels[0];selectedModel=ok.id;selectedEffort=ok.defaultEffort;}
         }
       } catch {}
     }
@@ -2420,51 +2408,32 @@ return { nav: cachedSidebarSlots.nav, nativeList: cachedSidebarSlots.nativeList,
     }
 
     function openModelMenu(anchorEl, opts) {
+      const tid=opts&&opts.runningSession?'prism-chat-running-model-menu':'prism-chat-home-model-menu';
+      if(activePopover&&activePopover.getAttribute('data-testid')===tid){closePopover();return;}
       refreshLiveGeminiModels();
-      const isRunning = Boolean(opts && opts.runningSession);
-      const runningCid = isRunning && typeof opts.cascadeId === 'string' ? opts.cascadeId : '';
-      const models = liveGeminiModels && liveGeminiModels.length ? liveGeminiModels : DEFAULT_GEMINI_MODELS;
-      const currentModelId = isRunning ? resolveRunningSessionModelId(runningCid) : selectedModel;
-      const isEn = getCurrentLang() === 'en';
-      const pop = el('div', 'ag-prism-sidebar-popover ag-prism-model-popover');
-      pop.setAttribute('data-testid', isRunning ? 'prism-chat-running-model-menu' : 'prism-chat-home-model-menu');
-      pop.appendChild(
-        el(
-          'div',
-          'ag-prism-menu-note',
-          isRunning
-            ? isEn ? 'Gemini Models' : 'Gemini 模型'
-            : isEn ? 'Gemini Models' : 'Gemini 模型'
-        )
-      );
+      const isRunning=Boolean(opts&&opts.runningSession),runningCid=isRunning&&typeof opts.cascadeId==='string'?opts.cascadeId:'';
+      const models=liveGeminiModels&&liveGeminiModels.length?liveGeminiModels:DEFAULT_GEMINI_MODELS,currentModelId=isRunning?resolveRunningSessionModelId(runningCid):selectedModel,isEn=getCurrentLang()==='en';
+      const pop=el('div','ag-prism-sidebar-popover ag-prism-model-popover');
+      pop.setAttribute('data-testid',tid);
+      pop.appendChild(el('div','ag-prism-menu-note',isEn?'Gemini Models':'Gemini 模型'));
 
       for (let i = 0; i < models.length; i++) {
-        const m = models[i];
-        const isSel = currentModelId === m.id;
-        const opt = el('button', 'ag-prism-model-opt');
-        opt.type = 'button';
-        opt.setAttribute('data-selected', isSel ? '1' : '0');
-        opt.setAttribute('data-model-id', m.id);
+        const m=models[i],isSel=currentModelId===m.id,descTxt=String(isEn?m.descEn||m.desc:m.desc||''),isAvail=m.available!==false&&!m.disabled&&!/not included|paid .*plan/i.test(descTxt),opt=el('button','ag-prism-model-opt');
+        opt.type='button';opt.setAttribute('data-selected',isSel?'1':'0');opt.setAttribute('data-model-id',m.id);
+        if(!isAvail){opt.disabled=true;opt.setAttribute('aria-disabled','true');opt.style.opacity='0.45';opt.style.cursor='not-allowed';}
 
-        const lead = el('span', 'ag-prism-model-lead');
-        const ic = el('span', 'ag-prism-model-icon');
-        ic.appendChild(makeBrandSvg(OFFICIAL_GEMINI_COLOR_SVG, 15));
-        lead.appendChild(ic);
+        const lead=el('span','ag-prism-model-lead'),ic=el('span','ag-prism-model-icon');
+        ic.appendChild(makeBrandSvg(OFFICIAL_GEMINI_COLOR_SVG,15));lead.appendChild(ic);
+        const txt=el('span','ag-prism-model-text');
+        txt.appendChild(el('span','ag-prism-model-name',m.id));
+        txt.appendChild(el('span','ag-prism-model-desc',descTxt));
+        lead.appendChild(txt);opt.appendChild(lead);
 
-        const txt = el('span', 'ag-prism-model-text');
-        txt.appendChild(el('span', 'ag-prism-model-name', m.id));
-        txt.appendChild(el('span', 'ag-prism-model-desc', isEn ? m.descEn || m.desc : m.desc));
-        lead.appendChild(txt);
-        opt.appendChild(lead);
-
-        if (isSel) {
-          const ck = el('span', 'ag-prism-model-check');
-          ck.appendChild(makeMonoSvg('check', 13));
-          opt.appendChild(ck);
-        }
+        if(isSel||!isAvail){const ck=el('span','ag-prism-model-check');ck.appendChild(makeMonoSvg(isSel?'check':'lock',isSel?13:12));opt.appendChild(ck);}
 
         opt.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (!isAvail) return;
           if (isRunning) {
             const eff = m.defaultEffort || (m.id.includes('3.8') ? 'Medium' : 'High');
             const modelEnum = resolveModelEnum(m.id, eff);
@@ -2482,7 +2451,7 @@ return { nav: cachedSidebarSlots.nav, nativeList: cachedSidebarSlots.nativeList,
               }
             }
             closePopover();
-            showToast(`已切换为 ${m.id}`);
+            showToast(isEn ? `Switched to ${m.id}` : `已切换为 ${m.id}`);
           } else {
             selectedModel = m.id;
             const allowed = Array.isArray(m.efforts) && m.efforts.length ? m.efforts : ['Low', 'Medium', 'High'];
@@ -4360,6 +4329,7 @@ return { nav: cachedSidebarSlots.nav, nativeList: cachedSidebarSlots.nativeList,
       });
       btn.addEventListener('contextmenu', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         openChatSessionMenu(item, btn);
       });
 
@@ -4554,6 +4524,7 @@ return { nav: cachedSidebarSlots.nav, nativeList: cachedSidebarSlots.nativeList,
           });
           gh.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             openKnowledgeFolderMenu(f, gh);
           });
 
@@ -4676,6 +4647,7 @@ return { nav: cachedSidebarSlots.nav, nativeList: cachedSidebarSlots.nativeList,
             });
             gh.addEventListener('contextmenu', (e) => {
               e.preventDefault();
+              e.stopPropagation();
               openSparkWorkspaceMenu(p, gh);
             });
 
