@@ -2892,3 +2892,45 @@ test('vendor/pulse-dashboard/inline-fallback.js auto-yields to agy-powertools te
     ctlLate.destroy();
   }
 });
+
+test('telemetryModule=auto preserves external #ag-pulse-status-bar on .agy-home and handles hidden keep-alive .agy-home', async () => {
+  const env = createLightweightDom();
+  const home = env.makeEl('div');
+  home.className = 'agy-home';
+  const greeting = env.makeEl('div');
+  greeting.setAttribute('data-testid', 'home-greeting');
+  home.appendChild(greeting);
+  env.doc.body.appendChild(home);
+
+  const extBar = env.makeEl('div');
+  extBar.id = 'ag-pulse-status-bar';
+  extBar.setAttribute('data-ag-prism-hidden', '1');
+  extBar.style.setProperty('opacity', '0', 'important');
+  env.composerToolbar.appendChild(extBar);
+
+  const ctl = telemetryMod.createTelemetryController({ window: env.win, document: env.doc });
+  try {
+    ctl.sync({ telemetryModule: 'auto', __fallbackDelayMs: 5 });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(extBar.getAttribute('data-ag-prism-hidden'), null, 'auto mode must clear/avoid data-ag-prism-hidden on external bar in .agy-home');
+    assert.equal(extBar.style.getPropertyValue('opacity'), '');
+    assert.equal(env.doc.getElementById('ag-prism-pulse-bar'), null, 'auto mode must NOT mount fallback on .agy-home');
+
+    home.hidden = true;
+    const convView = env.makeEl('div');
+    convView.setAttribute('data-testid', 'conversation-view');
+    convView.appendChild(env.composerToolbar);
+    env.doc.body.appendChild(convView);
+    const stConv = ctl.sync({ telemetryModule: 'auto', __fallbackDelayMs: 5 });
+    assert.equal(stConv.yieldedToExternal, true, 'hidden keep-alive .agy-home must not block active conversation telemetry');
+  } finally {
+    ctl.destroy();
+  }
+
+  const css = fs.readFileSync(path.join(ROOT_DIR, 'style.css'), 'utf8');
+  assert.equal(
+    css.includes('& .agy-home:not(#_) :is(#ag-prism-pulse-bar,[data-ag-prism-pulse-bar],[data-ag-prism-fallback="1"]),&[data-ag-cs-telemetry="on"] .agy-home:not(#_) :is(#ag-pulse-status-bar,[data-ag-pulse-bar]){display:none!important}'),
+    true,
+    'style.css must only hide external pulse bar on .agy-home when telemetry="on"'
+  );
+});
