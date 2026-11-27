@@ -124,7 +124,7 @@
     const clHas = (e, c) => Boolean(e?.[K_CL]?.contains?.(c));
     const rc = (e) => e?.getBoundingClientRect?.() || null;
     const docOf = () => (typeof document !== 'undefined' ? document : null);
-    const isHid = () => docOf()?.hidden;
+    const isHid = () => Boolean(docOf()?.hidden || ga(getRootHtml(), 'data-ag-cs-win-blur') === '1');
     const rAF = (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : 0);
     const cAF = (id) => { if (id && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id); };
     const mk = (tag, cls, txt) => {
@@ -390,15 +390,20 @@
       } else clr();
     };
 
+    let mAl = 0, mLts = 0, mPb = false;
     const cancelMountRaf = () => { if (mMountRaf) { cAF(mMountRaf); mMountRaf = 0; } };
-    const cancelStepRaf = () => { if (mRaf) { cAF(mRaf); mRaf = 0; } };
+    const cancelStepRaf = () => { if (mAl) { clearTimeout(mAl); mAl = 0; } if (mRaf) { cAF(mRaf); mRaf = 0; } mLts = 0; };
+    const canStep = () => !isDestroyed() && mInst && mWasOrch && mPanel?.[K_IC];
+    const onPwr = () => { if (!canStep()) return; if (isHid()) return cancelStepRaf(); if (!mRaf && !mAl && !motionReduced() && !mInst.isIdle?.()) { mLastMs = nowMs(); mRaf = rAF(stepCrystalLoop); } };
+    const onFocus = () => Promise.resolve().then(onPwr);
+    const setPwr = (on) => { if (mPb === on) return; mPb = on; const m = on ? 'addEventListener' : 'removeEventListener'; try { docOf()?.[m]?.('visibilitychange', onPwr); G[m]?.('blur', cancelStepRaf); G[m]?.('focus', onFocus); } catch {} };
 
     const resetKnobCache = () => {
       mKnob = mKnobRect = null; mTrkWidth = mKnobRectAt = 0; mKnobFillSig = ''; mStepFillRatio = null;
     };
 
     const stopCrystalOnPanel = (panel) => {
-      detachSliderWake(); cancelMountRaf(); cancelStepRaf();
+      setPwr(false); detachSliderWake(); cancelMountRaf(); cancelStepRaf();
       try { mInst?.dispose?.(); } catch {}
       if (panel) {
         clearSliderPrismOverlay(panel); ra(panel, 'data-ag-cs-orch-active');
@@ -433,10 +438,15 @@
 
     const stepCrystalLoop = (now) => {
       mRaf = 0;
-      if (isDestroyed() || !mInst || !mPanel?.[K_IC] || !mWasOrch) return;
-      const minGap = getMinFrameGapMs();
+      if (!canStep() || isHid()) return cancelStepRaf();
+      const vs = mLts > 0 && now > mLts ? now - mLts : mLastMs > 0 && now > mLastMs ? now - mLastMs : 16, minGap = getMinFrameGapMs();
+      mLts = now;
       if (minGap > 0 && mLastMs > 0 && now - mLastMs < minGap) {
-        if (!motionReduced() && !isHid()) mRaf = rAF(stepCrystalLoop);
+        if (!motionReduced()) {
+          const rem = minGap - (now - mLastMs);
+          if (typeof setTimeout === 'function' && rem > Math.max(8, vs + 2)) { if (mAl) clearTimeout(mAl); mAl = setTimeout(() => { mAl = 0; onPwr(); }, Math.max(4, Math.ceil(rem))); }
+          else mRaf = rAF(stepCrystalLoop);
+        }
         return;
       }
       const dt = mLastMs > 0 ? Math.min(0.05, Math.max(0.002, (now - mLastMs) / 1000)) : 0.016;
@@ -500,6 +510,7 @@
           const onWake = (ev) => {
             mKnobRect = null;
             if (ev && typeof ev.clientX === 'number') syncKnobPrismPointer(ev.clientX, ev.clientY);
+            if (mAl) { clearTimeout(mAl); mAl = 0; }
             if (!mRaf && mInst && !isHid()) { mLastMs = nowMs(); mRaf = rAF(stepCrystalLoop); }
           };
           try { sTrk.addEventListener('pointerdown', onWake, { passive: true }); } catch {}
@@ -539,6 +550,7 @@
             } catch { mInst = null; }
           }
           if (!mInst) return;
+          setPwr(true);
           mInst.setReduceMotion?.(reducedNow);
           mStepFillRatio = mHideLock ? readTrackFillRatio(mTrk) : -1;
           const ptr = getLastPointerPos?.() || null;
@@ -547,7 +559,7 @@
           if (switchedIn || !mMountedAt) { mMountedAt = nowMs(); if (!reducedNow && ambientNow > 0.001) mInst.wake?.(); }
           try { mInst.step(0.016); } catch {} finally { mStepFillRatio = null; }
           if (mInst.isIdle?.() || isHid()) cancelStepRaf();
-          else if (!mRaf) { mLastMs = nowMs(); mRaf = rAF(stepCrystalLoop); }
+          else if (!mRaf && !mAl) { mLastMs = nowMs(); mRaf = rAF(stepCrystalLoop); }
         };
         if (mInst) kickCrystal();
         else if (!mMountRaf) {
@@ -578,7 +590,7 @@
         syncKnobPrismPointer(x, y);
         if (mInst?.setPointerClient) {
           mInst.setPointerClient(x, y);
-          if (!mRaf && mWasOrch && mPanel?.[K_IC] !== false && !motionReduced() && !docOf()?.hidden && !mInst.isIdle?.()) {
+          if (!mRaf && mWasOrch && mPanel?.[K_IC] !== false && !motionReduced() && !isHid() && !mInst.isIdle?.()) {
             mLastMs = performance.now();
             mRaf = rAF(stepCrystalLoop);
           }

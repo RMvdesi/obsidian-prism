@@ -528,17 +528,12 @@ module.exports = function installAgPulseInlineWidget() {
   function densityBounds(next){
     const row=next.row.getBoundingClientRect(),target=next.rect;
     let left=Math.max(row.left,composer.anchor?.getBoundingClientRect().right||0),right=Math.min(row.right,innerWidth);
-    for(const control of document.querySelectorAll('button,[role="button"],a[href],input,select')){
-      if(control===next.model||(next.model&&(next.model.contains(control)||control.contains(next.model))))continue;
+    const scope=composer.box||next.row.parentElement||next.row;
+    for(const control of scope.querySelectorAll('button,[role="button"],a[href],input,select')){
+      if(isOwnNode(control)||control===next.model||(next.model&&(next.model.contains(control)||control.contains(next.model))))continue;
       const r=control.getBoundingClientRect();
       if(r.width<=0||r.height<=0||Math.min(target.bottom,r.bottom)-Math.max(target.top,r.top)<=1)continue;
       if(control.closest('[hidden],[inert]')||getComputedStyle(control).visibility==='hidden')continue;
-      if(!next.row.parentElement?.contains(control)){
-        if(Math.min(right,r.right)-Math.max(left,r.left)<=0)continue;
-        const x=(Math.max(left,r.left)+Math.min(right,r.right))/2,y=(Math.max(target.top,r.top)+Math.min(target.bottom,r.bottom))/2;
-        const hit=document.elementFromPoint(x,y);
-        if(!hit||(hit!==control&&!control.contains(hit)))continue;
-      }
       if(r.right<=target.left+1)left=Math.max(left,r.right);
       else if(r.left>=target.right-1)right=Math.min(right,r.left);
       else return null;
@@ -656,19 +651,26 @@ module.exports = function installAgPulseInlineWidget() {
       if(bar.scrollWidth>bar.clientWidth+2||rect.width<=0||rect.left< -1||rect.right>innerWidth+1||rect.top< -1||rect.bottom>innerHeight+1||rect.left<row.left-1||rect.right>row.right+1)return false;
       if(!nativeComfortable())return false;
       if(composer.kind==='subagent'&&intersects(composer.anchor.getBoundingClientRect()))return false;
-      for(const control of document.querySelectorAll('button,[role="button"],a[href],input,select,[contenteditable="true"]')){
-        const other=control.getBoundingClientRect();
-        if(other.width<=0||other.height<=0||!intersects(other))continue;
-        if(control.closest('[hidden],[inert]')||getComputedStyle(control).visibility==='hidden')continue;
-        // Scrolling messages can put clipped/covered links underneath the
-        // fixed composer. Their rectangles alone are not a visible collision.
-        // Always reserve local actions; other controls must actually paint at
-        // the intersection (e.g. a floating jump-to-bottom button).
-        if(composer.row.parentElement?.contains(control))return false;
-        const left=Math.max(rect.left,other.left),right=Math.min(rect.right,other.right),top=Math.max(rect.top,other.top),bottom=Math.min(rect.bottom,other.bottom);
-        for(const [x,y]of [[(left+right)/2,(top+bottom)/2],[left+.5,top+.5],[right-.5,top+.5],[left+.5,bottom-.5],[right-.5,bottom-.5]]){
+      const ctrlSel='button,[role="button"],a[href],input,select,[contenteditable="true"]';
+      const localScope=composer.box||composer.row.parentElement;
+      if(localScope){
+        for(const control of localScope.querySelectorAll(ctrlSel)){
+          if(isOwnNode(control))continue;
+          const other=control.getBoundingClientRect();
+          if(other.width<=0||other.height<=0||!intersects(other))continue;
+          if(control.closest('[hidden],[inert]')||getComputedStyle(control).visibility==='hidden')continue;
+          return false;
+        }
+      }
+      // Probe 5 points of our own strip rect via elementFromPoint (O(1)) instead of scanning
+      // every link/button in a long chat transcript with getBoundingClientRect().
+      if(typeof document.elementFromPoint==='function'){
+        const cx=(rect.left+rect.right)/2,cy=(rect.top+rect.bottom)/2;
+        for(const [x,y]of [[cx,cy],[rect.left+.5,rect.top+.5],[rect.right-.5,rect.top+.5],[rect.left+.5,rect.bottom-.5],[rect.right-.5,rect.bottom-.5]]){
           const hit=document.elementFromPoint(x,y);
-          if(hit&&(hit===control||control.contains(hit)))return false;
+          if(!hit||isOwnNode(hit))continue;
+          const ctrl=hit.closest?.(ctrlSel);
+          if(ctrl&&!isOwnNode(ctrl)&&!ctrl.closest('[hidden],[inert]')&&getComputedStyle(ctrl).visibility!=='hidden')return false;
         }
       }
       return true;
@@ -1454,6 +1456,7 @@ module.exports = function installAgPulseInlineWidget() {
     get usageDashboard(){return usageDashboard;},
     get parked(){return parked;},
     get parkedKind(){return parkedKind;},
+    get hasOpenOverlay(){return Boolean(cardName||(root&&!$('language-guide')?.hidden));},
     mountTo,park,dispose,hide,fit,tick,position,updateGuide,stopDensityMotion,
     setPrimary(flag,id){
       const changed=isPrimary!==flag;
@@ -1467,14 +1470,26 @@ module.exports = function installAgPulseInlineWidget() {
     syncUsageGuide(){usageDashboard?.syncGuideDismissed();},
     poll(){
       if(instDisposed||!node)return;
-      if(!parked){fit();tick();position();}
-      if((!parked&&conversationId()!==lastConversation)||Date.now()-lastFetch>(document.hidden?10000:2200))refresh();
+      const bg=isWindowPaused();
+      if(!parked&&!bg){fit();tick();position();}
+      if((!parked&&!bg&&conversationId()!==lastConversation)||Date.now()-lastFetch>(bg?10000:2200))refresh();
     },
   };
   }
+  const isWindowPaused=()=>Boolean(document.hidden||document.documentElement?.getAttribute?.('data-ag-cs-win-blur')==='1');
+  const STREAM_NOISE_SEL='[data-testid="autoscroll-viewport"],[data-testid="planner-response-text"],[data-testid="agent-response"],[data-markdown-root],[data-op-thought="1"],.ag-prism-thought-overlay,.ag-cs-conv-aura-host,.ag-cs-crab,.ag-cs-prism-rim-cv,.ag-anim-icon,.ag-cs-thinking-spark,[data-hover-card-popup]';
+  const isStreamNoiseNode=target=>{
+    const el=target?.nodeType===1?target:target?.parentElement;
+    return Boolean(el&&el.closest&&!el.closest('[data-testid="agent-input-box"]')&&el.closest(STREAM_NOISE_SEL));
+  };
+  let positionFrame=null;
+  function schedulePositionOnly(){
+    if(disposed||layoutFrame!==null||positionFrame!==null)return;
+    positionFrame=requestAnimationFrame(()=>{positionFrame=null;if(disposed||isWindowPaused())return;for(const inst of instances)if(!inst.parked&&inst.hasOpenOverlay)inst.position();});
+  }
   function scheduleLayout(){
-    if(disposed||layoutFrame!==null)return;
-    layoutFrame=requestAnimationFrame(()=>{layoutFrame=null;if(disposed)return;mount();for(const inst of instances)if(!inst.parked){inst.fit();inst.position();}});
+    if(disposed||layoutFrame!==null||isWindowPaused())return;
+    layoutFrame=requestAnimationFrame(()=>{layoutFrame=null;if(disposed||isWindowPaused())return;mount();for(const inst of instances)if(!inst.parked){inst.fit();inst.position();}});
   }
   function mount(){
     if(disposed)return;
@@ -1524,20 +1539,29 @@ module.exports = function installAgPulseInlineWidget() {
     for(const inst of instances)if(inst!==primary)inst.setPrimary(false,`${ID}-${secondaryIndex++}`);
     if(primary)primary.setPrimary(true,ID);
   }
-  const observer=new MutationObserver(records=>{if(records.some(record=>!isOwnNode(record.target)))scheduleLayout();});observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden','inert','data-cascade-id','data-testid','data-tooltip-id','aria-label','role','contenteditable']});
+  const observer=new MutationObserver(records=>{if(isWindowPaused())return;if(records.some(record=>!isOwnNode(record.target)&&!isStreamNoiseNode(record.target)))scheduleLayout();});observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden','inert','data-cascade-id','data-testid','data-tooltip-id','aria-label','role','contenteditable']});
   const onKey=e=>{if(e.key==='Escape')for(const inst of instances)inst.hide();}, onPointer=e=>{for(const inst of instances)if(inst.node&&!e.composedPath().includes(inst.node))inst.hide();};
   const onFocus=e=>{if(!instances.length||!e.composedPath().some(isOwnNode))scheduleLayout();};
+  const onScroll=e=>{
+    if(disposed||isWindowPaused())return;
+    const t=e?.target;
+    if(t instanceof Node&&instances.some(inst=>inst.node&&t.contains(inst.node))){scheduleLayout();return;}
+    if(instances.some(inst=>!inst.parked&&inst.hasOpenOverlay))schedulePositionOnly();
+  };
+  const onWake=()=>queueMicrotask(()=>{if(!disposed&&!isWindowPaused())scheduleLayout();});
   const onMotionChange=()=>{for(const inst of instances)inst.stopDensityMotion();};
   document.addEventListener('keydown',onKey);document.addEventListener('pointerdown',onPointer);document.addEventListener('focusin',onFocus);
-  window.addEventListener('resize',scheduleLayout);document.addEventListener('scroll',scheduleLayout,true);
+  document.addEventListener('visibilitychange',onWake);window.addEventListener('focus',onWake);
+  window.addEventListener('resize',scheduleLayout,{passive:true});document.addEventListener('scroll',onScroll,{capture:true,passive:true});
   densityMedia.addEventListener('change',onMotionChange);
-  const timerId=setInterval(()=>{mount();for(const inst of instances)inst.poll();},1000);
+  const timerId=setInterval(()=>{if(isWindowPaused())return;mount();for(const inst of instances)inst.poll();},1000);
   window.__agPulseDispose=()=>{
     disposed=true;
-    clearInterval(timerId);if(layoutFrame!==null)cancelAnimationFrame(layoutFrame);observer.disconnect();preferences.dispose();
+    clearInterval(timerId);if(layoutFrame!==null)cancelAnimationFrame(layoutFrame);if(positionFrame!==null)cancelAnimationFrame(positionFrame);observer.disconnect();preferences.dispose();
     for(const inst of instances.splice(0))inst.dispose();
     document.removeEventListener('keydown',onKey);document.removeEventListener('pointerdown',onPointer);document.removeEventListener('focusin',onFocus);
-    document.removeEventListener('scroll',scheduleLayout,true);window.removeEventListener('resize',scheduleLayout);
+    document.removeEventListener('visibilitychange',onWake);window.removeEventListener('focus',onWake);
+    document.removeEventListener('scroll',onScroll,true);window.removeEventListener('resize',scheduleLayout);
     densityMedia.removeEventListener('change',onMotionChange);
     document.removeEventListener('DOMContentLoaded',mount);
     window.__agPulseInlineInstalled=false;delete window.__agPulseDispose;

@@ -290,7 +290,9 @@
     ':is(html.light,html[data-theme="light"],html[data-ag-cs-theme="light"],body:is(.theme-light,.light-theme,.light)) .ag-prism-chat-aura[data-kind="knowledge"] .ag-prism-orb-b{background:radial-gradient(circle at 54% 50%,rgba(20,184,166,.15) 0%,rgba(56,189,248,.09) 52%,transparent 76%)}',
     ':is(html.light,html[data-theme="light"],html[data-ag-cs-theme="light"],body:is(.theme-light,.light-theme,.light)) .ag-prism-chat-aura[data-kind="spark"] .ag-prism-orb-a{background:radial-gradient(circle at 46% 48%,rgba(50,121,249,.19) 0%,rgba(96,165,250,.11) 50%,transparent 76%)}',
     ':is(html.light,html[data-theme="light"],html[data-ag-cs-theme="light"],body:is(.theme-light,.light-theme,.light)) .ag-prism-chat-aura[data-kind="spark"] .ag-prism-orb-b{background:radial-gradient(circle at 52% 48%,rgba(56,189,248,.15) 0%,rgba(147,197,253,.10) 52%,transparent 76%)}',
-    '.ag-prism-chat-aura[data-paused="1"] .ag-prism-aura-orb,.ag-prism-chat-home[data-visible="0"] .ag-prism-aura-orb{animation-play-state:paused!important}',
+    '.ag-prism-chat-aura[data-paused="1"] .ag-prism-aura-orb,.ag-prism-chat-home[data-visible="0"] .ag-prism-aura-orb,.ag-prism-chat-home[data-paused="1"] .ag-prism-vessel::after,.ag-prism-chat-home[data-visible="0"] .ag-prism-vessel::after,html[data-ag-cs-win-blur="1"] .ag-prism-aura-orb,html[data-ag-cs-win-blur="1"] .ag-prism-vessel::after,html[data-ag-cs-win-blur="1"] .ag-prism-sb-spin,html[data-ag-cs-win-blur="1"] .ag-prism-sb-dot{animation-play-state:paused!important}',
+    '.ag-prism-chat-home[data-visible="0"] .ag-prism-aura-orb,html[data-ag-cs-win-blur="1"] .ag-prism-aura-orb{will-change:auto!important}',
+    'html[data-ag-cs-motion="low"] .ag-prism-vessel,html[data-ag-cs-motion="subtle"] .ag-prism-vessel,html[data-ag-cs-motion="off"] .ag-prism-vessel,html[data-ag-cs-win-blur="1"] .ag-prism-vessel{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
     '@keyframes ag-sb-breathe-a{0%,100%{opacity:.74;transform:translate3d(-12px,-8px,0) scale(.93)}50%{opacity:1;transform:translate3d(12px,6px,0) scale(1.08)}}',
     '@keyframes ag-sb-breathe-b{0%{opacity:.78;transform:translate3d(20px,-10px,0) scale(.95)}100%{opacity:.98;transform:translate3d(-18px,12px,0) scale(1.06)}}',
     '.ag-prism-hero-head{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:28px;text-align:center}',
@@ -5141,14 +5143,16 @@
         const refs = host.chatHomeEl._refs;
         if (!shouldShow) {
           host.chatHomeEl.setAttribute('data-visible', '0');
+          host.chatHomeEl.setAttribute('data-paused', '1');
           refs.aura.setAttribute('data-paused', '1');
           return;
         }
 
         // 原地增量热更（保证 Knowledge <-> Spark 切换 0px 跳动且所有 CSS 过渡自然执行）
         const isSpark = snapshot.chatDraft && snapshot.chatDraft.kind === 'spark';
-        const paused = document.hidden || currentCfg.motionLevel === 'off';
+        const paused = isChatHomePaused();
         host.chatHomeEl.setAttribute('data-visible', '1');
+        host.chatHomeEl.setAttribute('data-paused', paused ? '1' : '0');
         refs.aura.setAttribute('data-kind', isSpark ? 'spark' : 'knowledge');
         refs.aura.setAttribute('data-paused', paused ? '1' : '0');
         refs.wrap.setAttribute('data-kind', isSpark ? 'spark' : 'knowledge');
@@ -5395,13 +5399,22 @@
         }
       }
     };
-    const onVisChange = () => {
+    const isChatHomePaused = () => Boolean(
+      document.hidden ||
+      currentCfg.motionLevel === 'off' ||
+      document.documentElement?.getAttribute?.('data-ag-cs-win-blur') === '1'
+    );
+    const syncChatHomePauseState = () => {
       if (host.chatHomeEl && host.chatHomeEl._refs) {
-        const isHidden = document.hidden || currentCfg.motionLevel === 'off' || host.chatHomeEl.getAttribute('data-visible') !== '1';
+        const isPaused = isChatHomePaused() || host.chatHomeEl.getAttribute('data-visible') !== '1';
         runGuarded(() => {
-          host.chatHomeEl._refs.aura.setAttribute('data-paused', isHidden ? '1' : '0');
+          host.chatHomeEl.setAttribute('data-paused', isPaused ? '1' : '0');
+          host.chatHomeEl._refs.aura.setAttribute('data-paused', isPaused ? '1' : '0');
         });
       }
+    };
+    const onVisChange = () => {
+      syncChatHomePauseState();
       if (!document.hidden && !destroyed && currentCfg.sidebarStudio === 'on') {
         scheduleCatalogSync();
       }

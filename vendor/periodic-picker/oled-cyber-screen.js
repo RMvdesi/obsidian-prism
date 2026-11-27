@@ -1336,6 +1336,46 @@
       }
     }
 
+    function buildMonoOffscreenCanvas(doc, wpEntry, isLight) {
+      if (!doc || typeof doc.createElement !== 'function' || !wpEntry || !wpEntry.img) return null;
+      try {
+        var iw = Number(wpEntry.img.naturalWidth || wpEntry.img.width) || 960;
+        var ih = Number(wpEntry.img.naturalHeight || wpEntry.img.height) || 288;
+        var mw = Math.min(960, Math.max(64, iw));
+        var mh = Math.min(288, Math.max(32, ih));
+        var c = doc.createElement('canvas');
+        if (!c || typeof c.getContext !== 'function') return null;
+        c.width = mw;
+        c.height = mh;
+        var g = c.getContext('2d');
+        if (!g || !('filter' in g)) {
+          c.width = 0;
+          c.height = 0;
+          return null;
+        }
+        try {
+          g.filter = isLight
+            ? 'grayscale(1) contrast(1.02) brightness(0.99)'
+            : 'grayscale(1) contrast(1.08) brightness(0.88)';
+        } catch (_f) {
+          c.width = 0;
+          c.height = 0;
+          return null;
+        }
+        if (!g.filter || g.filter === 'none') {
+          c.width = 0;
+          c.height = 0;
+          return null;
+        }
+        g.drawImage(wpEntry.img, 0, 0, mw, mh);
+        try { g.filter = 'none'; } catch (_fr) {}
+        try { c.src = wpEntry.src; } catch (_sr) {}
+        return c;
+      } catch (_err) {
+        return null;
+      }
+    }
+
     function drawFullBleedBannerLayer(ctx, W, H, bgState, grainPkg, alpha, slideOffsetX, orbitYaw, orbitPitch, effortSwell) {
       if (alpha <= 0.002) return;
       var tokens = bgState.tokens;
@@ -1389,7 +1429,14 @@
 
         if (tokens.isMono || isOrchUnsupported) {
           var filterApplied = false;
-          /* 已命中离屏预烘焙冰封缓存时，直接零滤镜贴图，彻底避免热路径大画布 ctx.filter='blur(...)' */
+          if (tokens.isMono && !isOrchUnsupported && bgState.getMonoSurface && bgState.preferOffscreenBlur) {
+            var monoSurf = bgState.getMonoSurface(modeTag, lookupKey, wpEntry, tokens.isLight);
+            if (monoSurf) {
+              drawSource = monoSurf;
+              usingOffscreenFrosted = true;
+            }
+          }
+          /* 已命中离屏预烘焙冰封/单色缓存时，直接零滤镜贴图，彻底避免热路径大画布 ctx.filter */
           if (!usingOffscreenFrosted && supportsFilterProp) {
             try {
               if (tokens.isMono && isOrchUnsupported) {
@@ -2435,6 +2482,31 @@
         return built;
       }
 
+      function getMonoSurfaceForKey(modeTag, keyId, wpEntry, isLight) {
+        if (disposed || !wpEntry || !wpEntry.img) return null;
+        var mKey = modeTag + ':' + String(keyId) + ':mono-only';
+        var targetMap = sharedPool ? sharedPool.frosted : localFrostedCache;
+        var cachedCv = targetMap.get(mKey);
+        if (cachedCv && cachedCv.width > 0) {
+          targetMap.delete(mKey);
+          targetMap.set(mKey, cachedCv);
+          return cachedCv;
+        }
+        if (targetMap.size >= 16) {
+          var firstK = targetMap.keys().next().value;
+          var oldCv = targetMap.get(firstK);
+          if (oldCv) {
+            try { oldCv.width = 0; oldCv.height = 0; } catch (_e) {}
+          }
+          targetMap.delete(firstK);
+        }
+        var built = buildMonoOffscreenCanvas(doc, wpEntry, Boolean(isLight));
+        if (built) {
+          targetMap.set(mKey, built);
+        }
+        return built;
+      }
+
       function requestWallpaperEntry(modeTag, keyId, wallpapersDict) {
         if (disposed || !wallpapersDict) return null;
         if (sharedPool) {
@@ -2794,6 +2866,7 @@
           tokens: tokens,
           requestWp: requestWallpaperEntry,
           getFrostedSurface: getFrostedSurfaceForKey,
+          getMonoSurface: getMonoSurfaceForKey,
           preferOffscreenBlur: Boolean(bs.forceOffscreenBlur || defaultPreferOffscreenBlur),
         };
 

@@ -140,19 +140,19 @@ precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 
-uniform vec2 u_res;         // CSS 像素尺寸
-uniform float u_dpr;        // 设备像素比（用于 ~0.9px 刀锋棱线的设备级抗锯齿）
+uniform vec2 u_res;
+uniform float u_dpr;
 uniform float u_time;
 uniform float u_dark;
-uniform vec2 u_pointer;     // 相对胶囊中心的 CSS 坐标（y 轴朝上），远距为 (-9999,-9999)
-uniform float u_proximity;  // 0..1，已乘 prismStrength 并经过非对称平滑
+uniform vec2 u_pointer;
+uniform float u_proximity;
 uniform float u_reduce;
-uniform vec4 u_glints;      // 4 路异步星芒强度
-uniform vec4 u_glintU;      // 星芒锚点 u（左原点）
-uniform vec4 u_glintV;      // 星芒锚点 v（上原点）
-uniform vec2 u_wake;        // x: 扫光中心（u 空间），y: 扫光包络强度（0 表示未激活）
-uniform float u_accent;     // 0:default 1:warm 2:cobalt 3:iris 4:amber 5:mono
-uniform float u_ambient;    // 0..1 环境氛围光缩放
+uniform vec4 u_glints;
+uniform vec4 u_glintU;
+uniform vec4 u_glintV;
+uniform vec2 u_wake;
+uniform float u_accent;
+uniform float u_ambient;
 
 vec2 hash22(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -166,7 +166,6 @@ float hash21(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
-// 网格空间 Voronoi：返回所在切面 id、最近棱所属邻面 id、最近棱的网格空间法线与距离
 void fVor(vec2 p, out vec2 cId, out vec2 nbId, out vec2 eN, out float eD) {
   vec2 n = floor(p);
   vec2 f = fract(p);
@@ -214,7 +213,6 @@ float etchedLockMask(vec2 q, float halfStroke, float aa) {
   return 1.0 - smoothstep(-aa, aa, min(min(dBody, dSh), dKey));
 }
 
-// 柯西四色光谱与强调色模式映射（0:四色 1:暖岩 2:钴蓝 3:鸢尾紫 4:琥珀金 5:纯银钛单色）
 vec3 cSp(float t, float ac) {
   float u = clamp(t, 0.0, 1.0);
   if (ac > 4.5) {
@@ -251,7 +249,6 @@ vec3 cSp(float t, float ac) {
   return mix(c2, c3, s - 2.0);
 }
 
-// 冰透明度梯度色带：TIR 暗渊 -> 冷钢灰 -> 冰透银白 -> 刀锋纯白
 vec3 iRmp(float l, float dk) {
   vec3 a = dk > 0.5 ? vec3(0.036, 0.036, 0.044) : vec3(0.25, 0.28, 0.34);
   vec3 st = dk > 0.5 ? vec3(0.38, 0.43, 0.53) : vec3(0.63, 0.69, 0.78);
@@ -280,7 +277,6 @@ void main() {
   }
   float rimD = max(0.0, -sdf);
 
-  // ── 1. 各向异性 Voronoi 大切面 ──
   float ch = cr.y * 0.66;
   float cw = ch * 2.2;
   float sh = 0.38;
@@ -296,7 +292,6 @@ void main() {
   float h2 = hash21(cId + vec2(17.3, 9.1));
   float h3 = hash21(cId + vec2(5.7, 31.4));
 
-  // ── 2. 宏观主光 ──
   float yN = clamp(px.y / max(1.0, hs.y), -1.0, 1.0);
   float cEn = clamp((abs(px.x) - (hs.x - capR)) / max(1.0, capR), 0.0, 1.0);
   vec3 Nr = vec3(sign(px.x) * cEn * 0.55, yN * 0.62, 1.0);
@@ -325,7 +320,6 @@ void main() {
   col = mix(col, cT * (0.55 + 0.5 * lum), cZ * (dk > 0.5 ? 0.22 : 0.16) * (0.35 + 0.65 * u_ambient));
   col += vec3(0.92, 0.95, 1.0) * pow(max(dot(N, Hk), 0.0), 38.0) * (dk > 0.5 ? 0.42 : 0.28);
 
-  // ── 3. 内部斜棱带 ──
   if (u_ambient > 0.01) {
     for (int k = 0; k < 3; k++) {
       float fk = float(k);
@@ -343,7 +337,6 @@ void main() {
     }
   }
 
-  // ── 4. 刀锋菲涅尔棱线 ──
   vec3 Nb = normalize(vec3(nE * 0.45, 0.89) + vec3(Nr.xy * 0.12, 0.0));
   float rSp = pow(max(dot(Nb, Hk), 0.0), 12.0);
   float fM = 0.55 + 0.45 * pow(abs(yN), 2.0);
@@ -354,7 +347,6 @@ void main() {
   col += vec3(0.96, 0.98, 1.0) * bld * rSp * eG * fM * (dk > 0.5 ? 0.92 : 0.68);
   col *= 1.0 - hr * (1.0 - rSp) * eG * (dk > 0.5 ? 0.20 : 0.12);
 
-  // ── 5. 近场追光 + 柯西色散 ──
   if (u_proximity > 0.004) {
     vec2 dp = px - u_pointer;
     float sp = pow(1.0 - smoothstep(0.0, max(cr.y * 3.0, 84.0), length(dp * vec2(0.85, 1.2))), 1.5);
@@ -372,7 +364,6 @@ void main() {
     col += vec3(1.0) * bld * eL * rc * 0.55;
   }
 
-  // ── 6. 4 路异步冷白十字星芒 ──
   for (int i = 0; i < 4; i++) {
     float gi = u_glints[i] * u_ambient;
     if (gi > 0.01) {
@@ -390,13 +381,11 @@ void main() {
     }
   }
 
-  // ── 7. 光学唤醒 ──
   if (u_wake.y > 0.001) {
     float d = px.x - (u_wake.x - 0.5) * cr.x - px.y * 0.55;
     col += vec3(0.90, 0.95, 1.0) * (exp(-d * d / 60.0) * 0.55 + exp(-d * d / 1.6) * 0.80) * u_wake.y;
   }
 
-  // ── 8. 胶囊外缘：厚玻璃侧壁暗化 + 内移菲涅尔亮缘（避开 rimD<1px 半透明抗锯齿带防白毛边） ──
   vec2 rN = normalize(vec2(sign(px.x) * max(0.0, abs(px.x) - (hs.x - capR)), px.y) + vec2(0.0001));
   float rL = 0.20 + 0.80 * smoothstep(-0.3, 0.85, dot(rN, normalize(Lk.xy)));
   float wS = 1.0 - smoothstep(0.0, 3.2, rimD);
@@ -411,7 +400,6 @@ void main() {
     col = mix(col, vec3(0.47, 0.52, 0.59), tL * 0.72);
   }
 
-  // ── 9. 可调滑块模式 ──
   if (u_reduce > 1.5) {
     float fU = clamp(u_reduce > 3.5 ? (u_reduce - 4.0) : (u_reduce - 2.0), 0.0, 1.0);
     float aM = 1.0 - smoothstep(fU - 0.012, fU + 0.012, vUv.x);
@@ -534,21 +522,10 @@ void main() {
     ctx.roundRect(0, 0, cssW, cssH, r);
     ctx.clip();
 
-    // 全局明暗梯度：上冠面亮银白 -> 中部清透 -> 下亭部 TIR 暗渊
-    const baseGrad = ctx.createLinearGradient(0, 0, 0, cssH);
-    if (isDark) {
-      baseGrad.addColorStop(0, '#c4ccd8');
-      baseGrad.addColorStop(0.22, '#dfe5ee');
-      baseGrad.addColorStop(0.55, '#8d97a8');
-      baseGrad.addColorStop(0.85, '#2a2e37');
-      baseGrad.addColorStop(1, '#0b0b0e');
-    } else {
-      baseGrad.addColorStop(0, '#e9eef5');
-      baseGrad.addColorStop(0.22, '#f7f9fc');
-      baseGrad.addColorStop(0.55, '#c9d1dd');
-      baseGrad.addColorStop(1, '#5d6778');
-    }
-    ctx.fillStyle = baseGrad;
+    const addStops = (g, s) => { for (const [o, c] of s) g.addColorStop(o, c); return g; };
+    ctx.fillStyle = addStops(ctx.createLinearGradient(0, 0, 0, cssH), isDark
+      ? [[0, '#c4ccd8'], [0.22, '#dfe5ee'], [0.55, '#8d97a8'], [0.85, '#2a2e37'], [1, '#0b0b0e']]
+      : [[0, '#e9eef5'], [0.22, '#f7f9fc'], [0.55, '#c9d1dd'], [1, '#5d6778']]);
     ctx.fillRect(0, 0, cssW, cssH);
 
     // 确定性斜切长切面：每列一条斜分割线，约 10~12 块
@@ -699,27 +676,18 @@ void main() {
     if (sliderFillRatio >= 0) {
       const splitX = clamp(sliderFillRatio, 0, 1) * cssW;
       if (splitX < cssW) {
-        const gr = ctx.createLinearGradient(0, 0, 0, cssH);
-        if (isDark) {
-          gr.addColorStop(0, '#07090f');
-          gr.addColorStop(0.45, '#10141f');
-          gr.addColorStop(0.92, '#141a28');
-          gr.addColorStop(1, '#263046');
-        } else {
-          gr.addColorStop(0, '#96a2b6');
-          gr.addColorStop(0.55, '#bcc6d6');
-          gr.addColorStop(1, '#e4eaf4');
-        }
-        ctx.fillStyle = gr;
+        ctx.fillStyle = addStops(ctx.createLinearGradient(0, 0, 0, cssH), isDark
+          ? [[0, '#07090f'], [0.45, '#10141f'], [0.92, '#141a28'], [1, '#263046']]
+          : [[0, '#96a2b6'], [0.55, '#bcc6d6'], [1, '#e4eaf4']]);
         ctx.fillRect(splitX, 0, cssW - splitX, cssH);
       }
       if (splitX > 1) {
-        const gloss = ctx.createLinearGradient(0, 0, 0, cssH);
-        gloss.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-        gloss.addColorStop(0.22, isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.24)');
-        gloss.addColorStop(0.42, 'rgba(255, 255, 255, 0.02)');
-        gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = gloss;
+        ctx.fillStyle = addStops(ctx.createLinearGradient(0, 0, 0, cssH), [
+          [0, 'rgba(255, 255, 255, 0.08)'],
+          [0.22, isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.24)'],
+          [0.42, 'rgba(255, 255, 255, 0.02)'],
+          [1, 'rgba(255, 255, 255, 0)'],
+        ]);
         ctx.fillRect(0, 0, splitX, cssH);
       }
     }
@@ -834,27 +802,11 @@ void main() {
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      const uloc = (name) => gl.getUniformLocation(prog, name);
-      return {
-        gl,
-        prog,
-        buf,
-        u: {
-          res: uloc('u_res'),
-          dpr: uloc('u_dpr'),
-          time: uloc('u_time'),
-          dark: uloc('u_dark'),
-          pointer: uloc('u_pointer'),
-          proximity: uloc('u_proximity'),
-          reduce: uloc('u_reduce'),
-          glints: uloc('u_glints'),
-          glintU: uloc('u_glintU'),
-          glintV: uloc('u_glintV'),
-          wake: uloc('u_wake'),
-          accent: uloc('u_accent'),
-          ambient: uloc('u_ambient'),
-        },
-      };
+      const u = {};
+      for (const k of ['res', 'dpr', 'time', 'dark', 'pointer', 'proximity', 'reduce', 'glints', 'glintU', 'glintV', 'wake', 'accent', 'ambient']) {
+        u[k] = gl.getUniformLocation(prog, 'u_' + k);
+      }
+      return { gl, prog, buf, u };
     };
 
     if (!force2D) {
@@ -863,7 +815,7 @@ void main() {
           alpha: true,
           antialias: true,
           premultipliedAlpha: true,
-          powerPreference: 'high-performance',
+          powerPreference: 'low-power',
         });
         if (gl) {
           glState = initWebGL2(gl);
@@ -964,7 +916,7 @@ void main() {
         }
       }
 
-      const dpr = M.min(2.5, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+      const dpr = M.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
       const targetW = M.max(4, M.round(cssW * dpr));
       const targetH = M.max(4, M.round(cssH * dpr));
 
@@ -1058,24 +1010,23 @@ void main() {
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.useProgram(prog);
 
-        gl.uniform2f(u.res, cssW, cssH);
-        gl.uniform1f(u.dpr, dpr);
-        gl.uniform1f(u.time, elapsedTime);
-        gl.uniform1f(u.dark, isDark ? 1.0 : 0.0);
-        // 着色器坐标系 y 轴朝上，这里翻转指针 y
-        if (pointerLocalX > -2000) {
-          gl.uniform2f(u.pointer, pointerLocalX - cssW * 0.5, cssH * 0.5 - pointerLocalY);
-        } else {
-          gl.uniform2f(u.pointer, -9999, -9999);
-        }
-        gl.uniform1f(u.proximity, currentProximity);
-        gl.uniform1f(u.reduce, hideLock ? (reduceMotion ? 4.0 : 2.0) + fillRatio : (reduceMotion ? 1.0 : 0.0));
-        gl.uniform4f(u.glints, glintBuf[0], glintBuf[1], glintBuf[2], glintBuf[3]);
-        gl.uniform4f(u.glintU, GLINT_ANCHORS[0].u, GLINT_ANCHORS[1].u, GLINT_ANCHORS[2].u, GLINT_ANCHORS[3].u);
-        gl.uniform4f(u.glintV, GLINT_ANCHORS[0].v, GLINT_ANCHORS[1].v, GLINT_ANCHORS[2].v, GLINT_ANCHORS[3].v);
-        gl.uniform2f(u.wake, wakeU, wakeAmp);
-        gl.uniform1f(u.accent, accentCode);
-        gl.uniform1f(u.ambient, ambientVal);
+        const u1 = (k, v) => gl.uniform1f(u[k], v);
+        const u2 = (k, a, b) => gl.uniform2f(u[k], a, b);
+        const u4 = (k, a, b, c, d) => gl.uniform4f(u[k], a, b, c, d);
+        u2('res', cssW, cssH);
+        u1('dpr', dpr);
+        u1('time', elapsedTime);
+        u1('dark', isDark ? 1.0 : 0.0);
+        if (pointerLocalX > -2000) u2('pointer', pointerLocalX - cssW * 0.5, cssH * 0.5 - pointerLocalY);
+        else u2('pointer', -9999, -9999);
+        u1('proximity', currentProximity);
+        u1('reduce', hideLock ? (reduceMotion ? 4.0 : 2.0) + fillRatio : (reduceMotion ? 1.0 : 0.0));
+        u4('glints', glintBuf[0], glintBuf[1], glintBuf[2], glintBuf[3]);
+        u4('glintU', GLINT_ANCHORS[0].u, GLINT_ANCHORS[1].u, GLINT_ANCHORS[2].u, GLINT_ANCHORS[3].u);
+        u4('glintV', GLINT_ANCHORS[0].v, GLINT_ANCHORS[1].v, GLINT_ANCHORS[2].v, GLINT_ANCHORS[3].v);
+        u2('wake', wakeU, wakeAmp);
+        u1('accent', accentCode);
+        u1('ambient', ambientVal);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       } else if (ctx2d) {
         ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1188,6 +1139,7 @@ void main() {
           glState = null;
         }
         ctx2d = null;
+        if (canvas && (canvas.width || canvas.height)) try { canvas.width = canvas.height = 0; } catch {}
       },
     };
   }

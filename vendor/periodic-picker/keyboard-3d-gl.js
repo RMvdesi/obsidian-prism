@@ -10792,13 +10792,23 @@
       /* ============================================================================
        * 12. 自管 rAF 动画循环（动态高刷限帧 60/120/180/native + 失焦/隐藏真 0fps 休眠 + 残差 < IDLE_EPS 自动归零）
        * ============================================================================ */
+      var rafAlignTimer = 0;
+      var lastRafCallbackTs = 0;
       function cancelAnimLoop() {
+        if (rafAlignTimer) {
+          var clrTo = (root && typeof root.clearTimeout === 'function')
+            ? root.clearTimeout.bind(root)
+            : (typeof clearTimeout === 'function' ? clearTimeout : null);
+          if (clrTo) clrTo(rafAlignTimer);
+          rafAlignTimer = 0;
+        }
         if (rafId && root && typeof root.cancelAnimationFrame === 'function') {
           root.cancelAnimationFrame(rafId);
         }
         rafId = 0;
         lastFrameMs = 0;
         lastDrawAt = 0;
+        lastRafCallbackTs = 0;
       }
 
       function onAnimFrame(now) {
@@ -10808,13 +10818,34 @@
           pendingRenderWhilePaused = Boolean(pendingRenderWhilePaused || !idle);
           lastFrameMs = 0;
           lastDrawAt = 0;
+          lastRafCallbackTs = 0;
           return;
         }
         var ts = typeof now === 'number' && Number.isFinite(now) ? now : readNowMs(root);
+        var vsDt = lastRafCallbackTs > 0 && ts > lastRafCallbackTs
+          ? (ts - lastRafCallbackTs)
+          : (lastDrawAt > 0 && ts > lastDrawAt ? (ts - lastDrawAt) : 16);
+        lastRafCallbackTs = ts;
         var minFrameGapMs = resolveMinFrameGapMs(resolveTargetFps());
         if (minFrameGapMs > 0 && lastDrawAt > 0 && ts >= lastDrawAt && (ts - lastDrawAt) < minFrameGapMs) {
           if (!idle || pendingRenderWhilePaused) {
-            scheduleAnimLoop(pendingRenderWhilePaused);
+            var remMs = minFrameGapMs - (ts - lastDrawAt);
+            var setTo = (root && typeof root.setTimeout === 'function')
+              ? root.setTimeout.bind(root)
+              : (typeof setTimeout === 'function' ? setTimeout : null);
+            if (setTo && remMs > Math.max(8, vsDt + 2)) {
+              if (!rafAlignTimer) {
+                var wantPending = Boolean(pendingRenderWhilePaused);
+                rafAlignTimer = setTo(function () {
+                  rafAlignTimer = 0;
+                  if (!disposed && !contextLost && !isEffectivelyPaused() && (!idle || wantPending || pendingRenderWhilePaused)) {
+                    scheduleAnimLoop(wantPending || pendingRenderWhilePaused);
+                  }
+                }, Math.max(4, Math.ceil(remMs)));
+              }
+            } else {
+              scheduleAnimLoop(pendingRenderWhilePaused);
+            }
           }
           return;
         }

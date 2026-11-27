@@ -28,6 +28,8 @@
   const addS = (g, a) => { for (let i = 0; i < a.length; i += 2) g.addColorStop(a[i], a[i + 1]); return g; };
   const palS = (g, tk, dk) => { for (const [o, c] of (RIM_PALETTES[tk] || RIM_PALETTES.default)[dk ? 'dark' : 'light']) g.addColorStop(o, c); return g; };
   const rg = (rgb, a) => `rgba(${rgb},${a.toFixed(4)})`;
+  const rG = (c, x, y, r) => c.createRadialGradient(x, y, 0, x, y, r);
+  const cG = (e, id, k, fn) => { const c = e._c || (e._c = {}), h = c[id]; return h && h.k === k ? h.g : (c[id] = { k, g: fn() }).g; };
   const PB = 'data-ag-cs-prism-box', PM = 'data-ag-cs-prism-mirror', CV_A = 'data-ag-cs-prism-cv', CV_C = 'ag-cs-prism-rim-cv', CV_S = '.' + CV_C;
 
   const parseAmbientScale = (raw) =>
@@ -82,7 +84,7 @@
     const isDragSuspended = () => { const h = getHtml(); return ga(h, 'data-ag-cs-resizing') === '1' || ga(h, 'data-ag-cs-mascot-drag') === '1'; };
     const clrIdle = () => { if (idleT) { isFn(G.clearTimeout) && clearTimeout(idleT); idleT = 0; } };
     const zCv = (c) => { if (c && (c.width || c.height)) c.width = c.height = 0; };
-    const zEnt = (e, all) => { if (e && (all || e.wasCleared)) { e._s = ''; e._g = null; e._gk = ''; e.wasCleared = true; zCv(e.cv); } };
+    const zEnt = (e, all) => { if (e && (all || e.wasCleared)) { e._s = ''; e._c = null; e.wasCleared = true; zCv(e.cv); } };
 
     const shrinkRims = (all) => {
       clrIdle();
@@ -210,24 +212,22 @@
       ctx.closePath();
     };
 
-    const drawMirrorCursorReflection = (ctx, gx, gy, w, h, dpr, dark, effAlpha, rectW, rectH, localX, localY) => {
+    const drawMirrorCursorReflection = (entry, ctx, gx, gy, w, h, dpr, dark, effAlpha, rectW, rectH, localX, localY) => {
       if ((rectW || 0) * (rectH || 0) > 120000) return;
       const distOut = Math.hypot(localX < 0 ? -localX : localX > rectW ? localX - rectW : 0, localY < 0 ? -localY : localY > rectH ? localY - rectH : 0);
       if (distOut > 42) return;
       const a = effAlpha * Math.max(0, 1 - distOut / 42) * (dark ? 1 : 0.65);
       if (a <= 0.01) return;
-      const rx = gx + 3.2 * dpr, ry = gy + 4.2 * dpr;
-      ctx.fillStyle = addS(
-        ctx.createRadialGradient(rx + 2 * dpr, ry + 3 * dpr, 0, rx + 2 * dpr, ry + 3 * dpr, 26 * dpr),
-        dark ? [0, rg('248,252,255', 0.135 * a), 0.45, rg('216,232,252', 0.05 * a), 1, 'rgba(200,220,250,0)'] : [0, rg('37,99,235', 0.065 * a), 1, 'rgba(37,99,235,0)']
-      );
-      ctx.fillRect(0, 0, w, h);
-      const drawLayer = (ox, oy, s, x1, y1, st) => {
-        ctx.save(); ctx.translate(rx + ox * dpr, ry + oy * dpr); traceGhost(ctx, s);
-        ctx.fillStyle = addS(ctx.createLinearGradient(0, 0, x1 * s, y1 * s), st); ctx.fill(); ctx.restore();
-      };
-      drawLayer(-0.55, -0.55, 1.18 * dpr, 8, 16, dark ? [0, rg('232,242,255', 0.055 * a), 0.55, rg('204,224,248', 0.024 * a), 1, 'rgba(180,205,238,0)'] : [0, rg('15,23,42', 0.032 * a), 1, 'rgba(15,23,42,0)']);
-      drawLayer(0, 0, 1.04 * dpr, 7, 15, dark ? [0, rg('252,254,255', 0.115 * a), 0.45, rg('222,235,252', 0.048 * a), 1, rg('190,210,240', 0.006 * a)] : [0, rg('15,23,42', 0.06 * a), 1, 'rgba(15,23,42,0.004)']);
+      const rx = gx + 3.2 * dpr, ry = gy + 4.2 * dpr, mk = `${dpr}|${+dark}`;
+      const rg0 = cG(entry, 'mr', mk, () => addS(rG(ctx, 0, 0, 26 * dpr), dark ? [0, rg('248,252,255', 0.135), 0.45, rg('216,232,252', 0.05), 1, 'rgba(200,220,250,0)'] : [0, rg('37,99,235', 0.065), 1, 'rgba(37,99,235,0)']));
+      const hx = rx + 2 * dpr, hy = ry + 3 * dpr;
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(hx, hy); ctx.fillStyle = rg0; ctx.fillRect(-hx, -hy, w, h); ctx.restore();
+      const s1 = 1.18 * dpr, s2 = 1.04 * dpr;
+      const g1 = cG(entry, 'm1', mk, () => addS(ctx.createLinearGradient(0, 0, 8 * s1, 16 * s1), dark ? [0, rg('232,242,255', 0.055), 0.55, rg('204,224,248', 0.024), 1, 'rgba(180,205,238,0)'] : [0, rg('15,23,42', 0.032), 1, 'rgba(15,23,42,0)']));
+      const g2 = cG(entry, 'm2', mk, () => addS(ctx.createLinearGradient(0, 0, 7 * s2, 15 * s2), dark ? [0, rg('252,254,255', 0.115), 0.45, rg('222,235,252', 0.048), 1, rg('190,210,240', 0.006)] : [0, rg('15,23,42', 0.06), 1, 'rgba(15,23,42,0.004)']));
+      for (const [ox, oy, s, g] of [[-0.55, -0.55, s1, g1], [0, 0, s2, g2]]) {
+        ctx.save(); ctx.globalAlpha = a; ctx.translate(rx + ox * dpr, ry + oy * dpr); traceGhost(ctx, s); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+      }
     };
 
     const paintPrismRimCanvas = (entry, active, localX, localY, radius, dark, toneKey = 'default', ambientScale = 1) => {
@@ -249,29 +249,28 @@
       const padOff = entry.insetPad ? entry.insetPad * 0.5 : 0;
       const gx = (localX + padOff) * dpr, gy = (localY + padOff) * dpr, gr = radius * dpr;
       const inset = (entry.insetPad ? 1 : 0.75) * dpr, rw = Math.max(2, w - inset * 2), rh = Math.max(2, h - inset * 2), rr = Math.min(rw * 0.5, rh * 0.5, cssR * dpr);
-      const prevA = ctx.globalAlpha;
+      const prevA = ctx.globalAlpha, xf = isFn(ctx.save) && isFn(ctx.translate) && isFn(ctx.restore);
+      const strokeCached = (id, key, x, y, r, lw, al, build) => {
+        if (xf) {
+          const g = cG(entry, id, key, () => build(0, 0, r));
+          ctx.save(); ctx.globalAlpha = al; ctx.translate(x, y);
+          strokeRoundedRectPath(ctx, inset - x, inset - y, rw, rh, rr);
+          ctx.lineWidth = lw; ctx.strokeStyle = g; ctx.stroke(); ctx.restore();
+        } else {
+          ctx.globalAlpha = al; strokeRoundedRectPath(ctx, inset, inset, rw, rh, rr);
+          ctx.lineWidth = lw; ctx.strokeStyle = build(x, y, r); ctx.stroke();
+        }
+      };
 
       if (isMirror) {
         if (isFn(ctx.save) && isFn(ctx.clip) && isFn(ctx.fillRect)) {
-          ctx.save();
-          strokeRoundedRectPath(ctx, 0, 0, w, h, Math.min(w * 0.5, h * 0.5, cssR * dpr));
-          ctx.clip();
-          ctx.fillStyle = addS(
-            ctx.createRadialGradient(gx, gy, 0, gx, gy, 210 * dpr),
-            dark ? [0, rg('238,245,255', 0.068 * effA), 0.42, rg('206,224,250', 0.026 * effA), 0.8, rg('180,202,238', 0.006 * effA), 1, 'rgba(180,202,238,0)'] : [0, rg('37,99,235', 0.042 * effA), 0.5, rg('37,99,235', 0.014 * effA), 1, 'rgba(37,99,235,0)']
-          );
-          ctx.fillRect(0, 0, w, h);
-          if (isFn(ctx.translate) && isFn(ctx.createLinearGradient)) drawMirrorCursorReflection(ctx, gx, gy, w, h, dpr, dark, effA, entry.rect.width, entry.rect.height, localX, localY);
+          ctx.save(); strokeRoundedRectPath(ctx, 0, 0, w, h, Math.min(w * 0.5, h * 0.5, cssR * dpr)); ctx.clip();
+          const g = cG(entry, 'mb', `${dpr}|${+dark}`, () => addS(rG(ctx, 0, 0, 210 * dpr), dark ? [0, rg('238,245,255', 0.068), 0.42, rg('206,224,250', 0.026), 0.8, rg('180,202,238', 0.006), 1, 'rgba(180,202,238,0)'] : [0, rg('37,99,235', 0.042), 0.5, rg('37,99,235', 0.014), 1, 'rgba(37,99,235,0)']));
+          if (xf) { ctx.save(); ctx.globalAlpha = effA; ctx.translate(gx, gy); ctx.fillStyle = g; ctx.fillRect(-gx, -gy, w, h); ctx.restore(); }
+          if (isFn(ctx.translate) && isFn(ctx.createLinearGradient)) drawMirrorCursorReflection(entry, ctx, gx, gy, w, h, dpr, dark, effA, entry.rect.width, entry.rect.height, localX, localY);
           ctx.restore();
         }
-        ctx.globalAlpha = effA;
-        strokeRoundedRectPath(ctx, inset, inset, rw, rh, rr);
-        ctx.lineWidth = 1.35 * dpr;
-        ctx.strokeStyle = addS(
-          ctx.createRadialGradient(gx, gy, 0, gx, gy, gr),
-          dark ? [0, 'rgba(255,255,255,0.95)', 0.24, 'rgba(232,240,252,0.56)', 0.54, 'rgba(186,202,228,0.18)', 0.85, 'rgba(148,168,198,0.03)', 1, 'rgba(148,168,198,0)'] : [0, 'rgba(30,64,175,0.52)', 0.42, 'rgba(59,130,246,0.2)', 1, 'rgba(59,130,246,0)']
-        );
-        ctx.stroke();
+        strokeCached('ms', `${gr}|${+dark}`, gx, gy, gr, 1.35 * dpr, effA, (x, y, r) => addS(rG(ctx, x, y, r), dark ? [0, 'rgba(255,255,255,0.95)', 0.24, 'rgba(232,240,252,0.56)', 0.54, 'rgba(186,202,228,0.18)', 0.85, 'rgba(148,168,198,0.03)', 1, 'rgba(148,168,198,0)'] : [0, 'rgba(30,64,175,0.52)', 0.42, 'rgba(59,130,246,0.2)', 1, 'rgba(59,130,246,0)']));
         ctx.globalAlpha = prevA !== undefined ? prevA : 1;
         return true;
       }
@@ -280,41 +279,23 @@
         const gyR = h + 16 * dpr, grR = Math.max(radius * 1.15, 220) * dpr, ob = localY - entry.rect.height;
         const aR = effA * 0.46 * (ob > 150 ? Math.max(0, 1 - (ob - 150) / 190) : localY < 0 ? Math.max(0, 1 + localY / 80) : 1);
         if (aR > 0.004) {
-          ctx.globalAlpha = aR;
-          strokeRoundedRectPath(ctx, inset, inset, rw, rh, rr);
-          ctx.lineWidth = 1.15 * dpr;
-          ctx.strokeStyle = palS(ctx.createRadialGradient(gx, gyR, 0, gx, gyR, grR), toneKey, dark);
-          ctx.stroke();
-          if (isFn(ctx.save) && isFn(ctx.clip)) {
+          strokeCached('rs', `${grR}|${+dark}|${toneKey}`, gx, gyR, grR, 1.15 * dpr, aR, (x, y, r) => palS(rG(ctx, x, y, r), toneKey, dark));
+          if (xf && isFn(ctx.clip)) {
             ctx.save(); strokeRoundedRectPath(ctx, inset, inset, rw, rh, rr); ctx.clip();
-            const wh = Math.min(rh, 14 * dpr), wc = dark ? '255,255,255' : '59,130,246';
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = addS(ctx.createRadialGradient(gx, h + 2 * dpr, 0, gx, h + 2 * dpr, Math.max(grR * 0.72, 160 * dpr)), [0, rg(wc, 0.032 * aR), 1, `rgba(${wc},0)`]);
-            ctx.fillRect(0, Math.max(0, h - wh), w, wh);
-            ctx.restore();
+            const wh = Math.min(rh, 14 * dpr), wc = dark ? '255,255,255' : '59,130,246', wr = Math.max(grR * 0.72, 160 * dpr), wy = h + 2 * dpr;
+            const g = cG(entry, 'rw', `${wr}|${+dark}`, () => addS(rG(ctx, 0, 0, wr), [0, rg(wc, 0.032), 1, `rgba(${wc},0)`]));
+            ctx.globalAlpha = aR; ctx.translate(gx, wy); ctx.fillStyle = g; ctx.fillRect(-gx, Math.max(0, h - wh) - wy, w, wh); ctx.restore();
           }
           if (isFn(ctx.createLinearGradient) && isFn(ctx.save)) {
-            ctx.save(); ctx.globalCompositeOperation = 'destination-in'; ctx.globalAlpha = 1;
-            ctx.fillStyle = addS(ctx.createLinearGradient(0, h, 0, 0), [0, 'rgba(0,0,0,1)', 0.22, 'rgba(0,0,0,0.68)', 0.48, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0)']);
-            ctx.fillRect(0, 0, w, h); ctx.restore();
+            const mg = cG(entry, 'rm', h, () => addS(ctx.createLinearGradient(0, h, 0, 0), [0, 'rgba(0,0,0,1)', 0.22, 'rgba(0,0,0,0.68)', 0.48, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0)']));
+            ctx.save(); ctx.globalCompositeOperation = 'destination-in'; ctx.globalAlpha = 1; ctx.fillStyle = mg; ctx.fillRect(0, 0, w, h); ctx.restore();
           }
         }
         ctx.globalAlpha = prevA !== undefined ? prevA : 1;
         return true;
       }
 
-      if (isFn(ctx.save) && isFn(ctx.translate) && isFn(ctx.restore)) {
-        const gKey = `${gr}|${dark ? 1 : 0}|${toneKey}`;
-        let grad = entry._gk === gKey ? entry._g : null;
-        if (!grad) { grad = palS(ctx.createRadialGradient(0, 0, 0, 0, 0, gr), toneKey, dark); entry._g = grad; entry._gk = gKey; }
-        ctx.save(); ctx.globalAlpha = effA; ctx.translate(gx, gy);
-        strokeRoundedRectPath(ctx, inset - gx, inset - gy, rw, rh, rr);
-        ctx.lineWidth = 1.45 * dpr; ctx.strokeStyle = grad; ctx.stroke(); ctx.restore();
-      } else {
-        ctx.globalAlpha = effA;
-        strokeRoundedRectPath(ctx, inset, inset, rw, rh, rr);
-        ctx.lineWidth = 1.45 * dpr; ctx.strokeStyle = palS(ctx.createRadialGradient(gx, gy, 0, gx, gy, gr), toneKey, dark); ctx.stroke();
-      }
+      strokeCached('d', `${gr}|${+dark}|${toneKey}`, gx, gy, gr, 1.45 * dpr, effA, (x, y, r) => palS(rG(ctx, x, y, r), toneKey, dark));
       ctx.globalAlpha = prevA !== undefined ? prevA : 1;
       return true;
     };
@@ -411,7 +392,7 @@
         return {
           box, rect, cv: rim ? rim.cv : null, ctx: rim ? rim.ctx : null, insetPad, mirrorMode, reflectBottomMode, borderRadius,
           wasCleared: prev ? prev.wasCleared : false, _s: prev?._s || '', _x: prev?._x ?? -9999, _y: prev?._y ?? -9999,
-          _g: reusePrev ? (prev._g || null) : null, _gk: reusePrev ? (prev._gk || '') : '', pxStr: prev ? prev.pxStr : '', pyStr: prev ? prev.pyStr : '',
+          _c: reusePrev ? (prev._c || null) : null, pxStr: prev ? prev.pxStr : '', pyStr: prev ? prev.pyStr : '',
         };
       };
       runGuardedMut(() => {

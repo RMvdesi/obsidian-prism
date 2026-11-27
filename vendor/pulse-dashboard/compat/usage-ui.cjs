@@ -301,7 +301,6 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   });
   view.addEventListener('pointerdown',event=>{const path=event.composedPath();if(!path.includes($('year'))&&!path.includes($('year-menu')))closeYear(false);});
   $('page-body').addEventListener('scroll',()=>{closeYear(false);if(!$('tip').hidden){$('tip').hidden=true;highlightModel(null);}},{passive:true});
-  window.addEventListener('resize',positionYear);
   $('heat').addEventListener('keydown',event=>{
     const buttons=[...$('heat').children],index=buttons.indexOf(event.target);if(index<0)return;
     const delta=heatMode==='day'?{ArrowLeft:-7,ArrowRight:7,ArrowUp:-1,ArrowDown:1}:{ArrowLeft:-1,ArrowRight:1,ArrowUp:-Math.ceil(buttons.length/2),ArrowDown:Math.ceil(buttons.length/2)};
@@ -329,12 +328,29 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
   // In long chats this alone can block Chromium for seconds. A top-layer
   // popover keeps the same backdrop without touching every background node.
   // Contain pointer, focus, Tab, Escape and scrolling explicitly instead.
+  let modalGuardsBound=false;
+  function bindModalGuards(){
+    if(modalGuardsBound||disposed)return;modalGuardsBound=true;
+    window.addEventListener('resize',positionYear,{passive:true});
+    document.addEventListener('focusin',containFocus,true);document.addEventListener('keydown',containKeys,true);
+    document.addEventListener('wheel',containScroll,{capture:true,passive:false});document.addEventListener('touchmove',containScroll,{capture:true,passive:false});
+    for(const type of ['pointerdown','mousedown','click'])document.addEventListener(type,containPointer,true);
+  }
+  function unbindModalGuards(){
+    if(!modalGuardsBound)return;modalGuardsBound=false;
+    window.removeEventListener('resize',positionYear);
+    document.removeEventListener('focusin',containFocus,true);document.removeEventListener('keydown',containKeys,true);
+    document.removeEventListener('wheel',containScroll,true);document.removeEventListener('touchmove',containScroll,true);
+    for(const type of ['pointerdown','mousedown','click'])document.removeEventListener(type,containPointer,true);
+  }
   function present(){
     if(dialog.matches(':popover-open'))return;
+    bindModalGuards();
     dialog.removeAttribute('open');dialog.showPopover();dialog.setAttribute('open','');
     $('locale').focus({preventScroll:true});
   }
   function conceal(){
+    unbindModalGuards();
     if(dialog.matches(':popover-open'))dialog.hidePopover();dialog.removeAttribute('open');
   }
   function close(){languagePicker.close(false);closeYear(false);conceal();$('tip').hidden=true;opener?.focus({preventScroll:true});}
@@ -365,9 +381,8 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
     const backdropHit=event.composedPath()[0]===dialog;
     if(!within(event)||backdropHit&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)){event.preventDefault();event.stopImmediatePropagation();if(event.type==='click')close();}
   }
-  document.addEventListener('focusin',containFocus,true);document.addEventListener('keydown',containKeys,true);
-  document.addEventListener('wheel',containScroll,{capture:true,passive:false});document.addEventListener('touchmove',containScroll,{capture:true,passive:false});
-  for(const type of ['pointerdown','mousedown','click'])document.addEventListener(type,containPointer,true);
+  // Modal guards (incl. non-passive wheel/touchmove) are bound only while open in present()/conceal()
+  // so compositor-thread scrolling stays unblocked when the usage dialog is closed.
   // CSS surfaces update immediately; JS model colors must follow in the same
   // theme change, rather than waiting for the next metrics poll.
   const themeObserver=new MutationObserver(()=>{if(!disposed&&value&&dialog.open){const key=contentKey(value);if(key!==lastKey){lastKey=key;render();}}});
@@ -395,5 +410,5 @@ module.exports = function createUsageDashboard({root,language,setMarkup,hostLabe
       if(accountKey&&accountKey!==data.accountKey){selected=null;disabledModels.clear();year=data.today.slice(0,4);anchor=data.today;}accountKey=data.accountKey;value=data;if(!dialog.open)return;const key=contentKey(data);if(key===lastKey)return;lastKey=key;render();
     },
     restoreModal(){if(!disposed&&dialog.open&&dialog.isConnected&&!dialog.matches(':popover-open')){closeYear(false);present();}},
-    close,syncGuideDismissed(){if(!replayGuide)dismissGuide();},dispose(){disposed=true;languagePicker.dispose();themeObserver.disconnect();clearTimeout(refreshDelay);finishRefresh?.();refreshMotion?.cancel();for(const anim of scopeAnimations)anim.cancel();scopeAnimations=[];closeYear(false);window.removeEventListener('resize',positionYear);document.removeEventListener('focusin',containFocus,true);document.removeEventListener('keydown',containKeys,true);document.removeEventListener('wheel',containScroll,true);document.removeEventListener('touchmove',containScroll,true);for(const type of ['pointerdown','mousedown','click'])document.removeEventListener(type,containPointer,true);conceal();dialog.remove();backdrop.remove();},get isOpen(){return dialog.open;}};
+    close,syncGuideDismissed(){if(!replayGuide)dismissGuide();},dispose(){disposed=true;languagePicker.dispose();themeObserver.disconnect();clearTimeout(refreshDelay);finishRefresh?.();refreshMotion?.cancel();for(const anim of scopeAnimations)anim.cancel();scopeAnimations=[];closeYear(false);unbindModalGuards();conceal();dialog.remove();backdrop.remove();},get isOpen(){return dialog.open;}};
 };

@@ -114,6 +114,8 @@ function makeMascotDomMock(clock, opts = {}) {
       dataset: {},
       children: kids,
       childNodes: kids,
+      get firstElementChild() { return kids[0] || null; },
+      get lastElementChild() { return kids[kids.length - 1] || null; },
       parentNode: null,
       parentElement: null,
       width: tag === 'canvas' ? 64 : undefined,
@@ -916,6 +918,8 @@ test('Wave 3 P2-2 vendor/effort-slider/upstream-client: paintDither caches gradi
       },
       children: kids,
       childNodes: kids,
+      get firstElementChild() { return kids[0] || null; },
+      get lastElementChild() { return kids[kids.length - 1] || null; },
       parentNode: null,
       width: tag === 'canvas' ? 280 : undefined,
       height: tag === 'canvas' ? 28 : undefined,
@@ -1345,4 +1349,449 @@ test('Wave 3 P1-3d vendor/host-i18n: blur->focus with 0 DOM mutations does 0 ful
   inst.destroy();
   assert.equal(observerInstances[0].connected, false);
   assert.equal(dirtyObs.connected, false);
+});
+
+test('GPU-01 usage-ui.cjs: lazy-binds non-passive document wheel/touchmove/modal guards only while open and unbinds on close/dispose', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'vendor', 'pulse-dashboard', 'compat', 'usage-ui.cjs'), 'utf8');
+  const docBus = makeEventBus();
+  const winBus = makeEventBus();
+  const makeNode = (tag, id = '') => {
+    const attrs = new Map();
+    const kids = [];
+    const node = {
+      nodeType: 1,
+      tagName: String(tag || 'DIV').toUpperCase(),
+      id,
+      className: '',
+      hidden: false,
+      disabled: false,
+      tabIndex: 0,
+      textContent: '',
+      dataset: {},
+      children: kids,
+      childNodes: kids,
+      get firstElementChild() { return kids[0] || null; },
+      get lastElementChild() { return kids[kids.length - 1] || null; },
+      parentNode: null,
+      style: {
+        cssText: '',
+        setProperty(k, v) { this[k] = String(v); },
+        getPropertyValue(k) { return this[k] || ''; },
+      },
+      _popoverOpen: false,
+      get open() { return attrs.has('open'); },
+      get isConnected() { return true; },
+      showPopover() { this._popoverOpen = true; },
+      hidePopover() { this._popoverOpen = false; },
+      matches(sel) { return sel === ':popover-open' ? this._popoverOpen : false; },
+      setAttribute(k, v) { attrs.set(k, String(v)); if (k === 'id') this.id = String(v); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      removeAttribute(k) { attrs.delete(k); },
+      hasAttribute(k) { return attrs.has(k); },
+      append(...ns) { for (const n of ns) { if (n && typeof n === 'object') { n.parentNode = node; kids.push(n); } } },
+      before() {},
+      after() {},
+      replaceChildren(...ns) { kids.length = 0; this.append(...ns); },
+      remove() {},
+      focus() {},
+      addEventListener() {},
+      removeEventListener() {},
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 }),
+      getClientRects: () => [{ width: 800, height: 600 }],
+      querySelector(sel) {
+        if (sel === '#totals') {
+          if (!idMap.has('totals')) idMap.set('totals', makeNode('div', 'totals'));
+          return idMap.get('totals');
+        }
+        if (sel === 'svg') return makeNode('svg');
+        return null;
+      },
+      querySelectorAll: () => [],
+      attachShadow() {
+        const sr = makeNode('#shadow');
+        sr.host = node;
+        sr.getElementById = (k) => {
+          if (!idMap.has(k)) idMap.set(k, makeNode('div', k));
+          return idMap.get(k);
+        };
+        sr.querySelectorAll = () => [];
+        return sr;
+      },
+      getContext() {
+        return { clearRect() {}, fillRect() {}, getImageData: () => ({ data: [120, 140, 220, 255] }), fillStyle: '' };
+      },
+      animate: () => ({ cancel() {} }),
+    };
+    return node;
+  };
+  const idMap = new Map();
+  const rootEl = makeNode('div');
+  const fakeDoc = {
+    createElement: (t) => makeNode(t),
+    createTextNode: (t) => ({ nodeType: 3, textContent: String(t) }),
+    addEventListener: (t, fn) => docBus.add(t, fn),
+    removeEventListener: (t, fn) => docBus.remove(t, fn),
+  };
+  const fakeWin = {
+    document: fakeDoc,
+    addEventListener: (t, fn) => winBus.add(t, fn),
+    removeEventListener: (t, fn) => winBus.remove(t, fn),
+    matchMedia: () => ({ matches: true }),
+    getComputedStyle: () => ({ getPropertyValue: () => '#3186ff' }),
+    MutationObserver: class { observe() {} disconnect() {} },
+    performance: { now: () => 1000 },
+    setTimeout,
+    clearTimeout,
+  };
+  const mod = { exports: null };
+  vm.runInNewContext(src, {
+    module: mod,
+    exports: {},
+    window: fakeWin,
+    document: fakeDoc,
+    matchMedia: fakeWin.matchMedia,
+    getComputedStyle: fakeWin.getComputedStyle,
+    MutationObserver: fakeWin.MutationObserver,
+    performance: fakeWin.performance,
+    setTimeout,
+    clearTimeout,
+    Date, Math, Number, String, Boolean, Array, Object, Map, Set, JSON, Promise,
+  });
+  const ui = mod.exports({
+    root: rootEl,
+    language: {
+      language: 'en',
+      t: (k) => k,
+      mountLanguagePicker: () => ({ close() {}, sync() {}, update() {}, dispose() {} }),
+    },
+    setMarkup: (el, html) => {
+      if (String(html || '').includes('<span')) el.replaceChildren(makeNode('span'));
+    },
+    guideDismissed: true,
+    onDismissGuide: async () => {},
+    onLanguage: () => {},
+    onRefresh: async () => {},
+  });
+
+  // Closed on mount: 0 document wheel/touchmove/keydown/pointerdown guards!
+  for (const ev of ['wheel', 'touchmove', 'keydown', 'focusin', 'pointerdown', 'mousedown', 'click']) {
+    assert.equal(docBus.count(ev), 0, `Closed usage modal must bind 0 document ${ev} listeners`);
+  }
+  assert.equal(winBus.count('resize'), 0, 'Closed usage modal must bind 0 window resize listeners');
+
+  const sampleData = {
+    today: '2026-11-26',
+    firstDate: '2026-11-26',
+    timeZone: 'UTC+8',
+    todayTokens: 1000,
+    weekTokens: 1000,
+    monthTokens: 1000,
+    totalTokens: 1000,
+    requests: 2,
+    models: ['gemini-2.5-pro'],
+    days: [{ date: '2026-11-26', models: { 'gemini-2.5-pro': { total: 1000, requests: 2, uncached: 500, cacheRead: 200, cacheWrite: 100, output: 200 } } }],
+    scope: 'local',
+    accountKey: 'acct-1',
+  };
+  ui.open(sampleData);
+  assert.equal(docBus.count('wheel'), 1, 'Open usage modal must bind document wheel guard');
+  assert.equal(docBus.count('touchmove'), 1, 'Open usage modal must bind document touchmove guard');
+  assert.equal(winBus.count('resize'), 1, 'Open usage modal must bind window resize listener');
+
+  ui.close();
+  assert.equal(docBus.count('wheel'), 0, 'Closing usage modal must unbind document wheel guard');
+  assert.equal(docBus.count('touchmove'), 0, 'Closing usage modal must unbind document touchmove guard');
+  assert.equal(winBus.count('resize'), 0, 'Closing usage modal must unbind window resize listener');
+
+  ui.open(sampleData);
+  assert.equal(docBus.count('wheel'), 1);
+  ui.dispose();
+  for (const ev of ['wheel', 'touchmove', 'keydown', 'focusin', 'pointerdown', 'mousedown', 'click']) {
+    assert.equal(docBus.count(ev), 0, `dispose() must leave 0 document ${ev} listeners`);
+  }
+  assert.equal(winBus.count('resize'), 0);
+});
+
+test('GPU-03 conv-aura: 300Hz running stream with 60Hz targetFps aligns via setTimeout instead of spinning rAF', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'conv-aura.js'), 'utf8');
+  const clock = makeFakeClock(1000);
+  const docBus = makeEventBus();
+  const winBus = makeEventBus();
+
+  const makeEl = (tag) => {
+    const attrs = new Map();
+    const kids = [];
+    const el = {
+      tagName: tag.toUpperCase(),
+      className: '',
+      isConnected: true,
+      parentElement: null,
+      children: kids,
+      width: tag === 'canvas' ? 300 : undefined,
+      height: tag === 'canvas' ? 150 : undefined,
+      style: { setProperty(k, v) { this[k] = v; }, removeProperty(k) { delete this[k]; } },
+      setAttribute: (k, v) => attrs.set(k, String(v)),
+      getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+      hasAttribute: (k) => attrs.has(k),
+      removeAttribute: (k) => attrs.delete(k),
+      appendChild(c) { c.parentElement = el; kids.push(c); return c; },
+      insertBefore(c) { c.parentElement = el; kids.unshift(c); return c; },
+      get firstChild() { return kids[0] || null; },
+      remove() { this.isConnected = false; },
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 900, height: 600 }),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    };
+    return el;
+  };
+  const convView = makeEl('div');
+  convView.clientWidth = 900;
+  convView.clientHeight = 600;
+  const stopBtn = makeEl('button');
+  stopBtn.getBoundingClientRect = () => ({ left: 800, top: 550, right: 830, bottom: 580, width: 30, height: 30 });
+  stopBtn.getClientRects = () => [{ width: 30, height: 30 }];
+  convView.querySelector = (s) => (s.includes('stop-button') ? stopBtn : null);
+  convView.querySelectorAll = (s) => (s.includes('stop-button') ? [stopBtn] : []);
+  const fakeDoc = {
+    hidden: false,
+    documentElement: makeEl('html'),
+    body: makeEl('body'),
+    createElement: (t) => makeEl(t),
+    querySelector: (s) => (s.includes('conversation-view') ? convView : null),
+    querySelectorAll: (s) => (s.includes('conversation-view') ? [convView] : []),
+    addEventListener: (t, fn) => docBus.add(t, fn),
+    removeEventListener: (t, fn) => docBus.remove(t, fn),
+  };
+  convView.offsetParent = fakeDoc.body;
+  stopBtn.offsetParent = convView;
+  const sb = {
+    document: fakeDoc,
+    devicePixelRatio: 1,
+    performance: clock.performance,
+    requestAnimationFrame: clock.requestAnimationFrame,
+    cancelAnimationFrame: clock.cancelAnimationFrame,
+    setTimeout: clock.setTimeout,
+    clearTimeout: clock.clearTimeout,
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1', position: 'relative' }),
+    ResizeObserver: class { observe() {} disconnect() {} },
+    addEventListener: (t, fn) => winBus.add(t, fn),
+    removeEventListener: (t, fn) => winBus.remove(t, fn),
+    Math, Number, String, Boolean, Array, Object, Map, Set,
+  };
+  sb.window = sb;
+  sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+
+  const ctl = sb.__agPrismConvAura.createConvAuraController({
+    isDestroyed: () => false,
+    isHomeRippleEnabled: () => true,
+    isMotionStandardOrUltra: () => true,
+    isDarkTheme: () => true,
+    getMinFrameGapMs: () => 15.2,
+    getAmbientIntensity: () => 1,
+    getSpectrumMode: () => 'default',
+    isWindowFocused: () => true,
+    rippleCore: {
+      resolveHorizonDpr: (raw, scale) => Math.min(raw, 2) * scale,
+      mountBrandHorizonGlow: (cv) => ({
+        mode: 'webgl2',
+        resize(w, h, dpr) { cv.width = Math.max(1, Math.round(w * dpr)); cv.height = Math.max(1, Math.round(h * dpr)); },
+        releaseBackingStore() { cv.width = 0; cv.height = 0; },
+        invalidate() {},
+        clear() {},
+        draw() {},
+        drawStaticSnapshot() {},
+        dispose() {},
+      }),
+    },
+    setAttrIfChanged: (el, k, v) => el.setAttribute(k, v),
+    runGuardedMut: (fn) => fn(),
+  });
+
+  ctl.sync();
+  assert.ok(ctl.getInstance(), 'conv-aura must mount on mock conversation-view');
+  // Advance past initial start burst into steady 'running' phase, then tick at 300Hz (3.33ms) VSync cadence
+  clock.advanceTimers(550);
+  clock.flushRafs(3.33); // enters 'running', records lastRafTs & lastGpuDrawAt, schedules rAF
+  clock.flushRafs(3.33); // +3.33ms -> measures vsDt=3.33ms, rem=12ms > max(8, 5.33) -> timer-aligned!
+  assert.equal(clock.rafs.size, 0, '300Hz running conv-aura under 60Hz targetFps must not spin rAF');
+  assert.equal(clock.timers.size, 1, '300Hz running conv-aura under 60Hz targetFps must align via setTimeout');
+  ctl.unmount();
+});
+
+test('GPU-05 crystal-prism-core & model-glyph-crystal: low-power WebGL2, DPR<=2, 0x0 dispose, and blur halts step loop', () => {
+  const crystalCore = require(path.join(ROOT, 'crystal-prism-core.js'));
+  let seenGlOpts = null;
+  const fakeCv = {
+    width: 100,
+    height: 10,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 10 }),
+    getContext(type, opts) {
+      if (type === 'webgl2') { seenGlOpts = opts; return null; }
+      return {
+        setTransform() {}, clearRect() {}, save() {}, restore() {}, beginPath() {}, roundRect() {},
+        rect() {}, clip() {}, fillRect() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {}, arc() {},
+        createLinearGradient: () => ({ addColorStop() {} }),
+        createRadialGradient: () => ({ addColorStop() {} }),
+      };
+    },
+  };
+  const prevDpr = globalThis.devicePixelRatio;
+  globalThis.devicePixelRatio = 3;
+  try {
+    const inst = crystalCore.mountCrystalPrismBar(fakeCv, { reduceMotion: true });
+    assert.equal(seenGlOpts?.powerPreference, 'low-power', 'crystal-prism-core must request low-power WebGL2 context');
+    assert.ok(fakeCv.width <= 400, `DPR must cap at 2 (<=400px for 200px bar), got ${fakeCv.width}`);
+    inst.dispose();
+    assert.equal(fakeCv.width, 0, 'crystal-prism-core dispose() must zero canvas width to 0');
+    assert.equal(fakeCv.height, 0, 'crystal-prism-core dispose() must zero canvas height to 0');
+  } finally {
+    if (prevDpr === undefined) delete globalThis.devicePixelRatio;
+    else globalThis.devicePixelRatio = prevDpr;
+  }
+
+  const mgcSrc = fs.readFileSync(path.join(ROOT, 'model-glyph-crystal.js'), 'utf8');
+  assert.match(mgcSrc, /(?:data-ag-cs-|DP\s*\+\s*')win-blur/, 'model-glyph-crystal must gate isHid() on data-ag-cs-win-blur="1"');
+  assert.match(mgcSrc, /'blur',\s*cancelStepRaf/, 'model-glyph-crystal must cancel stepCrystalLoop on window.blur');
+  assert.match(mgcSrc, /onFocus\s*=\s*\(\)\s*=>\s*Promise\.resolve\(\)\.then\(onPwr\)/, 'model-glyph-crystal must defer focus wake past ui-runtime clearWinBlur');
+});
+
+test('GPU-07 prism-rim-canvas: mirror-mode pointer moves reuse cached radial & linear gradients without per-frame allocation', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'prism-rim-canvas.js'), 'utf8');
+  const clock = makeFakeClock(5000);
+  const docBus = makeEventBus();
+  const rootBus = makeEventBus();
+  const winBus = makeEventBus();
+  let radialCreates = 0;
+  let linearCreates = 0;
+
+  const makeCanvas = () => {
+    const attrs = new Map();
+    const cv = {
+      width: 300, height: 150, className: '', isConnected: true, parentElement: null,
+      classList: { contains: (c) => cv.className.split(/\s+/).includes(c) },
+      setAttribute: (k, v) => attrs.set(k, String(v)),
+      getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+      remove() { this.isConnected = false; },
+      getContext: (t) => t !== '2d' ? null : {
+        globalAlpha: 1, lineWidth: 1, strokeStyle: null, fillStyle: null,
+        save() {}, restore() {}, translate() {}, clip() {}, clearRect() {}, fillRect() {},
+        beginPath() {}, roundRect() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fill() {},
+        createRadialGradient() { radialCreates += 1; return { addColorStop() {} }; },
+        createLinearGradient() { linearCreates += 1; return { addColorStop() {} }; },
+      },
+    };
+    return cv;
+  };
+  const kids = [];
+  const boxAttrs = new Map([['data-ag-cs-prism-box', '1'], ['data-ag-cs-prism-mirror', '1']]);
+  const box = {
+    isConnected: true, style: { setProperty() {} },
+    get firstElementChild() { return kids[0] || null; },
+    setAttribute: (k, v) => boxAttrs.set(k, String(v)),
+    getAttribute: (k) => (boxAttrs.has(k) ? boxAttrs.get(k) : null),
+    hasAttribute: (k) => boxAttrs.has(k),
+    removeAttribute: (k) => boxAttrs.delete(k),
+    appendChild(c) { c.parentElement = box; c.isConnected = true; kids.push(c); return c; },
+    querySelector: (s) => (s === '.ag-cs-prism-rim-cv' ? kids[0] || null : null),
+    getBoundingClientRect: () => ({ left: 100, top: 100, right: 400, bottom: 180, width: 300, height: 80 }),
+  };
+  const html = {
+    getAttribute: (k) => (k === 'data-ag-cs-motion' ? 'standard' : k === 'data-ag-cs-ambient' ? '1' : null),
+    addEventListener: (t, fn) => rootBus.add(t, fn),
+    removeEventListener: (t, fn) => rootBus.remove(t, fn),
+  };
+  const fakeDoc = {
+    hidden: false, documentElement: html,
+    createElement: () => makeCanvas(),
+    getElementById: () => null,
+    querySelectorAll: (s) => s.includes('data-ag-cs-prism-box') ? [box] : [],
+    addEventListener: (t, fn) => docBus.add(t, fn),
+    removeEventListener: (t, fn) => docBus.remove(t, fn),
+  };
+  const sb = {
+    document: fakeDoc, devicePixelRatio: 1, performance: clock.performance,
+    requestAnimationFrame: clock.requestAnimationFrame, cancelAnimationFrame: clock.cancelAnimationFrame,
+    setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout,
+    getComputedStyle: () => ({ borderTopLeftRadius: '10px' }),
+    addEventListener: (t, fn) => winBus.add(t, fn),
+    removeEventListener: (t, fn) => winBus.remove(t, fn),
+    Set, Map, Array, Math, Number, String, Boolean,
+  };
+  sb.window = sb; sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+  const ctl = sb.__agPrismRimCanvas.createPrismRimCanvasController({
+    isDestroyed: () => false, isDarkTheme: () => true, motionReduced: () => false,
+    getMinFrameGapMs: () => 0, getAmbientIntensity: () => 1, getAccentTone: () => 'follow',
+    canMountRealCanvas: () => true, setAttrIfChanged: (el, k, v) => el.setAttribute(k, v), runGuardedMut: (fn) => fn(),
+  });
+  for (let i = 0; i < 6; i++) {
+    if (i === 3) ctl.markDirty();
+    ctl.onPointerMove({ clientX: 130 + i * 24, clientY: 130 + i * 3 });
+    clock.flushRafs(16);
+  }
+  assert.equal(radialCreates, 3, 'Mirror mode must create its 3 radial gradients only once across 6 pointer moves');
+  assert.equal(linearCreates, 2, 'Mirror mode must create its 2 ghost linear gradients only once across 6 pointer moves');
+  ctl.teardown();
+});
+
+test('GPU-02/04/06/08/09/10 invariants: inline-widget composer scope & blur pause, sidebar blur CSS, octopath low-power/RO, effort DPR<=2, oled mono cache, vial isCalm/0x0 dispose, pulse-vial <31KB', () => {
+  // GPU-02 inline-widget.cjs
+  const iwSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'pulse-dashboard', 'compat', 'inline-widget.cjs'), 'utf8');
+  assert.equal(/document\.querySelectorAll\('button,\[role="button"\]/.test(iwSrc), false, 'inline-widget fits()/densityBounds() must not scan full document');
+  assert.match(iwSrc, /isWindowPaused/, 'inline-widget must pause observer/interval on hidden or data-ag-cs-win-blur="1"');
+  assert.match(iwSrc, /isStreamNoiseNode/, 'inline-widget MO must fast-filter streaming leaf mutations');
+  assert.match(iwSrc, /onWake=\(\)=>queueMicrotask\(/, 'inline-widget onWake must defer past synchronous clearWinBlur');
+
+  // GPU-04 sidebar-client.js
+  const sbSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'sidebar-studio', 'sidebar-client.js'), 'utf8');
+  assert.match(sbSrc, /html\[data-ag-cs-win-blur="1"\] \.ag-prism-vessel::after/, 'sidebar-client CSS must pause vessel conic-gradient halo on win-blur');
+  assert.match(sbSrc, /html\[data-ag-cs-win-blur="1"\] \.ag-prism-aura-orb\{will-change:auto!important\}/, 'sidebar-client CSS must release will-change on blur/hidden');
+  assert.match(sbSrc, /html\[data-ag-cs-win-blur="1"\] \.ag-prism-vessel\{backdrop-filter:none!important/, 'sidebar-client CSS must drop backdrop-filter on blur/low-motion');
+
+  // GPU-06 octopath-stage-webgl.js
+  const octSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'clawd-mascot', 'octopath-stage-webgl.js'), 'utf8');
+  assert.equal(/powerPreference:\s*'high-performance'/.test(octSrc), false, 'octopath-stage-webgl must not force high-performance dGPU');
+  assert.match(octSrc, /ResizeObserver/, 'octopath-stage-webgl must cache CSS width via ResizeObserver');
+
+  // GPU-08 effort-slider/upstream-client.js
+  const esSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'effort-slider', 'upstream-client.js'), 'utf8');
+  assert.match(esSrc, /html\[data-ag-cs-win-blur='1'\] \.ces-star/, 'effort-slider CSS must pause star/sweep animations on win-blur');
+  assert.match(esSrc, /N\(2,\s*\(win\s*&&\s*\+win\.devicePixelRatio\)/, 'effort-slider Claude canvas must cap DPR at 2');
+  assert.match(esSrc, /winBlurred\s*=\s*false;\s*Promise\.resolve\(\)\.then\(/, 'effort-slider onWinFocus must clear winBlurred and defer wake past clearWinBlur');
+
+  // GPU-09 keyboard-3d-gl.js & oled-cyber-screen.js
+  const kbSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'periodic-picker', 'keyboard-3d-gl.js'), 'utf8');
+  assert.match(kbSrc, /rafAlignTimer/, 'keyboard-3d-gl must align throttled rAF via timer on high-Hz displays');
+  const oledSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'periodic-picker', 'oled-cyber-screen.js'), 'utf8');
+  assert.match(oledSrc, /getMonoSurfaceForKey/, 'oled-cyber-screen must cache monochrome offscreen surface instead of per-frame ctx.filter');
+
+  // GPU-10 vial-core.js + pulse-vial-bridge.js
+  const vialCore = require(path.join(ROOT, 'vial-core.js'));
+  let reduceFlag = false;
+  const vCv = {
+    width: 96, height: 220,
+    getContext: (t) => t === '2d' ? {
+      setTransform() {}, clearRect() {}, save() {}, restore() {}, beginPath() {}, roundRect() {},
+      rect() {}, clip() {}, fillRect() {}, strokeRect() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {},
+      arcTo() {}, closePath() {}, stroke() {}, fill() {}, arc() {}, ellipse() {}, translate() {}, rotate() {},
+      scale() {}, setLineDash() {}, fillText() {},
+      createLinearGradient: () => ({ addColorStop() {} }),
+      createRadialGradient: () => ({ addColorStop() {} }),
+    } : null,
+    addEventListener() {}, removeEventListener() {},
+  };
+  const vl = vialCore.mountPhysicalWaterVial(vCv, {
+    getState: () => ({ isDark: true, streaming: true, fill: 0.5, reduceMotion: reduceFlag }),
+  });
+  assert.equal(typeof vl.isCalm(), 'boolean', 'vial-core must expose zero-alloc isCalm()');
+  reduceFlag = true;
+  vl.step(0.016);
+  assert.equal(vl.isSettled(), true, 'vial-core must dynamically settle when reduceMotion becomes true');
+  vl.dispose();
+  assert.equal(vCv.width, 0, 'vial-core dispose() must zero canvas width to 0');
+  assert.equal(vCv.height, 0, 'vial-core dispose() must zero canvas height to 0');
+
+  const pvbSize = fs.statSync(path.join(ROOT, 'pulse-vial-bridge.js')).size;
+  assert.ok(pvbSize < 31000, `pulse-vial-bridge.js must stay < 31,000 B, got ${pvbSize}`);
 });

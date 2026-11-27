@@ -721,6 +721,7 @@
       let frameWanted = false;
       let drawnOnce = false;
       let lastGpuDrawAt = 0;
+      let lastRafTs = 0;
       let forceImmediateDraw = false;
       let bkRel = false;
       let pendingW = 0;
@@ -831,6 +832,8 @@
         frameWanted = false;
         if (isDestroyed() || convAura !== state) return;
         if (isH()) { releaseBacking(); return; }
+        const vsDt = lastRafTs > 0 && now > lastRafTs ? now - lastRafTs : (lastGpuDrawAt > 0 && now > lastGpuDrawAt ? now - lastGpuDrawAt : 16);
+        lastRafTs = now;
 
         const ambient = resolveAmbient();
         if (ambient <= 0) {
@@ -906,8 +909,8 @@
         forceImmediateDraw = false;
 
         if (!bypassThrottle && allowLivingFlow && effectiveMinGap > 0 && lastGpuDrawAt > 0 && now - lastGpuDrawAt < effectiveMinGap) {
-          if (smoothActiveGpu) { wake(false); return; }
           const rem = M.max(4, M.ceil(effectiveMinGap - (now - lastGpuDrawAt)));
+          if (smoothActiveGpu && (typeof setTimeout !== 'function' || rem <= M.max(8, vsDt + 2))) { wake(false); return; }
           clearTimeout(state.timer);
           state.timer = setTimeout(() => wake(false), rem);
           return;
@@ -992,7 +995,12 @@
           nextDelay = M.min(nextDelay, M.max(20, CONV_AURA_IDLE_SLEEP_MS - phaseElapsed + 4));
         }
         clearTimeout(state.timer);
-        if (smoothActiveGpu) { wake(false); return; }
+        if (smoothActiveGpu) {
+          if (typeof setTimeout === 'function' && effectiveMinGap > M.max(8, vsDt + 2)) {
+            state.timer = setTimeout(() => wake(false), M.max(4, M.floor(effectiveMinGap - vsDt * 0.5)));
+          } else wake(false);
+          return;
+        }
         state.timer = setTimeout(() => wake(false), nextDelay);
       }
 

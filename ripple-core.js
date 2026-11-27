@@ -854,31 +854,36 @@ color = vec4(rgb * a, a);
       draw(palette, dpr, uploadCells = true) {
         if (!program || gl.isContextLost?.()) return;
         buildAtlas(palette.fontFamily, dpr);
+        const u1 = (k, v) => gl.uniform1f(uniforms[k], v);
+        const u2 = (k, a, b) => gl.uniform2f(uniforms[k], a, b);
+        const u3 = (k, a) => gl.uniform3f(uniforms[k], a[0] / 255, a[1] / 255, a[2] / 255);
+        const u4 = (k, a, b, c, d) => gl.uniform4f(uniforms[k], a, b, c, d);
         gl.viewport(0, 0, canvas.width, canvas.height);
-        gl.uniform2f(uniforms.size, canvas.width, canvas.height);
-        gl.uniform2f(uniforms.grid, columns, rows);
-        gl.uniform2f(uniforms.cellPixels, RIPPLE.cellWidth * dpr, RIPPLE.cellHeight * dpr);
-        gl.uniform3f(uniforms.ink, palette.ink[0] / 255, palette.ink[1] / 255, palette.ink[2] / 255);
-        gl.uniform3f(uniforms.wave, palette.wave[0] / 255, palette.wave[1] / 255, palette.wave[2] / 255);
+        u2('size', canvas.width, canvas.height);
+        u2('grid', columns, rows);
+        u2('cellPixels', RIPPLE.cellWidth * dpr, RIPPLE.cellHeight * dpr);
+        u3('ink', palette.ink);
+        u3('wave', palette.wave);
         const aura = readAura(palette);
         const amb = Number.isFinite(Number(palette.ambientIntensity)) ? M.max(0, M.min(1, Number(palette.ambientIntensity))) : 1;
         const specCode = Number(palette.spectrumCode ?? 0);
-        gl.uniform4f(uniforms.aura, aura.x * dpr, aura.y * dpr, aura.radius * dpr, aura.strength * amb);
-        gl.uniform4f(uniforms.optics, RIPPLE.auraTint * (specCode === 5 ? 0.55 : 1), RIPPLE.prismTint * (specCode === 5 ? 0.45 : 1), RIPPLE.prismCap, palette.prismStrength);
-        gl.uniform1f(uniforms.auraLift, RIPPLE.auraLift * amb * (palette.auraLiftScale ?? 1));
-        gl.uniform1f(uniforms.auraPhase, palette.auraPhase || 0);
-        gl.uniform1f(uniforms.lightMode, palette.dark === false ? 1 : 0);
-        gl.uniform1f(uniforms.spectrumMode, specCode);
+        u4('aura', aura.x * dpr, aura.y * dpr, aura.radius * dpr, aura.strength * amb);
+        u4('optics', RIPPLE.auraTint * (specCode === 5 ? 0.55 : 1), RIPPLE.prismTint * (specCode === 5 ? 0.45 : 1), RIPPLE.prismCap, palette.prismStrength);
+        u1('auraLift', RIPPLE.auraLift * amb * (palette.auraLiftScale ?? 1));
+        u1('auraPhase', palette.auraPhase || 0);
+        u1('lightMode', palette.dark === false ? 1 : 0);
+        u1('spectrumMode', specCode);
         const neb = palette.nebula;
         const n0 = neb && neb[0];
         const n1 = neb && neb[1];
         const n2 = neb && neb[2];
-        gl.uniform4f(uniforms.neb0, n0 ? n0.x * dpr : 0, n0 ? n0.y * dpr : 0, n0 ? n0.radius * dpr : 1, n0 ? n0.strength * amb : 0);
-        gl.uniform4f(uniforms.neb1, n1 ? n1.x * dpr : 0, n1 ? n1.y * dpr : 0, n1 ? n1.radius * dpr : 1, n1 ? n1.strength * amb : 0);
-        gl.uniform4f(uniforms.neb2, n2 ? n2.x * dpr : 0, n2 ? n2.y * dpr : 0, n2 ? n2.radius * dpr : 1, n2 ? n2.strength * amb : 0);
+        const setNeb = (k, n) => u4(k, n ? n.x * dpr : 0, n ? n.y * dpr : 0, n ? n.radius * dpr : 1, n ? n.strength * amb : 0);
+        setNeb('neb0', n0);
+        setNeb('neb1', n1);
+        setNeb('neb2', n2);
         const nebL = palette.nebulaLiftScale ?? 1;
-        gl.uniform4f(uniforms.nebOpt, n0 ? n0.hue : 0, n1 ? n1.hue : 0, n2 ? n2.hue : 0, RIPPLE.nebulaTint * amb * (specCode === 5 ? 0.45 : 1) * (0.35 + 0.65 * nebL));
-        gl.uniform1f(uniforms.nebulaLift, RIPPLE.nebulaLift * amb * nebL);
+        u4('nebOpt', n0 ? n0.hue : 0, n1 ? n1.hue : 0, n2 ? n2.hue : 0, RIPPLE.nebulaTint * amb * (specCode === 5 ? 0.45 : 1) * (0.35 + 0.65 * nebL));
+        u1('nebulaLift', RIPPLE.nebulaLift * amb * nebL);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, cellTexture);
         if (uploadCells !== false) {
@@ -1111,7 +1116,11 @@ color = vec4(rgb * a, a);
         }
         ctx.putImageData(image, 0, 0);
       },
-      dispose() {},
+      dispose() {
+        image = pixels = mask = null;
+        atlasKey = '';
+        if (atlas && (atlas.width || atlas.height)) try { atlas.width = atlas.height = 0; } catch {}
+      },
     };
   }
   function normalizeZones(zones) {
@@ -1937,21 +1946,22 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
       },
       draw(w, h, dpr, timeSec, dark, intensity, presence, reach = DEFAULT_HORIZON_AURA.reach, prism = 0, surge = 0, speed = 1, spectrumCode = 0, semanticCode = 0) {
         if (!program || gl.isContextLost?.()) return;
+        const u1 = (k, v) => { if (u[k] != null) gl.uniform1f(u[k], v); };
         gl.viewport(0, 0, w, h);
         gl.useProgram(program);
         gl.uniform2f(u.uRes, w, h);
-        gl.uniform1f(u.uDpr, dpr);
-        gl.uniform1f(u.uTime, timeSec);
-        gl.uniform1f(u.uDark, dark ? 1 : 0);
-        gl.uniform1f(u.uReach, reach);
-        gl.uniform1f(u.uIntensity, intensity);
-        gl.uniform1f(u.uStretch, 0.6);
-        gl.uniform1f(u.uPresence, presence);
-        gl.uniform1f(u.uPrism, prism);
-        gl.uniform1f(u.uSurge, surge);
-        gl.uniform1f(u.uSpeed, speed);
-        if (u.uSpectrum) gl.uniform1f(u.uSpectrum, spectrumCode);
-        if (u.uSemantic) gl.uniform1f(u.uSemantic, semanticCode);
+        u1('uDpr', dpr);
+        u1('uTime', timeSec);
+        u1('uDark', dark ? 1 : 0);
+        u1('uReach', reach);
+        u1('uIntensity', intensity);
+        u1('uStretch', 0.6);
+        u1('uPresence', presence);
+        u1('uPrism', prism);
+        u1('uSurge', surge);
+        u1('uSpeed', speed);
+        u1('uSpectrum', spectrumCode);
+        u1('uSemantic', semanticCode);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -2178,7 +2188,10 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
         }
         ctx.putImageData(image, 0, 0);
       },
-      dispose() {},
+      dispose() {
+        image = null;
+        pixels = null;
+      },
     };
   }
   function expClamp(v) {

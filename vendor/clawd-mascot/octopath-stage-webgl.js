@@ -62,7 +62,7 @@
         antialias: false,
         depth: false,
         stencil: false,
-        powerPreference: 'high-performance',
+        powerPreference: 'low-power',
         preserveDrawingBuffer: false,
       });
       return isRealWebGL2Context(gl);
@@ -71,19 +71,19 @@
     }
   }
 
-  // ── 轻量 4×4 矩阵数学工具（列主序，零外部依赖）─────────────────────────────
-  function mat4Perspective(fovRad, aspect, near, far) {
+  // ── 轻量 4×4 矩阵数学工具（列主序，支持复用 out 缓冲零分配）─────────────────────────────
+  function mat4Perspective(fovRad, aspect, near, far, out) {
     const f = 1.0 / Math.tan(fovRad * 0.5);
     const nf = 1.0 / (near - far);
-    return new Float32Array([
-      f / aspect, 0, 0, 0,
-      0, f, 0, 0,
-      0, 0, (far + near) * nf, -1,
-      0, 0, 2 * far * near * nf, 0,
-    ]);
+    const m = out || new Float32Array(16);
+    m[0] = f / aspect; m[1] = 0; m[2] = 0; m[3] = 0;
+    m[4] = 0; m[5] = f; m[6] = 0; m[7] = 0;
+    m[8] = 0; m[9] = 0; m[10] = (far + near) * nf; m[11] = -1;
+    m[12] = 0; m[13] = 0; m[14] = 2 * far * near * nf; m[15] = 0;
+    return m;
   }
 
-  function mat4LookAt(eye, target, up) {
+  function mat4LookAt(eye, target, up, out) {
     let zx = eye[0] - target[0];
     let zy = eye[1] - target[1];
     let zz = eye[2] - target[2];
@@ -100,30 +100,30 @@
     const yy = zz * xx - zx * xz;
     const yz = zx * xy - zy * xx;
 
-    return new Float32Array([
-      xx, yx, zx, 0,
-      xy, yy, zy, 0,
-      xz, yz, zz, 0,
-      -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
-      -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
-      -(zx * eye[0] + zy * eye[1] + zz * eye[2]),
-      1,
-    ]);
+    const m = out || new Float32Array(16);
+    m[0] = xx; m[1] = yx; m[2] = zx; m[3] = 0;
+    m[4] = xy; m[5] = yy; m[6] = zy; m[7] = 0;
+    m[8] = xz; m[9] = yz; m[10] = zz; m[11] = 0;
+    m[12] = -(xx * eye[0] + xy * eye[1] + xz * eye[2]);
+    m[13] = -(yx * eye[0] + yy * eye[1] + yz * eye[2]);
+    m[14] = -(zx * eye[0] + zy * eye[1] + zz * eye[2]);
+    m[15] = 1;
+    return m;
   }
 
-  function mat4Mul(a, b) {
-    const out = new Float32Array(16);
+  function mat4Mul(a, b, out) {
+    const m = out || new Float32Array(16);
     for (let c = 0; c < 4; c++) {
       const b0 = b[c * 4];
       const b1 = b[c * 4 + 1];
       const b2 = b[c * 4 + 2];
       const b3 = b[c * 4 + 3];
-      out[c * 4] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
-      out[c * 4 + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
-      out[c * 4 + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
-      out[c * 4 + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
+      m[c * 4] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
+      m[c * 4 + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
+      m[c * 4 + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
+      m[c * 4 + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
     }
-    return out;
+    return m;
   }
 
   function projectToNdc(vp, x, y, z) {
@@ -995,15 +995,15 @@ void main() {
     ]);
   }
 
-  function modelMat(tx, ty, tz, sx = 1, sy = 1, sz = 1, rotY = 0, rotZ = 0) {
+  function modelMat(tx, ty, tz, sx = 1, sy = 1, sz = 1, rotY = 0, rotZ = 0, out) {
     const cy = Math.cos(rotY), syr = Math.sin(rotY);
     const cz = Math.cos(rotZ), szr = Math.sin(rotZ);
-    return new Float32Array([
-      (cy * cz) * sx, (szr) * sx, (-syr * cz) * sx, 0,
-      (-cy * szr) * sy, (cz) * sy, (syr * szr) * sy, 0,
-      syr * sz, 0, cy * sz, 0,
-      tx, ty, tz, 1,
-    ]);
+    const m = out || new Float32Array(16);
+    m[0] = (cy * cz) * sx; m[1] = szr * sx; m[2] = (-syr * cz) * sx; m[3] = 0;
+    m[4] = (-cy * szr) * sy; m[5] = cz * sy; m[6] = (syr * szr) * sy; m[7] = 0;
+    m[8] = syr * sz; m[9] = 0; m[10] = cy * sz; m[11] = 0;
+    m[12] = tx; m[13] = ty; m[14] = tz; m[15] = 1;
+    return m;
   }
 
   // ── 极繁 3D 摆件世界布置表（19 个错落 Z 轴立牌/装饰，生活感与空间纵深拉满）──
@@ -1049,7 +1049,7 @@ void main() {
         antialias: false,
         depth: false,
         stencil: false,
-        powerPreference: 'high-performance',
+        powerPreference: 'low-power',
         preserveDrawingBuffer: false,
       });
     } catch {
@@ -1409,11 +1409,65 @@ void main() {
     canvas.addEventListener?.('webglcontextlost', onCtxLost, false);
     canvas.addEventListener?.('webglcontextrestored', onCtxRestored, false);
 
-    const resize = () => {
+    const tmpModel = new Float32Array(16);
+    const tmpProj = new Float32Array(16);
+    const tmpView = new Float32Array(16);
+    const tmpVp = new Float32Array(16);
+    const slotPosArr = new Float32Array(20);
+    const slotColArr = new Float32Array(20);
+    const eyeBuf = [0, 0, 0];
+    const TARGET_POS = [0.0, 0.78, -0.35];
+    const UP_VEC = [0, 1, 0];
+    const CLEAR_LIGHT = new Float32Array([0.88, 0.82, 0.72, 1.0]);
+    const CLEAR_DARK = new Float32Array([0.015, 0.022, 0.048, 1.0]);
+    const CLEAR_ZERO = new Float32Array([0.0, 0.0, 0.0, 1.0]);
+    const DEFAULT_UV = [0, 0, 1, 1];
+    const DEFAULT_TINT = [1, 1, 1, 1];
+    const DEFAULT_EMISSIVE = [1, 1, 1, 0];
+    const DEFAULT_FLAGS = [0, 0, 1, 0];
+    const scratchUv = [0, 0, 1, 1];
+    const scratchEm = [1, 1, 1, 0];
+    const scratchFlags = [0, 0, 1, 0];
+    const scratchCol = [1, 1, 1, 1];
+    const scratchParams = [0, 0, 0, 0];
+    const WALL_EM = [0.96, 0.84, 0.70, 0.72];
+    const FLOOR_BOUNDS = [0, 0, 5.0, 3.0];
+    const FLOOR_FLAGS = [0, 1, 1, 0];
+    const UNIT_BOUNDS = [0, 0, 1, 1];
+    const EDGE_TINT = [0.76, 0.68, 0.62, 1];
+    const PLAT_BOUNDS = [0, 0, 2, 2];
+    const PLAT_TINT = [0.96, 0.88, 0.80, 1];
+    const PLAT_FLAGS = [0, 0.65, 1, 0];
+    const STEP_UP_TINT = [0.92, 0.84, 0.76, 1];
+    const STEP_LO_TINT = [0.88, 0.80, 0.72, 1];
+    const STEP_FLAGS = [0, 0.5, 1, 0];
+    const drawOpts = { uvRect: DEFAULT_UV, uvBounds: null, tint: DEFAULT_TINT, emissive: DEFAULT_EMISSIVE, flags: DEFAULT_FLAGS };
+
+    let cachedCssW = 0;
+    let lastRectReadAt = 0;
+    let stageRo = null;
+    const RO = (win && win.ResizeObserver) || (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    if (typeof RO === 'function') {
+      try {
+        stageRo = new RO((entries) => {
+          const cr = entries && entries[0] && entries[0].contentRect;
+          if (cr && cr.width > 0) cachedCssW = cr.width;
+        });
+        stageRo.observe(canvas);
+      } catch {
+        stageRo = null;
+      }
+    }
+
+    const resize = (forceMeasure = false, nowMs = 0) => {
       if (disposed || contextLost) return false;
       const dpr = Math.min((win && win.devicePixelRatio) || 1, MAX_DPR);
-      const rect = typeof canvas.getBoundingClientRect === 'function' ? canvas.getBoundingClientRect() : null;
-      const cssW = rect && rect.width > 120 ? Math.min(rect.width, 760) : STAGE_W;
+      if (forceMeasure || cachedCssW <= 0 || (!stageRo && (nowMs <= 0 || nowMs - lastRectReadAt > 1000))) {
+        const rect = typeof canvas.getBoundingClientRect === 'function' ? canvas.getBoundingClientRect() : null;
+        if (rect && rect.width > 0) cachedCssW = rect.width;
+        lastRectReadAt = nowMs > 0 ? nowMs : Date.now();
+      }
+      const cssW = cachedCssW > 120 ? Math.min(cachedCssW, 760) : STAGE_W;
       const tw = Math.min(960, Math.max(320, Math.round(cssW * dpr)));
       const th = Math.round((tw * STAGE_H) / STAGE_W);
       if (canvas.width !== tw || canvas.height !== th) {
@@ -1429,18 +1483,22 @@ void main() {
       gl.bindTexture(gl.TEXTURE_2D, texInfo.tex);
       gl.uniform1i(uScene.uTex, 0);
       gl.uniformMatrix4fv(uScene.uModel, false, model);
-      const r = optsDraw.uvRect || [0, 0, 1, 1];
+      const r = optsDraw.uvRect || DEFAULT_UV;
       gl.uniform4f(uScene.uUvRect, r[0], r[1], r[2], r[3]);
       const tw = texInfo.w || 1;
       const th = texInfo.h || 1;
       gl.uniform2f(uScene.uTexelSize, 1 / tw, 1 / th);
-      const b = optsDraw.uvBounds || [r[0] + 0.5 / tw, r[1] + 0.5 / th, r[0] + r[2] - 0.5 / tw, r[1] + r[3] - 0.5 / th];
-      gl.uniform4f(uScene.uUvBounds, b[0], b[1], b[2], b[3]);
-      const tn = optsDraw.tint || [1, 1, 1, 1];
+      const b = optsDraw.uvBounds;
+      if (b) {
+        gl.uniform4f(uScene.uUvBounds, b[0], b[1], b[2], b[3]);
+      } else {
+        gl.uniform4f(uScene.uUvBounds, r[0] + 0.5 / tw, r[1] + 0.5 / th, r[0] + r[2] - 0.5 / tw, r[1] + r[3] - 0.5 / th);
+      }
+      const tn = optsDraw.tint || DEFAULT_TINT;
       gl.uniform4f(uScene.uTint, tn[0], tn[1], tn[2], tn[3]);
-      const em = optsDraw.emissive || [1, 1, 1, 0];
+      const em = optsDraw.emissive || DEFAULT_EMISSIVE;
       gl.uniform4f(uScene.uEmissive, em[0], em[1], em[2], em[3]);
-      const fl = optsDraw.flags || [0, 0, 1, 0];
+      const fl = optsDraw.flags || DEFAULT_FLAGS;
       gl.uniform4f(uScene.uFlags, fl[0], fl[1], fl[2], fl[3]);
       gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
     };
@@ -1451,6 +1509,11 @@ void main() {
       gl.uniform4f(uFx.uColor, col[0], col[1], col[2], col[3]);
       gl.uniform4f(uFx.uParams, params[0], params[1], params[2], params[3]);
       gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+    };
+    const drawFxScalars = (mesh, model, r, g, b, a, p0, p1, p2, p3) => {
+      scratchCol[0] = r; scratchCol[1] = g; scratchCol[2] = b; scratchCol[3] = a;
+      scratchParams[0] = p0; scratchParams[1] = p1; scratchParams[2] = p2; scratchParams[3] = p3;
+      drawFxMesh(mesh, model, scratchCol, scratchParams);
     };
 
     const runBlurPass = (srcTex, fboA, texA, fboB, texB, w, h, spread) => {
@@ -1474,7 +1537,7 @@ void main() {
     const render = (now, state) => {
       if (disposed || contextLost) return false;
       tryBindExternalAtlas();
-      if (!resize()) return false;
+      if (!resize(false, now || 0)) return false;
 
       const dtSec = Math.min(0.08, Math.max(0.008, (state.dt || 45) / 1000));
       const timeSec = (now || 0) * 0.001;
@@ -1488,18 +1551,15 @@ void main() {
       curYaw += (tgtYaw - curYaw) * damp;
       curPitch += (tgtPitch - curPitch) * damp;
 
-      const target = [0.0, 0.78, -0.35];
       const R = 6.75;
       const cosP = Math.cos(-curPitch);
       const sinP = Math.sin(-curPitch);
-      const eye = [
-        target[0] + R * cosP * Math.sin(curYaw),
-        target[1] + R * sinP,
-        target[2] + R * cosP * Math.cos(curYaw),
-      ];
-      const proj = mat4Perspective(34 * DEG2RAD, fbW / fbH, 0.5, 28.0);
-      const view = mat4LookAt(eye, target, [0, 1, 0]);
-      const vp = mat4Mul(proj, view);
+      eyeBuf[0] = TARGET_POS[0] + R * cosP * Math.sin(curYaw);
+      eyeBuf[1] = TARGET_POS[1] + R * sinP;
+      eyeBuf[2] = TARGET_POS[2] + R * cosP * Math.cos(curYaw);
+      const proj = mat4Perspective(34 * DEG2RAD, fbW / fbH, 0.5, 28.0, tmpProj);
+      const view = mat4LookAt(eyeBuf, TARGET_POS, UP_VEC, tmpView);
+      const vp = mat4Mul(proj, view, tmpVp);
       lastVp = vp;
 
       // 2. 同步桌宠像素精灵图集
@@ -1513,8 +1573,8 @@ void main() {
       gl.enable(gl.DEPTH_TEST);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
-      gl.clearBufferfv(gl.COLOR, 0, lightMode > 0.5 ? [0.88, 0.82, 0.72, 1.0] : [0.015, 0.022, 0.048, 1.0]);
-      gl.clearBufferfv(gl.COLOR, 1, [0.0, 0.0, 0.0, 1.0]);
+      gl.clearBufferfv(gl.COLOR, 0, lightMode > 0.5 ? CLEAR_LIGHT : CLEAR_DARK);
+      gl.clearBufferfv(gl.COLOR, 1, CLEAR_ZERO);
       gl.clear(gl.DEPTH_BUFFER_BIT);
 
       gl.useProgram(progScene);
@@ -1523,8 +1583,6 @@ void main() {
       const hearthFlicker = 2.40 + 0.34 * Math.sin(timeSec * 7.3) + 0.18 * Math.sin(timeSec * 13.1);
       gl.uniform4f(uScene.uHearth, -0.02, 0.76, -3.12, hearthFlicker * (lightMode > 0.5 ? 0.55 : 1.0));
 
-      const slotPosArr = new Float32Array(20);
-      const slotColArr = new Float32Array(20);
       for (let i = 0; i < 5; i++) {
         const sp = SLOT_WORLD_POS[i];
         const li = slotInfos[i] ? slotInfos[i].light : 0;
@@ -1541,55 +1599,39 @@ void main() {
       gl.uniform4fv(uScene['uSlotCol[0]'], slotColArr);
 
       // 3a) 远景黑曜石酒馆星夜后墙 (z = -3.50)
-      drawSceneMesh(meshWall, wallTexInfo, modelMat(0, 0, -3.50, 1, 1, 1), {
-        emissive: [0.96, 0.84, 0.70, lightMode > 0.5 ? 0.28 : 0.72],
-        flags: [0, 0, 1, 0],
-      });
+      WALL_EM[3] = lightMode > 0.5 ? 0.28 : 0.72;
+      drawOpts.uvRect = DEFAULT_UV; drawOpts.uvBounds = null; drawOpts.tint = DEFAULT_TINT; drawOpts.emissive = WALL_EM; drawOpts.flags = DEFAULT_FLAGS;
+      drawSceneMesh(meshWall, wallTexInfo, modelMat(0, 0, -3.50, 1, 1, 1, 0, 0, tmpModel), drawOpts);
 
       // 3b) 木石拼花主地板 + 立体前缘厚度 + 织金长地毯（居于 4 主宠脚下，右沿止于 +1.46 不撞石阶）
-      drawSceneMesh(meshFloor, floorTexInfo, modelMat(0, 0, -0.50, 1, 1, 1), {
-        uvBounds: [0, 0, 5.0, 3.0],
-        flags: [0, 1, 1, 0],
-      });
-      drawSceneMesh(meshFloorEdge, stoneTexInfo, modelMat(0, 0, 2.50, 1, 1, 1), {
-        uvBounds: [0, 0, 1, 1],
-        tint: [0.76, 0.68, 0.62, 1],
-        flags: [0, 0, 1, 0],
-      });
+      drawOpts.uvRect = DEFAULT_UV; drawOpts.uvBounds = FLOOR_BOUNDS; drawOpts.tint = DEFAULT_TINT; drawOpts.emissive = DEFAULT_EMISSIVE; drawOpts.flags = FLOOR_FLAGS;
+      drawSceneMesh(meshFloor, floorTexInfo, modelMat(0, 0, -0.50, 1, 1, 1, 0, 0, tmpModel), drawOpts);
+      drawOpts.uvBounds = UNIT_BOUNDS; drawOpts.tint = EDGE_TINT; drawOpts.flags = DEFAULT_FLAGS;
+      drawSceneMesh(meshFloorEdge, stoneTexInfo, modelMat(0, 0, 2.50, 1, 1, 1, 0, 0, tmpModel), drawOpts);
       const rugRect = activeRects.rug;
       if (rugRect) {
-        const u0 = rugRect.x / propsTexInfo.w;
-        const v0 = rugRect.y / propsTexInfo.h;
-        const uw = rugRect.w / propsTexInfo.w;
-        const vh = rugRect.h / propsTexInfo.h;
-        drawSceneMesh(meshRug, propsTexInfo, modelMat(-0.78, 0.012, -0.10, 1, 1, 1), {
-          uvRect: [u0, v0, uw, vh],
-          flags: [0, 1, 1, 0],
-        });
+        scratchUv[0] = rugRect.x / propsTexInfo.w;
+        scratchUv[1] = rugRect.y / propsTexInfo.h;
+        scratchUv[2] = rugRect.w / propsTexInfo.w;
+        scratchUv[3] = rugRect.h / propsTexInfo.h;
+        drawOpts.uvRect = scratchUv; drawOpts.uvBounds = null; drawOpts.tint = DEFAULT_TINT; drawOpts.flags = FLOOR_FLAGS;
+        drawSceneMesh(meshRug, propsTexInfo, modelMat(-0.78, 0.012, -0.10, 1, 1, 1, 0, 0, tmpModel), drawOpts);
       }
 
       // 3c) 右侧抬高迷你小蟹专属暖黑曜石双层石台与立体阶梯（左沿 +1.99，最左台阶 +1.65，与蓝鲸留足清晰间距）
-      drawSceneMesh(meshMiniPlat, stoneTexInfo, modelMat(2.86, 0.0, -0.14, 1, 1, 1), {
-        uvBounds: [0, 0, 2, 2],
-        tint: [0.96, 0.88, 0.80, 1],
-        flags: [0, 0.65, 1, 0],
-      });
-      drawSceneMesh(meshStepUpper, stoneTexInfo, modelMat(1.90, 0.0, -0.04, 1, 1, 1), {
-        uvBounds: [0, 0, 1, 1],
-        tint: [0.92, 0.84, 0.76, 1],
-        flags: [0, 0.5, 1, 0],
-      });
-      drawSceneMesh(meshStepLower, stoneTexInfo, modelMat(1.73, 0.0, 0.0, 1, 1, 1), {
-        uvBounds: [0, 0, 1, 1],
-        tint: [0.88, 0.80, 0.72, 1],
-        flags: [0, 0.5, 1, 0],
-      });
+      drawOpts.uvRect = DEFAULT_UV; drawOpts.uvBounds = PLAT_BOUNDS; drawOpts.tint = PLAT_TINT; drawOpts.flags = PLAT_FLAGS;
+      drawSceneMesh(meshMiniPlat, stoneTexInfo, modelMat(2.86, 0.0, -0.14, 1, 1, 1, 0, 0, tmpModel), drawOpts);
+      drawOpts.uvBounds = UNIT_BOUNDS; drawOpts.tint = STEP_UP_TINT; drawOpts.flags = STEP_FLAGS;
+      drawSceneMesh(meshStepUpper, stoneTexInfo, modelMat(1.90, 0.0, -0.04, 1, 1, 1, 0, 0, tmpModel), drawOpts);
+      drawOpts.tint = STEP_LO_TINT;
+      drawSceneMesh(meshStepLower, stoneTexInfo, modelMat(1.73, 0.0, 0.0, 1, 1, 1, 0, 0, tmpModel), drawOpts);
 
       // 3d) 极繁生活感像素摆件立牌（全 gl.NEAREST + Rim Light + 动态暖发光；外部壁炉墙已载入时自动跳过 hearth 避免重叠）
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       const pw = propsTexInfo.w || 256;
       const ph = propsTexInfo.h || 256;
+      drawOpts.uvRect = scratchUv; drawOpts.uvBounds = null; drawOpts.tint = DEFAULT_TINT; drawOpts.emissive = scratchEm; drawOpts.flags = scratchFlags;
       for (let i = 0; i < TAVERN_PROPS_LAYOUT.length; i++) {
         const item = TAVERN_PROPS_LAYOUT[i];
         if (item.skipWithExternalWall && atlasLoadedFlags.wall) continue;
@@ -1599,18 +1641,13 @@ void main() {
         const aspect = item.wScale && rawAspect < 1.35 ? rawAspect * item.wScale : Math.min(rawAspect, 3.2);
         const w = item.h * aspect;
         const swayZ = item.sway && !reduced ? Math.sin(timeSec * 1.4 + i) * item.sway : 0;
-        const m = modelMat(item.x, item.y, item.z, w, item.h, 1, 0, swayZ);
+        const m = modelMat(item.x, item.y, item.z, w, item.h, 1, 0, swayZ, tmpModel);
         const mesh = item.anchorY === 0 ? meshUnitQuadTop : meshUnitQuadBot;
-        const u0 = rect.x / pw;
-        const v0 = rect.y / ph;
-        const uw = rect.w / pw;
-        const vh = rect.h / ph;
+        scratchUv[0] = rect.x / pw; scratchUv[1] = rect.y / ph; scratchUv[2] = rect.w / pw; scratchUv[3] = rect.h / ph;
         const emBoost = (item.emissive || 0) * (rect.emissive !== false ? 1 : 0.4) * (lightMode > 0.5 ? 0.55 : 0.92);
-        drawSceneMesh(mesh, propsTexInfo, m, {
-          uvRect: [u0, v0, uw, vh],
-          emissive: [item.emCol[0], item.emCol[1], item.emCol[2], emBoost],
-          flags: [1, 0, 1, item.rim || 0.45],
-        });
+        scratchEm[0] = item.emCol[0]; scratchEm[1] = item.emCol[1]; scratchEm[2] = item.emCol[2]; scratchEm[3] = emBoost;
+        scratchFlags[0] = 1; scratchFlags[1] = 0; scratchFlags[2] = 1; scratchFlags[3] = item.rim || 0.45;
+        drawSceneMesh(mesh, propsTexInfo, m, drawOpts);
       }
 
       // 3e) 贴地 Contact AO 软阴影 + 阵营地板光环（半透明不写深度）
@@ -1620,10 +1657,11 @@ void main() {
 
       // 普通混合绘 Contact AO 地面阴影
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      const aoAlpha = lightMode > 0.5 ? 0.24 : 0.58;
       for (let i = 0; i < 5; i++) {
         const sp = SLOT_WORLD_POS[i];
         const shScale = i === 4 ? 1.32 : 1.02;
-        drawFxMesh(meshFxFloor, modelMat(sp.x, sp.y + 0.016, sp.z, shScale, 1, shScale * 0.68), [0.02, 0.02, 0.05, lightMode > 0.5 ? 0.24 : 0.58], [1.0, timeSec, 1.8, 0.0]);
+        drawFxScalars(meshFxFloor, modelMat(sp.x, sp.y + 0.016, sp.z, shScale, 1, shScale * 0.68, 0, 0, tmpModel), 0.02, 0.02, 0.05, aoAlpha, 1.0, timeSec, 1.8, 0.0);
       }
 
       // Additive 混合绘地板阵营池光、常驻锐利双环魔法光池与点亮瞬间魔法涟漪
@@ -1635,18 +1673,18 @@ void main() {
         if (info.light > 0.02) {
           const rad = (i === 4 ? 1.48 : 1.28) + info.light * 0.20;
           const a = info.light * (lightMode > 0.5 ? 0.22 : 0.38);
-          drawFxMesh(meshFxFloor, modelMat(sp.x, sp.y + 0.020, sp.z, rad, 1, rad * 0.78), [sp.col[0], sp.col[1], sp.col[2], a], [1.0, timeSec, 1.9, 0.45]);
+          drawFxScalars(meshFxFloor, modelMat(sp.x, sp.y + 0.020, sp.z, rad, 1, rad * 0.78, 0, 0, tmpModel), sp.col[0], sp.col[1], sp.col[2], a, 1.0, timeSec, 1.9, 0.45);
           const ringPulse = 0.95 + 0.05 * Math.sin(timeSec * 3.0 + i * 1.3);
           const ringRad = (i === 4 ? 1.44 : 1.22) * ringPulse;
           const rippleYield = info.rippleProg > 0 && info.rippleProg < 1 ? 0.55 + info.rippleProg * 0.45 : 1.0;
           const ringA = info.light * rippleYield * (lightMode > 0.5 ? 0.20 : 0.48);
-          drawFxMesh(meshFxFloor, modelMat(sp.x, sp.y + 0.022, sp.z, ringRad, 1, ringRad * 0.78), [sp.colHi[0], sp.colHi[1], sp.colHi[2], ringA], [2.0, timeSec, 0.78, 0.72]);
+          drawFxScalars(meshFxFloor, modelMat(sp.x, sp.y + 0.022, sp.z, ringRad, 1, ringRad * 0.78, 0, 0, tmpModel), sp.colHi[0], sp.colHi[1], sp.colHi[2], ringA, 2.0, timeSec, 0.78, 0.72);
         }
         if (info.rippleProg > 0 && info.rippleProg < 1) {
           const rp = info.rippleProg;
           const scale = (i === 4 ? 1.58 : 1.44) * (0.45 + rp * 0.95);
           const alpha = (1.0 - rp) * 0.74;
-          drawFxMesh(meshFxFloor, modelMat(sp.x, sp.y + 0.025, sp.z, scale, 1, scale * 0.82), [sp.colHi[0], sp.colHi[1], sp.colHi[2], alpha], [2.0, timeSec, 0.35 + rp * 0.55, 0.78]);
+          drawFxScalars(meshFxFloor, modelMat(sp.x, sp.y + 0.025, sp.z, scale, 1, scale * 0.82, 0, 0, tmpModel), sp.colHi[0], sp.colHi[1], sp.colHi[2], alpha, 2.0, timeSec, 0.35 + rp * 0.55, 0.78);
         }
       }
 
@@ -1656,42 +1694,42 @@ void main() {
       gl.useProgram(progScene);
       gl.uniformMatrix4fv(uScene.uViewProj, false, vp);
 
+      drawOpts.uvRect = scratchUv; drawOpts.uvBounds = null; drawOpts.tint = DEFAULT_TINT; drawOpts.emissive = scratchEm; drawOpts.flags = scratchFlags;
       for (let i = 0; i < 4; i++) {
         const sp = SLOT_WORLD_POS[i];
-        const info = slotInfos[i] || { light: 0, cnt: 0, jumpWorld: 0, isHov: false, farewell: false };
-        const dim = info.cnt === 0 && !info.isHov && !info.farewell ? 0.38 : info.cnt > 0 ? 1.0 : 0.82;
-        const m = modelMat(sp.x, sp.y + (info.jumpWorld || 0) - 0.21, sp.z, 1.68, 1.54, 1, curYaw * 0.35, 0);
-        const u0 = (i * SPR_MAIN_W) / SPR_W;
-        const uw = SPR_MAIN_W / SPR_W;
-        const vh = SPR_MAIN_H / SPR_H;
-        const fireEm = info.pose === 'dragonFlame' || info.pose === 'whaleSpout' ? 0.32 : 0.0;
-        drawSceneMesh(meshUnitQuadBot, spriteTexInfo, m, {
-          uvRect: [u0, 0, uw, vh],
-          emissive: [sp.colHi[0], sp.colHi[1], sp.colHi[2], fireEm],
-          flags: [2, 0, dim, 0.62 + info.light * 0.32],
-        });
+        const info = slotInfos[i];
+        const light = info ? info.light : 0;
+        const cnt = info ? info.cnt : 0;
+        const dim = cnt === 0 && !(info && info.isHov) && !(info && info.farewell) ? 0.38 : cnt > 0 ? 1.0 : 0.82;
+        const m = modelMat(sp.x, sp.y + ((info && info.jumpWorld) || 0) - 0.21, sp.z, 1.68, 1.54, 1, curYaw * 0.35, 0, tmpModel);
+        scratchUv[0] = (i * SPR_MAIN_W) / SPR_W; scratchUv[1] = 0; scratchUv[2] = SPR_MAIN_W / SPR_W; scratchUv[3] = SPR_MAIN_H / SPR_H;
+        const fireEm = info && (info.pose === 'dragonFlame' || info.pose === 'whaleSpout') ? 0.32 : 0.0;
+        scratchEm[0] = sp.colHi[0]; scratchEm[1] = sp.colHi[1]; scratchEm[2] = sp.colHi[2]; scratchEm[3] = fireEm;
+        scratchFlags[0] = 2; scratchFlags[1] = 0; scratchFlags[2] = dim; scratchFlags[3] = 0.62 + light * 0.32;
+        drawSceneMesh(meshUnitQuadBot, spriteTexInfo, m, drawOpts);
       }
 
       // 第 5 站位：抬高暖黑曜石苔藓石台上的 3 只迷你小蟹立体站位！
       const spM = SLOT_WORLD_POS[4];
-      const infoM = slotInfos[4] || { light: 0, cnt: 0, cheering: false, cheerProg: 0, isHov: false, farewell: false };
-      const dimM = infoM.cnt === 0 && !infoM.isHov && !infoM.farewell ? 0.40 : infoM.cnt > 0 ? 1.0 : 0.82;
+      const infoM = slotInfos[4];
+      const mLight = infoM ? infoM.light : 0;
+      const mCnt = infoM ? infoM.cnt : 0;
+      const mCheering = Boolean(infoM && infoM.cheering);
+      const mCheerProg = infoM ? infoM.cheerProg : 0;
+      const dimM = mCnt === 0 && !(infoM && infoM.isHov) && !(infoM && infoM.farewell) ? 0.40 : mCnt > 0 ? 1.0 : 0.82;
       for (let mIdx = 0; mIdx < 3; mIdx++) {
         const mo = MINI_OFFSETS[mIdx];
-        const activeLift = mIdx === 2 && infoM.cnt > 0 ? 0.18 : 0;
-        const jumpY = infoM.cheering
-          ? Math.abs(Math.sin((infoM.cheerProg + mo.phase * 0.18) * Math.PI * 2)) * 0.34
-          : infoM.cnt > 0 && !reduced
+        const activeLift = mIdx === 2 && mCnt > 0 ? 0.18 : 0;
+        const jumpY = mCheering
+          ? Math.abs(Math.sin((mCheerProg + mo.phase * 0.18) * Math.PI * 2)) * 0.34
+          : mCnt > 0 && !reduced
             ? Math.max(0, Math.sin(timeSec * 2.6 + mo.phase * 1.7)) * 0.05
             : 0;
-        const mMat = modelMat(spM.x + mo.dx, spM.y + activeLift + jumpY - 0.105, spM.z + mo.dz, 0.64, 0.64, 1, curYaw * 0.35, 0);
-        const u0 = (mIdx * SPR_MINI_W) / SPR_W;
-        const v0 = 48 / SPR_H;
-        drawSceneMesh(meshUnitQuadBot, spriteTexInfo, mMat, {
-          uvRect: [u0, v0, SPR_MINI_W / SPR_W, SPR_MINI_H / SPR_H],
-          emissive: [spM.colHi[0], spM.colHi[1], spM.colHi[2], infoM.cheering ? 0.24 : 0.0],
-          flags: [2, 0, dimM, 0.62 + infoM.light * 0.32],
-        });
+        const mMat = modelMat(spM.x + mo.dx, spM.y + activeLift + jumpY - 0.105, spM.z + mo.dz, 0.64, 0.64, 1, curYaw * 0.35, 0, tmpModel);
+        scratchUv[0] = (mIdx * SPR_MINI_W) / SPR_W; scratchUv[1] = 48 / SPR_H; scratchUv[2] = SPR_MINI_W / SPR_W; scratchUv[3] = SPR_MINI_H / SPR_H;
+        scratchEm[0] = spM.colHi[0]; scratchEm[1] = spM.colHi[1]; scratchEm[2] = spM.colHi[2]; scratchEm[3] = mCheering ? 0.24 : 0.0;
+        scratchFlags[0] = 2; scratchFlags[1] = 0; scratchFlags[2] = dimM; scratchFlags[3] = 0.62 + mLight * 0.32;
+        drawSceneMesh(meshUnitQuadBot, spriteTexInfo, mMat, drawOpts);
       }
 
       // 3g) 体积丁达尔光柱（冷月斜射窗光 + 5 束可开关真 3D 阵营体积光柱）+ 3D 金粉星尘与壁炉火星
@@ -1702,19 +1740,19 @@ void main() {
 
       // 左右哥特拱窗斜射冷月丁达尔光束（塑造冷暖强对比）
       const moonA = lightMode > 0.5 ? 0.08 : 0.20;
-      drawFxMesh(meshFxCard, modelMat(-2.30, 1.58, -2.98, 1.85, 2.95, 1, 0, -0.26), [0.28, 0.54, 1.0, moonA], [0.0, timeSec, 0, 0.74]);
-      drawFxMesh(meshFxCard, modelMat(2.30, 1.58, -2.98, 1.85, 2.95, 1, 0, 0.26), [0.28, 0.54, 1.0, moonA], [0.0, timeSec, 0, 0.74]);
+      drawFxScalars(meshFxCard, modelMat(-2.30, 1.58, -2.98, 1.85, 2.95, 1, 0, -0.26, tmpModel), 0.28, 0.54, 1.0, moonA, 0.0, timeSec, 0, 0.74);
+      drawFxScalars(meshFxCard, modelMat(2.30, 1.58, -2.98, 1.85, 2.95, 1, 0, 0.26, tmpModel), 0.28, 0.54, 1.0, moonA, 0.0, timeSec, 0, 0.74);
 
       // 居中壁炉动态炽烈暖光晕与升腾火星粒子（精准落于后墙大壁炉膛口，零重叠穿帮）
       const hearthZ = atlasLoadedFlags.wall ? -3.26 : -2.62;
       const hearthY = atlasLoadedFlags.wall ? 0.64 : 0.46;
       const hGlowA = (lightMode > 0.5 ? 0.20 : 0.58) * (0.85 + 0.15 * Math.sin(timeSec * 9.2));
-      drawFxMesh(meshFxCard, modelMat(-0.02, hearthY, hearthZ, 1.46, 1.10, 1), [1.0, 0.48, 0.12, hGlowA], [1.0, timeSec, 1.72, 1.46]);
+      drawFxScalars(meshFxCard, modelMat(-0.02, hearthY, hearthZ, 1.46, 1.10, 1, 0, 0, tmpModel), 1.0, 0.48, 0.12, hGlowA, 1.0, timeSec, 1.72, 1.46);
       for (let e = 0; e < 9; e++) {
         const ep = ((timeSec * (0.38 + (e % 4) * 0.08) + e * 0.19) % 1.0);
         const ex = -0.02 + Math.sin(timeSec * 3.1 + e * 2.1) * (0.18 + ep * 0.16) + ((e % 3) - 1) * 0.14;
         const ey = 0.26 + ep * 0.96;
-        drawFxMesh(meshFxCard, modelMat(ex, ey, hearthZ + 0.06, 0.055, 0.055, 1), [1.0, 0.74 - ep * 0.36, 0.20, (1.0 - ep) * 0.98], [3.0, timeSec, 0, 1.55]);
+        drawFxScalars(meshFxCard, modelMat(ex, ey, hearthZ + 0.06, 0.055, 0.055, 1, 0, 0, tmpModel), 1.0, 0.74 - ep * 0.36, 0.20, (1.0 - ep) * 0.98, 3.0, timeSec, 0, 1.55);
       }
 
       // 精准联动美术图集各摆件发光核 (glowX, glowY) 的 3D 柔暖/荧光 Bloom 呼吸光晕
@@ -1732,7 +1770,7 @@ void main() {
         const pulse = 0.84 + 0.16 * Math.sin(timeSec * 4.2 + i * 1.7);
         const haloSz = Math.min(1.02, Math.max(0.42, item.h * 0.54));
         const haloA = (lightMode > 0.5 ? 0.13 : 0.34) * pulse;
-        drawFxMesh(meshFxCard, modelMat(gx, gy, item.z + 0.05, haloSz, haloSz, 1), [item.emCol[0], item.emCol[1], item.emCol[2], haloA], [1.0, timeSec, 2.0, 1.28]);
+        drawFxScalars(meshFxCard, modelMat(gx, gy, item.z + 0.05, haloSz, haloSz, 1, 0, 0, tmpModel), item.emCol[0], item.emCol[1], item.emCol[2], haloA, 1.0, timeSec, 2.0, 1.28);
       }
 
       // 5 束可开关真 3D 交叉锥形体积光柱（略偏后置 z - 0.10 令高饱和光柱从主角头顶与身后划破暗夜，绝不糊白精灵面部！）
@@ -1741,9 +1779,9 @@ void main() {
         const info = slotInfos[i];
         if (!info || info.light <= 0.02) continue;
         const beamA = info.light * (lightMode > 0.5 ? 0.15 : 0.36);
-        drawFxMesh(meshBeamCone, modelMat(sp.x, sp.y, sp.z - 0.10, 1, 1, 1), [sp.col[0], sp.col[1], sp.col[2], beamA], [0.0, timeSec, 1.0, 0.62]);
+        drawFxScalars(meshBeamCone, modelMat(sp.x, sp.y, sp.z - 0.10, 1, 1, 1, 0, 0, tmpModel), sp.col[0], sp.col[1], sp.col[2], beamA, 0.0, timeSec, 1.0, 0.62);
         // 顶梁发光灯芯（高 Emissive 进 Bloom）
-        drawFxMesh(meshFxCard, modelMat(sp.x, sp.y + 2.95, sp.z - 0.08, 0.40, 0.23, 1), [sp.colHi[0], sp.colHi[1], sp.colHi[2], info.light * 0.94], [1.0, timeSec, 1.35, 1.44]);
+        drawFxScalars(meshFxCard, modelMat(sp.x, sp.y + 2.95, sp.z - 0.08, 0.40, 0.23, 1, 0, 0, tmpModel), sp.colHi[0], sp.colHi[1], sp.colHi[2], info.light * 0.94, 1.0, timeSec, 1.35, 1.44);
         // 槽位上升 3D 像素金粉星尘
         for (let k = 0; k < 6; k++) {
           const prog = ((timeSec * (0.18 + (k % 3) * 0.07) + k * 0.17 + i * 0.11) % 1.0);
@@ -1753,7 +1791,7 @@ void main() {
           const my = sp.y + 0.24 + prog * 2.40;
           const mz = sp.z - 0.08 + Math.sin(ang) * rad * 0.6;
           const tw = (0.45 + 0.55 * Math.sin(timeSec * 4.2 + k * 1.9)) * Math.sin(prog * Math.PI) * info.light;
-          drawFxMesh(meshFxCard, modelMat(mx, my, mz, 0.065, 0.065, 1), [sp.colHi[0], sp.colHi[1], sp.colHi[2], tw * 0.92], [3.0, timeSec, 0, 1.32]);
+          drawFxScalars(meshFxCard, modelMat(mx, my, mz, 0.065, 0.065, 1, 0, 0, tmpModel), sp.colHi[0], sp.colHi[1], sp.colHi[2], tw * 0.92, 3.0, timeSec, 0, 1.32);
         }
         // 点亮瞬间 3D 爆发星尘
         if (info.cheerProg > 0 && info.cheerProg < 0.72) {
@@ -1763,7 +1801,7 @@ void main() {
             const bx = sp.x + Math.cos(ba) * (0.16 + bp * 0.68);
             const by = sp.y + 0.38 + bp * (0.85 + (b % 3) * 0.35);
             const bz = sp.z - 0.04 + Math.sin(ba) * (0.14 + bp * 0.44);
-            drawFxMesh(meshFxCard, modelMat(bx, by, bz, 0.078, 0.078, 1), [sp.colHi[0], sp.colHi[1], sp.colHi[2], (1.0 - bp) * 0.94], [3.0, timeSec, 0, 1.42]);
+            drawFxScalars(meshFxCard, modelMat(bx, by, bz, 0.078, 0.078, 1, 0, 0, tmpModel), sp.colHi[0], sp.colHi[1], sp.colHi[2], (1.0 - bp) * 0.94, 3.0, timeSec, 0, 1.42);
           }
         }
       }
@@ -1775,10 +1813,9 @@ void main() {
         const py = 0.25 + ((d.y + yOff) % 2.8);
         const px = d.x + Math.sin(timeSec * 0.7 + d.ph) * 0.14;
         const tw = 0.45 + 0.55 * Math.sin(timeSec * 2.1 + d.ph);
-        const col = d.warm ? [1.0, 0.78, 0.38] : [0.56, 0.78, 1.0];
         const a = tw * (lightMode > 0.5 ? 0.30 : 0.48);
         const mode = i < 10 ? 1.0 : 3.0;
-        drawFxMesh(meshFxCard, modelMat(px, py, d.z, d.size, d.size, 1), [col[0], col[1], col[2], a], [mode, timeSec, 1.6, 1.15]);
+        drawFxScalars(meshFxCard, modelMat(px, py, d.z, d.size, d.size, 1, 0, 0, tmpModel), d.warm ? 1.0 : 0.56, 0.78, d.warm ? 0.38 : 1.0, a, mode, timeSec, 1.6, 1.15);
       }
 
       gl.disable(gl.BLEND);
@@ -1868,6 +1905,10 @@ void main() {
     const dispose = () => {
       if (disposed) return;
       disposed = true;
+      if (stageRo) {
+        try { stageRo.disconnect(); } catch {}
+        stageRo = null;
+      }
       canvas.removeEventListener?.('webglcontextlost', onCtxLost, false);
       canvas.removeEventListener?.('webglcontextrestored', onCtxRestored, false);
       for (const img of pendingImages) {
@@ -1889,7 +1930,7 @@ void main() {
 
     return {
       render,
-      resize,
+      resize: () => resize(true),
       setPointer,
       pickSlot,
       isContextLost: () => contextLost,

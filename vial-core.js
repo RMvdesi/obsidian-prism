@@ -1020,6 +1020,10 @@
         maxTokens: Number(raw.maxTokens) > 0 ? Number(raw.maxTokens) : 512000,
         hoveredSlice: typeof raw.hoveredSlice === 'number' ? raw.hoveredSlice : -1,
         streaming: raw.streaming !== undefined ? Boolean(raw.streaming) : manualStreaming,
+        reduceMotion:
+          raw.reduceMotion !== undefined
+            ? Boolean(raw.reduceMotion)
+            : Boolean(reduceMotion || docEl?.getAttribute?.('data-ag-cs-motion') === 'off'),
         ratios: Array.isArray(raw.ratios) ? raw.ratios : [0.08, 0.27, 0.12],
       };
     };
@@ -1036,32 +1040,14 @@
       const locPos = gl.getAttribLocation(prog, 'a_pos');
       gl.enableVertexAttribArray(locPos);
       gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
-      return {
-        gl,
-        prog,
-        buf,
-        u: {
-          res: gl.getUniformLocation(prog, 'u_res'),
-          time: gl.getUniformLocation(prog, 'u_time'),
-          dark: gl.getUniformLocation(prog, 'u_dark'),
-          fill: gl.getUniformLocation(prog, 'u_fill'),
-          tilt: gl.getUniformLocation(prog, 'u_tilt'),
-          tint: gl.getUniformLocation(prog, 'u_tint'),
-          camp: gl.getUniformLocation(prog, 'u_camp'),
-          accent: gl.getUniformLocation(prog, 'u_accent'),
-          critical: gl.getUniformLocation(prog, 'u_critical'),
-          pendant: gl.getUniformLocation(prog, 'u_pendant'),
-          wetL: gl.getUniformLocation(prog, 'u_wetL'),
-          wetR: gl.getUniformLocation(prog, 'u_wetR'),
-          hoverSlice: gl.getUniformLocation(prog, 'u_hoverSlice'),
-          wave: gl.getUniformLocation(prog, 'u_wave[0]'),
-          drops: gl.getUniformLocation(prog, 'u_drops[0]'),
-          bubbles: gl.getUniformLocation(prog, 'u_bubbles[0]'),
-          bubShape: gl.getUniformLocation(prog, 'u_bubShape[0]'),
-          raySlope: gl.getUniformLocation(prog, 'u_raySlope[0]'),
-          ratios: gl.getUniformLocation(prog, 'u_ratios'),
-        },
-      };
+      const u = {};
+      for (const k of ['res', 'time', 'dark', 'fill', 'tilt', 'tint', 'camp', 'accent', 'critical', 'pendant', 'wetL', 'wetR', 'hoverSlice', 'ratios']) {
+        u[k] = gl.getUniformLocation(prog, 'u_' + k);
+      }
+      for (const k of ['wave', 'drops', 'bubbles', 'bubShape', 'raySlope']) {
+        u[k] = gl.getUniformLocation(prog, 'u_' + k + '[0]');
+      }
+      return { gl, prog, buf, u };
     };
 
     const onGlLost = (ev) => {
@@ -1215,6 +1201,7 @@
       canvas.addEventListener('pointerleave', onPointerLeave);
     }
 
+    const byTone = (t, m, a, i, d) => (t === 'mono' ? m : t === 'amber' ? a : t === 'iris' ? i : d);
     // 右侧 512K 动态激光微刻标尺（浅色加深为清晰石板蓝灰 rgba(30, 41, 59, 0.62)）
     const drawScaleMarks = (ctx, st, curFill) => {
       const isDark = Boolean(st.isDark);
@@ -1235,26 +1222,22 @@
       }
 
       const tone = st.accentTone || 'cobalt';
-      const activeCols =
-        tone === 'mono'
-          ? isDark ? ['#71717A', '#A1A1AA', '#E4E4E7'] : ['#3F3F46', '#52525B', '#71717A']
-          : tone === 'amber'
-            ? isDark ? ['#B45309', '#D97706', '#FBBF24'] : ['#92400E', '#B45309', '#D97706']
-            : tone === 'iris'
-              ? isDark ? ['#6D28D9', '#8B5CF6', '#C4B5FD'] : ['#5B21B6', '#7C3AED', '#9333EA']
-              : [isDark ? '#2A6EE8' : '#1D4ED8', isDark ? '#3186FF' : '#2563EB', isDark ? '#5CC6FC' : '#0284C7'];
-      const majorSpecs = [
-        { frac: 0.25, label: formatTickTokens(maxTok * 0.25), activeCol: activeCols[0] },
-        { frac: 0.5, label: formatTickTokens(maxTok * 0.5), activeCol: activeCols[1] },
-        { frac: 0.75, label: formatTickTokens(maxTok * 0.75), activeCol: activeCols[2] },
-      ];
-      for (const item of majorSpecs) {
-        const ty = Math.round(botChamber - item.frac * hChamber);
-        const reached = curFill >= item.frac - 0.012;
+      const activeCols = byTone(
+        tone,
+        isDark ? ['#71717A', '#A1A1AA', '#E4E4E7'] : ['#3F3F46', '#52525B', '#71717A'],
+        isDark ? ['#B45309', '#D97706', '#FBBF24'] : ['#92400E', '#B45309', '#D97706'],
+        isDark ? ['#6D28D9', '#8B5CF6', '#C4B5FD'] : ['#5B21B6', '#7C3AED', '#9333EA'],
+        isDark ? ['#2A6EE8', '#3186FF', '#5CC6FC'] : ['#1D4ED8', '#2563EB', '#0284C7']
+      );
+      const fracs = [0.25, 0.5, 0.75];
+      for (let idx = 0; idx < 3; idx++) {
+        const frac = fracs[idx];
+        const ty = Math.round(botChamber - frac * hChamber);
+        const reached = curFill >= frac - 0.012;
         const lineCol = reached
           ? st.critical
             ? isDark ? '#F59E0B' : '#EA580C'
-            : item.activeCol
+            : activeCols[idx]
           : isDark
             ? 'rgba(172, 194, 228, 0.28)'
             : 'rgba(30, 41, 59, 0.38)';
@@ -1262,53 +1245,37 @@
         if (reached) {
           ctx.fillStyle = st.critical
             ? 'rgba(234, 88, 12, 0.20)'
-            : tone === 'mono'
-              ? 'rgba(161, 161, 170, 0.20)'
-              : tone === 'amber'
-                ? 'rgba(217, 119, 6, 0.18)'
-                : tone === 'iris'
-                  ? 'rgba(139, 92, 246, 0.18)'
-                  : isDark
-                    ? 'rgba(92, 198, 252, 0.18)'
-                    : 'rgba(37, 99, 235, 0.16)';
+            : byTone(tone, 'rgba(161, 161, 170, 0.20)', 'rgba(217, 119, 6, 0.18)', 'rgba(139, 92, 246, 0.18)', isDark ? 'rgba(92, 198, 252, 0.18)' : 'rgba(37, 99, 235, 0.16)');
           ctx.fillRect(tickX - 0.5, ty - 1.1, 4.5, 2.2);
         }
         ctx.fillStyle = lineCol;
         ctx.fillRect(tickX, ty - 0.5, 3.5, 1.0);
 
         ctx.fillStyle = reached
-          ? isDark
-            ? 'rgba(222, 236, 252, 0.88)'
-            : 'rgba(15, 23, 42, 0.90)'
-          : isDark
-            ? 'rgba(140, 154, 178, 0.58)'
-            : 'rgba(30, 41, 59, 0.62)';
-        ctx.fillText(item.label, tickX + 5.6, ty + 0.3);
+          ? isDark ? 'rgba(222, 236, 252, 0.88)' : 'rgba(15, 23, 42, 0.90)'
+          : isDark ? 'rgba(140, 154, 178, 0.58)' : 'rgba(30, 41, 59, 0.62)';
+        ctx.fillText(formatTickTokens(maxTok * frac), tickX + 5.6, ty + 0.3);
       }
       ctx.restore();
     };
 
     // 2D 降级保底：与 WebGL2 视觉一致的白昼高硼硅折射侧壁 + 皇家钴蓝至晴空蔚蓝液柱
     const gradCache = new Map();
+    const addStops = (g, s) => { for (let i = 0; i < s.length; i += 2) g.addColorStop(s[i], s[i + 1]); return g; };
     const getIonCylGrad = (ctx, isDark, tone = 'cobalt') => {
       const key = `${isDark ? 'd' : 'l'}:${tone}`;
       let g = gradCache.get(key);
       if (g) return g;
       g = ctx.createLinearGradient(TUBE_X - TUBE_IN_R, 0, TUBE_X + TUBE_IN_R, 0);
-      const edgeL =
-        tone === 'mono'
-          ? 'rgba(63, 63, 70, 0.30)'
-          : tone === 'amber'
-            ? 'rgba(146, 64, 14, 0.30)'
-            : tone === 'iris'
-              ? 'rgba(91, 33, 182, 0.30)'
-              : 'rgba(30, 64, 175, 0.32)';
+      const edgeL = byTone(tone, 'rgba(63, 63, 70, 0.30)', 'rgba(146, 64, 14, 0.30)', 'rgba(91, 33, 182, 0.30)', 'rgba(30, 64, 175, 0.32)');
       const edgeD = tone === 'mono' ? 'rgba(24, 24, 27, 0.58)' : 'rgba(15, 23, 58, 0.58)';
-      g.addColorStop(0.0, isDark ? edgeD : edgeL);
-      g.addColorStop(0.24, 'rgba(255, 255, 255, 0.08)');
-      g.addColorStop(0.5, isDark ? (tone === 'mono' ? 'rgba(228, 228, 231, 0.14)' : 'rgba(168, 220, 255, 0.14)') : 'rgba(255, 255, 255, 0.22)');
-      g.addColorStop(0.82, isDark ? (tone === 'mono' ? 'rgba(24, 24, 27, 0.38)' : 'rgba(15, 23, 58, 0.38)') : (tone === 'cobalt' ? 'rgba(30, 64, 175, 0.20)' : edgeL));
-      g.addColorStop(1.0, isDark ? (tone === 'mono' ? 'rgba(24, 24, 27, 0.64)' : 'rgba(15, 23, 58, 0.64)') : (tone === 'cobalt' ? 'rgba(30, 64, 175, 0.34)' : edgeL));
+      addStops(g, [
+        0, isDark ? edgeD : edgeL,
+        0.24, 'rgba(255, 255, 255, 0.08)',
+        0.5, isDark ? (tone === 'mono' ? 'rgba(228, 228, 231, 0.14)' : 'rgba(168, 220, 255, 0.14)') : 'rgba(255, 255, 255, 0.22)',
+        0.82, isDark ? (tone === 'mono' ? 'rgba(24, 24, 27, 0.38)' : 'rgba(15, 23, 58, 0.38)') : (tone === 'cobalt' ? 'rgba(30, 64, 175, 0.20)' : edgeL),
+        1, isDark ? (tone === 'mono' ? 'rgba(24, 24, 27, 0.64)' : 'rgba(15, 23, 58, 0.64)') : (tone === 'cobalt' ? 'rgba(30, 64, 175, 0.34)' : edgeL),
+      ]);
       gradCache.set(key, g);
       return g;
     };
@@ -1318,20 +1285,9 @@
       let g = gradCache.get(key);
       if (g) return g;
       g = ctx.createLinearGradient(TUBE_X - TUBE_OUT_R, 0, TUBE_X + TUBE_OUT_R, 0);
-      const rim =
-        tone === 'mono'
-          ? 'rgba(82, 82, 91, 0.28)'
-          : tone === 'amber'
-            ? 'rgba(146, 64, 14, 0.26)'
-            : tone === 'iris'
-              ? 'rgba(91, 33, 182, 0.26)'
-              : 'rgba(30, 64, 175, 0.28)';
+      const rim = byTone(tone, 'rgba(82, 82, 91, 0.28)', 'rgba(146, 64, 14, 0.26)', 'rgba(91, 33, 182, 0.26)', 'rgba(30, 64, 175, 0.28)');
       const mid = tone === 'mono' ? 'rgba(244, 244, 245, 0.34)' : tone === 'amber' ? 'rgba(254, 243, 199, 0.32)' : 'rgba(224, 235, 250, 0.36)';
-      g.addColorStop(0.0, rim);
-      g.addColorStop(0.14, mid);
-      g.addColorStop(0.5, tone === 'mono' ? 'rgba(244, 244, 245, 0.26)' : 'rgba(224, 235, 250, 0.28)');
-      g.addColorStop(0.86, mid);
-      g.addColorStop(1.0, rim);
+      addStops(g, [0, rim, 0.14, mid, 0.5, tone === 'mono' ? 'rgba(244, 244, 245, 0.26)' : 'rgba(224, 235, 250, 0.28)', 0.86, mid, 1, rim]);
       gradCache.set(key, g);
       return g;
     };
@@ -1346,18 +1302,14 @@
       const isClaude = st.camp === 'claude';
       const isCrit = Boolean(st.critical);
       const bladeCol = isCrit
-        ? isDark
-          ? 'rgba(255, 236, 168, 0.94)'
-          : 'rgba(234, 88, 12, 0.96)'
-        : tone === 'mono'
-          ? isDark ? 'rgba(244, 244, 245, 0.94)' : 'rgba(39, 39, 42, 0.96)'
-          : tone === 'amber'
-            ? isDark ? 'rgba(253, 224, 71, 0.94)' : 'rgba(180, 83, 9, 0.96)'
-            : tone === 'iris'
-              ? isDark ? 'rgba(221, 214, 254, 0.94)' : 'rgba(109, 40, 217, 0.96)'
-              : isDark
-                ? 'rgba(176, 224, 255, 0.94)'
-                : 'rgba(3, 105, 161, 0.96)';
+        ? (isDark ? 'rgba(255, 236, 168, 0.94)' : 'rgba(234, 88, 12, 0.96)')
+        : byTone(
+            tone,
+            isDark ? 'rgba(244, 244, 245, 0.94)' : 'rgba(39, 39, 42, 0.96)',
+            isDark ? 'rgba(253, 224, 71, 0.94)' : 'rgba(180, 83, 9, 0.96)',
+            isDark ? 'rgba(221, 214, 254, 0.94)' : 'rgba(109, 40, 217, 0.96)',
+            isDark ? 'rgba(176, 224, 255, 0.94)' : 'rgba(3, 105, 161, 0.96)'
+          );
 
       ctx.save();
 
@@ -1368,62 +1320,30 @@
 
       // 2. 连续电离能量柱
       if (surfY < FLOOR_IN - 0.5) {
-        const liqGrad = ctx.createLinearGradient(TUBE_X, FLOOR_IN, TUBE_X, Math.min(FLOOR_IN - 6, surfY));
-        if (isCrit) {
-          if (isDark) {
-            liqGrad.addColorStop(0.0, 'rgba(92, 37, 9, 0.92)');
-            liqGrad.addColorStop(0.38, 'rgba(189, 84, 19, 0.90)');
-            liqGrad.addColorStop(0.75, 'rgba(241, 153, 18, 0.90)');
-            liqGrad.addColorStop(1.0, 'rgba(254, 213, 79, 0.90)');
-          } else {
-            liqGrad.addColorStop(0.0, 'rgba(124, 58, 237, 0.94)');
-            liqGrad.addColorStop(0.52, 'rgba(234, 88, 12, 0.93)');
-            liqGrad.addColorStop(1.0, 'rgba(245, 158, 11, 0.94)');
-          }
-        } else if (tone === 'mono') {
-          if (isDark) {
-            liqGrad.addColorStop(0.0, 'rgba(24, 24, 27, 0.92)');
-            liqGrad.addColorStop(0.45, 'rgba(82, 82, 91, 0.90)');
-            liqGrad.addColorStop(1.0, 'rgba(212, 212, 216, 0.90)');
-          } else {
-            liqGrad.addColorStop(0.0, 'rgba(39, 39, 42, 0.94)');
-            liqGrad.addColorStop(0.52, 'rgba(82, 82, 91, 0.93)');
-            liqGrad.addColorStop(1.0, 'rgba(113, 113, 122, 0.94)');
-          }
-        } else if (tone === 'amber') {
-          if (isDark) {
-            liqGrad.addColorStop(0.0, 'rgba(69, 26, 3, 0.92)');
-            liqGrad.addColorStop(0.45, 'rgba(180, 83, 9, 0.90)');
-            liqGrad.addColorStop(1.0, 'rgba(251, 191, 36, 0.90)');
-          } else {
-            liqGrad.addColorStop(0.0, 'rgba(146, 64, 14, 0.94)');
-            liqGrad.addColorStop(0.52, 'rgba(217, 119, 6, 0.93)');
-            liqGrad.addColorStop(1.0, 'rgba(245, 158, 11, 0.94)');
-          }
-        } else if (tone === 'iris') {
-          if (isDark) {
-            liqGrad.addColorStop(0.0, 'rgba(46, 16, 101, 0.92)');
-            liqGrad.addColorStop(0.45, 'rgba(109, 40, 217, 0.90)');
-            liqGrad.addColorStop(1.0, 'rgba(196, 181, 253, 0.90)');
-          } else {
-            liqGrad.addColorStop(0.0, 'rgba(91, 33, 182, 0.94)');
-            liqGrad.addColorStop(0.52, 'rgba(124, 58, 237, 0.93)');
-            liqGrad.addColorStop(1.0, 'rgba(168, 85, 247, 0.94)');
-          }
-        } else if (isDark) {
-          liqGrad.addColorStop(0.0, 'rgba(15, 23, 58, 0.92)');
-          liqGrad.addColorStop(0.36, isClaude ? 'rgba(32, 72, 180, 0.90)' : 'rgba(27, 73, 178, 0.90)');
-          liqGrad.addColorStop(0.74, isClaude ? 'rgba(64, 132, 252, 0.90)' : 'rgba(49, 134, 255, 0.90)');
-          liqGrad.addColorStop(1.0, 'rgba(92, 198, 252, 0.90)');
-        } else if (snap.fill >= 0.72) {
-          liqGrad.addColorStop(0.0, '#1D4ED8');
-          liqGrad.addColorStop(0.55, '#4F46E5');
-          liqGrad.addColorStop(1.0, '#7C3AED');
-        } else {
-          liqGrad.addColorStop(0.0, 'rgba(29, 78, 216, 0.94)');
-          liqGrad.addColorStop(0.52, isClaude ? 'rgba(59, 102, 228, 0.93)' : 'rgba(37, 99, 235, 0.93)');
-          liqGrad.addColorStop(1.0, 'rgba(2, 132, 199, 0.94)');
-        }
+        const liqGrad = addStops(
+          ctx.createLinearGradient(TUBE_X, FLOOR_IN, TUBE_X, Math.min(FLOOR_IN - 6, surfY)),
+          isCrit
+            ? isDark
+              ? [0, 'rgba(92, 37, 9, 0.92)', 0.38, 'rgba(189, 84, 19, 0.90)', 0.75, 'rgba(241, 153, 18, 0.90)', 1, 'rgba(254, 213, 79, 0.90)']
+              : [0, 'rgba(124, 58, 237, 0.94)', 0.52, 'rgba(234, 88, 12, 0.93)', 1, 'rgba(245, 158, 11, 0.94)']
+            : byTone(
+                tone,
+                isDark
+                  ? [0, 'rgba(24, 24, 27, 0.92)', 0.45, 'rgba(82, 82, 91, 0.90)', 1, 'rgba(212, 212, 216, 0.90)']
+                  : [0, 'rgba(39, 39, 42, 0.94)', 0.52, 'rgba(82, 82, 91, 0.93)', 1, 'rgba(113, 113, 122, 0.94)'],
+                isDark
+                  ? [0, 'rgba(69, 26, 3, 0.92)', 0.45, 'rgba(180, 83, 9, 0.90)', 1, 'rgba(251, 191, 36, 0.90)']
+                  : [0, 'rgba(146, 64, 14, 0.94)', 0.52, 'rgba(217, 119, 6, 0.93)', 1, 'rgba(245, 158, 11, 0.94)'],
+                isDark
+                  ? [0, 'rgba(46, 16, 101, 0.92)', 0.45, 'rgba(109, 40, 217, 0.90)', 1, 'rgba(196, 181, 253, 0.90)']
+                  : [0, 'rgba(91, 33, 182, 0.94)', 0.52, 'rgba(124, 58, 237, 0.93)', 1, 'rgba(168, 85, 247, 0.94)'],
+                isDark
+                  ? [0, 'rgba(15, 23, 58, 0.92)', 0.36, isClaude ? 'rgba(32, 72, 180, 0.90)' : 'rgba(27, 73, 178, 0.90)', 0.74, isClaude ? 'rgba(64, 132, 252, 0.90)' : 'rgba(49, 134, 255, 0.90)', 1, 'rgba(92, 198, 252, 0.90)']
+                  : snap.fill >= 0.72
+                    ? [0, '#1D4ED8', 0.55, '#4F46E5', 1, '#7C3AED']
+                    : [0, 'rgba(29, 78, 216, 0.94)', 0.52, isClaude ? 'rgba(59, 102, 228, 0.93)' : 'rgba(37, 99, 235, 0.93)', 1, 'rgba(2, 132, 199, 0.94)']
+              )
+        );
         traceCapsuleColumn(ctx, TUBE_X, TUBE_IN_R, surfY - slope, surfY + slope, FLOOR_IN, RC_IN);
         ctx.fillStyle = liqGrad;
         ctx.fill();
@@ -1434,11 +1354,7 @@
       }
 
       // 3. 失重微米星尘点阵与晶莹气泡描边
-      ctx.fillStyle = isDark
-        ? isClaude
-          ? 'rgba(182, 198, 255, 0.50)'
-          : 'rgba(176, 224, 255, 0.50)'
-        : 'rgba(255, 255, 255, 0.68)';
+      ctx.fillStyle = isDark ? (isClaude ? 'rgba(182, 198, 255, 0.50)' : 'rgba(176, 224, 255, 0.50)') : 'rgba(255, 255, 255, 0.68)';
       for (let sy = surfY + 7; sy < FLOOR_IN - 6; sy += 7.5) {
         const half = Math.max(4, Math.min(TUBE_IN_R - 4, TUBE_IN_R - 3));
         for (let sx = -half + 3; sx <= half - 3; sx += 6.2) {
@@ -1458,15 +1374,7 @@
         ctx.ellipse(TUBE_X + b.x, b.y, br, br, 0, 0, Math.PI * 2);
         ctx.fill();
         if (!isDark) {
-          ctx.strokeStyle = isCrit
-            ? 'rgba(194, 65, 12, 0.72)'
-            : tone === 'mono'
-              ? 'rgba(63, 63, 70, 0.68)'
-              : tone === 'amber'
-                ? 'rgba(180, 83, 9, 0.68)'
-                : tone === 'iris'
-                  ? 'rgba(109, 40, 217, 0.68)'
-                  : 'rgba(29, 78, 216, 0.68)';
+          ctx.strokeStyle = isCrit ? 'rgba(194, 65, 12, 0.72)' : byTone(tone, 'rgba(63, 63, 70, 0.68)', 'rgba(180, 83, 9, 0.68)', 'rgba(109, 40, 217, 0.68)', 'rgba(29, 78, 216, 0.68)');
           ctx.lineWidth = 0.65;
           ctx.stroke();
         }
@@ -1485,27 +1393,24 @@
       ctx.rotate(tilt);
       ctx.fillStyle = isCrit
         ? 'rgba(234, 88, 12, 0.44)'
-        : tone === 'mono'
-          ? isDark ? 'rgba(212, 212, 216, 0.32)' : 'rgba(82, 82, 91, 0.48)'
-          : tone === 'amber'
-            ? isDark ? 'rgba(251, 191, 36, 0.36)' : 'rgba(217, 119, 6, 0.50)'
-            : tone === 'iris'
-              ? isDark ? 'rgba(196, 181, 253, 0.36)' : 'rgba(124, 58, 237, 0.50)'
-              : isDark
-                ? 'rgba(92, 198, 252, 0.36)'
-                : 'rgba(2, 132, 199, 0.56)';
+        : byTone(
+            tone,
+            isDark ? 'rgba(212, 212, 216, 0.32)' : 'rgba(82, 82, 91, 0.48)',
+            isDark ? 'rgba(251, 191, 36, 0.36)' : 'rgba(217, 119, 6, 0.50)',
+            isDark ? 'rgba(196, 181, 253, 0.36)' : 'rgba(124, 58, 237, 0.50)',
+            isDark ? 'rgba(92, 198, 252, 0.36)' : 'rgba(2, 132, 199, 0.56)'
+          );
       ctx.beginPath();
       ctx.ellipse(0, 0, TUBE_IN_R - 0.3, 4.0, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle =
-        tone === 'mono'
-          ? isDark ? 'rgba(228, 228, 231, 0.42)' : 'rgba(63, 63, 70, 0.56)'
-          : tone === 'amber'
-            ? isDark ? 'rgba(253, 224, 71, 0.42)' : 'rgba(180, 83, 9, 0.56)'
-            : tone === 'iris'
-              ? isDark ? 'rgba(221, 214, 254, 0.44)' : 'rgba(109, 40, 217, 0.56)'
-              : isDark ? 'rgba(176, 224, 255, 0.44)' : 'rgba(29, 78, 216, 0.58)';
+      ctx.strokeStyle = byTone(
+        tone,
+        isDark ? 'rgba(228, 228, 231, 0.42)' : 'rgba(63, 63, 70, 0.56)',
+        isDark ? 'rgba(253, 224, 71, 0.42)' : 'rgba(180, 83, 9, 0.56)',
+        isDark ? 'rgba(221, 214, 254, 0.44)' : 'rgba(109, 40, 217, 0.56)',
+        isDark ? 'rgba(176, 224, 255, 0.44)' : 'rgba(29, 78, 216, 0.58)'
+      );
       ctx.lineWidth = 0.75;
       ctx.beginPath();
       ctx.ellipse(0, 0, TUBE_IN_R - 0.3, 4.0, 0, Math.PI, Math.PI * 2);
@@ -1549,14 +1454,7 @@
       } else {
         const splitY = Math.max(topThreadY, Math.min(botThreadY, surfY));
         if (splitY > topThreadY) {
-          ctx.fillStyle =
-            tone === 'mono'
-              ? 'rgba(82, 82, 91, 0.34)'
-              : tone === 'amber'
-                ? 'rgba(180, 83, 9, 0.32)'
-                : tone === 'iris'
-                  ? 'rgba(109, 40, 217, 0.32)'
-                  : 'rgba(30, 64, 175, 0.34)';
+          ctx.fillStyle = byTone(tone, 'rgba(82, 82, 91, 0.34)', 'rgba(180, 83, 9, 0.32)', 'rgba(109, 40, 217, 0.32)', 'rgba(30, 64, 175, 0.34)');
           ctx.fillRect(threadX, topThreadY, 0.85, splitY - topThreadY);
         }
         if (botThreadY > splitY) {
@@ -1566,14 +1464,13 @@
       }
 
       traceClosedCapsule(ctx, TUBE_X, TUBE_OUT_R, TOP_OUT, FLOOR_OUT, RC_OUT, RC_OUT);
-      ctx.strokeStyle =
-        tone === 'mono'
-          ? isDark ? 'rgba(212, 212, 216, 0.68)' : 'rgba(82, 82, 91, 0.68)'
-          : tone === 'amber'
-            ? isDark ? 'rgba(251, 191, 36, 0.62)' : 'rgba(146, 64, 14, 0.68)'
-            : tone === 'iris'
-              ? isDark ? 'rgba(196, 181, 253, 0.64)' : 'rgba(91, 33, 182, 0.68)'
-              : isDark ? 'rgba(172, 204, 248, 0.68)' : 'rgba(30, 64, 175, 0.68)';
+      ctx.strokeStyle = byTone(
+        tone,
+        isDark ? 'rgba(212, 212, 216, 0.68)' : 'rgba(82, 82, 91, 0.68)',
+        isDark ? 'rgba(251, 191, 36, 0.62)' : 'rgba(146, 64, 14, 0.68)',
+        isDark ? 'rgba(196, 181, 253, 0.64)' : 'rgba(91, 33, 182, 0.68)',
+        isDark ? 'rgba(172, 204, 248, 0.68)' : 'rgba(30, 64, 175, 0.68)'
+      );
       ctx.lineWidth = isDark ? 1.0 : 1.15;
       ctx.stroke();
 
@@ -1585,7 +1482,7 @@
       const dt = Math.max(0.001, Math.min(MAX_FRAME_DT, Number(dtSec || 0.016)));
       const st = resolveEffectiveState();
       phys.setStreaming(Boolean(st.streaming));
-      if (reduceMotion) {
+      if (st.reduceMotion) {
         phys.snapFillNow(st.fill);
       } else {
         phys.setTargetFill(st.fill);
@@ -1650,22 +1547,22 @@
         }
         updateRaySlopes(snap.tiltAngle, elapsedTime);
 
+        const u1 = (k, v) => { if (u[k] != null) gl.uniform1f(u[k], v); };
         gl.uniform2f(u.res, targetW, targetH);
-        gl.uniform1f(u.time, elapsedTime);
-        gl.uniform1f(u.dark, st.isDark ? 1.0 : 0.0);
-        gl.uniform1f(u.fill, snap.fill);
-        gl.uniform1f(u.tilt, snap.tiltAngle);
+        u1('time', elapsedTime);
+        u1('dark', st.isDark ? 1.0 : 0.0);
+        u1('fill', snap.fill);
+        u1('tilt', snap.tiltAngle);
         gl.uniform3fv(u.tint, tintVec);
-        gl.uniform1f(u.camp, st.camp === 'claude' ? 1.0 : 0.0);
-        const accentNum = st.accentTone === 'mono' ? 3.0 : st.accentTone === 'amber' ? 2.0 : st.accentTone === 'iris' ? 1.0 : 0.0;
-        if (u.accent !== null && u.accent !== undefined) gl.uniform1f(u.accent, accentNum);
-        gl.uniform1f(u.critical, st.critical ? 1.0 : 0.0);
-        gl.uniform1f(u.pendant, snap.streaming ? snap.pendantSize : 0.0);
+        u1('camp', st.camp === 'claude' ? 1.0 : 0.0);
+        u1('accent', byTone(st.accentTone, 3.0, 2.0, 1.0, 0.0));
+        u1('critical', st.critical ? 1.0 : 0.0);
+        u1('pendant', snap.streaming ? snap.pendantSize : 0.0);
         const rt = st.ratios;
         gl.uniform3f(u.ratios, Number(rt[0]) || 0, Number(rt[1]) || 0, Number(rt[2]) || 0);
-        gl.uniform1f(u.wetL, snap.wetLeft);
-        gl.uniform1f(u.wetR, snap.wetRight);
-        gl.uniform1f(u.hoverSlice, st.hoveredSlice);
+        u1('wetL', snap.wetLeft);
+        u1('wetR', snap.wetRight);
+        u1('hoverSlice', st.hoveredSlice);
         gl.uniform1fv(u.wave, phys.waveH);
         gl.uniform4fv(u.drops, dropArr);
         gl.uniform4fv(u.bubbles, bubArr);
@@ -1689,7 +1586,7 @@
       if (dirtyRender) return false;
       const st = resolveEffectiveState();
       if (buildVisualSig(st) !== renderedSig) return false;
-      if (reduceMotion) return true;
+      if (st.reduceMotion) return true;
       if (st.streaming) return false;
       if (settleClock < SETTLE_MIN_AGE_SEC) return false;
       const snap = phys.readSnapshotInto(snapBuf);
@@ -1731,6 +1628,10 @@
         phys.spawnDropletNow();
         notifyWake();
       },
+      isCalm() {
+        const snap = phys.readSnapshotInto(snapBuf);
+        return !snap.fallingCount && snap.waveEnergy < 0.35;
+      },
       getDebugState() {
         return {
           rendererMode: getRendererMode(),
@@ -1759,6 +1660,9 @@
           } catch {}
           glState = null;
         }
+        const z = (c) => { if (c && (c.width || c.height)) try { c.width = c.height = 0; } catch {} };
+        z(glCanvas);
+        z(canvas);
         glCanvas = null;
       },
     };
