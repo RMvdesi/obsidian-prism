@@ -30,6 +30,7 @@
   "sidebar": "on",
   "sidebarCompact": false,
   "sidebarNavFold": "off",
+  "projectPartitions": "off",
   "smoothCaret": true,
   "scrollBottomMotion": "smooth",
   "contextMenu": true,

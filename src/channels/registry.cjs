@@ -228,7 +228,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'settings', channelNumber: 9, order: 90, tier: 'addon', injectMode: 'on-demand-rpc', precompileOnBoot: false,
     label: 'Settings Panel & Full Locales',
-    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode'],
+    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode', 'projectPartitions'],
     files: [
       'src/runtime/i18n-tr-locale.js', 'i18n-locales.js', 'assets/brand-mark-svg.js', 'vendor/clawd-mascot/tavern-atlas-data.js',
       'vendor/clawd-mascot/octopath-stage-webgl.js', 'src/runtime/i18n-ext-beta4.js',
@@ -373,6 +373,23 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     defaultShouldEnable: (cfg) => cfg?.contextMenu !== false && cfg?.contextMenu !== 'off',
     cfgSig: (cfg) => (cfg?.contextMenu === false || cfg?.contextMenu === 'off' ? 'off' : 'on'),
   }),
+  defineSpec({
+    id: 'projectPartitions', channelNumber: 17, order: 170, tier: 'addon', topLevelPack: true,
+    label: 'Project Partitions 3-Level Hierarchy', configKeys: ['projectPartitions', 'language'],
+    files: ['vendor/project-partitions/partitions-ui.js', 'vendor/project-partitions/partitions-host.js', 'vendor/project-partitions/partitions-client.js'],
+    mountGlobal: '__agPrismProjectPartitions', respectSkippedByLiveCfg: true, budgetBytes: 64 * 1024,
+    probeLines: [
+      "hasProjectPartitions: Boolean((window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions) && (window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions).getStatus?.()?.status !== 'destroyed')",
+      "projectPartitionsCodeHash: String((window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.__prismCodeHash || '')",
+    ],
+    fieldOverrides: {
+      cdpShouldFn: 'shouldEnableProjectPartitions',
+      cdpBuildFn: 'buildProjectPartitionsExpression',
+      cdpRemoveConst: 'PROJECT_PARTITIONS_REMOVE_EXPRESSION',
+    },
+    defaultShouldEnable: (cfg) => cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true,
+    cfgSig: (cfg) => (cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true ? 'on' : 'off'),
+  }),
 ]);
 
 // 从唯一真相源自动派生：磁盘缓存键清单、缓存格式映射、Runtime 下沉通道 ID 清单
@@ -476,6 +493,7 @@ function createChannelRegistry({ builders, readConfig }) {
     bindEntry('effortSlider', builders.shouldEnableEffortSlider, builders.buildEffortSliderChannelExpression),
     bindEntry('workbenchEnhancer', builders.shouldEnableWorkbenchEnhancer, builders.buildWorkbenchEnhancerChannelExpression),
     bindEntry('contextMenu', builders.shouldEnableContextMenu, builders.buildContextMenuChannelExpression),
+    bindEntry('projectPartitions', builders.shouldEnableProjectPartitions, builders.buildProjectPartitionsExpression),
   ]);
 
   const registryById = new Map(CHANNEL_REGISTRY.map((ch) => [ch.id, ch]));

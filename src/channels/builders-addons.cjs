@@ -619,6 +619,139 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
   })()`;
   }
 
+  function shouldEnableProjectPartitions(config = null) {
+    const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
+    return cfg.projectPartitions === 'on' || cfg.projectPartitions === true;
+  }
+
+  function readCompiledProjectPartitionsAssets(opts = null) {
+    const rels = [
+      'vendor/project-partitions/partitions-ui.js',
+      'vendor/project-partitions/partitions-host.js',
+      'vendor/project-partitions/partitions-client.js',
+    ];
+    const absPaths = rels.map((rel) => path.join(rootDir, ...rel.split('/')));
+    if (absPaths.some((p) => !fs.existsSync(p))) {
+      return { sig: '', minRuntime: '', codeHash: '' };
+    }
+    const sig = absPaths.map((p) => getFileSig(p)).join('|');
+    const cachePath = resolveBundleCachePathOption(opts);
+    const curMem = bundleCache.getChannelMemCache('projectPartitions');
+    if (!cachePath && curMem && curMem.sig === sig && curMem.codeHash) {
+      return curMem;
+    }
+    const fileEntries = rels.map((rel, i) => ({ rel, fullPath: absPaths[i] }));
+    return bundleCache.resolveChannelAssetsWithDiskCache({
+      channelName: 'projectPartitions',
+      sig,
+      fileEntries,
+      opts,
+      compileFn: () => {
+        const parts = absPaths.map((p) => minifySingleSource(fs.readFileSync(p, 'utf8'), { allowMemberProps: false }));
+        const minRuntime = parts.join(';\n');
+        const codeHash = computeHash(minRuntime);
+        return { minRuntime, codeHash };
+      },
+      toCacheEntry: (assets, sourceHash) => ({
+        sourceHash,
+        codeHash: assets.codeHash,
+        minRuntime: assets.minRuntime,
+        payloadSha256: sha256Text(`${assets.codeHash}\0${assets.minRuntime}`),
+        updatedAt: Date.now(),
+      }),
+      fromCacheEntry: (entry) => ({
+        minRuntime: entry.minRuntime,
+        codeHash: entry.codeHash,
+      }),
+    });
+  }
+
+  // 第十七通道独立注入（侧边栏项目三级分区目录）：默认 off 态 0 B，零 Channel 1 负担，支持热插拔与无损卸载
+  function buildProjectPartitionsExpression(config = null, opts = null) {
+    let resolvedCfg = config;
+    let resolvedOpts = opts;
+    if (
+      !resolvedOpts &&
+      config &&
+      typeof config === 'object' &&
+      ('cachePath' in config || 'noDiskCache' in config || 'deferCacheWrite' in config) &&
+      !('projectPartitions' in config)
+    ) {
+      resolvedOpts = config;
+      resolvedCfg = null;
+    }
+    const cfg = resolvedCfg && typeof resolvedCfg === 'object' ? reconcileConfigAliases(resolvedCfg) : readConfig();
+    if (!shouldEnableProjectPartitions(cfg)) return '';
+    const { minRuntime, codeHash } = readCompiledProjectPartitionsAssets(resolvedOpts);
+    if (!minRuntime || !codeHash) return '';
+
+    const bootCfgJson = serializeJsonForEval(cfg);
+    const hashJson = serializeJsonForEval(codeHash);
+
+    return `(() => {
+  try {
+${CHANNEL_MAIN_FRAME_HOST_GUARD}
+
+    const cleanupPartitions = () => {
+      try { (window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.destroy?.(); } catch {}
+      try { document.documentElement?.removeAttribute?.('data-ag-prism-project-partitions'); } catch {}
+      try { document.getElementById?.('ag-prism-project-partitions-css')?.remove?.(); } catch {}
+      try { document.getElementById?.('ag-prism-part-hide-css')?.remove?.(); } catch {}
+      for (const k of ['__agPrismProjectPartitions', '__agPrismProjectPartitionsFactory', '__agPrismProjectPartitionsUi', '__agPrismProjectPartitionsHost']) {
+        try { delete window[k]; } catch {}
+        try { delete globalThis[k]; } catch {}
+      }
+    };
+
+    const bootCfg = ${bootCfgJson};
+    const targetHash = ${hashJson};
+    const mountOrReuse = () => {
+      if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {
+        return { ok: false, status: 'skipped-non-host' };
+      }
+      let liveCfg = null;
+      try {
+        const st = (window.__agPrism || window.__agClaudeStyle)?.getState?.();
+        if (st && st.cfg && typeof st.cfg === 'object') liveCfg = st.cfg;
+      } catch {}
+      if (liveCfg && liveCfg.projectPartitions !== 'on' && liveCfg.projectPartitions !== true) {
+        cleanupPartitions();
+        return { ok: true, status: 'off', skippedByLiveCfg: true };
+      }
+      const effectiveCfg = liveCfg || bootCfg;
+      const existing = window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions;
+      if (existing && existing.__prismCodeHash === targetHash && existing.getStatus?.()?.status !== 'destroyed') {
+        try { existing.sync?.(effectiveCfg); } catch {}
+        return { ok: true, reused: true, codeHash: targetHash };
+      }
+
+      cleanupPartitions();
+      ;${minRuntime};
+
+      const factory = window.__agPrismProjectPartitionsFactory || globalThis.__agPrismProjectPartitionsFactory;
+      let mounted = null;
+      if (factory && typeof factory.mountProjectPartitions === 'function') {
+        mounted = factory.mountProjectPartitions({ root: window, doc: document, config: effectiveCfg });
+      }
+      if (mounted && typeof mounted === 'object') {
+        mounted.__prismCodeHash = targetHash;
+        try { window.__agPrismProjectPartitions = mounted; } catch {}
+        try { globalThis.__agPrismProjectPartitions = mounted; } catch {}
+      }
+      return { ok: true, status: 'mounted', codeHash: targetHash };
+    };
+
+    if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {
+      document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });
+      return { ok: true, status: 'deferred', codeHash: targetHash };
+    }
+    return mountOrReuse();
+  } catch (err) {
+    return { ok: false, status: 'error', channel: 'projectPartitions', error: String(err && err.message || err).slice(0, 300), stack: String(err && err.stack || '').slice(0, 600) };
+  }
+  })()`;
+  }
+
   return {
     shouldEnableThought,
     buildThoughtExpression,
@@ -626,6 +759,8 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     shouldEnableMascot,
     buildMascotChannelExpression,
     buildSuggesterExpression,
+    shouldEnableProjectPartitions,
+    buildProjectPartitionsExpression,
   };
 }
 

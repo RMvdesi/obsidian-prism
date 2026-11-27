@@ -836,9 +836,9 @@ namespace AgyClaudeStyle
         private static readonly string[] AutoOnOffValues = new string[] { "auto", "on", "off" };
         private static readonly string[] StrictOnBoolKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
         private static readonly string[] NotOffBoolKeys = new string[] { "smoothCaret", "contextMenu" };
-        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "omniModule", "sidebarStudio", "autoUpdate" };
+        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "projectPartitions", "omniModule", "sidebarStudio", "autoUpdate" };
 
-        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 54 键 100% 对齐：40 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
+        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 55 键 100% 对齐：41 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
         private static readonly string[,] EnumSchemaSpecs = new string[,]
         {
             { "language", "auto", "L" }, { "lang", "auto", "L" },
@@ -852,7 +852,7 @@ namespace AgyClaudeStyle
             { "convRipple", "off", "off,subtle,medium,full" }, { "ripple", "on", "O" }, { "composer", "on", "O" },
             { "placeholderStyle", "studio", "studio,host" }, { "promptStyle", "studio", "studio,host" },
             { "mascot", "crab", "crab,minis,quad,quad-minis,dual,off" }, { "logoInk", "accent", "accent,foreground" },
-            { "sidebar", "on", "O" }, { "sidebarNavFold", "off", "off,on" },
+            { "sidebar", "on", "O" }, { "sidebarNavFold", "off", "off,on" }, { "projectPartitions", "off", "O" },
             { "scrollBottomMotion", "smooth", "smooth,instant" }, { "accentTone", "follow", "follow,cobalt,iris,amber,mono" },
             { "cornerStyle", "balanced", "sharp,balanced,soft" }, { "chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom" },
             { "codeFont", "default", "default,jetbrains,cascadia,sfmono,custom" }, { "ambientIntensity", "100", "0,35,70,100" },

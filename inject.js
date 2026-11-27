@@ -52,7 +52,9 @@ const INLINE_DIFF_MAX_URI_LENGTH = 2048;
 
 // 全部运行期下沉通道（Ch13~Ch16）与清理句柄均直接从 cdp.CHANNEL_REGISTRY 唯一真相源派生
 function getRuntimeRegistryChannels(mod) {
-  return Array.isArray(mod?.CHANNEL_REGISTRY) ? mod.CHANNEL_REGISTRY.filter((ch) => ch && ch.tier === 'runtime') : [];
+  return Array.isArray(mod?.CHANNEL_REGISTRY)
+    ? mod.CHANNEL_REGISTRY.filter((ch) => ch && (ch.tier === 'runtime' || ch.id === 'projectPartitions'))
+    : [];
 }
 function buildRuntimeChannelBundleMap(mod, cfg, cacheOpts = null) {
   return getRuntimeRegistryChannels(mod).map((ch) => {

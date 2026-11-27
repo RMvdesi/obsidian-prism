@@ -807,6 +807,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
     effortSliderModule: 'on',
     workbenchEnhancer: 'on',
     contextMenu: true,
+    projectPartitions: 'on',
   };
 
   for (const ch of cdp.CHANNEL_REGISTRY) {
@@ -849,7 +850,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
         ? { protocol: 'plugin:', hostname: 'swarm--swarm_board-1', pathname: '/', port: '', username: '', password: '' }
         : { href: 'vscode-file://vscode-app/workbench.html' },
       document: hostileDoc,
-      __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', language: 'zh-CN' } }) },
+      __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', projectPartitions: 'on', language: 'zh-CN' } }) },
       __agPrismOmni: trapExisting,
       __agPrismSidebar: trapExisting,
       __agPrismInlineDiff: trapExisting,
@@ -866,6 +867,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
       __agPrismEffortSlider: trapExisting,
       __agPrismHostEnhancer: trapExisting,
       __agPrismContextMenu: trapExisting,
+      __agPrismProjectPartitions: trapExisting,
     };
     hostileWin.self = hostileWin;
     hostileWin.top = hostileWin;

@@ -325,6 +325,28 @@
       'Beide (5h + W)',
       'İkisi (5s + Hf)',
     ],
+    setProjectPartitionsLabel: [
+      '项目分区',
+      '專案分區',
+      'Project Partitions',
+      'プロジェクトセクション',
+      '프로젝트 섹션',
+      'Secciones de proyectos',
+      'Sections de projets',
+      'Projektbereiche',
+      'Proje Bölümleri',
+    ],
+    setProjectPartitionsDesc: [
+      '在项目菜单中支持归类到自定义分区，并在侧边栏与 Projects 同级展开三级目录。',
+      '在專案選單中支援歸類到自訂分區，並在側邊欄與 Projects 同級展開三級目錄。',
+      'Group projects into custom sidebar partitions alongside Projects with 3-level drill-down.',
+      'プロジェクトをカスタムセクションへ分類し、Projects と同階層で 3 階層表示します。',
+      '프로젝트를 사용자 지정 섹션으로 분류하여 Projects와 같은 계층의 3단계 트리로 표시합니다.',
+      'Agrupa proyectos en secciones personalizadas junto a Projects con vista en 3 niveles.',
+      'Regroupe les projets dans des sections personnalisées aux côtés de Projects sur 3 niveaux.',
+      'Gruppiert Projekte in eigene Seitenleisten-Bereiche auf Ebene von Projects (3 Ebenen).',
+      'Projeleri kenar çubuğunda Projects ile aynı düzeyde 3 katmanlı özel bölümlerde gruplar.',
+    ],
   });
 
   function normalizeLocale(lang) {

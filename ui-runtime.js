@@ -73,7 +73,7 @@ const isElementLike = (n) => !!(n && (n.nodeType === 1 || (n.nodeType === undefi
 const safeParseJsonObj = (raw) => { if (!raw || typeof raw !== 'string') return null; try { const p = JSON.parse(raw); return p && typeof p === 'object' && !Array.isArray(p) ? p : null; } catch { return null; } };
 
 const BOOL_ALIAS_PAIRS = [['homeRipple', 'ripple'], ['composerRestyle', 'composer'], ['sidebarRestyle', 'sidebar']];
-const ONOFF_STR_KEYS = 'telemetryModule|effortSliderModule|effortMemory|periodicModelPicker|omniModule|sidebarStudio|autoUpdate|sidebarNavFold'.split('|');
+const ONOFF_STR_KEYS = 'telemetryModule|effortSliderModule|effortMemory|periodicModelPicker|omniModule|sidebarStudio|autoUpdate|sidebarNavFold|projectPartitions'.split('|');
 const PICK_SETS = new Map();
 const pickOf = (v, s, d) => { let set = PICK_SETS.get(s); if (!set) PICK_SETS.set(s, set = new Set(s.split('|'))); return set.has(v) ? v : d; };
 const normConvRipple = (v) => (v === true || v === 'true' || v === 'on' ? 'medium' : pickOf(v, 'subtle|medium|full', 'off'));
@@ -94,7 +94,7 @@ out.placeholderStyle = out.promptStyle = (out.placeholderStyle ?? out.promptStyl
 out.mascot = out.mascot === 'off' || out.mascot === false ? 'off' : /^(minis|quad(-minis)?|r:[ckdw0-4,+m]+)$/.test(out.mascot) ? out.mascot : 'crab';
 out.convRipple = normConvRipple(out.convRipple);
 for (const k of ['sidebarCompact', 'codeLigatures', 'autoArchiveOnExit', 'ignoreReducedMotion']) out[k] = out[k] === true || out[k] === 'on';
-for (const k of ['sidebarNavFold', 'sidebarStudio', 'autoUpdate']) out[k] = out[k] === 'on' || out[k] === true ? 'on' : 'off';
+for (const k of ['sidebarNavFold', 'projectPartitions', 'sidebarStudio', 'autoUpdate']) out[k] = out[k] === 'on' || out[k] === true ? 'on' : 'off';
 for (const k of ['smoothCaret', 'contextMenu']) out[k] = out[k] === undefined ? true : out[k] !== false && out[k] !== 'off';
 out.accentTone = pickOf(out.accentTone, 'follow|cobalt|iris|amber|mono', 'follow');
 out.cornerStyle = pickOf(out.cornerStyle, 'sharp|balanced|soft', 'balanced');
@@ -1423,7 +1423,7 @@ for (const el of qa(r, HOST_BTN_QUERY)) if (!isThoughtIsolatedNode(el)) set.add(
   const OWN_PLUGIN_SELECTOR =
     '.ag-cs-home-panel-seat, .ag-cs-ripple-host, .ag-cs-conv-aura-host, .ag-cs-crab, .ag-cs-prism-rim-cv, .ag-cs-model-glyph, [data-testid="orchestrator-effort-bar"], .ag-cs-thinking-spark, .ag-cs-smooth-caret, .ag-cs-liftoff-veil, .ag-cs-sidebar-glide-pill, .ag-cs-pill-glide, .ag-cs-stream-chunk, .ag-cs-thought-chunk, .ag-anim-icon, .ag-prism-omni-menu, .ag-prism-omni-pane, .ag-cs-ctx-menu, .ag-cs-ctx-toast, [data-ag-prism-omni-owned="1"], [data-ag-prism-sidebar-owned="1"], .ces-ag-section, .ces-set, #ag-codex-effort-slider-styles, #ag-pulse-status-bar, [data-ag-prism-pulse-bar], [data-ag-prism-fallback="1"], #context-card, #' +
     SETTINGS_SEC_ID +
-    ', #ag-prism-css, #ag-prism-omni-css, #ag-prism-sidebar-studio-css, #ag-prism-periodic-picker-root, #ag-prism-periodic-picker-css, .ag-pp-hold-ring, .ag-pp-mini-keycap, #ag-claude-style-css, #ag-prism-motion-off-css, #ag-prism-host-alert-css, ' +
+    ', #ag-prism-css, #ag-prism-omni-css, #ag-prism-sidebar-studio-css, #ag-prism-periodic-picker-root, #ag-prism-periodic-picker-css, .ag-pp-hold-ring, .ag-pp-mini-keycap, .ag-prism-partitions-root, .ag-prism-part-popup, .ag-prism-part-dialog-backdrop, #ag-prism-project-partitions-css, #ag-prism-part-hide-css, #ag-claude-style-css, #ag-prism-motion-off-css, #ag-prism-host-alert-css, ' +
     EXT_ZH_UI_SEL;
 
   const isOwnPluginNode = (t, selfOnly) => {
@@ -2421,7 +2421,7 @@ modelInfo: latestPrimaryModelInfo ? { ...latestPrimaryModelInfo } : null, perf: 
 suppressEntryMotion(ms) { streamChoreoCtl.suppressEntryMotion?.(ms); },
 destroy() {
 teardownCore();
-for (const k of 'Telemetry,EffortSlider,Thought,Omni,Sidebar,PeriodicStub,PeriodicPicker,HostI18n,Wallpaper,Suggester'.split(',')) try { (W['__agPrism' + k] || GT['__agPrism' + k])?.destroy?.(); } catch {}
+for (const k of 'Telemetry,EffortSlider,Thought,Omni,Sidebar,PeriodicStub,PeriodicPicker,ProjectPartitions,HostI18n,Wallpaper,Suggester'.split(',')) try { (W['__agPrism' + k] || GT['__agPrism' + k])?.destroy?.(); } catch {}
 for (const k of 'PrismPeriodicStub,PrismPeriodicStubFactory,PeriodicPendingOpen,PeriodicFullLoaded,PeriodicStubHash'.split(',')) { try { delete W['__ag' + k]; } catch {} try { delete GT['__ag' + k]; } catch {} }
 try { W.__agPrismInlineDiff?.unbindHooks?.(); } catch {}
 try { (ownedCtxMenu || W.__agPrismContextMenu || GT.__agPrismContextMenu)?.destroy?.(); } catch {}
@@ -2435,12 +2435,12 @@ qa(D, '.agy-overlay,.agy-fastpick,[data-testid="context-menu-popup"],[data-testi
 for (const s of 'placeholder|orch-active|model-overlay|aux-dual|overview-shell|prism-mirror|prism-reflect|settings-dlg|settings-nav|nav-active|conv-seat|conv-ripple-host|vp-wrap|home-sheet|row-running|menu-open|auto-unfolded|outer-open|caustic|fiber-camp|pane-camp|sonar|stage-glide|liftoff-bubble|thought-streaming|spark-streaming|prism-cv|code-folded|bg-cmd-wrap|input-layer|hdr-open|rich-pre|glide-item|crab-anchor|bleed'.split('|')) qa(D, `[data-ag-cs-${s}]`).forEach((e) => ra(e, 'data-ag-cs-' + s));
 for (const a of 'data-has-sep,data-pv-warn,data-ag-sp-running'.split(',')) qa(D, `[${a}]`).forEach((e) => ra(e, a));
 try { getDomBus()?.dispose?.(D, W); getMascotHop()?.dispose?.(D); for (const k of ['__agPrismFontCustomizer', '__agPrismReducedMotionGuard']) (W[k] || GT[k])?.dispose?.(D); } catch {}
-qa(D, '#ag-prism-mascot-hop-style,.ag-prism-mascot-hop-layer,#ag-prism-custom-fonts-style,#ag-prism-settings-ext-beta4-css,#ag-prism-settings-v101-css,#ag-prism-studio-v101-css,#ag-prism-omni-css,#ag-prism-motion-off-css,#ag-prism-periodic-stub-css,#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap,#ag-prism-wallpaper-root,#ag-prism-wallpaper-css,#ag-prism-suggester-css,.ag-omni-dock,.ag-omni-menu,.ag-prism-omni-menu,.ag-prism-omni-pane,.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-sb-more-wrap,[data-ag-prism-omni-owned="1"],.ag-cs-home-panel,.ag-cs-home-panel-seat,.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill,.ag-cs-pill-glide,.ag-cs-conv-aura-host,.ag-cs-conv-glow,.ag-cs-prism-rim-cv,.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-model-glyph,.ag-cs-panel-row-glyph,[data-testid="orchestrator-effort-bar"],.ag-cs-thinking-spark,.ag-cs-orbital-backdrop,.ag-cs-perf-backdrop,.ag-v2-habitat-prop,#' + SETTINGS_SEC_ID).forEach((e) => e.remove());
+qa(D, '#ag-prism-mascot-hop-style,.ag-prism-mascot-hop-layer,#ag-prism-custom-fonts-style,#ag-prism-settings-ext-beta4-css,#ag-prism-settings-v101-css,#ag-prism-studio-v101-css,#ag-prism-omni-css,#ag-prism-motion-off-css,#ag-prism-periodic-stub-css,#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,#ag-prism-project-partitions-css,#ag-prism-part-hide-css,.ag-prism-partitions-root,.ag-prism-part-add-btn,.ag-prism-part-menu-item,.ag-prism-part-menu-sep,.ag-prism-part-popup,.ag-prism-part-dialog-backdrop,.ag-pp-hold-ring,.ag-pp-mini-keycap,#ag-prism-wallpaper-root,#ag-prism-wallpaper-css,#ag-prism-suggester-css,.ag-omni-dock,.ag-omni-menu,.ag-prism-omni-menu,.ag-prism-omni-pane,.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-sb-more-wrap,[data-ag-prism-omni-owned="1"],.ag-cs-home-panel,.ag-cs-home-panel-seat,.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill,.ag-cs-pill-glide,.ag-cs-conv-aura-host,.ag-cs-conv-glow,.ag-cs-prism-rim-cv,.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-model-glyph,.ag-cs-panel-row-glyph,[data-testid="orchestrator-effort-bar"],.ag-cs-thinking-spark,.ag-cs-orbital-backdrop,.ag-cs-perf-backdrop,.ag-v2-habitat-prop,#' + SETTINGS_SEC_ID).forEach((e) => e.remove());
 const html = de();
 if (html) {
 ra(html, 'data-ag-perf-busy');
 for (const s of 'style|theme|palette|light-preset|motion|ignore-rm|perf-mode|stream-active|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|chat-font|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);
-for (const s of '|thought-view|omni|link-target|sidebar-studio|sidebar-host-sync'.split('|')) ra(html, s ? 'data-ag-prism-' + s : 'data-ag-prism');
+for (const s of '|thought-view|omni|link-target|sidebar-studio|sidebar-host-sync|project-partitions'.split('|')) ra(html, s ? 'data-ag-prism-' + s : 'data-ag-prism');
 rp(html, '--ag-spring-sidebar-ease'); rp(html, '--ag-spring-sidebar-dur');
 }
 },

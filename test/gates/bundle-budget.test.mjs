@@ -106,6 +106,7 @@ test('Law 4+: Declarative CHANNEL_REGISTRY multi-channel payloads stay within pe
     effortSliderModule: 'on',
     contextMenu: true,
     sidebarNavFold: true,
+    projectPartitions: 'on',
     scrollBottomMotion: 'on',
     sidebarRestyle: true,
   };
@@ -134,7 +135,7 @@ test('Law 4+: Declarative CHANNEL_REGISTRY multi-channel payloads stay within pe
     contextMenu: false,
   };
   const offReport = cdp.getChannelBudgetReport(offloadedDisabledCfg, { noDiskCache: true });
-  for (const id of ['telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu']) {
+  for (const id of ['telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu', 'projectPartitions']) {
     const ch = cdp.findChannel(id);
     assert.ok(ch, `Offloaded channel ${id} must be registered`);
     assert.equal(ch.shouldEnable(offloadedDisabledCfg), false, `${id} shouldEnable must be false when gated off`);

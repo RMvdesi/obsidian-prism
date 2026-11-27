@@ -313,67 +313,95 @@
     return row;
   }
 
-  function ensureIgnoreRmRow(rootEl, doc, ctx) {
-    let row = qs(rootEl, '[data-ag-cs-row="ignoreReducedMotion"]');
+  function ensureSwitchRow(rootEl, doc, { key, afterKey, options, onSelect }) {
+    let row = qs(rootEl, `[data-ag-cs-row="${key}"]`);
     if (row) return row;
-    const motionRow = qs(rootEl, '[data-ag-cs-row="motionLevel"]');
-    if (!motionRow || !motionRow.parentElement) return null;
-
+    const anchor = qs(rootEl, `[data-ag-cs-row="${afterKey}"]`);
+    if (!anchor || !anchor.parentElement) return null;
     row = mk(doc, 'div');
-    sa(row, 'data-ag-cs-row', 'ignoreReducedMotion');
+    sa(row, 'data-ag-cs-row', key);
     sa(row, 'data-ag-cs-ext-owned', '1');
-
     const inner = mk(doc, 'div', 'py-2');
     const textCol = mk(doc, 'div', 'flex-1');
     const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
-    const tSpan = mk(doc, 'span');
+    const tSpan = mk(doc, 'span'), dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
     sa(tSpan, 'data-k', 't');
-    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
     sa(dSpan, 'data-k', 'd');
     titleLine.appendChild(tSpan);
     textCol.appendChild(titleLine);
     textCol.appendChild(dSpan);
-
     const ctrlWrap = mk(doc, 'div', 'shrink-0');
     const grp = mk(doc, 'div', 'ag-cs-seg-group');
     sa(grp, 'role', 'group');
     sa(grp, 'data-ui-kind', 'switch');
     sa(grp, 'data-switch-on', '0');
-
     const thumb = mk(doc, 'span', 'ag-cs-switch-thumb');
     sa(thumb, 'aria-hidden', 'true');
     grp.appendChild(thumb);
-
-    const BTN_CLS = 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
-    for (const [val, roleTag] of [[true, 'on'], [false, 'off']]) {
-      const btn = mk(doc, 'button', BTN_CLS);
+    for (const [val, roleTag] of options) {
+      const btn = mk(doc, 'button', 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground');
       btn.type = 'button';
       sa(btn, 'type', 'button');
-      sa(btn, 'data-ag-cs-ext-key', 'ignoreReducedMotion');
+      sa(btn, 'data-ag-cs-ext-key', key);
       sa(btn, 'data-ag-cs-ext-val', JSON.stringify(val));
       sa(btn, 'data-ag-cs-ext-role', roleTag);
       btn.addEventListener('click', (ev) => {
         ev?.stopPropagation?.();
-        const applyFn = (ctx.win && ctx.win.__agPrismApplyIgnoreReducedMotion) || G.__agPrismApplyIgnoreReducedMotion;
-        if (typeof applyFn === 'function') applyFn(val, doc, ctx.win);
-        if (typeof ctx.saveSetting === 'function') ctx.saveSetting('ignoreReducedMotion', val);
+        if (typeof onSelect === 'function') onSelect(val);
         if (typeof row.__extResync === 'function') row.__extResync();
       });
       grp.appendChild(btn);
     }
-
     ctrlWrap.appendChild(grp);
     inner.appendChild(textCol);
     inner.appendChild(ctrlWrap);
     row.appendChild(inner);
-
-    const parent = motionRow.parentElement;
-    if (motionRow.nextSibling && typeof parent.insertBefore === 'function') {
-      parent.insertBefore(row, motionRow.nextSibling);
-    } else {
-      parent.appendChild(row);
-    }
+    const parent = anchor.parentElement;
+    if (anchor.nextSibling && typeof parent.insertBefore === 'function') parent.insertBefore(row, anchor.nextSibling);
+    else parent.appendChild(row);
     return row;
+  }
+
+  function syncSwitchRow(row, { title, desc, key, isOn, dimmed, extUi, resync }) {
+    if (!row) return;
+    row.__extResync = resync;
+    const tEl = qs(row, '[data-k="t"]'), dEl = qs(row, '[data-k="d"]');
+    if (tEl && tEl.textContent !== title) tEl.textContent = title;
+    if (dEl && dEl.textContent !== desc) dEl.textContent = desc;
+    if (row.style) row.style.opacity = dimmed ? '0.55' : '';
+    if (dimmed) sa(row, 'data-ag-cs-dimmed', '1'); else ra(row, 'data-ag-cs-dimmed');
+    const grp = qs(row, '.ag-cs-seg-group');
+    if (!grp) return;
+    sa(grp, 'data-switch-on', isOn ? '1' : '0');
+    const btns = grp.querySelectorAll ? grp.querySelectorAll(`button[data-ag-cs-ext-key="${key}"]`) : [];
+    for (let i = 0; i < btns.length; i++) {
+      const b = btns[i], isOnBtn = ga(b, 'data-ag-cs-ext-role') === 'on';
+      const lbl = isOnBtn ? (extUi.onLabel || 'On') : (extUi.offLabel || 'Off');
+      if (b.textContent !== lbl) b.textContent = lbl;
+      const act = isOnBtn === isOn;
+      sa(b, 'aria-pressed', act ? 'true' : 'false');
+      if (act) sa(b, 'data-pressed'); else ra(b, 'data-pressed');
+      b.tabIndex = act ? -1 : 0;
+      sa(b, 'tabindex', act ? '-1' : '0');
+    }
+  }
+
+  function ensureIgnoreRmRow(rootEl, doc, ctx) {
+    return ensureSwitchRow(rootEl, doc, {
+      key: 'ignoreReducedMotion', afterKey: 'motionLevel', options: [[true, 'on'], [false, 'off']],
+      onSelect: (val) => {
+        const applyFn = (ctx.win && ctx.win.__agPrismApplyIgnoreReducedMotion) || G.__agPrismApplyIgnoreReducedMotion;
+        if (typeof applyFn === 'function') applyFn(val, doc, ctx.win);
+        if (typeof ctx.saveSetting === 'function') ctx.saveSetting('ignoreReducedMotion', val);
+      },
+    });
+  }
+
+  function ensureProjectPartitionsRow(rootEl, doc, ctx) {
+    return ensureSwitchRow(rootEl, doc, {
+      key: 'projectPartitions', afterKey: 'sidebarNavFold', options: [['on', 'on'], ['off', 'off']],
+      onSelect: (val) => { if (typeof ctx.saveSetting === 'function') ctx.saveSetting('projectPartitions', val); },
+    });
   }
 
   function ensureChatFontRow(rootEl, doc, ctx) {
@@ -560,15 +588,18 @@
     const codeFontCustom = String(readLiveCfg(ctx, 'codeFontCustom', '') || '');
     const telOff = readLiveCfg(ctx, 'telemetryModule', 'auto') === 'off';
     const telQuotaMode = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
+    const rawPart = readLiveCfg(ctx, 'projectPartitions', 'off');
+    const partOn = rawPart === 'on' || rawPart === true;
 
-    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
+    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}|${partOn ? 1 : 0}`;
     if (
       rootEl.__extBeta4Sig === extSig &&
       qs(rootEl, '[data-ag-cs-row="performanceMode"]') &&
       qs(rootEl, '[data-ag-cs-row="ignoreReducedMotion"]') &&
       qs(rootEl, '[data-ag-cs-row="chatFont"]') &&
       qs(rootEl, 'button[data-ag-cs-code-custom="1"]') &&
-      (!qs(rootEl, '[data-ag-cs-row="telemetryModule"]') || qs(rootEl, '[data-ag-cs-row="telemetryQuotaMode"]'))
+      (!qs(rootEl, '[data-ag-cs-row="telemetryModule"]') || qs(rootEl, '[data-ag-cs-row="telemetryQuotaMode"]')) &&
+      (!qs(rootEl, '[data-ag-cs-row="sidebarNavFold"]') || qs(rootEl, '[data-ag-cs-row="projectPartitions"]'))
     ) {
       return true;
     }
@@ -605,35 +636,26 @@
       }
 
       // 1. 忽略系统减弱动效开关（动效区）
-      const rmRow = ensureIgnoreRmRow(rootEl, doc, ctx);
-      if (rmRow) {
-        rmRow.__extResync = resyncNow;
-        const tEl = qs(rmRow, '[data-k="t"]');
-        const dEl = qs(rmRow, '[data-k="d"]');
-        if (tEl && tEl.textContent !== extUi.setIgnoreReducedMotionTitle) tEl.textContent = extUi.setIgnoreReducedMotionTitle || 'Ignore System Reduced Motion';
-        if (dEl && dEl.textContent !== extUi.setIgnoreReducedMotionDesc) dEl.textContent = extUi.setIgnoreReducedMotionDesc || '';
-        if (rmRow.style) rmRow.style.opacity = motionOff ? '0.55' : '';
-        if (motionOff) sa(rmRow, 'data-ag-cs-dimmed', '1');
-        else ra(rmRow, 'data-ag-cs-dimmed');
+      syncSwitchRow(ensureIgnoreRmRow(rootEl, doc, ctx), {
+        title: extUi.setIgnoreReducedMotionTitle || 'Ignore System Reduced Motion',
+        desc: extUi.setIgnoreReducedMotionDesc || '',
+        key: 'ignoreReducedMotion',
+        isOn: ignoreRm,
+        dimmed: motionOff,
+        extUi,
+        resync: resyncNow,
+      });
 
-        const grp = qs(rmRow, '.ag-cs-seg-group');
-        if (grp) {
-          sa(grp, 'data-switch-on', ignoreRm ? '1' : '0');
-          const btns = grp.querySelectorAll ? grp.querySelectorAll('button[data-ag-cs-ext-key="ignoreReducedMotion"]') : [];
-          for (let i = 0; i < btns.length; i++) {
-            const b = btns[i];
-            const isOnBtn = ga(b, 'data-ag-cs-ext-role') === 'on';
-            const lbl = isOnBtn ? (extUi.onLabel || 'On') : (extUi.offLabel || 'Off');
-            if (b.textContent !== lbl) b.textContent = lbl;
-            const act = isOnBtn === ignoreRm;
-            sa(b, 'aria-pressed', act ? 'true' : 'false');
-            if (act) sa(b, 'data-pressed');
-            else ra(b, 'data-pressed');
-            b.tabIndex = act ? -1 : 0;
-            sa(b, 'tabindex', act ? '-1' : '0');
-          }
-        }
-      }
+      // 1b. 项目分区三级目录开关（交互区，紧随 sidebarNavFold 下方）
+      syncSwitchRow(ensureProjectPartitionsRow(rootEl, doc, ctx), {
+        title: extUi.setProjectPartitionsLabel || 'Project Partitions',
+        desc: extUi.setProjectPartitionsDesc || '',
+        key: 'projectPartitions',
+        isOn: partOn,
+        dimmed: false,
+        extUi,
+        resync: resyncNow,
+      });
 
       // 2. 会话正文字体（字体/排版区）
       const chatRow = ensureChatFontRow(rootEl, doc, ctx);

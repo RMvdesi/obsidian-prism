@@ -425,6 +425,21 @@ const CONTEXT_MENU_REMOVE_EXPRESSION = `(() => {
   return { ok: true, status: 'off' };
 })()`;
 
+const PROJECT_PARTITIONS_REMOVE_EXPRESSION = `(() => {
+  try { (window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.destroy?.(); } catch {}
+  try { document.documentElement?.removeAttribute?.('data-ag-prism-project-partitions'); } catch {}
+  try { document.getElementById?.('ag-prism-project-partitions-css')?.remove?.(); } catch {}
+  try { document.getElementById?.('ag-prism-part-hide-css')?.remove?.(); } catch {}
+  try {
+    document.querySelectorAll?.('.ag-prism-partitions-root,.ag-prism-part-add-btn,.ag-prism-part-menu-item,.ag-prism-part-menu-sep,.ag-prism-part-popup,.ag-prism-part-dialog-backdrop')?.forEach?.((n) => n.remove());
+  } catch {}
+  for (const k of ['__agPrismProjectPartitions', '__agPrismProjectPartitionsFactory', '__agPrismProjectPartitionsUi', '__agPrismProjectPartitionsHost']) {
+    try { delete window[k]; } catch {}
+    try { delete globalThis[k]; } catch {}
+  }
+  return { ok: true, status: 'off' };
+})()`;
+
 const CHANNEL_TEARDOWN_MAP = Object.freeze({
   omni: OMNI_REMOVE_EXPRESSION,
   sidebar: SIDEBAR_REMOVE_EXPRESSION,
@@ -442,6 +457,7 @@ const CHANNEL_TEARDOWN_MAP = Object.freeze({
   effortSlider: EFFORT_SLIDER_REMOVE_EXPRESSION,
   workbenchEnhancer: WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   contextMenu: CONTEXT_MENU_REMOVE_EXPRESSION,
+  projectPartitions: PROJECT_PARTITIONS_REMOVE_EXPRESSION,
 });
 
 module.exports = {
@@ -463,5 +479,6 @@ module.exports = {
   EFFORT_SLIDER_REMOVE_EXPRESSION,
   WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   CONTEXT_MENU_REMOVE_EXPRESSION,
+  PROJECT_PARTITIONS_REMOVE_EXPRESSION,
   CHANNEL_TEARDOWN_MAP,
 };
