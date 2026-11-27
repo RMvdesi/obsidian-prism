@@ -11,6 +11,7 @@ import { MetricsStore } from '../vendor/pulse-dashboard/sidecars/panel/store.mjs
 import { TrajectoryReader } from '../vendor/pulse-dashboard/sidecars/panel/trajectory-reader.mjs';
 import { trajectoryMetrics } from '../vendor/pulse-dashboard/sidecars/panel/metrics.mjs';
 import { ensureMetricsCollector } from '../src/daemon/telemetry-cache.mjs';
+import { createScopedRendererClient } from '../src/daemon/telemetry-scope.mjs';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -778,4 +779,26 @@ test('U9 Frontend: burstGen prevents same-session re-arm race (no early-clear or
   } finally {
     ctl.destroy();
   }
+});
+
+test('Scoped renderer trajectory cache keeps the newer refresh after an older response arrives', async () => {
+  const pending = [];
+  const client = createScopedRendererClient({
+    invokeRendererLsRpc: () => new Promise((resolve) => pending.push(resolve)),
+  }, { pageId: 'page-1' }, 'local');
+  const older = client.trajectory(CID_1);
+  const refresh = client.trajectory(CID_1, { force: true });
+  assert.equal(pending.length, 2);
+
+  const newerData = { version: 2, status: 'CASCADE_RUN_STATUS_IDLE' };
+  pending[1](newerData);
+  assert.equal(await refresh, newerData);
+
+  const olderData = { version: 1, status: 'CASCADE_RUN_STATUS_IDLE' };
+  pending[0](olderData);
+  assert.equal(await older, olderData);
+
+  const cached = client.trajectory(CID_1);
+  assert.equal(pending.length, 2);
+  assert.equal(await cached, newerData);
 });
