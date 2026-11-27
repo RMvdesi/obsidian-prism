@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OmniServer, OMNI_BINDING, isBlockedUncPath } from '../../vendor/omni-viewer/omni-server.mjs';
 import {
   buildRendererRpcExpression,
+  buildRendererRpcCallExpression,
   extractModelLabelMap,
   normalizeRendererUserStatus,
   normalizeRendererQuotaSummary,
@@ -316,6 +317,27 @@ function serializeJsonForEval(val) {
   );
 }
 
+// Large payloads (>4 KiB) use V8's fast C++ JSON.parse path instead of compiling megabytes of JS object literals on the renderer main thread.
+function formatJsonArgForEval(val) {
+  const safeJson = serializeJsonForEval(val);
+  return safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+}
+
+export function isSameSpaDocumentRoute(prevUrl, nextUrl) {
+  if (!prevUrl || !nextUrl || typeof prevUrl !== 'string' || typeof nextUrl !== 'string') return false;
+  try {
+    const a = new URL(prevUrl);
+    const b = new URL(nextUrl);
+    if (a.protocol !== b.protocol || a.host !== b.host || a.pathname !== b.pathname || a.hash !== b.hash) return false;
+    const raA = a.searchParams.get('remoteAuthority') || '';
+    const raB = b.searchParams.get('remoteAuthority') || '';
+    if (raA !== raB) return false;
+    return extractScopeKeyFromUri(prevUrl) === extractScopeKeyFromUri(nextUrl);
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeGitRemoteUrl(rawUrl) {
   const s = String(rawUrl || '').trim();
   if (!s) return '';
@@ -405,6 +427,98 @@ export function writeFileAtomicSync(targetPath, content, { mode = 0o600 } = {}) 
     try { fs.chmodSync(resolvedTarget, mode); } catch {}
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch {}
+    throw err;
+  }
+}
+
+async function assertNotSymlinkAsync(targetPath, label = 'path') {
+  try {
+    const st = await fs.promises.lstat(targetPath);
+    if (st.isSymbolicLink()) {
+      throw new Error(`Refusing symbolic link ${label}: ${targetPath}`);
+    }
+    return st;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+async function writeFileAtomicAsync(targetPath, content, { mode = 0o600, shouldAbort = null } = {}) {
+  const aborted = () => typeof shouldAbort === 'function' && Boolean(shouldAbort());
+  if (aborted()) return false;
+  const resolvedTarget = path.resolve(targetPath);
+  const dir = path.dirname(resolvedTarget);
+  const dirStat = await assertNotSymlinkAsync(dir, 'target directory');
+  if (dirStat && !dirStat.isDirectory()) {
+    throw new Error(`Target parent is not a directory: ${dir}`);
+  }
+  await assertNotSymlinkAsync(resolvedTarget, 'target file');
+  if (aborted()) return false;
+
+  const base = path.basename(resolvedTarget);
+  const tmpName = `.${base}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  const tmpPath = path.join(dir, tmpName);
+  let fh = null;
+  try {
+    fh = await fs.promises.open(tmpPath, 'wx', mode);
+    await fh.writeFile(content, 'utf8');
+    try { await fh.sync(); } catch {}
+    await fh.close();
+    fh = null;
+    try { await fs.promises.chmod(tmpPath, mode); } catch {}
+  } catch (err) {
+    if (fh !== null) {
+      try { await fh.close(); } catch {}
+    }
+    try { await fs.promises.unlink(tmpPath); } catch {}
+    throw err;
+  }
+
+  try {
+    await assertNotSymlinkAsync(dir, 'target directory');
+    await assertNotSymlinkAsync(resolvedTarget, 'target file');
+    if (aborted()) {
+      try { await fs.promises.unlink(tmpPath); } catch {}
+      return false;
+    }
+    let renamed = false;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (aborted()) {
+        try { await fs.promises.unlink(tmpPath); } catch {}
+        return false;
+      }
+      try {
+        await fs.promises.rename(tmpPath, resolvedTarget);
+        renamed = true;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (process.platform !== 'win32' || !['EBUSY', 'EPERM', 'EACCES', 'EEXIST'].includes(err?.code)) {
+          throw err;
+        }
+      }
+    }
+    if (!renamed) {
+      if (process.platform === 'win32' && ['EBUSY', 'EPERM', 'EACCES', 'EEXIST'].includes(lastErr?.code)) {
+        await assertNotSymlinkAsync(dir, 'target directory');
+        await assertNotSymlinkAsync(resolvedTarget, 'target file');
+        if (aborted()) {
+          try { await fs.promises.unlink(tmpPath); } catch {}
+          return false;
+        }
+        await fs.promises.copyFile(tmpPath, resolvedTarget);
+        try { await fs.promises.unlink(tmpPath); } catch {}
+      } else {
+        throw lastErr;
+      }
+    }
+    await assertNotSymlinkAsync(resolvedTarget, 'target file');
+    try { await fs.promises.chmod(resolvedTarget, mode); } catch {}
+    return true;
+  } catch (err) {
+    try { await fs.promises.unlink(tmpPath); } catch {}
     throw err;
   }
 }
@@ -2154,6 +2268,9 @@ export class PrismDaemon {
     this._logBytes = -1;
     this._ownerFileCache = null;
     this._safeSidebarFileCache = null;
+    this._clientFileExistsCache = new Map();
+    this._scopedTrajCache = new Map();
+    this._scopedTrajInFlight = new Map();
     this._lazyStore = null;
     this._lazyUsage = null;
     this._lazyLsClient = null;
@@ -2164,6 +2281,8 @@ export class PrismDaemon {
     this._usageDiskCache = null;
     this._usageCacheDirty = false;
     this._usageCacheTimer = null;
+    this._usageCacheFlushPromise = null;
+    this._usageCacheFlushEpoch = 0;
     this._storageHealthCache = null;
     this._storageHealthAt = 0;
     this._storageGuardStateFile = resolveStorageGuardStatePath(storageGuardStatePath);
@@ -2493,13 +2612,7 @@ export class PrismDaemon {
     }
     for (const entry of localEntries) {
       try {
-        const expr = buildRendererRpcExpression('CheckHostIdleState', {});
-        const evalRes = await entry.session.send(
-          'Runtime.evaluate',
-          { expression: expr, awaitPromise: true, returnByValue: true },
-          4000
-        );
-        const val = evalRes?.result?.value;
+        const val = await this._evalRendererRpcOnEntry(entry, 'CheckHostIdleState', {}, 4000, { useSend: true });
         if (val && val.ok && val.data && val.data.idle === false) {
           return val.data;
         }
@@ -2552,6 +2665,7 @@ export class PrismDaemon {
         break;
       }
     }
+    await this._usageCacheFlushPromise?.catch?.(() => {});
     this._flushUsageDiskCache();
     return { fetched, flushed: true };
   }
@@ -2735,14 +2849,13 @@ export class PrismDaemon {
               }
             }
             if (localEntry) {
-              const sigExpr = buildRendererRpcExpression('GetAllCascadeTrajectories', {
-                includeVisibleMainIds: true,
-                signalsOnly: true,
-              });
-              const evalRes = await localEntry.session
-                .send('Runtime.evaluate', { expression: sigExpr, awaitPromise: true, returnByValue: true }, 2500)
-                .catch(() => null);
-              const val = evalRes?.result?.value;
+              const val = await this._evalRendererRpcOnEntry(
+                localEntry,
+                'GetAllCascadeTrajectories',
+                { includeVisibleMainIds: true, signalsOnly: true },
+                2500,
+                { useSend: true }
+              ).catch(() => null);
               if (val && val.ok && val.data) {
                 const normSig = normalizeRendererSummaries(val.data);
                 if (Array.isArray(normSig?.visibleMainIds) && normSig.visibleMainIds.length > 0) {
@@ -4235,6 +4348,7 @@ export class PrismDaemon {
   }
 
   rebuildBundle({ forceReloadCdp = false, deferDiskCacheWrite = false } = {}) {
+    this._clientFileExistsCache?.clear?.();
     const cdpPath = path.join(this.rootDir, 'cdp.js');
     const nextSig = this._readCdpFileSig();
     if (forceReloadCdp || !this.cdp || (nextSig && nextSig !== this._cdpFileSig)) {
@@ -4320,12 +4434,29 @@ export class PrismDaemon {
     return this.injectExpr;
   }
 
-  _hasOmniClientFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'vendor', 'omni-viewer', 'omni-client.js'));
-    } catch {
-      return false;
+  _hasRootFileCached(relKey, relSegments, bypassCache = false) {
+    if (!bypassCache && this._clientFileExistsCache instanceof Map && this._clientFileExistsCache.has(relKey)) {
+      return this._clientFileExistsCache.get(relKey);
     }
+    let exists = false;
+    try {
+      if (typeof this.rootDir === 'string' && this.rootDir) {
+        const fullPath = Array.isArray(relSegments)
+          ? path.join(this.rootDir, ...relSegments)
+          : path.join(this.rootDir, String(relSegments || ''));
+        exists = fs.existsSync(fullPath);
+      }
+    } catch {
+      exists = false;
+    }
+    if (this._clientFileExistsCache instanceof Map) {
+      this._clientFileExistsCache.set(relKey, exists);
+    }
+    return exists;
+  }
+
+  _hasOmniClientFile(bypassCache = false) {
+    return this._hasRootFileCached('omni', ['vendor', 'omni-viewer', 'omni-client.js'], bypassCache);
   }
 
   _hasSafeV2SidebarClientFile() {
@@ -4971,12 +5102,8 @@ export class PrismDaemon {
     );
   }
 
-  _hasInlineDiffClientFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'vendor', 'inline-diff', 'inline-diff-client.js'));
-    } catch {
-      return false;
-    }
+  _hasInlineDiffClientFile(bypassCache = false) {
+    return this._hasRootFileCached('inlineDiff', ['vendor', 'inline-diff', 'inline-diff-client.js'], bypassCache);
   }
 
   _extractInlineDiffCodeHash(expr) {
@@ -5031,12 +5158,8 @@ export class PrismDaemon {
     );
   }
 
-  _hasWallpaperClientFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'vendor', 'wallpaper', 'wallpaper-client.js'));
-    } catch {
-      return false;
-    }
+  _hasWallpaperClientFile(bypassCache = false) {
+    return this._hasRootFileCached('wallpaper', ['vendor', 'wallpaper', 'wallpaper-client.js'], bypassCache);
   }
 
   _extractWallpaperCodeHash(expr) {
@@ -5098,12 +5221,8 @@ export class PrismDaemon {
     );
   }
 
-  _hasSuggesterClientFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'vendor', 'prompt-suggester', 'suggester-client.js'));
-    } catch {
-      return false;
-    }
+  _hasSuggesterClientFile(bypassCache = false) {
+    return this._hasRootFileCached('suggester', ['vendor', 'prompt-suggester', 'suggester-client.js'], bypassCache);
   }
 
   _extractSuggesterCodeHash(expr) {
@@ -5158,12 +5277,8 @@ export class PrismDaemon {
     );
   }
 
-  _hasPeriodicPickerFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'vendor', 'periodic-picker', 'periodic-picker.js'));
-    } catch {
-      return false;
-    }
+  _hasPeriodicPickerFile(bypassCache = false) {
+    return this._hasRootFileCached('periodicPicker', ['vendor', 'periodic-picker', 'periodic-picker.js'], bypassCache);
   }
 
   _isPeriodicPickerEnabled(cfgOverride = null) {
@@ -5390,12 +5505,8 @@ export class PrismDaemon {
   }
 
   // ── 第十通道：双桌宠按配置门控独立注入（mascot === 'off' 时零注入） ─────────────────
-  _hasMascotFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'dual-mascot-rig.js'));
-    } catch {
-      return false;
-    }
+  _hasMascotFile(bypassCache = false) {
+    return this._hasRootFileCached('mascot', ['dual-mascot-rig.js'], bypassCache);
   }
 
   _isMascotEnabled(cfgOverride = null) {
@@ -5561,12 +5672,8 @@ export class PrismDaemon {
   }
 
   // ── 第十二通道：Studio 首页仪表盘按配置门控独立延迟注入（homeLayout !== 'studio' 时零注入） ──
-  _hasHomeStudioFile() {
-    try {
-      return fs.existsSync(path.join(this.rootDir, 'home-studio-panel.js'));
-    } catch {
-      return false;
-    }
+  _hasHomeStudioFile(bypassCache = false) {
+    return this._hasRootFileCached('homeStudio', ['home-studio-panel.js'], bypassCache);
   }
 
   _isHomeStudioEnabled(cfgOverride = null) {
@@ -6329,10 +6436,63 @@ export class PrismDaemon {
       scopeKey: safeScope,
       ...(extraOpts?.strictEntry ? { strictEntry: true } : {}),
     };
+    const isSettledStatus = (st) =>
+      st === 1 ||
+      st === 'CASCADE_RUN_STATUS_1' ||
+      /IDLE|DONE|COMPLETED|CANCELLED|CANCELED|STOPPED|FAILED|ERROR/i.test(String(st || ''));
+    const buildSummaryStamp = (summary) => {
+      if (!summary || typeof summary !== 'object') return '';
+      const lm = summary.lastModifiedTime;
+      const lmStr =
+        typeof lm === 'string' || typeof lm === 'number' || typeof lm === 'bigint'
+          ? String(lm)
+          : lm && typeof lm === 'object'
+            ? `${lm.seconds ?? ''}:${lm.nanos ?? 0}`
+            : '';
+      const sc = summary.stepCount ?? summary.numTotalSteps ?? '';
+      return lmStr || sc !== '' ? `${lmStr}|${sc}` : '';
+    };
     return {
       server: { port: 0, csrf: '', pid: 0, mode: 'renderer-proxy', scopeKey: safeScope },
       call: (method, body = {}) => this._invokeRendererLsRpc(method, body, routeOpts),
-      trajectory: (cascadeId) => this._invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts),
+      trajectory: (cascadeId, trajOpts = null) => {
+        const cid = String(cascadeId || '').trim().toLowerCase();
+        if (!cid) return this._invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts);
+        const force = Boolean(trajOpts && typeof trajOpts === 'object' && trajOpts.force);
+        const sumStamp = buildSummaryStamp(trajOpts?.summary || null);
+        const cacheKey = `${safeScope}::${entry?.pageId || ''}::${cid}`;
+        if (!(this._scopedTrajCache instanceof Map)) this._scopedTrajCache = new Map();
+        if (!(this._scopedTrajInFlight instanceof Map)) this._scopedTrajInFlight = new Map();
+        const now = Date.now();
+        if (!force) {
+          const hit = this._scopedTrajCache.get(cacheKey);
+          if (hit) {
+            const stampChanged = Boolean(sumStamp && hit.sumStamp && sumStamp !== hit.sumStamp);
+            const ttl = isSettledStatus(hit.data?.status) ? 20000 : 4000;
+            if (!stampChanged && now - hit.at < ttl) {
+              return Promise.resolve(hit.data);
+            }
+          }
+          const inFlight = this._scopedTrajInFlight.get(cacheKey);
+          if (inFlight) return inFlight;
+        }
+        const req = this._invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts)
+          .then((data) => {
+            this._scopedTrajCache.delete(cacheKey);
+            this._scopedTrajCache.set(cacheKey, { at: Date.now(), data, sumStamp });
+            while (this._scopedTrajCache.size > 32) {
+              this._scopedTrajCache.delete(this._scopedTrajCache.keys().next().value);
+            }
+            return data;
+          })
+          .finally(() => {
+            if (this._scopedTrajInFlight.get(cacheKey) === req) {
+              this._scopedTrajInFlight.delete(cacheKey);
+            }
+          });
+        this._scopedTrajInFlight.set(cacheKey, req);
+        return req;
+      },
     };
   }
 
@@ -6347,6 +6507,34 @@ export class PrismDaemon {
     return 'local';
   }
 
+  async _evalRendererRpcOnEntry(entry, method, body = {}, timeoutMs = 12000, { useSend = false } = {}) {
+    const docGen = typeof entry.sidebarDocument === 'number' ? entry.sidebarDocument : 0;
+    const runEval = async (expression) => {
+      if (useSend) {
+        const evalRes = await entry.session.send(
+          'Runtime.evaluate',
+          { expression, awaitPromise: true, returnByValue: true },
+          timeoutMs
+        );
+        return evalRes?.result?.value;
+      }
+      return entry.session.evaluate(expression, true, timeoutMs);
+    };
+    if (entry._rendererRpcInstalledDocGen === docGen) {
+      const fastRes = await runEval(buildRendererRpcCallExpression(method, body));
+      if (!fastRes || fastRes.needInstall !== true) {
+        return fastRes;
+      }
+      entry._rendererRpcInstalledDocGen = -1;
+    }
+    const fullRes = await runEval(buildRendererRpcExpression(method, body));
+    const currentDocGen = typeof entry.sidebarDocument === 'number' ? entry.sidebarDocument : 0;
+    if (fullRes && fullRes.ok === true && currentDocGen === docGen) {
+      entry._rendererRpcInstalledDocGen = docGen;
+    }
+    return fullRes;
+  }
+
   async _invokeRendererLsRpc(method, body = {}, opts = null) {
     const asyncCtx = RPC_ROUTE_STORAGE.getStore();
     const routeOpts = opts || (asyncCtx && asyncCtx.daemon === this ? asyncCtx : null);
@@ -6354,12 +6542,11 @@ export class PrismDaemon {
     if (!candidates.length) {
       throw new Error('等待 Antigravity 主窗口连接');
     }
-    const expr = buildRendererRpcExpression(method, body);
     const timeoutMs = method === 'Probe' ? 2600 : 12000;
     let lastErr = null;
     for (const entry of candidates) {
       try {
-        const res = await entry.session.evaluate(expr, true, timeoutMs);
+        const res = await this._evalRendererRpcOnEntry(entry, method, body, timeoutMs, { useSend: false });
         if (!res || res.ok !== true) {
           lastErr = new Error(String(res?.error || 'renderer_ls_unavailable'));
           continue;
@@ -6923,7 +7110,7 @@ export class PrismDaemon {
       if (!this._usageCacheTimer) {
         this._usageCacheTimer = setTimeout(() => {
           this._usageCacheTimer = null;
-          this._flushUsageDiskCache();
+          void this._flushUsageDiskCacheAsync();
         }, 1500);
         this._usageCacheTimer.unref?.();
       }
@@ -6992,10 +7179,93 @@ export class PrismDaemon {
     if (!this._usageCacheTimer) {
       this._usageCacheTimer = setTimeout(() => {
         this._usageCacheTimer = null;
-        this._flushUsageDiskCache();
+        void this._flushUsageDiskCacheAsync();
       }, 1500);
       this._usageCacheTimer.unref?.();
     }
+  }
+
+  _buildUsageDiskCacheSerialized() {
+    // 1) 单 scope 限额 1200 条，按 lastModifiedSec 降序保留最新记录
+    const normalizedScopes = [];
+    let totalCount = 0;
+    for (const [rawScope, bucket] of this._usageDiskCache.entries()) {
+      const sc = normalizeUsageScopeKey(rawScope);
+      if (!sc || !(bucket instanceof Map) || bucket.size === 0) continue;
+      let entries = Array.from(bucket.entries());
+      entries.sort((a, b) => (b[1].lastModifiedSec || 0) - (a[1].lastModifiedSec || 0));
+      if (entries.length > USAGE_CACHE_MAX_PER_SCOPE) {
+        entries = entries.slice(0, USAGE_CACHE_MAX_PER_SCOPE);
+        this._usageDiskCache.set(sc, new Map(entries));
+      }
+      const newestSec = entries[0]?.[1]?.lastModifiedSec || 0;
+      normalizedScopes.push({ scope: sc, entries, newestSec });
+      totalCount += entries.length;
+    }
+    // 最多保留 USAGE_CACHE_MAX_SCOPES 个最活跃 scope
+    normalizedScopes.sort((a, b) => b.newestSec - a.newestSec);
+    if (normalizedScopes.length > USAGE_CACHE_MAX_SCOPES) {
+      normalizedScopes.length = USAGE_CACHE_MAX_SCOPES;
+    }
+
+    // 2) 跨 scope 总条目限额控制
+    if (totalCount > USAGE_CACHE_MAX_TOTAL_RECORDS) {
+      const allItems = [];
+      for (const s of normalizedScopes) {
+        for (const [k, v] of s.entries) allItems.push({ scope: s.scope, key: k, val: v });
+      }
+      allItems.sort((a, b) => (b.val.lastModifiedSec || 0) - (a.val.lastModifiedSec || 0));
+      const kept = allItems.slice(0, USAGE_CACHE_MAX_TOTAL_RECORDS);
+      const byScope = new Map();
+      for (const it of kept) {
+        let arr = byScope.get(it.scope);
+        if (!arr) {
+          arr = [];
+          byScope.set(it.scope, arr);
+        }
+        arr.push([it.key, it.val]);
+      }
+      normalizedScopes.length = 0;
+      for (const [sc, entries] of byScope.entries()) {
+        normalizedScopes.push({ scope: sc, entries, newestSec: entries[0]?.[1]?.lastModifiedSec || 0 });
+      }
+    }
+
+    // 3) 序列化并严格保证 <= 4 MB 上限（超限时按最老条目逐步裁剪）
+    normalizedScopes.sort((a, b) => (b.newestSec || 0) - (a.newestSec || 0));
+    const buildPayload = () => {
+      const scopesObj = Object.create(null);
+      for (const s of normalizedScopes) {
+        if (!s.entries.length) continue;
+        const bucketObj = Object.create(null);
+        for (const [k, v] of s.entries) bucketObj[k] = v;
+        scopesObj[s.scope] = bucketObj;
+      }
+      return JSON.stringify({ version: 2, scopes: scopesObj });
+    };
+    let serialized = buildPayload();
+    while (Buffer.byteLength(serialized, 'utf8') > USAGE_CACHE_MAX_BYTES) {
+      let trimmed = false;
+      for (const s of normalizedScopes) {
+        if (s.entries.length > 1) {
+          s.entries = s.entries.slice(0, Math.max(1, Math.floor(s.entries.length * 0.8)));
+          trimmed = true;
+        }
+      }
+      if (!trimmed) {
+        // 各 scope 均仅剩 <=1 条仍超 4MB 时，从最老 scope 起弹出尾部记录，避免死锁放弃落盘
+        for (let i = normalizedScopes.length - 1; i >= 0; i--) {
+          if (normalizedScopes[i].entries.length > 0) {
+            normalizedScopes[i].entries.pop();
+            trimmed = true;
+            break;
+          }
+        }
+      }
+      if (!trimmed) break;
+      serialized = buildPayload();
+    }
+    return Buffer.byteLength(serialized, 'utf8') <= USAGE_CACHE_MAX_BYTES ? serialized : null;
   }
 
   _flushUsageDiskCache() {
@@ -7003,8 +7273,9 @@ export class PrismDaemon {
       clearTimeout(this._usageCacheTimer);
       this._usageCacheTimer = null;
     }
-    if (!this._usageCacheDirty || !(this._usageDiskCache instanceof Map)) return;
+    if ((!this._usageCacheDirty && !this._usageCacheFlushPromise) || !(this._usageDiskCache instanceof Map)) return;
     this._usageCacheDirty = false;
+    this._usageCacheFlushEpoch = (this._usageCacheFlushEpoch || 0) + 1;
     try {
       const cacheFile = this._resolveUsageCachePath();
       const dir = path.dirname(cacheFile);
@@ -7013,90 +7284,55 @@ export class PrismDaemon {
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       }
       assertNotSymlinkSync(dir, 'usage cache directory');
-
-      // 1) 单 scope 限额 1200 条，按 lastModifiedSec 降序保留最新记录
-      const normalizedScopes = [];
-      let totalCount = 0;
-      for (const [rawScope, bucket] of this._usageDiskCache.entries()) {
-        const sc = normalizeUsageScopeKey(rawScope);
-        if (!sc || !(bucket instanceof Map) || bucket.size === 0) continue;
-        let entries = Array.from(bucket.entries());
-        entries.sort((a, b) => (b[1].lastModifiedSec || 0) - (a[1].lastModifiedSec || 0));
-        if (entries.length > USAGE_CACHE_MAX_PER_SCOPE) {
-          entries = entries.slice(0, USAGE_CACHE_MAX_PER_SCOPE);
-          this._usageDiskCache.set(sc, new Map(entries));
-        }
-        const newestSec = entries[0]?.[1]?.lastModifiedSec || 0;
-        normalizedScopes.push({ scope: sc, entries, newestSec });
-        totalCount += entries.length;
-      }
-      // 最多保留 USAGE_CACHE_MAX_SCOPES 个最活跃 scope
-      normalizedScopes.sort((a, b) => b.newestSec - a.newestSec);
-      if (normalizedScopes.length > USAGE_CACHE_MAX_SCOPES) {
-        normalizedScopes.length = USAGE_CACHE_MAX_SCOPES;
-      }
-
-      // 2) 跨 scope 总条目限额控制
-      if (totalCount > USAGE_CACHE_MAX_TOTAL_RECORDS) {
-        const allItems = [];
-        for (const s of normalizedScopes) {
-          for (const [k, v] of s.entries) allItems.push({ scope: s.scope, key: k, val: v });
-        }
-        allItems.sort((a, b) => (b.val.lastModifiedSec || 0) - (a.val.lastModifiedSec || 0));
-        const kept = allItems.slice(0, USAGE_CACHE_MAX_TOTAL_RECORDS);
-        const byScope = new Map();
-        for (const it of kept) {
-          let arr = byScope.get(it.scope);
-          if (!arr) {
-            arr = [];
-            byScope.set(it.scope, arr);
-          }
-          arr.push([it.key, it.val]);
-        }
-        normalizedScopes.length = 0;
-        for (const [sc, entries] of byScope.entries()) {
-          normalizedScopes.push({ scope: sc, entries, newestSec: entries[0]?.[1]?.lastModifiedSec || 0 });
-        }
-      }
-
-      // 3) 序列化并严格保证 <= 4 MB 上限（超限时按最老条目逐步裁剪）
-      normalizedScopes.sort((a, b) => (b.newestSec || 0) - (a.newestSec || 0));
-      const buildPayload = () => {
-        const scopesObj = Object.create(null);
-        for (const s of normalizedScopes) {
-          if (!s.entries.length) continue;
-          const bucketObj = Object.create(null);
-          for (const [k, v] of s.entries) bucketObj[k] = v;
-          scopesObj[s.scope] = bucketObj;
-        }
-        return JSON.stringify({ version: 2, scopes: scopesObj });
-      };
-      let serialized = buildPayload();
-      while (Buffer.byteLength(serialized, 'utf8') > USAGE_CACHE_MAX_BYTES) {
-        let trimmed = false;
-        for (const s of normalizedScopes) {
-          if (s.entries.length > 1) {
-            s.entries = s.entries.slice(0, Math.max(1, Math.floor(s.entries.length * 0.8)));
-            trimmed = true;
-          }
-        }
-        if (!trimmed) {
-          // 各 scope 均仅剩 <=1 条仍超 4MB 时，从最老 scope 起弹出尾部记录，避免死锁放弃落盘
-          for (let i = normalizedScopes.length - 1; i >= 0; i--) {
-            if (normalizedScopes[i].entries.length > 0) {
-              normalizedScopes[i].entries.pop();
-              trimmed = true;
-              break;
-            }
-          }
-        }
-        if (!trimmed) break;
-        serialized = buildPayload();
-      }
-      if (Buffer.byteLength(serialized, 'utf8') <= USAGE_CACHE_MAX_BYTES) {
+      const serialized = this._buildUsageDiskCacheSerialized();
+      if (serialized !== null) {
         writeFileAtomicSync(cacheFile, serialized, { mode: 0o600 });
       }
     } catch {}
+  }
+
+  _flushUsageDiskCacheAsync() {
+    if (this._usageCacheTimer) {
+      clearTimeout(this._usageCacheTimer);
+      this._usageCacheTimer = null;
+    }
+    if (this._usageCacheFlushPromise) {
+      return this._usageCacheFlushPromise;
+    }
+    if (!this._usageCacheDirty || !(this._usageDiskCache instanceof Map)) return Promise.resolve();
+    this._usageCacheDirty = false;
+    const epoch = (this._usageCacheFlushEpoch = (this._usageCacheFlushEpoch || 0) + 1);
+    const cacheFile = this._resolveUsageCachePath();
+    const dir = path.dirname(cacheFile);
+    let serialized = null;
+    try {
+      serialized = this._buildUsageDiskCacheSerialized();
+    } catch {
+      return Promise.resolve();
+    }
+    if (serialized === null) return Promise.resolve();
+    const task = (async () => {
+      try {
+        await assertNotSymlinkAsync(cacheFile, 'usage cache file');
+        await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
+        await assertNotSymlinkAsync(dir, 'usage cache directory');
+        if (epoch !== this._usageCacheFlushEpoch) return;
+        await writeFileAtomicAsync(cacheFile, serialized, {
+          mode: 0o600,
+          shouldAbort: () => epoch !== this._usageCacheFlushEpoch,
+        });
+      } catch {
+      } finally {
+        if (this._usageCacheFlushPromise === task) {
+          this._usageCacheFlushPromise = null;
+        }
+        if (this._usageCacheDirty && this._usageDiskCache instanceof Map) {
+          void this._flushUsageDiskCacheAsync();
+        }
+      }
+    })();
+    this._usageCacheFlushPromise = task;
+    return task;
   }
 
   async fetchUsageRollupBatch(rawItems, opts = {}) {
@@ -7243,7 +7479,14 @@ export class PrismDaemon {
             const realStepCount = Math.max(stepCount, Number(fullTraj?.numTotalSteps || 0), allSteps.length);
             const totalGm = Math.max(Number(fullTraj?.numTotalGeneratorMetadata || 0), allGms.length);
             const firstStepTs = allSteps.find((s) => s?.metadata?.createdAt)?.metadata?.createdAt;
-            const lastStepTs = [...allSteps].reverse().find((s) => s?.metadata?.completedAt || s?.metadata?.createdAt);
+            let lastStepTs = null;
+            for (let si = allSteps.length - 1; si >= 0; si -= 1) {
+              const stepMeta = allSteps[si]?.metadata;
+              if (stepMeta && (stepMeta.completedAt || stepMeta.createdAt)) {
+                lastStepTs = allSteps[si];
+                break;
+              }
+            }
             const realLastModSec =
               lastModifiedSec ||
               (lastStepTs ? Math.floor((Date.parse(lastStepTs.metadata.completedAt || lastStepTs.metadata.createdAt) || 0) / 1000) : 0);
@@ -8787,12 +9030,13 @@ export class PrismDaemon {
       const result = await this.executeRepoAction({ ...inputPayload, action });
       if (reqId !== null) {
         const safeId = Number(reqId) | 0;
-        const jsonRes = serializeJsonForEval(result);
+        const payloadExpr = formatJsonArgForEval(result);
         const expr = `(() => {
+          const r = ${payloadExpr};
           if (window.__agPrismRepoBridge && typeof window.__agPrismRepoBridge.resolve === 'function') {
-            window.__agPrismRepoBridge.resolve(${safeId}, ${jsonRes});
+            window.__agPrismRepoBridge.resolve(${safeId}, r);
           } else if (typeof window.__agPrismRepoResolve === 'function') {
-            window.__agPrismRepoResolve(${safeId}, ${jsonRes});
+            window.__agPrismRepoResolve(${safeId}, r);
           }
         })()`;
         const evalParams = { expression: expr, returnByValue: true };
@@ -8843,7 +9087,7 @@ export class PrismDaemon {
         }
       }
       const safeId = Number(reqId) | 0;
-      const expr = `window.__agPrismMetricsResolve && window.__agPrismMetricsResolve(${safeId}, ${serializeJsonForEval(result)})`;
+      const expr = `window.__agPrismMetricsResolve && window.__agPrismMetricsResolve(${safeId}, ${formatJsonArgForEval(result)})`;
       const evalParams = { expression: expr, returnByValue: true };
       if (executionContextId) evalParams.contextId = executionContextId;
       await entry.session.send('Runtime.evaluate', evalParams).catch(() => {});
@@ -8960,8 +9204,7 @@ export class PrismDaemon {
 
       if (!entry.session.closed) {
         const safeId = Number(reqId) | 0;
-        const safeJson = serializeJsonForEval(result);
-        const payloadExpr = safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+        const payloadExpr = formatJsonArgForEval(result);
         const resolveExpr = `window.__agPrismThoughtResolve && window.__agPrismThoughtResolve(${safeId}, ${payloadExpr})`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (executionContextId) evalParams.contextId = executionContextId;
@@ -9021,7 +9264,7 @@ export class PrismDaemon {
       }
       if (!entry.session.closed) {
         const safeId = Number(reqId) | 0;
-        const resolveExpr = `window.__agPrismUsageResolve && window.__agPrismUsageResolve(${safeId}, ${serializeJsonForEval(result)})`;
+        const resolveExpr = `window.__agPrismUsageResolve && window.__agPrismUsageResolve(${safeId}, ${formatJsonArgForEval(result)})`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (executionContextId) evalParams.contextId = executionContextId;
         await entry.session.send('Runtime.evaluate', evalParams).catch(() => {});
@@ -9089,7 +9332,7 @@ export class PrismDaemon {
       }
       // 异步返回前再次复检文档代际 docGen 与执行上下文仍有效，严防跨导航回注
       if (isCurrentContext()) {
-        const resolveExpr = `window.__agPrismInlineDiffResolve?.(${reqId}, ${serializeJsonForEval(resp)})`;
+        const resolveExpr = `window.__agPrismInlineDiffResolve?.(${reqId}, ${formatJsonArgForEval(resp)})`;
         await entry.session
           .send('Runtime.evaluate', {
             expression: resolveExpr,
@@ -9131,7 +9374,7 @@ export class PrismDaemon {
       }
       if (!entry.session.closed) {
         const safeId = Number(reqId) | 0;
-        const jsonRes = serializeJsonForEval(result);
+        const jsonRes = formatJsonArgForEval(result);
         const resolveExpr = `(() => { const r = ${jsonRes}; const b = window.__agPrismOmniBridge; if (b && typeof b.resolve === 'function') b.resolve(${safeId}, r); if (typeof window.__agPrismOmniResolve === 'function' && (!b || window.__agPrismOmniResolve !== b.resolve)) window.__agPrismOmniResolve(${safeId}, r); })()`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (executionContextId) evalParams.contextId = executionContextId;
@@ -9192,7 +9435,7 @@ export class PrismDaemon {
         // 异常不把宿主栈、命令参数或本地路径回传到渲染进程。
       }
       if (isCurrentHost()) {
-        const jsonRes = serializeJsonForEval(result);
+        const jsonRes = formatJsonArgForEval(result);
         const resolveExpr = `(() => { const r = ${jsonRes}; const b = window.__agPrismSidebarBridge; if (b && typeof b.resolve === 'function') b.resolve(${safeId}, r); if (typeof window.__agPrismSidebarResolve === 'function' && (!b || window.__agPrismSidebarResolve !== b.resolve)) window.__agPrismSidebarResolve(${safeId}, r); })()`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (executionContextId) evalParams.contextId = executionContextId;
@@ -9285,8 +9528,7 @@ export class PrismDaemon {
 
       if (isCurrentContext()) {
         const safeId = Number(reqId) | 0;
-        const safeJson = serializeJsonForEval(result);
-        const payloadExpr = safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+        const payloadExpr = formatJsonArgForEval(result);
         const resolveExpr = `(() => { const r = ${payloadExpr}; if (typeof window.__agPrismWallpaperResolve === 'function') window.__agPrismWallpaperResolve(${safeId}, r); else if (window.__agPrismWallpaperBridge && typeof window.__agPrismWallpaperBridge.resolve === 'function') window.__agPrismWallpaperBridge.resolve(${safeId}, r); })()`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (typeof executionContextId === 'number') evalParams.contextId = executionContextId;
@@ -9437,8 +9679,7 @@ export class PrismDaemon {
 
       if (isCurrentContext()) {
         const safeId = Number(reqId) | 0;
-        const safeJson = serializeJsonForEval(result);
-        const payloadExpr = safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+        const payloadExpr = formatJsonArgForEval(result);
         const resolveExpr = `(() => { const r = ${payloadExpr}; if (typeof window.__agPrismSuggesterResolve === 'function') window.__agPrismSuggesterResolve(${safeId}, r); else if (window.__agPrismSuggesterBridge && typeof window.__agPrismSuggesterBridge.resolve === 'function') window.__agPrismSuggesterBridge.resolve(${safeId}, r); })()`;
         const evalParams = { expression: resolveExpr, returnByValue: true };
         if (typeof executionContextId === 'number') evalParams.contextId = executionContextId;
@@ -9555,6 +9796,7 @@ export class PrismDaemon {
       sidebarVerifiedDocument: -1,
       sidebarHostContextId: null,
       sidebarDocument: 0,
+      _rendererRpcInstalledDocGen: -1,
       lastOmniExpr: '',
       lastVerifyAt: 0,
       healthyStreak: 0,
@@ -9590,6 +9832,7 @@ export class PrismDaemon {
         entry.sidebarVerifiedDocument = -1;
         entry.sidebarHostContextId = null;
         entry.sidebarDocument += 1;
+        entry._rendererRpcInstalledDocGen = -1;
         entry.inlineDiffSkipped = false;
         entry.wallpaperSkipped = false;
       };
@@ -9857,19 +10100,20 @@ export class PrismDaemon {
     const thoughtNeedsSync = thoughtEnabled
       ? !entry.thoughtScriptId || !entry.thoughtMounted
       : Boolean(entry.thoughtScriptId || entry.thoughtMounted);
-    const inlineDiffAvailable = Boolean(this.inlineDiffExpr || this._hasInlineDiffClientFile());
+    const inlineDiffAvailable = Boolean(this.inlineDiffExpr || this._hasInlineDiffClientFile(force));
     const inlineDiffNeedsSync = inlineDiffAvailable
       ? !entry.inlineDiffSkipped && (!entry.inlineDiffScriptId || !entry.inlineDiffMounted)
       : Boolean(entry.inlineDiffScriptId || entry.inlineDiffMounted);
-    const wallpaperAvailable = Boolean(this.wallpaperExpr || this._hasWallpaperClientFile());
+    const wallpaperAvailable = Boolean(this.wallpaperExpr || this._hasWallpaperClientFile(force));
     const wallpaperNeedsSync = wallpaperAvailable
       ? !entry.wallpaperSkipped && (!entry.wallpaperScriptId || !entry.wallpaperMounted)
       : Boolean(entry.wallpaperScriptId || entry.wallpaperMounted);
-    const suggesterAvailable = Boolean(this.suggesterExpr || this._hasSuggesterClientFile());
+    const suggesterAvailable = Boolean(this.suggesterExpr || this._hasSuggesterClientFile(force));
     const suggesterNeedsSync = suggesterAvailable
       ? !entry.suggesterSkipped && (!entry.suggesterScriptId || !entry.suggesterMounted)
       : Boolean(entry.suggesterScriptId || entry.suggesterMounted);
-    const periodicPickerAvailable = this._isPeriodicPickerEnabled(cfg) && this._hasPeriodicPickerFile();
+    const periodicPickerAvailable =
+      this._isPeriodicPickerEnabled(cfg) && Boolean(this.periodicPickerExpr || this._hasPeriodicPickerFile(force));
     const expectedPeriodicEarlySig =
       periodicPickerAvailable && this.periodicPickerExpr
         ? `${this._getPeriodicPickerCfgSig(cfg)}:${this._getPeriodicPickerExprHash(this.periodicPickerExpr)}`
@@ -9879,7 +10123,8 @@ export class PrismDaemon {
         !entry.periodicPickerMounted ||
         Boolean(expectedPeriodicEarlySig && (entry.lastPeriodicPickerSig !== expectedPeriodicEarlySig || entry.lastPeriodicPickerScriptSig !== expectedPeriodicEarlySig))
       : Boolean(entry.periodicPickerScriptId || entry.periodicPickerMounted);
-    const mascotAvailable = this._isMascotEnabled(cfg) && this._hasMascotFile();
+    const mascotAvailable =
+      this._isMascotEnabled(cfg) && Boolean(this.mascotExpr || this._hasMascotFile(force));
     const expectedMascotEarlySig =
       mascotAvailable && this.mascotExpr
         ? `${this._getMascotCfgSig(cfg)}:${this._getMascotExprHash(this.mascotExpr)}`
@@ -9889,7 +10134,8 @@ export class PrismDaemon {
         !entry.mascotMounted ||
         Boolean(expectedMascotEarlySig && (entry.lastMascotSig !== expectedMascotEarlySig || entry.lastMascotScriptSig !== expectedMascotEarlySig))
       : Boolean(entry.mascotScriptId || entry.mascotMounted);
-    const homeStudioAvailable = this._isHomeStudioEnabled(cfg) && this._hasHomeStudioFile();
+    const homeStudioAvailable =
+      this._isHomeStudioEnabled(cfg) && Boolean(this.homeStudioExpr || this._hasHomeStudioFile(force));
     const expectedHomeStudioEarlySig =
       homeStudioAvailable && this.homeStudioExpr
         ? `${this._getHomeStudioCfgSig(cfg)}:${this._getHomeStudioExprHash(this.homeStudioExpr)}`
@@ -10922,12 +11168,15 @@ export class PrismDaemon {
               }
             }
             if (typeof info.url === 'string' && info.url && info.url !== existing.url) {
+              const sameSpaRoute = existing.healthyStreak > 0 && isSameSpaDocumentRoute(existing.url, info.url);
               existing.url = info.url;
-              existing.detectedScopeKey = '';
-              existing._usageScopeVerified = false;
-              existing.verifyDirty = true;
-              existing.healthyStreak = 0;
-              this.scheduleImmediateTick(45);
+              if (!sameSpaRoute) {
+                existing.detectedScopeKey = '';
+                existing._usageScopeVerified = false;
+                existing.verifyDirty = true;
+                existing.healthyStreak = 0;
+                this.scheduleImmediateTick(45);
+              }
             }
             return;
           }
@@ -11917,6 +12166,12 @@ export class PrismDaemon {
     this._lazyLsClient = null;
     this._backendSummariesCache = null;
     this._backendSummariesAt = 0;
+    this._scopedTrajCache?.clear?.();
+    this._scopedTrajInFlight?.clear?.();
+    this._clientFileExistsCache?.clear?.();
+    while (this._usageCacheFlushPromise) {
+      await this._usageCacheFlushPromise.catch(() => {});
+    }
     this._usageDiskCache = null;
     this._lazyThoughtService = null;
     if (this.omniServer) {

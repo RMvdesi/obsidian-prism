@@ -13,6 +13,7 @@ import {
   PrismDaemon,
   discoverActivePort,
   isPluginEnabledInHostConfig,
+  isSameSpaDocumentRoute,
 } from '../sidecars/daemon/main.mjs';
 import {
   UpdateService,
@@ -1505,5 +1506,408 @@ test('SetFix #5/#6/#7b/#7d: legacy alias normalization, thoughtView off removal,
       delete require.cache[require.resolve(injectPath)];
     } catch {}
     snap.cleanup();
+  }
+});
+
+test('Perf audit IPC-01..IPC-06: cached renderer RPC dispatcher, JSON.parse fast-path bindings, async usage disk flush, renderer-proxy discovery reuse, scoped trajectory cache, SPA tab URL stability, and 0-reflow waveform loop', async () => {
+  const {
+    buildRendererRpcExpression,
+    buildRendererRpcCallExpression,
+    RENDERER_RPC_DISPATCHER_VERSION,
+  } = await import('../vendor/pulse-dashboard/sidecars/panel/renderer-rpc-adapter.mjs');
+  const { AntigravityClient } = await import('../vendor/pulse-dashboard/sidecars/panel/client.mjs');
+
+  // 1) IPC-01: Renderer RPC expression installs versioned non-enumerable dispatcher & fast call shrinks payload >99%
+  const fullProbeExpr = buildRendererRpcExpression('Probe', {});
+  const fastProbeExpr = buildRendererRpcCallExpression('Probe', {});
+  assert.ok(Buffer.byteLength(fullProbeExpr, 'utf8') > 35000, 'Full installer expression should carry full dispatcher');
+  assert.ok(Buffer.byteLength(fastProbeExpr, 'utf8') < 350, `Fast call expression must stay tiny (<350 B), got ${Buffer.byteLength(fastProbeExpr, 'utf8')}`);
+  assert.equal(fullProbeExpr.includes('q.shift()'), false, 'React fiber BFS must use O(1) cursor instead of O(N^2) q.shift()');
+
+  const fakeLs = {
+    getUserStatus: async () => ({ userStatus: { email: 'a@b.c' } }),
+    getCascadeTrajectory: async () => ({ status: 1, numTotalSteps: 2, trajectory: { steps: [], generatorMetadata: [] } }),
+  };
+  const fakeRoot = { __reactFiber$1: { memoizedProps: { value: fakeLs }, child: null, sibling: null } };
+  let busyQsaCalls = 0;
+  let busyQsCalls = 0;
+  const vmSandbox = {
+    document: {
+      getElementById: (id) => (id === 'root' ? fakeRoot : null),
+      querySelectorAll: (sel) => {
+        if (String(sel || '').includes('data-ag-sub-running')) busyQsaCalls += 1;
+        return [];
+      },
+      querySelector: (sel) => {
+        if (String(sel || '').includes('data-ag-sub-running')) busyQsCalls += 1;
+        return null;
+      },
+    },
+    window: {},
+    globalThis: {},
+  };
+  vmSandbox.window = vmSandbox;
+  vmSandbox.globalThis = vmSandbox;
+  vm.createContext(vmSandbox);
+
+  // Fast call before install cleanly signals needInstall
+  const beforeInstall = await vm.runInContext(fastProbeExpr, vmSandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(beforeInstall)), { ok: false, needInstall: true });
+
+  // Full call installs non-enumerable dispatcher and succeeds
+  const afterInstall = await vm.runInContext(fullProbeExpr, vmSandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(afterInstall)), { ok: true, data: { available: true } });
+  assert.equal(vmSandbox.__agPrismRendererRpc.__v, RENDERER_RPC_DISPATCHER_VERSION);
+  assert.equal(Object.keys(vmSandbox).includes('__agPrismRendererRpc'), false, 'Installed dispatcher must be non-enumerable');
+
+  // Subsequent fast call executes directly with tiny payload
+  const fastHit = await vm.runInContext(fastProbeExpr, vmSandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(fastHit)), { ok: true, data: { available: true } });
+
+  // CheckHostIdleState must perform a single querySelector probe and skip querySelectorAll when idle
+  busyQsaCalls = 0;
+  busyQsCalls = 0;
+  const idleRes = await vm.runInContext(buildRendererRpcCallExpression('CheckHostIdleState', {}), vmSandbox);
+  assert.equal(idleRes.ok, true);
+  assert.equal(idleRes.data.idle, true);
+  assert.equal(busyQsCalls, 1, 'CheckHostIdleState should probe busySel via document.querySelector once');
+  assert.equal(busyQsaCalls, 0, 'CheckHostIdleState must skip busySel document.querySelectorAll when querySelector returns null');
+
+  // Daemon _evalRendererRpcOnEntry uses full expr once, then fast call, and self-heals on needInstall / docGen bump
+  const tmpDir = mkTempDir('prism-ipc-audit-');
+  try {
+    const usageCachePath = path.join(tmpDir, 'usage-cache.json');
+    const daemon = new PrismDaemon({
+      rootDir: ROOT,
+      usageCachePath,
+      bundleCachePath: false,
+      enableAutoUpdateTimer: false,
+      enableStorageGuardTimer: false,
+      silent: true,
+    });
+    const sentExprs = [];
+    const vmEntry = {
+      wsUrl: 'ws://127.0.0.1:9999/page/vm',
+      pageId: 'page-vm',
+      url: 'https://127.0.0.1:8798/c/11111111-1111-4111-8111-111111111111?tab=file__a',
+      title: 'Antigravity',
+      sidebarDocument: 0,
+      _rendererRpcInstalledDocGen: -1,
+      healthyStreak: 3,
+      verifyDirty: false,
+      _usageScopeVerified: true,
+      session: {
+        closed: false,
+        async evaluate(expr) {
+          sentExprs.push(expr);
+          return vm.runInContext(expr, vmSandbox);
+        },
+        async send(method, params) {
+          if (method === 'Runtime.evaluate') {
+            sentExprs.push(params.expression);
+            return { result: { value: await vm.runInContext(params.expression, vmSandbox) } };
+          }
+          return {};
+        },
+        close() { this.closed = true; },
+      },
+    };
+    const r1 = await daemon._evalRendererRpcOnEntry(vmEntry, 'Probe', {}, 2000);
+    const r2 = await daemon._evalRendererRpcOnEntry(vmEntry, 'Probe', {}, 2000);
+    assert.equal(r1.ok, true);
+    assert.equal(r2.ok, true);
+    assert.ok(sentExprs[0].length > 35000, 'First RPC on fresh entry installs dispatcher');
+    assert.ok(sentExprs[1].length < 350, 'Second RPC on same document uses tiny cached call');
+    // Simulate context wipe without docGen change -> self-heals via needInstall fallback
+    vm.runInContext('delete globalThis.__agPrismRendererRpc', vmSandbox);
+    assert.equal(vm.runInContext('typeof globalThis.__agPrismRendererRpc', vmSandbox), 'undefined');
+    const r3 = await daemon._evalRendererRpcOnEntry(vmEntry, 'Probe', {}, 2000);
+    assert.equal(r3.ok, true);
+    assert.ok(sentExprs[2].length < 350 && sentExprs[3].length > 35000, 'Must transparently fall back and reinstall on needInstall');
+
+    // 2) IPC-02: Large binding responses (>4096 B) use JSON.parse fast-path on USAGE/METRICS/OMNI
+    const bigEvalReplies = [];
+    const bindingEntry = {
+      wsUrl: 'ws://127.0.0.1:9999/page/bind',
+      pageId: 'page-bind',
+      mainFrameId: 'F1',
+      sidebarHostVerified: true,
+      sidebarDocument: 0,
+      sidebarVerifiedDocument: 0,
+      sidebarHostContextId: 1,
+      contextFrames: new Map([[1, { frameId: 'F1', isDefault: true, type: 'default', docGen: 0 }]]),
+      session: {
+        closed: false,
+        async send(method, params) {
+          if (method === 'Runtime.evaluate') bigEvalReplies.push(params.expression);
+          return { result: { value: true } };
+        },
+      },
+    };
+    const bigPayload = { connection: 'live', speed: { note: 'x'.repeat(6000) }, groups: [] };
+    daemon._customMetricsProvider = async () => bigPayload;
+    await daemon.handleBindingCall(bindingEntry, {
+      name: '__agPrismMetricsCall',
+      payload: JSON.stringify({ id: 7, input: {} }),
+      executionContextId: 1,
+    });
+    assert.equal(bigEvalReplies.length, 1);
+    assert.ok(bigEvalReplies[0].includes('JSON.parse('), 'Large METRICS_BINDING response (>4 KiB) must use JSON.parse fast-path');
+    // Verify evaluated JS produces identical payload object
+    let resolvedMetrics = null;
+    vm.runInNewContext(bigEvalReplies[0], {
+      window: { __agPrismMetricsResolve: (_id, data) => { resolvedMetrics = data; } },
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(resolvedMetrics)), bigPayload);
+
+    // 3) IPC-03: _flushUsageDiskCacheAsync persists cache asynchronously without blocking,
+    // aborts cleanly if superseded by a synchronous flush, and drains mid-flight dirty writes even when running===false
+    const cid = '11111111-1111-4111-8111-111111111111';
+    daemon._putUsageDiskCache(
+      cid,
+      5,
+      1763620000,
+      { cascadeId: cid, stepCount: 5, lastModifiedSec: 1763620000, days: { '2026-11-26': { calls: 1, total: 1000 } } },
+      'local'
+    );
+    await daemon._flushUsageDiskCacheAsync();
+    assert.equal(fs.existsSync(usageCachePath), true, 'Async usage cache flush must persist cache file');
+    const persistedUsage = JSON.parse(fs.readFileSync(usageCachePath, 'utf8'));
+    assert.equal(persistedUsage.version, 2);
+    assert.equal(persistedUsage.scopes.local[cid].stepCount, 5);
+
+    // 3a) Stale in-flight async flush superseded by sync _flushUsageDiskCache must NOT overwrite newer ledger
+    const origChmod = fs.promises.chmod;
+    let releasePause = null;
+    let reachedPause = null;
+    const pausedOnce = new Promise((r) => { reachedPause = r; });
+    let armPause = true;
+    fs.promises.chmod = async (target, mode) => {
+      if (armPause && String(target).includes('usage-cache.json') && String(target).endsWith('.tmp')) {
+        armPause = false;
+        reachedPause();
+        await new Promise((r) => { releasePause = r; });
+      }
+      return origChmod.call(fs.promises, target, mode);
+    };
+    try {
+      daemon._putUsageDiskCache(
+        cid,
+        10,
+        1763620010,
+        { cascadeId: cid, stepCount: 10, lastModifiedSec: 1763620010, days: { '2026-11-26': { calls: 2, total: 2000 } } },
+        'local'
+      );
+      const staleAsyncFlush = daemon._flushUsageDiskCacheAsync();
+      await pausedOnce;
+      // While stale S1 async flush is paused before rename, write newer S2 synchronously
+      daemon._putUsageDiskCache(
+        cid,
+        99,
+        1763620099,
+        { cascadeId: cid, stepCount: 99, lastModifiedSec: 1763620099, days: { '2026-11-26': { calls: 9, total: 9000 } } },
+        'local'
+      );
+      daemon._flushUsageDiskCache();
+      assert.equal(JSON.parse(fs.readFileSync(usageCachePath, 'utf8')).scopes.local[cid].stepCount, 99);
+      releasePause();
+      await staleAsyncFlush;
+      assert.equal(
+        JSON.parse(fs.readFileSync(usageCachePath, 'utf8')).scopes.local[cid].stepCount,
+        99,
+        'Aborted stale async flush must never overwrite newer synchronous usage cache'
+      );
+      const leftoverTmp = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.tmp'));
+      assert.equal(leftoverTmp.length, 0, 'Aborted async flush must unlink its temp file');
+
+      // 3b) Dirty write queued mid-flush with daemon.running === false must still drain cleanly
+      assert.equal(daemon.running, false);
+      let releasePause2 = null;
+      let reachedPause2 = null;
+      const pausedTwice = new Promise((r) => { reachedPause2 = r; });
+      let armPause2 = true;
+      fs.promises.chmod = async (target, mode) => {
+        if (armPause2 && String(target).includes('usage-cache.json') && String(target).endsWith('.tmp')) {
+          armPause2 = false;
+          reachedPause2();
+          await new Promise((r) => { releasePause2 = r; });
+        }
+        return origChmod.call(fs.promises, target, mode);
+      };
+      daemon._putUsageDiskCache(
+        cid,
+        101,
+        1763620101,
+        { cascadeId: cid, stepCount: 101, lastModifiedSec: 1763620101, days: { '2026-11-26': { calls: 10, total: 10000 } } },
+        'local'
+      );
+      const firstFlush = daemon._flushUsageDiskCacheAsync();
+      await pausedTwice;
+      daemon._putUsageDiskCache(
+        cid,
+        202,
+        1763620202,
+        { cascadeId: cid, stepCount: 202, lastModifiedSec: 1763620202, days: { '2026-11-26': { calls: 20, total: 20000 } } },
+        'local'
+      );
+      // Simulates 1.5s timer firing mid-flight (returns existing promise without clearing dirty)
+      assert.equal(daemon._flushUsageDiskCacheAsync(), firstFlush);
+      releasePause2();
+      await firstFlush;
+      while (daemon._usageCacheFlushPromise) {
+        await daemon._usageCacheFlushPromise;
+      }
+      assert.equal(daemon._usageCacheDirty, false);
+      assert.equal(
+        JSON.parse(fs.readFileSync(usageCachePath, 'utf8')).scopes.local[cid].stepCount,
+        202,
+        'Queued dirty update during async flush must still persist when daemon.running === false'
+      );
+    } finally {
+      fs.promises.chmod = origChmod;
+    }
+
+    // 3c) IPC-05: isSameSpaDocumentRoute handles Electron custom-scheme host & hash differences
+    assert.equal(
+      isSameSpaDocumentRoute('vscode-file://vscode-app/index.html?tab=a', 'vscode-file://vscode-app/index.html?tab=b'),
+      true
+    );
+    assert.equal(
+      isSameSpaDocumentRoute('vscode-file://host-a/index.html?tab=a', 'vscode-file://host-b/index.html?tab=a'),
+      false,
+      'Custom scheme URLs with different hosts must not be treated as same SPA document route'
+    );
+    assert.equal(
+      isSameSpaDocumentRoute('vscode-file://vscode-app/index.html?tab=a#h1', 'vscode-file://vscode-app/index.html?tab=a#h2'),
+      false,
+      'Hash changes must not be treated as same SPA document route'
+    );
+
+    // 4) IPC-05a: _verifyAndHealEntryUnlocked does 0 fs.existsSync on healthy backoff skip
+    daemon.rebuildBundle();
+    const cfgNow = daemon.cdp?.readConfig?.() || {};
+    const thoughtOn = daemon._isThoughtEnabled(cfgNow);
+    const periodicOn = daemon._isPeriodicPickerEnabled(cfgNow);
+    const mascotOn = daemon._isMascotEnabled(cfgNow);
+    const homeStudioOn = daemon._isHomeStudioEnabled(cfgNow);
+    const healthyEntry = {
+      wsUrl: 'ws://127.0.0.1:9999/page/healthy',
+      mainFrameId: 'F1',
+      contextFrames: new Map([[1, { frameId: 'F1', isDefault: true, type: 'default', docGen: 0 }]]),
+      thoughtScriptId: thoughtOn ? 'th1' : null,
+      thoughtMounted: thoughtOn,
+      inlineDiffScriptId: 'id1',
+      inlineDiffMounted: true,
+      inlineDiffSkipped: false,
+      wallpaperScriptId: 'wp1',
+      wallpaperMounted: true,
+      wallpaperSkipped: false,
+      suggesterScriptId: 'sg1',
+      suggesterMounted: true,
+      suggesterSkipped: false,
+      periodicPickerScriptId: periodicOn ? 'pp1' : null,
+      periodicPickerMounted: periodicOn,
+      lastPeriodicPickerSig: periodicOn ? `${daemon._getPeriodicPickerCfgSig(cfgNow)}:${daemon._getPeriodicPickerExprHash(daemon.periodicPickerExpr)}` : '',
+      lastPeriodicPickerScriptSig: periodicOn ? `${daemon._getPeriodicPickerCfgSig(cfgNow)}:${daemon._getPeriodicPickerExprHash(daemon.periodicPickerExpr)}` : '',
+      mascotScriptId: mascotOn ? 'm1' : null,
+      mascotMounted: mascotOn,
+      lastMascotSig: mascotOn ? `${daemon._getMascotCfgSig(cfgNow)}:${daemon._getMascotExprHash(daemon.mascotExpr)}` : '',
+      lastMascotScriptSig: mascotOn ? `${daemon._getMascotCfgSig(cfgNow)}:${daemon._getMascotExprHash(daemon.mascotExpr)}` : '',
+      homeStudioScriptId: homeStudioOn ? 'hs1' : null,
+      homeStudioMounted: homeStudioOn,
+      lastHomeStudioSig: homeStudioOn ? `${daemon._getHomeStudioCfgSig(cfgNow)}:${daemon._getHomeStudioExprHash(daemon.homeStudioExpr)}` : '',
+      lastHomeStudioScriptSig: homeStudioOn ? `${daemon._getHomeStudioCfgSig(cfgNow)}:${daemon._getHomeStudioExprHash(daemon.homeStudioExpr)}` : '',
+      verifyDirty: false,
+      lastVerifiedCodeHash: daemon.codeHash,
+      lastVerifyAt: Date.now(),
+      healthyStreak: 4,
+      session: { closed: false },
+    };
+    const origExistsSync = fs.existsSync;
+    let existsCalls = 0;
+    fs.existsSync = (...args) => {
+      existsCalls += 1;
+      return origExistsSync(...args);
+    };
+    try {
+      const skipRes = await daemon._verifyAndHealEntryUnlocked(healthyEntry, false);
+      assert.equal(skipRes.skipped, true);
+      assert.equal(existsCalls, 0, 'Steady-state _verifyAndHealEntryUnlocked backoff skip must perform 0 fs.existsSync calls');
+    } finally {
+      fs.existsSync = origExistsSync;
+    }
+
+    // 5) IPC-05b / AIPC-03: _createScopedRendererClient caches settled trajectories and deduplicates in-flight RPCs
+    let scopedRpcCalls = 0;
+    daemon._invokeRendererLsRpc = async (method) => {
+      if (method === 'GetCascadeTrajectory') {
+        scopedRpcCalls += 1;
+        await new Promise((r) => setTimeout(r, 15));
+        return { status: 1, numTotalSteps: 3, trajectory: { cascadeId: cid, steps: [], generatorMetadata: [] } };
+      }
+      return {};
+    };
+    const scopedClient = daemon._createScopedRendererClient(vmEntry, 'ssh:prod-box');
+    const [scA, scB] = await Promise.all([scopedClient.trajectory(cid), scopedClient.trajectory(cid)]);
+    const scC = await scopedClient.trajectory(cid);
+    assert.equal(scopedRpcCalls, 1, 'Scoped renderer client must dedupe concurrent calls and serve settled trajectory from TTL cache');
+    assert.equal(scA.numTotalSteps, 3);
+    assert.equal(scB.numTotalSteps, 3);
+    assert.equal(scC.numTotalSteps, 3);
+
+    // 6) IPC-04 / AIPC-04: AntigravityClient reuses renderer-proxy via Probe without OS process respawns & preserves server on payload limit errors
+    let fakeNow = 10000;
+    let osDiscoverCalls = 0;
+    let probeCalls = 0;
+    let oversizeToggle = false;
+    const client = new AntigravityClient({
+      now: () => fakeNow,
+      cdpPort: 8794,
+      paths: () => ({ log: path.join(tmpDir, 'missing.log'), logCandidates: [path.join(tmpDir, 'missing.log')] }),
+      processes: async () => {
+        osDiscoverCalls += 1;
+        return [];
+      },
+      rendererRpc: async (method) => {
+        if (method === 'Probe') {
+          probeCalls += 1;
+          return { available: true };
+        }
+        if (method === 'GetCascadeTrajectory') {
+          if (oversizeToggle) {
+            return { trajectory: { steps: [{ pad: 'z'.repeat(9 * 1024 * 1024) }], generatorMetadata: [] } };
+          }
+          return { status: 1, numTotalSteps: 1, trajectory: { steps: [], generatorMetadata: [] } };
+        }
+        return {};
+      },
+    });
+    const srv1 = await client.discover();
+    assert.equal(srv1.mode, 'renderer-proxy');
+    assert.equal(osDiscoverCalls, 1);
+    assert.equal(probeCalls, 1);
+
+    // Advance 130s (>120s cacheTtl, <15m OS recheck): must re-verify via Probe ONLY, 0 OS discoverProcesses calls
+    fakeNow += 130000;
+    const srv2 = await client.discover();
+    assert.equal(srv2.mode, 'renderer-proxy');
+    assert.equal(osDiscoverCalls, 1, 'Healthy renderer-proxy refresh after 120s must NOT respawn OS process discovery');
+    assert.equal(probeCalls, 2);
+
+    // Oversized single conversation error must NOT wipe slot.server or trigger OS rescan
+    oversizeToggle = true;
+    await assert.rejects(() => client.call('GetCascadeTrajectory', { cascadeId: cid }), /超过采集上限/);
+    assert.equal(client.server?.mode, 'renderer-proxy', 'Per-conversation payload cap error must NOT invalidate renderer-proxy server');
+    assert.equal(osDiscoverCalls, 1, 'Per-conversation payload cap error must NOT trigger OS process rescan');
+    client.dispose();
+
+    // 7) IPC-06: Omni workbench-page media loop avoids 180Hz getComputedStyle/clientWidth reflow thrashing
+    const wbSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'omni-viewer', 'workbench-page.mjs'), 'utf8');
+    assert.ok(wbSrc.includes('let waveThemeCache = null;') && wbSrc.includes('invalidateWaveTheme()'));
+    assert.ok(wbSrc.includes('new ResizeObserver(') && wbSrc.includes('document.hidden'));
+
+    await daemon.stop(false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

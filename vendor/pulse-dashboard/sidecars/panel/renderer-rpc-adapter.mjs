@@ -3,6 +3,8 @@
 // Strictly read-only allowlist; projects numeric/structural telemetry in-renderer and strips all prompts,
 // message text, snippets, tool payloads, and token breakdown trees before crossing CDP.
 
+import crypto from 'node:crypto';
+
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_METHODS = new Set([
   'Probe',
@@ -515,7 +517,7 @@ export function normalizeRendererTrajectory(raw, cascadeId, modelLabelMap = null
   };
 }
 
-export function buildRendererRpcExpression(method, body = {}) {
+function buildRendererRpcParams(method, body = {}) {
   if (!ALLOWED_METHODS.has(method)) {
     throw new Error(`Unsupported renderer RPC method: ${String(method)}`);
   }
@@ -539,8 +541,10 @@ export function buildRendererRpcExpression(method, body = {}) {
       safeParams.includeVisibleMainIds = true;
     }
   }
-  const argLiteral = serializeJsonForEval(safeParams);
-  return `(async (params) => {
+  return safeParams;
+}
+
+const RENDERER_RPC_DISPATCHER_FN = `async (params) => {
     const g = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null;
     const guidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const isLs = (v) => Boolean(v && typeof v === 'object' && typeof v.getUserStatus === 'function' && typeof v.getCascadeTrajectory === 'function');
@@ -586,10 +590,11 @@ export function buildRendererRpcExpression(method, body = {}) {
       const fk = Object.keys(root).find((k) => k.startsWith('__reactContainer$') || k.startsWith('__reactFiber$'));
       if (!fk || !root[fk]) return null;
       const q = [root[fk]];
+      let qi = 0;
       const seen = new Set();
       let visited = 0;
-      while (q.length && visited < 4000) {
-        const f = q.shift();
+      while (qi < q.length && visited < 4000) {
+        const f = q[qi++];
         if (!f || seen.has(f)) continue;
         seen.add(f);
         visited += 1;
@@ -747,10 +752,11 @@ export function buildRendererRpcExpression(method, body = {}) {
         const fk = Object.keys(root).find((k) => k.startsWith('__reactContainer$') || k.startsWith('__reactFiber$'));
         if (!fk || !root[fk]) return null;
         const q = [root[fk]];
+        let qi = 0;
         const seen = new Set();
         let visited = 0;
-        while (q.length && visited < 4000) {
-          const f = q.shift();
+        while (qi < q.length && visited < 4000) {
+          const f = q[qi++];
           if (!f || seen.has(f)) continue;
           seen.add(f);
           visited += 1;
@@ -877,15 +883,24 @@ export function buildRendererRpcExpression(method, body = {}) {
             } catch {}
             return true;
           };
-          const nodes = typeof document.querySelectorAll === 'function'
-            ? document.querySelectorAll(busySel)
-            : (typeof document.querySelector === 'function' && document.querySelector(busySel) ? [document.querySelector(busySel)] : []);
-          const list = nodes && nodes.length ? nodes : (typeof document.querySelector === 'function' && document.querySelector(busySel) ? [document.querySelector(busySel)] : []);
-          for (let i = 0; i < list.length; i += 1) {
-            if (isVis(list[i])) {
-              domBusy = true;
-              if (reason === 'idle') reason = 'dom-busy';
-              break;
+          let firstMatch = null;
+          if (typeof document.querySelector === 'function') {
+            firstMatch = document.querySelector(busySel);
+          }
+          if (firstMatch && isVis(firstMatch)) {
+            domBusy = true;
+            if (reason === 'idle') reason = 'dom-busy';
+          } else if (
+            typeof document.querySelectorAll === 'function' &&
+            (firstMatch || typeof document.querySelector !== 'function')
+          ) {
+            const list = document.querySelectorAll(busySel);
+            for (let i = 0; i < list.length; i += 1) {
+              if (isVis(list[i])) {
+                domBusy = true;
+                if (reason === 'idle') reason = 'dom-busy';
+                break;
+              }
             }
           }
         }
@@ -1490,5 +1505,37 @@ export function buildRendererRpcExpression(method, body = {}) {
       }
       return { ok: false, error: String((err && err.message) || err || 'renderer_rpc_failed') };
     }
+  }`;
+
+export const RENDERER_RPC_DISPATCHER_VERSION = crypto
+  .createHash('sha256')
+  .update(RENDERER_RPC_DISPATCHER_FN)
+  .digest('hex')
+  .slice(0, 12);
+
+const RENDERER_RPC_VERSION_LITERAL = serializeJsonForEval(RENDERER_RPC_DISPATCHER_VERSION);
+
+export function buildRendererRpcCallExpression(method, body = {}) {
+  const argLiteral = serializeJsonForEval(buildRendererRpcParams(method, body));
+  return `((p) => { const g = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null; const fn = g && g.__agPrismRendererRpc; return typeof fn === 'function' && fn.__v === ${RENDERER_RPC_VERSION_LITERAL} ? fn(p) : { ok: false, needInstall: true }; })(${argLiteral})`;
+}
+
+export function buildRendererRpcExpression(method, body = {}) {
+  const argLiteral = serializeJsonForEval(buildRendererRpcParams(method, body));
+  return `((p) => {
+    const g = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null;
+    let fn = g && g.__agPrismRendererRpc;
+    if (typeof fn !== 'function' || fn.__v !== ${RENDERER_RPC_VERSION_LITERAL}) {
+      fn = ${RENDERER_RPC_DISPATCHER_FN};
+      try { fn.__v = ${RENDERER_RPC_VERSION_LITERAL}; } catch {}
+      if (g) {
+        try {
+          Object.defineProperty(g, '__agPrismRendererRpc', { value: fn, configurable: true, writable: true, enumerable: false });
+        } catch {
+          try { g.__agPrismRendererRpc = fn; } catch {}
+        }
+      }
+    }
+    return fn(p);
   })(${argLiteral})`;
 }

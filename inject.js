@@ -102,6 +102,11 @@ function serializeJsonForEval(val) {
   );
 }
 
+function formatJsonArgForEval(val) {
+  const safeJson = serializeJsonForEval(val);
+  return safeJson.length > 4096 ? `JSON.parse(${serializeJsonForEval(safeJson)})` : safeJson;
+}
+
 function updateConfigBatch(entriesObj) {
   if (!entriesObj || typeof entriesObj !== 'object' || Array.isArray(entriesObj)) return false;
   const patch = {};
@@ -1069,7 +1074,7 @@ async function watch() {
           }
           if (!session.closed) {
             const safeId = Number(reqId) | 0;
-            const jsonRes = serializeJsonForEval(result);
+            const jsonRes = formatJsonArgForEval(result);
             const resolveExpr = `(() => { const r = ${jsonRes}; const b = window.__agPrismOmniBridge; if (b && typeof b.resolve === 'function') b.resolve(${safeId}, r); if (typeof window.__agPrismOmniResolve === 'function' && (!b || window.__agPrismOmniResolve !== b.resolve)) window.__agPrismOmniResolve(${safeId}, r); })()`;
             const evalParams = { expression: resolveExpr, returnByValue: true };
             if (executionContextId) evalParams.contextId = executionContextId;
@@ -1118,7 +1123,7 @@ async function watch() {
             }
           }
           if (isCurrentHost()) {
-            const jsonRes = serializeJsonForEval(result);
+            const jsonRes = formatJsonArgForEval(result);
             const resolveExpr = `(() => { const r = ${jsonRes}; const b = window.__agPrismSidebarBridge; if (b && typeof b.resolve === 'function') b.resolve(${reqId}, r); if (typeof window.__agPrismSidebarResolve === 'function' && (!b || window.__agPrismSidebarResolve !== b.resolve)) window.__agPrismSidebarResolve(${reqId}, r); })()`;
             const evalParams = { expression: resolveExpr, returnByValue: true };
             if (executionContextId) evalParams.contextId = executionContextId;
@@ -1167,7 +1172,7 @@ async function watch() {
             resp = { ok: false, error: 'internal_error' };
           }
           if (isCurrentContext()) {
-            const resolveExpr = `window.__agPrismInlineDiffResolve?.(${reqId}, ${serializeJsonForEval(resp)})`;
+            const resolveExpr = `window.__agPrismInlineDiffResolve?.(${reqId}, ${formatJsonArgForEval(resp)})`;
             await session
               .send('Runtime.evaluate', {
                 expression: resolveExpr,

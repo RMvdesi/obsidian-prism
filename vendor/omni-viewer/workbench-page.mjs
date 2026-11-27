@@ -1731,6 +1731,15 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
     let analyser = null;
     let timeDomainBuf = null;
     let waveCanvas = null;
+    let waveCtx = null;
+    let waveThemeCache = null;
+    let waveCssW = 640;
+    let waveCssH = 112;
+    let waveSizeDirty = true;
+    let waveResizeObserver = null;
+    let onWaveWindowResize = null;
+    let lastTcText = '';
+    let lastTcAt = 0;
 
     if (isAudio) {
       mediaEl.className = 'wb-audio-el';
@@ -1896,32 +1905,53 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
     wrap.appendChild(deck);
     stageEl.appendChild(wrap);
 
+    function invalidateWaveTheme() {
+      waveThemeCache = null;
+    }
+
+    function readWaveTheme() {
+      if (waveThemeCache) return waveThemeCache;
+      const cs = getComputedStyle(htmlEl);
+      waveThemeCache = {
+        accent: cs.getPropertyValue('--wb-accent').trim() || '#669DF6',
+        muted: cs.getPropertyValue('--wb-muted').trim() || '#8A8A98',
+        accentSoft: cs.getPropertyValue('--wb-accent-soft').trim() || 'rgba(102,157,246,0.15)',
+      };
+      return waveThemeCache;
+    }
+
     function drawWaveformOnce() {
       if (!isAudio || !waveCanvas) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const cssW = waveCanvas.clientWidth || 640;
-      const cssH = waveCanvas.clientHeight || 112;
+      if (waveSizeDirty) {
+        waveCssW = waveCanvas.clientWidth || 640;
+        waveCssH = waveCanvas.clientHeight || 112;
+        waveSizeDirty = false;
+      }
+      const cssW = waveCssW;
+      const cssH = waveCssH;
       const pw = Math.max(4, Math.round(cssW * dpr));
       const ph = Math.max(4, Math.round(cssH * dpr));
       if (waveCanvas.width !== pw || waveCanvas.height !== ph) {
         waveCanvas.width = pw;
         waveCanvas.height = ph;
       }
-      const ctx = waveCanvas.getContext('2d');
+      const ctx = waveCtx || (waveCtx = waveCanvas.getContext('2d'));
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
 
-      const cs = getComputedStyle(htmlEl);
-      const accentCol = cs.getPropertyValue('--wb-accent').trim() || '#669DF6';
-      const mutedCol = cs.getPropertyValue('--wb-muted').trim() || '#8A8A98';
+      const themeCols = readWaveTheme();
+      const accentCol = themeCols.accent;
+      const mutedCol = themeCols.muted;
       const dur = Number.isFinite(mediaEl.duration) && mediaEl.duration > 0 ? mediaEl.duration : 0;
       const progress = dur > 0 ? Math.max(0, Math.min(1, (mediaEl.currentTime || 0) / dur)) : 0;
 
       if (dur > 0 && pointA !== null) {
         const xA = (pointA / dur) * cssW;
         const xB = pointB !== null ? (pointB / dur) * cssW : cssW;
-        ctx.fillStyle = cs.getPropertyValue('--wb-accent-soft').trim() || 'rgba(102,157,246,0.15)';
+        ctx.fillStyle = themeCols.accentSoft;
         ctx.fillRect(xA, 0, Math.max(2, xB - xA), cssH);
       }
 
@@ -1968,24 +1998,35 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
       }
     }
 
-    function updateTimecode() {
+    function updateTimecode(forceText = false) {
       const cur = mediaEl.currentTime || 0;
       const dur = Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0;
       if (pointA !== null && pointB !== null && cur >= pointB) {
         mediaEl.currentTime = pointA;
       }
-      tcReadout.textContent = `${formatTimecodeMs(mediaEl.currentTime || 0)} / ${formatTimecodeMs(dur)}`;
+      if (!forceText && !isAudio) {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (now - lastTcAt < 33) return;
+        lastTcAt = now;
+      }
+      const nextText = `${formatTimecodeMs(mediaEl.currentTime || 0)} / ${formatTimecodeMs(dur)}`;
+      if (nextText !== lastTcText) {
+        lastTcText = nextText;
+        tcReadout.textContent = nextText;
+      }
     }
 
     function tickPlayLoop() {
       rafId = 0;
       if (mediaEl.paused || mediaEl.ended) {
-        updateTimecode();
         drawWaveformOnce();
+        updateTimecode(true);
         return;
       }
-      updateTimecode();
-      drawWaveformOnce();
+      if (!(typeof document !== 'undefined' && document.hidden)) {
+        drawWaveformOnce();
+      }
+      updateTimecode(false);
       rafId = requestAnimationFrame(tickPlayLoop);
     }
 
@@ -2097,6 +2138,26 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
           })
           .catch(() => {});
       }
+      if (typeof ResizeObserver === 'function') {
+        waveResizeObserver = new ResizeObserver((entries) => {
+          const cr = entries && entries[0] && entries[0].contentRect;
+          if (cr && cr.width > 0 && cr.height > 0) {
+            waveCssW = cr.width;
+            waveCssH = cr.height;
+            waveSizeDirty = false;
+          } else {
+            waveSizeDirty = true;
+          }
+          drawWaveformOnce();
+        });
+        waveResizeObserver.observe(waveCanvas);
+      } else {
+        onWaveWindowResize = () => {
+          waveSizeDirty = true;
+          drawWaveformOnce();
+        };
+        window.addEventListener('resize', onWaveWindowResize);
+      }
       requestAnimationFrame(drawWaveformOnce);
       state._abortWaveDecode = () => {
         waveAborted = true;
@@ -2104,10 +2165,23 @@ function bootPrismWorkbench(INIT_STATE, I18N_TABLE) {
       };
     }
 
-    state.onThemeRefresh = isAudio ? drawWaveformOnce : null;
+    state.onThemeRefresh = isAudio
+      ? () => {
+          invalidateWaveTheme();
+          drawWaveformOnce();
+        }
+      : null;
 
     return () => {
       state.onThemeRefresh = null;
+      if (waveResizeObserver) {
+        try { waveResizeObserver.disconnect(); } catch {}
+        waveResizeObserver = null;
+      }
+      if (onWaveWindowResize) {
+        window.removeEventListener('resize', onWaveWindowResize);
+        onWaveWindowResize = null;
+      }
       if (typeof state._abortWaveDecode === 'function') {
         state._abortWaveDecode();
         state._abortWaveDecode = null;
