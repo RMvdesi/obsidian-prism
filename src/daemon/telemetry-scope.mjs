@@ -281,6 +281,7 @@ export function createScopedRendererClient(tel, entry, scopeKey, extraOpts = nul
       const req = tel
         .invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts)
         .then((data) => {
+          if (tel._scopedTrajInFlight.get(cacheKey) !== req) return data;
           tel._scopedTrajCache.delete(cacheKey);
           tel._scopedTrajCache.set(cacheKey, { at: Date.now(), data, sumStamp });
           while (tel._scopedTrajCache.size > 32) {
