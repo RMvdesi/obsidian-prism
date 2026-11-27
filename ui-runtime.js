@@ -1245,15 +1245,7 @@ for (const el of qa(r, HOST_BTN_QUERY)) if (!isThoughtIsolatedNode(el)) set.add(
       pending.push({ btn, iconName, origSvg, size, eqSig });
     }
 
-    if (pending.length <= 20 || !isFn(W.requestAnimationFrame)) {
-      for (const it of pending) applySingleHostIcon(it.btn, it.iconName, it.origSvg, it.size, it.eqSig);
-    } else {
-      const s = pending.length - 16;
-      for (let i = s; i < pending.length; i++) { const it = pending[i]; applySingleHostIcon(it.btn, it.iconName, it.origSvg, it.size, it.eqSig); }
-      const def = pending.slice(0, s);
-      for (const it of def) iconPendSig.set(it.btn, it.eqSig);
-      streamChoreoCtl.enqueueDeferredIcons(def);
-    }
+    for (const it of pending) applySingleHostIcon(it.btn, it.iconName, it.origSvg, it.size, it.eqSig);
   }
 
   const getOverlayPortal = () => {
@@ -1665,8 +1657,8 @@ if (hb) dirtyAddedRoots.add(el);
     const modelPanelNow = isFullSync || flags.c || flags.o ? qs(D, MODEL_PANEL_SEL) : null;
     const modelOverlayChanged = !!(flags.o) && (!!modelPanelNow || hadModelPanelOpen);
     const cPlan = isFullSync || flags.c || modelOverlayChanged ? measureCrabClearanceAll(isConvSwap) : null;
-    if (flags.f || flags.r || flags.c || flags.t) convAuraCtl.prime?.(isConvSwap);
-    return { inHome, inHero, formalConv, curCascadeId, isConvSwap, isAsyncConvEntry, homeComposerSampled, convInputRect, sidebarSnap, visibleChangedHeaders, lensOverlays, caretList, modelPanelNow, modelOverlayChanged, cPlan, checkCaustics: !!(flags.f || flags.cf || flags.r) };
+    if (flags.f || flags.r || flags.c || flags.t) convAuraCtl.prime?.(isConvSwap || isAsyncConvEntry || flags.r);
+    return { inHome, inHero, formalConv, curCascadeId, isConvSwap, isAsyncConvEntry, homeComposerSampled, convInputRect, sidebarSnap, visibleChangedHeaders, lensOverlays, caretList, modelPanelNow, modelOverlayChanged, cPlan, checkCaustics: !isAsyncConvEntry && !!(flags.f || flags.cf || flags.r) };
   };
 
   let enhancerSyncTimer = 0, enhancerSyncRaf = 0, lastEnhancerSyncAt = 0, enhConv = null;
@@ -1725,9 +1717,11 @@ if (hb) dirtyAddedRoots.add(el);
     runGuardedMut(() => {
       applyRootAttrs(effectiveFull);
       if (actualRouteJump) for (const a of ['data-ag-cs-stage-glide', 'data-ag-cs-sonar', 'data-ag-cs-caustic']) raAll(`[${a}]`, a);
-      if (effectiveFull || flags.m) stampBgCmdWrap(effectiveFull ? D : bgCmdNodes);
-      if (frc || flags.l) syncBleedTables();
-      if (effectiveFull || turboRoots) syncHostTurbo(effectiveFull ? D : turboRoots);
+      if (!deferHeavyConvWork) {
+        if (effectiveFull || flags.m) stampBgCmdWrap(effectiveFull ? D : bgCmdNodes);
+        if (frc || flags.l) syncBleedTables();
+        if (effectiveFull || turboRoots) syncHostTurbo(effectiveFull ? D : turboRoots);
+      }
       if (effectiveFull || flags.r || flags.s || flags.a || !axE || axE[K_IC] === false) syncAuxSplit();
       if (isStudioHome() && (measured.inHero || measured.inHome) && !getHomeStudioMod()) requestHomeStudioChannelIfNeeded();
       if (flags.f || flags.r || measured.inHero !== homeStudioCtl.wasHero()) {
@@ -1740,7 +1734,7 @@ if (hb) dirtyAddedRoots.add(el);
         } else { homeStudioCtl.parkPanelSeat(); markRim(); }
       }
       if (flags.f || flags.r || flags.t) safe(() => rippleCtl.sync());
-      if (frc || flags.t) safe(() => convAuraCtl.sync(true, measured.isConvSwap));
+      if (frc || flags.t) safe(() => convAuraCtl.sync(true, measured.isConvSwap || deferHeavyConvWork || flags.r));
       const modelPanelNow = measured.modelPanelNow, modelOverlayChanged = measured.modelOverlayChanged;
       if (effectiveFull || flags.c || flags.o) { hadModelPanelOpen = !!(modelPanelNow); syncModelMenuRootAttrs(modelPanelNow); }
       if (flags.f || flags.c || modelOverlayChanged) syncComposers(measured, deferHeavyConvWork);
@@ -1756,7 +1750,6 @@ if (hb) dirtyAddedRoots.add(el);
 
       if (deferHeavyConvWork) {
         const outR = addedRoots.filter((r) => r && r[K_IC] !== false && (!fc || !fc.contains?.(r)));
-        if (outR.length) syncHostAnimatedIcons(outR);
         const expCid = measured.curCascadeId || '';
         const verifyConv = () => {
           if (destroyed) return null;
@@ -1769,15 +1762,19 @@ if (hb) dirtyAddedRoots.add(el);
         sc.scheduleDeferredConvEntry(() => {
           const cv = verifyConv(); if (!cv) return false;
           const cPlan = qs(cv, `${TK_SUB_SEL}, ${S_RP}`) ? measureCrabClearanceAll() : null;
-          runGuardedMut(() => { if (cPlan) syncComposers({ cPlan }, false); stampBgCmdWrap(cv); syncBleedTables(); sc.syncThinkingSparks(latestPrimaryModelInfo, latestPaneModelMap); sc.syncDualStreamEngine(); sc.syncHeroCCaustics(); });
-          scheduleHostEnhancerSync(false, { f: true }); smoothCaretCtl.queue(false, false, false);
-          return true;
-        }, 140, () => {
-          const cv = verifyConv(); if (!cv) return;
-          runGuardedMut(() => syncHostAnimatedIcons([cv]));
+          runGuardedMut(() => {
+            if (cPlan) syncComposers({ cPlan }, false);
+            stampBgCmdWrap(cv); syncBleedTables(); syncHostTurbo(cv);
+            sc.syncThinkingSparks(latestPrimaryModelInfo, latestPaneModelMap);
+            sc.syncDualStreamEngine(); sc.syncHeroCCaustics(); ensurePulseBridge(false);
+            syncHostAnimatedIcons([cv, ...outR.filter((r) => r && r[K_IC] !== false)]);
+          });
+          mergeEnhancerDirty({ f: true }, null, cv); flushHostEnhancerSync();
           sc.syncWorkedForAutoUnfold();
           if (getThoughtTranslateMode() !== 'off') safe(() => getTh()?.scan?.());
-        });
+          smoothCaretCtl.queue(false, false, false);
+          return true;
+        }, 280);
       } else {
         if (flags.f) syncHostAnimatedIcons(null);
         else if (routeJumped) { const jr = [qs(D, '.agy-home'), fc, ...addedRoots].filter(Boolean); syncHostAnimatedIcons(jr.length ? jr : null); }
@@ -1785,7 +1782,7 @@ if (hb) dirtyAddedRoots.add(el);
         if ((flags.f || flags.l || routeJumped || ((flags.s || flags.g || flags.o) && W.__agPrismThought?.getTranslateTitles?.())) && getThoughtTranslateMode() !== 'off') safe(() => getTh()?.scan?.());
       }
       if (flags.f || flags.g) ensureSettingsSection();
-      if (frc || flags.t) ensurePulseBridge(!!(flags.f || flags.t));
+      if (!deferHeavyConvWork && (frc || flags.t)) ensurePulseBridge(!!(flags.f || flags.t));
       if (effectiveFull || flags.s || flags.c || flags.o || flags.r || offObs.size > 0) syncOffscreenRunningIo();
     });
     if (effectiveFull || flags.c || flags.r || routeJumped) safe(() => W.__agPrismPeriodicPicker?.onHostTriggerChanged?.());

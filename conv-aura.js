@@ -388,8 +388,8 @@
       if (convAura) {
         const a = convAura;
         if (a.seatParent !== seatParent || a.convView !== convView || !a.host.isConnected || !a.canvas.isConnected) {
-          const switchedPane = a.convView !== convView, nowRe = readNowMs(), [runRe, phaseRe] = readPhase();
-          const canDeferRelayout = !switchedPane && !a.backingReleased && !!(a.ro) && a.width > 0 && a.height > 0 && isF(G.requestAnimationFrame) && !docRef.hidden;
+          const nowRe = readNowMs(), [runRe, phaseRe] = readPhase();
+          const canDeferRelayout = !a.backingReleased && !!(a.ro) && a.width > 0 && a.height > 0 && isF(G.requestAnimationFrame) && !docRef.hidden;
           const [reW, reH] = canDeferRelayout ? [0, 0] : readSize();
           try { a.ro?.disconnect(); } catch {}
           a.seatParent = seatParent; a.convView = convView; a.parked = false;

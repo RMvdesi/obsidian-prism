@@ -72,6 +72,9 @@
     const transientTimers = new Set();
     const heroState = { routeInitialized: false, wasInHome: false, wasInFormalConv: false, lastModelSig: null, pendingModelShiftNotify: false, lastTriggerOrigin: null, lastGroupPress: null };
     let lastHomeRect = null, liftoffBubbleUntil = 0, sentBubbleUntil = 0, seenSentBubbles = new WeakSet(), suppressEntryMotionUntil = 0, convDipEl = null, convSwapSeq = 0, convSwapExitTm = 0;
+    const swapAnims = [], splitAnims = [];
+    const clrAnims = (arr) => { while (arr.length) { try { arr.pop()?.cancel?.(); } catch {} } };
+    const trackA = (arr, a) => { if (a) arr.push(a); return a; };
     let runInit = false, wasRunning = false, runStartAt = 0, lastVialHighNotifyAt = -600000, fiberTimer = 0, sbInit = false, sbIndex = -1, sbCid = '', sbRect = null, sbRunning = false, runHoldTimer = 0;
     const runningCidMap = new Map(), runningRowMap = new WeakMap(), seenHeaders = new WeakSet(), seenOverlays = new WeakSet(), streamRoots = new Set(), paneRunState = new WeakMap(), textLenMap = new WeakMap(), fadeItems = [], doneSparkCache = new WeakMap(), expirableClasses = new Map();
     let streamObs = null, streamMutating = false, lastCodeAt = -1000, scannedNodes = new WeakSet(), seenBlocks = new WeakSet(), hlBuckets = null, fadeRaf = 0, fadeTimer = 0, nextFadeDueAt = 0, sweepTimer = 0;
@@ -199,7 +202,7 @@ const clearTransientTimers = () => {
   convEntrySeq++; convSwapSeq++;
   convEntryTimer = clrT(convEntryTimer); convEntryRaf = clrF(convEntryRaf);
   wfClickTimer = clrT(wfClickTimer); sweepTimer = clrT(sweepTimer); runHoldTimer = clrT(runHoldTimer);
-  convSwapExitTm = clrT(convSwapExitTm); convDipEl = null;
+  convSwapExitTm = clrT(convSwapExitTm); convDipEl = null; clrAnims(swapAnims); clrAnims(splitAnims);
   runningCidMap.clear(); expirableClasses.clear();
   for (const id of transientTimers) CT(id);
   transientTimers.clear();
@@ -272,13 +275,7 @@ const syncThinkingSparks = (primaryModelInfo, paneModelMap = null) => {
     }
   }
   const runApply = (it) => { applySingleSpark(it.trig, it.brand, it.st); if (it.st === 'done' && !it.isLast) doneSparkCache.set(it.trig, it.cacheSig); };
-  if (pending.length <= 16 || typeof requestAnimationFrame !== 'function') for (const it of pending) runApply(it);
-  else {
-    const syncStart = pending.length - 12;
-    for (let i = syncStart; i < pending.length; i++) runApply(pending[i]);
-    sparkQueue = pending.slice(0, syncStart);
-    if (!hydrateRaf) hydrateRaf = rAF(stepHydration);
-  }
+  for (const it of pending) runApply(it);
 };
 const clearWorkedForAutoUnfoldAttrs = () => { const d = docOf(); raAll(d, 'data-ag-cs-auto-unfolded'); raAll(d, 'data-ag-cs-outer-open'); };
 const clickClosed = (cb) => {
@@ -520,9 +517,9 @@ const snap = rr ? { left: rr.left, top: rr.top, width: rr.width, height: rr.heig
 return { e: false, i: selIdx, cid: curCid, r: selRow, rn: selRun, s: snap, l: lr, t: stTop, st: states };
 };
 
-const SP = 'cubic-bezier(.22,1,.36,1)', SW_A = 'data-ag-cs-swapping', VL_A = 'data-ag-cs-vp-live';
+const SP = 'cubic-bezier(.22,1,.36,1)';
 const kf = (x, y, s, o) => {
-  const r = { transform: `translate3d(${x}px,${y}px,0) scale(${s})` };
+  const r = { transform: s === 1 ? `translate3d(${x}px,${y}px,0)` : `translate3d(${x}px,${y}px,0) scale(${s})` };
   if (o != null) r.opacity = o;
   return r;
 };
@@ -541,46 +538,49 @@ const deferPlay = (hs, onPlay) => {
     done = true; onPlay?.();
     if (!isDestroyed()) for (const a of list) try { a.play(); } catch {}
   };
-  if (!rAF(() => rAF(go))) go(); else scheduleTransient(go, 360);
+  if (!rAF(go)) go(); else scheduleTransient(go, 120);
 };
-const clearSwapGuards = (d) => { raAll(d, SW_A); raAll(d, VL_A); };
+const clearSwapGuards = () => { clrAnims(swapAnims); };
 const activeVp = (row) => {
   if (!row || !isMotionStandardOrUltra() || ga(row, 'data-selected') === 'true') return null;
   const cv = findFormalConvView();
   if (!cv) return null;
-  const vp = qs(cv, '[data-testid="autoscroll-viewport"]'), p = peOf(vp), i = AF(qsa(docOf(), '[data-testid="conversation-row-sidebar"]')).indexOf(row);
-  return { seat: peOf(cv), vp, wrap: (vp && p !== cv ? p : vp) || cv, dir: sbIndex >= 0 && i >= 0 && i < sbIndex ? -1 : 1 };
+  const vp = qs(cv, '[data-testid="autoscroll-viewport"]'), i = AF(qsa(docOf(), '[data-testid="conversation-row-sidebar"]')).indexOf(row);
+  return { vp, wrap: vp || cv, dir: sbIndex >= 0 && i >= 0 && i < sbIndex ? -1 : 1 };
 };
 const prepareConvPressDip = (row) => {
-  if (!row) { const el = convDipEl; convDipEl = null; if (el && isConn(el)) wa(el, [kf(0, 0, .988, .44), K1], 150); return; }
-  const cur = activeVp(row);
-  if (cur) wa((convDipEl = cur.wrap), [K1, kf(0, cur.dir * -12, .988, .44)], 120, SP, 'forwards');
+  if (!row) {
+    const el = convDipEl; convDipEl = null; clrAnims(swapAnims);
+    if (el && isConn(el)) wa(el, [kf(0, 0, .985, .86), K1], 110);
+    return;
+  }
+  if (!isMotionStandardOrUltra() || ga(row, 'data-selected') === 'true') return;
+  clrAnims(swapAnims);
+  trackA(swapAnims, wa((convDipEl = row), [K1, kf(0, 0, .985, .86)], 90, SP, 'forwards'));
 };
 const prepareConvSwitchExit = (row) => {
   const cur = activeVp(row);
   if (!cur) return;
-  convDipEl = null;
-  const seq = ++convSwapSeq, y = cur.dir * -22;
+  convDipEl = null; clrAnims(swapAnims);
+  const seq = ++convSwapSeq, y = cur.dir * -14;
   convSwapExitTm = clrT(convSwapExitTm);
-  guardMut(() => { if (cur.vp) sa(cur.vp, VL_A, '1'); if (cur.seat && tagOf(cur.seat) === 'DIV') sa(cur.seat, SW_A, '1'); });
-  wa(cur.wrap, [kf(0, M.round(y * .45), .99, .55), kf(0, y, .98, .04)], 155, 'cubic-bezier(.4,0,1,1)', 'forwards');
+  trackA(swapAnims, wa(cur.wrap, [kf(0, 0, 1, .85), kf(0, y, 1, .08)], 115, 'cubic-bezier(.4,0,1,1)', 'forwards'));
   convSwapExitTm = ST(() => {
     convSwapExitTm = 0;
     if (seq !== convSwapSeq || isDestroyed()) return;
-    guardMut(() => clearSwapGuards(docOf()));
-    if (isConn(cur.wrap)) wa(cur.wrap, [{ opacity: .04 }, K1], 160, 'ease-out');
-  }, 850);
+    clrAnims(swapAnims);
+    if (isConn(cur.wrap)) wa(cur.wrap, [{ opacity: .08 }, K1], 140, 'ease-out');
+  }, 380);
 };
 const triggerSplitTransition = (splitEl, toDual) => {
   const ks = splitEl?.children, n = ks?.length || 0;
   if (n < 2 || !isMotionStandardOrUltra() || suppressEntryMotionUntil > nowOf()) return;
+  clrAnims(splitAnims);
+  if (!toDual) return;
   const l = ks[0], r = ks[n - 1], s = n > 2 ? ks[1] : null, hs = [];
-  if (toDual) {
-    hs.push(wa(l, [kf(26, 0, .988), K0], 400));
-    if (r && r !== l) hs.push(wa(r, [kf(48, 0, .984), K0], 420, SP, 'backwards', 25), wO(r, 240, 25));
-    if (s) hs.push(wO(s, 240));
-  } else hs.push(wa(l, [kf(-32, 0, .984), K0], 400));
-  deferPlay(hs);
+  if (r && r !== l) hs.push(trackA(splitAnims, wa(r, [kf(24, 0, 1, 0), K1], 240, SP, 'backwards')));
+  if (s) hs.push(trackA(splitAnims, wO(s, 180)));
+  if (hs.length) deferPlay(hs);
 };
 const markFreshSentBubble = (conv) => {
   if (!conv || !isMotionStandardOrUltra()) return false;
@@ -631,21 +631,15 @@ const syncSidebarSelectionGlide = (snap) => {
       try { motionEngine?.glideIndicator?.(pill, fromRect, curSnap, { durationMs: 240, stiffness: 390, damping: 32, mass: 0.9 }); } catch {}
       scheduleTransient(() => pill.remove(), 260);
       convDipEl = null; convSwapSeq++; convSwapExitTm = clrT(convSwapExitTm);
-      const dy = dir === 'down' ? -28 : 28, hs = [];
-      for (const vp of targets) {
-        const p = peOf(vp), w = p && ga(p, 'data-ag-cs-vp-wrap') === '1' ? p : vp;
-        hs.push(wa(w, [kf(0, dy, .985), K0], 420, SP, 'backwards'), wO(w, 250));
-      }
-      deferPlay(hs, () => guardMut(() => clearSwapGuards(docOf())));
+      clrAnims(swapAnims);
+      const dy = dir === 'down' ? -20 : 20;
+      for (const vp of targets) wa(vp, [kf(0, dy, 1, 0), K1], 240, SP, 'backwards');
     }
     if (isMotionUltra()) {
       for (const vp of targets) {
         sa(vp, 'data-ag-cs-stage-glide', dir);
-        const kids = vp.children ? AF(vp.children) : [], glideKids = kids.slice(M.max(0, kids.length - 3));
-        for (const ch of glideKids) sa(ch, 'data-ag-cs-glide-item', dir);
         scheduleTransient(() => {
           if (isConn(vp) && ga(vp, 'data-ag-cs-stage-glide') === dir) ra(vp, 'data-ag-cs-stage-glide');
-          for (const ch of glideKids) if (isConn(ch) && ga(ch, 'data-ag-cs-glide-item') === dir) ra(ch, 'data-ag-cs-glide-item');
         }, 220);
       }
     }
@@ -780,6 +774,8 @@ const syncHeroRouteChoreography = (measured) => {
     if (liftoffBubbleUntil > 0 && (nowOf() > liftoffBubbleUntil || markLiftoffBubble(formalConv))) liftoffBubbleUntil = 0;
     if (sentBubbleUntil > 0 && (nowOf() > sentBubbleUntil || markFreshSentBubble(formalConv))) sentBubbleUntil = 0;
   }
+  if (inHome) clearSwapGuards(d);
+  else if (measured?.isConvSwap && !measured?.sidebarSnap) clearSwapGuards(d);
   if (measured?.sidebarSnap) syncSidebarSelectionGlide(measured.sidebarSnap);
   if (!measured || measured.checkCaustics !== false) syncHeroCCaustics(measured?.visibleChangedHeaders);
 };
@@ -815,7 +811,7 @@ const flushAllStreamArtifacts = (immediate = true) => {
       rmAll(d, '.ag-cs-liftoff-veil');
       for (const s of 'liftoff-bubble|caustic|fiber-camp|stage-glide|glide-item|sonar'.split('|')) raAll(d, 'data-ag-cs-' + s);
     }
-    if (!isMotionStandardOrUltra()) { rmAll(d, '.ag-cs-sidebar-glide-pill'); clearSwapGuards(d); }
+    if (!isMotionStandardOrUltra()) { rmAll(d, '.ag-cs-sidebar-glide-pill'); clearSwapGuards(d); clrAnims(splitAnims); }
   });
 };
 

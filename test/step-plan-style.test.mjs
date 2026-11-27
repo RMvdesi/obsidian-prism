@@ -592,10 +592,11 @@ test('transition choreography: two-phase exit-then-enter conv switch, dual-tab G
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
   const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
 
-  // 1) CSS zero-flash Frame-0 guard & large overview shell backdrop-filter:none
-  assert.ok(
-    css.includes('[data-ag-cs-conv-seat="1"][data-ag-cs-swapping="1"] [data-testid="autoscroll-viewport"]:not([data-ag-cs-vp-live="1"]){opacity:0!important}'),
-    'style.css must include Frame-0 zero-flash swapping guard'
+  // 1) Zero-ancestor-recalc (no data-ag-cs-swapping on 6000-el seat) & large overview shell backdrop-filter:none
+  assert.equal(
+    css.includes('data-ag-cs-swapping'),
+    false,
+    'style.css must not attach data-ag-cs-swapping descendant rules on 6000-el conv-seat'
   );
   const ovRule = css.split('\n').find((l) => l.includes('& [data-ag-cs-overview-shell="1"]{')) || '';
   assert.ok(ovRule.includes('backdrop-filter:none!important'), 'large overview shell must disable GPU backdrop-filter blur');
@@ -626,7 +627,7 @@ test('transition choreography: two-phase exit-then-enter conv switch, dual-tab G
       remove() { el.isConnected = false; },
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 40 }),
       animate(kfs, opts) {
-        const rec = { el, kfs, opts, paused: false, played: false, pause() { this.paused = true; }, play() { this.played = true; } };
+        const rec = { el, kfs, opts, paused: false, played: false, canceled: false, pause() { this.paused = true; }, play() { this.played = true; }, cancel() { this.canceled = true; } };
         anims.push(rec);
         return rec;
       },
@@ -714,17 +715,22 @@ test('transition choreography: two-phase exit-then-enter conv switch, dual-tab G
     assert.equal(ovShell.hasAttribute('data-ag-cs-prism-mirror'), false);
     assert.equal(ovPanel.querySelectorAll('[data-ag-row-stagger="1"]').length, 6);
 
-    // Initialize sidebar selection snapshot at row1, then test press-dip -> cancel -> click-exit -> double-rAF enter
+    // Initialize sidebar selection snapshot at row1, then test 1-el press-dip -> cancel -> click-exit -> direct pure-compositor enter (zero scale(), zero stuck forwards!)
     const snap1 = ctl.measureSidebarSelectionSnapshot();
     ctl.syncSidebarSelectionGlide(snap1);
     ctl.prepareConvPressDip(row2);
-    assert.equal(anims.some((a) => a.el === vpWrap && a.opts.duration === 120), true, 'press-dip must animate vpWrap');
+    const dipAnim = anims.find((a) => a.el === row2 && a.opts.duration === 90);
+    assert.ok(dipAnim, 'press-dip must animate only clicked sidebar row (never 6000-el viewport on pointerdown)');
     ctl.prepareConvPressDip(null);
-    assert.equal(anims.some((a) => a.el === vpWrap && a.opts.duration === 150), true, 'null press-dip must reverse cleanly');
+    assert.equal(dipAnim.canceled, true, 'null press-dip must cancel fill:forwards dip handle so opacity never sticks');
+    assert.equal(anims.some((a) => a.el === row2 && a.opts.duration === 110), true, 'null press-dip must reverse cleanly');
 
+    const beforeExit = anims.length;
     ctl.prepareConvSwitchExit(row2);
-    assert.equal(seat.getAttribute('data-ag-cs-swapping'), '1', 'click-exit must enable Frame-0 zero-flash guard');
-    assert.equal(vp.getAttribute('data-ag-cs-vp-live'), '1', 'outgoing viewport must stay visible during exit');
+    const exitAnim = anims.slice(beforeExit).find((a) => a.el === vp && a.opts.duration === 115);
+    assert.ok(exitAnim, 'click-exit must animate autoscroll-viewport');
+    assert.equal(exitAnim.kfs.some((k) => String(k.transform || '').includes('scale(')), false, 'click-exit must not use scale()');
+    assert.equal(seat.hasAttribute('data-ag-cs-swapping'), false, 'click-exit must not mutate conv-seat attributes');
 
     row1.removeAttribute('data-selected');
     row2.setAttribute('data-selected', 'true');
@@ -732,26 +738,29 @@ test('transition choreography: two-phase exit-then-enter conv switch, dual-tab G
     const snap2 = ctl.measureSidebarSelectionSnapshot();
     const beforeEnter = anims.length;
     ctl.syncSidebarSelectionGlide(snap2);
+    assert.equal(exitAnim.canceled, true, 'entering new conversation must cancel fill:forwards exit handle so reused DOM never snaps back to transparent');
     const enterAnims = anims.slice(beforeEnter);
-    assert.equal(enterAnims.some((a) => a.el === vpWrap && a.opts.duration === 420 && a.paused), true, 'entrance must pause until double-rAF');
-    flushRaf();
-    assert.equal(enterAnims.every((a) => a.played), true, 'double-rAF must play paused entrance animations');
-    assert.equal(seat.hasAttribute('data-ag-cs-swapping'), false, 'entrance play must clear zero-flash swapping guard');
+    const vpEnter = enterAnims.find((a) => a.el === vp && a.opts.duration === 240);
+    assert.ok(vpEnter, 'entrance must animate autoscroll-viewport directly on Frame 0 without pause stall');
+    assert.equal(vpEnter.kfs.some((k) => String(k.transform || '').includes('scale(')), false, 'entrance must not use scale()');
     assert.equal(vp.getAttribute('data-ag-cs-stage-glide'), 'up', 'existing Hero B2 stage-glide attribute stays intact');
 
-    // Single <-> Dual tab GPU split choreography
+    // Single <-> Dual tab GPU split choreography (animates only incoming right pane + sash, never 3000-el paneL!)
     const beforeSplit = anims.length;
     ctl.triggerSplitTransition(split, true);
     const dualAnims = anims.slice(beforeSplit);
-    assert.equal(dualAnims.some((a) => a.el === paneL && a.opts.duration === 400 && a.paused), true);
-    assert.equal(dualAnims.some((a) => a.el === paneR && a.opts.duration === 420 && a.paused), true);
-    assert.equal(dualAnims.some((a) => a.el === sash && a.opts.duration === 240 && a.paused), true);
+    assert.equal(dualAnims.some((a) => a.el === paneL), false, 'opening 2nd tab must not animate/re-rasterize giant main paneL');
+    const paneRAnim = dualAnims.find((a) => a.el === paneR && a.opts.duration === 240 && a.paused);
+    assert.ok(paneRAnim, 'opening 2nd tab must animate incoming paneR');
+    assert.equal(paneRAnim.kfs.some((k) => String(k.transform || '').includes('scale(')), false, '2nd tab animation must not use scale()');
+    assert.equal(dualAnims.some((a) => a.el === sash && a.opts.duration === 180 && a.paused), true);
     flushRaf();
     assert.equal(dualAnims.every((a) => a.played), true);
 
     const beforeClose = anims.length;
     ctl.triggerSplitTransition(split, false);
-    assert.equal(anims.slice(beforeClose).some((a) => a.el === paneL && a.opts.duration === 400), true);
+    assert.equal(paneRAnim.canceled, true, 'closing 2nd tab must cancel prior split handle');
+    assert.equal(anims.slice(beforeClose).some((a) => a.el === paneL), false, 'closing 2nd tab must not force-repaint paneL');
     flushRaf();
 
     // Send launch animation + newly appended user-message-bubble entrance
