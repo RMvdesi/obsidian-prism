@@ -6,6 +6,7 @@ import {
   INLINE_DIFF_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PARTITIONS_BINDING,
 } from './constants.mjs';
 import {
   ENTRY_FSM_STATES,
@@ -27,6 +28,7 @@ const BINDING_BY_CHANNEL = Object.freeze({
   inlineDiff: { name: () => INLINE_DIFF_BINDING, addedField: 'inlineDiffBindingAdded' },
   wallpaper: { name: (cdp) => cdp?.WALLPAPER_BINDING || WALLPAPER_BINDING, addedField: 'wallpaperBindingAdded' },
   suggester: { name: (cdp) => cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING, addedField: 'suggesterBindingAdded' },
+  projectPartitions: { name: (cdp) => cdp?.PARTITIONS_BINDING || PARTITIONS_BINDING, addedField: 'projectPartitionsBindingAdded' },
 });
 
 const PERSISTENT_SPECS = Object.freeze(
@@ -134,6 +136,7 @@ export async function removeChannelBinding(orch, entry, channelId, timeoutMs = 2
   const meta = BINDING_BY_CHANNEL[channelId];
   if (!meta || !entry || entry.session.closed) return;
   if (channelId === 'sidebar' && !entry.sidebarBindingAdded) return;
+  if (channelId === 'projectPartitions' && !entry.projectPartitionsBindingAdded) return;
   const bindingName = meta.name(orch.getCdp());
   if (bindingName) {
     await entry.session.send('Runtime.removeBinding', { name: bindingName }, timeoutMs).catch(() => {});
@@ -306,7 +309,7 @@ export async function cleanupChannelOnEntry(orch, entry, spec, { forceSidebarCle
   if (!entry || !spec) return;
   const f = spec.fields;
   if (f.scriptField) await replaceEntryNewDocScript(entry, f.scriptField, '');
-  if (spec.id === 'sidebar' || spec.id === 'wallpaper' || spec.id === 'suggester') {
+  if (spec.id === 'sidebar' || spec.id === 'wallpaper' || spec.id === 'suggester' || spec.id === 'projectPartitions') {
     await removeChannelBinding(orch, entry, spec.id);
   }
   if (!entry.session.closed) {
@@ -335,7 +338,7 @@ export async function teardownAllEntryChannelScripts(
   }
 
   if (removeBindings) {
-    for (const id of ['sidebar', 'inlineDiff', 'wallpaper', 'suggester']) {
+    for (const id of ['sidebar', 'inlineDiff', 'wallpaper', 'suggester', 'projectPartitions']) {
       await removeChannelBinding(orch, entry, id);
     }
   }
@@ -353,7 +356,7 @@ export async function healSingleChannelOnEntry(orch, entry, spec, cfg, probe, { 
     await ensureChannelBinding(orch, entry, 'sidebar', 2600, true);
   } else if ((id === 'thought' || id === 'inlineDiff') && !afterCh1Heal) {
     await ensureChannelBinding(orch, entry, id, 2600, true);
-  } else if (id === 'wallpaper' || id === 'suggester') {
+  } else if (id === 'wallpaper' || id === 'suggester' || id === 'projectPartitions') {
     await ensureChannelBinding(orch, entry, id, 2600, true);
   }
 
@@ -721,7 +724,7 @@ export async function runBroadcastConfigRefresh(orch) {
                   await recordPersistentEvalOutcome(orch, entry, spec, evalRes, { chHash: hash, chSig: sig, scriptId: entry[f.scriptField], stage: 'broadcast' });
                 }
               } else if ((hadBefore || (!spec.tracksSkippedNonHost && id !== 'omni' && id !== 'thought' && !orch.isChannelEnabled(spec, currentCfg))) && !skippedStale && !entry.session.closed) {
-                if (id === 'wallpaper' || id === 'suggester') await removeChannelBinding(orch, entry, id);
+                if (id === 'wallpaper' || id === 'suggester' || id === 'projectPartitions') await removeChannelBinding(orch, entry, id);
                 if (hadBefore) await evalFireAndForgetSafe(entry.session, buildEffectiveCleanupExpr(orch, spec), 0);
                 resetEntryChannelState(entry, spec, false);
               }

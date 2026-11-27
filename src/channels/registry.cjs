@@ -383,6 +383,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
       "projectPartitionsCodeHash: String((window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.__prismCodeHash || '')",
     ],
     fieldOverrides: {
+      bindingAddedField: 'projectPartitionsBindingAdded',
       cdpShouldFn: 'shouldEnableProjectPartitions',
       cdpBuildFn: 'buildProjectPartitionsExpression',
       cdpRemoveConst: 'PROJECT_PARTITIONS_REMOVE_EXPRESSION',

@@ -149,7 +149,9 @@
       probe();
       const result = [];
       const seen = new Set();
-      const list = safe(() => services?.core?.projectManagementService?.projectsStateProvider?.getState?.()) || [];
+      const provider = services?.core?.projectManagementService?.projectsStateProvider;
+      const fromHostCatalog = Boolean(provider && typeof provider.getState === 'function');
+      const list = safe(() => provider?.getState?.()) || [];
       if (Array.isArray(list)) {
         for (const entry of list) {
           if (!entry || typeof entry !== 'object') continue;
@@ -177,7 +179,7 @@
       if (nativeOrder.size > 0) {
         result.sort((a, b) => (nativeOrder.get(a.id) ?? 1e9) - (nativeOrder.get(b.id) ?? 1e9) || a.name.localeCompare(b.name));
       }
-      return { projects: result, seenIds: seen };
+      return { projects: result, seenIds: seen, fromHostCatalog };
     }
 
     function readConversationsByProject(projects, untitledLabel) {

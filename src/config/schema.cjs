@@ -11,6 +11,7 @@ const SIDEBAR_BINDING = '__agPrismSidebarCall';
 const INLINE_DIFF_BINDING = '__agPrismInlineDiffCall';
 const WALLPAPER_BINDING = '__agPrismWallpaperCall';
 const SUGGESTER_BINDING = '__agPrismSuggestCall';
+const PARTITIONS_BINDING = '__agPrismPartitionsCall';
 
 const CANONICAL_LANG_VALUES = Object.freeze(['auto', 'zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr']);
 const ON_OFF_VALUES = Object.freeze(['on', 'off']);
@@ -263,6 +264,7 @@ module.exports = {
   INLINE_DIFF_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PARTITIONS_BINDING,
   CONFIG_SCHEMA,
   DEFAULT_CONFIG,
   VALIDATORS,

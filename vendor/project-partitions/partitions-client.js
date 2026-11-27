@@ -40,7 +40,9 @@
 
     let bodyMo = null, observedListEl = null, renderRaf = 0, pollTimer = 0, toastEl = null, toastTimer = 0;
     let lastProjMenuTrigger = null, activeNativeMenu = null, activeSubmenu = null, activeFloatingMenu = null, activeDialog = null, submenuCloseTimer = 0;
+    let diskLoadTimer = 0, diskLoadAttempts = 0, diskHydrated = false;
     const cleanups = [];
+    const PERSIST_BINDING = opts.persistBinding || '__agPrismPartitionsCall';
     const L = () => I18N[resolveLang(getLangFn())] || I18N.en;
 
     function ensureStyleSheet() {
@@ -83,28 +85,83 @@
       if (styleEl.textContent !== cssText) styleEl.textContent = cssText;
     }
 
-    function loadState() {
+    function normalizeState(parsed) {
       const def = { version: 1, partitions: [], projectToPartition: {}, expandedProjects: {} };
-      const parsed = ls ? safe(() => JSON.parse(ls.getItem(STORAGE_KEY) || '')) : null;
-      if (!parsed || typeof parsed !== 'object') return def;
-      const partitions = Array.isArray(parsed.partitions)
-        ? parsed.partitions
-            .filter((p) => p && typeof p.id === 'string' && p.id.trim() && typeof p.name === 'string' && p.name.trim())
-            .map((p) => ({ id: p.id.trim(), name: p.name.trim().slice(0, 60), collapsed: Boolean(p.collapsed) }))
-        : [];
-      const validIds = new Set(partitions.map((p) => p.id));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return def;
+      const partitions = [];
+      const validIds = new Set();
+      if (Array.isArray(parsed.partitions)) {
+        for (const p of parsed.partitions) {
+          if (partitions.length >= 100) break;
+          if (!p || typeof p !== 'object') continue;
+          const id = typeof p.id === 'string' ? p.id.trim().slice(0, 80) : '';
+          const name = typeof p.name === 'string' ? p.name.trim().slice(0, 60) : '';
+          if (!id || !name || validIds.has(id)) continue;
+          validIds.add(id);
+          partitions.push({ id, name, collapsed: Boolean(p.collapsed) });
+        }
+      }
       const p2p = {};
-      if (parsed.projectToPartition && typeof parsed.projectToPartition === 'object') {
+      if (parsed.projectToPartition && typeof parsed.projectToPartition === 'object' && !Array.isArray(parsed.projectToPartition)) {
         for (const [k, v] of Object.entries(parsed.projectToPartition)) if (k && validIds.has(v)) p2p[k] = v;
       }
       const exp = {};
-      if (parsed.expandedProjects && typeof parsed.expandedProjects === 'object') {
+      if (parsed.expandedProjects && typeof parsed.expandedProjects === 'object' && !Array.isArray(parsed.expandedProjects)) {
         for (const [k, v] of Object.entries(parsed.expandedProjects)) if (k && v) exp[k] = true;
       }
       return { version: 1, partitions, projectToPartition: p2p, expandedProjects: exp };
     }
 
-    const saveState = () => { if (ls) safe(() => ls.setItem(STORAGE_KEY, JSON.stringify(state))); };
+    function loadState() {
+      const parsed = ls ? safe(() => JSON.parse(ls.getItem(STORAGE_KEY) || '')) : null;
+      return normalizeState(parsed);
+    }
+
+    function callPersistBinding(payloadObj) {
+      const fn = win?.[PERSIST_BINDING] || G?.[PERSIST_BINDING];
+      if (typeof fn !== 'function') return false;
+      safe(() => fn(JSON.stringify(payloadObj)));
+      return true;
+    }
+
+    const persistToDisk = () => callPersistBinding({ action: 'save', data: state });
+
+    function requestDiskLoad() {
+      if (destroyed) return;
+      if (callPersistBinding({ action: 'load' })) {
+        if (diskLoadTimer) { clearTimeout(diskLoadTimer); diskLoadTimer = 0; }
+        return;
+      }
+      if (!diskHydrated && diskLoadAttempts < 8) {
+        diskLoadAttempts += 1;
+        if (diskLoadTimer) clearTimeout(diskLoadTimer);
+        diskLoadTimer = setTimeout(() => {
+          diskLoadTimer = 0;
+          if (!destroyed && !diskHydrated) requestDiskLoad();
+        }, 450);
+        if (diskLoadTimer && typeof diskLoadTimer.unref === 'function') diskLoadTimer.unref();
+      }
+    }
+
+    function applyPersistedState(rawData, exists = true) {
+      if (destroyed) return;
+      diskHydrated = true;
+      if (diskLoadTimer) { clearTimeout(diskLoadTimer); diskLoadTimer = 0; }
+      if (exists) {
+        const next = normalizeState(rawData);
+        const same = JSON.stringify(next) === JSON.stringify(state);
+        state = next;
+        if (ls) safe(() => ls.setItem(STORAGE_KEY, JSON.stringify(state)));
+        if (!same || !doc?.querySelector?.('.ag-prism-partitions-root')) scheduleRender(true);
+      } else if (state.partitions.length > 0) {
+        persistToDisk();
+      }
+    }
+
+    const saveState = () => {
+      if (ls) safe(() => ls.setItem(STORAGE_KEY, JSON.stringify(state)));
+      persistToDisk();
+    };
 
     function showToast(msg) {
       if (destroyed || !doc?.body || !msg) return;
@@ -491,8 +548,8 @@
         return;
       }
 
-      const { projects, seenIds } = host.readProjects();
-      if (projects.length > 0) {
+      const { projects, seenIds, fromHostCatalog } = host.readProjects();
+      if (fromHostCatalog && projects.length > 0) {
         let pruned = false;
         for (const mapObj of [state.projectToPartition, state.expandedProjects]) {
           for (const pid of Object.keys(mapObj)) if (!seenIds.has(pid)) { delete mapObj[pid]; pruned = true; }
@@ -577,7 +634,12 @@
 
     function init() {
       if (!doc || !win) return;
-      state = loadState();
+      if (opts.hasPersistedState && opts.initialState && typeof opts.initialState === 'object') {
+        state = normalizeState(opts.initialState);
+        if (ls) safe(() => ls.setItem(STORAGE_KEY, JSON.stringify(state)));
+      } else {
+        state = loadState();
+      }
       if (!enabled) return;
 
       const onPointerDown = (e) => {
@@ -638,6 +700,7 @@
       if (pollTimer && typeof pollTimer.unref === 'function') pollTimer.unref();
 
       scheduleRender(true);
+      requestDiskLoad();
     }
 
     function sync(nextCfg) {
@@ -656,6 +719,7 @@
       if (renderRaf && typeof cancelAnimationFrame === 'function') { safe(() => cancelAnimationFrame(renderRaf)); renderRaf = 0; }
       if (pollTimer) { clearInterval(pollTimer); pollTimer = 0; }
       if (toastTimer) { clearTimeout(toastTimer); toastTimer = 0; }
+      if (diskLoadTimer) { clearTimeout(diskLoadTimer); diskLoadTimer = 0; }
       cancelCloseSubmenu();
       closeAllPopups();
       closeDialog();
@@ -684,6 +748,8 @@
       tryInjectIntoNativeMenu,
       recordProjectTriggerFromEvent,
       renderPartitions,
+      applyPersistedState,
+      requestDiskLoad,
       getState: () => JSON.parse(JSON.stringify(state)),
       getStatus: () => ({
         status: destroyed ? 'destroyed' : enabled ? 'active' : 'off',

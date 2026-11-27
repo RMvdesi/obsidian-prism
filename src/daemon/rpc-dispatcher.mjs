@@ -10,10 +10,12 @@ import {
   SIDEBAR_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PARTITIONS_BINDING,
   WALLPAPER_MAX_PAYLOAD_BYTES,
   WALLPAPER_ALLOWED_ACTIONS,
   SUGGESTER_MAX_PAYLOAD_BYTES,
   SUGGESTER_ALLOWED_ACTIONS,
+  PARTITIONS_MAX_PAYLOAD_BYTES,
 } from './constants.mjs';
 import { serializeJsonForEval } from './fs-atomic.mjs';
 import { isAutomatedTestRuntime } from './pid-lock.mjs';
@@ -661,6 +663,52 @@ async function handleSuggesterBinding(rpc, entry, payload, executionContextId) {
   return result;
 }
 
+async function handleProjectPartitionsBinding(rpc, entry, payload, executionContextId) {
+  const expectedDocGen = typeof entry?.sidebarDocument === 'number' ? entry.sidebarDocument : null;
+  const expectedContext = typeof executionContextId === 'number' ? entry?.contextFrames?.get?.(executionContextId) : undefined;
+  const checkCtx = () =>
+    isTrustedHostContext(entry, executionContextId, expectedDocGen, {
+      expectedContext,
+      stopped: Boolean(rpc.channelOrchestrator && !rpc.channelOrchestrator.isRunning?.()),
+    });
+  if (!checkCtx()) return;
+  const cdp = rpc.getCdp();
+  const cfg = typeof cdp?.readConfig === 'function' ? cdp.readConfig() : null;
+  const enabled = typeof cdp?.shouldEnableProjectPartitions === 'function'
+    ? Boolean(cdp.shouldEnableProjectPartitions(cfg))
+    : cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true;
+  if (!enabled || typeof payload !== 'string' || payload.length > PARTITIONS_MAX_PAYLOAD_BYTES || Buffer.byteLength(payload, 'utf8') > PARTITIONS_MAX_PAYLOAD_BYTES) return;
+  let parsed;
+  try { parsed = JSON.parse(payload); } catch { return; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  const action = typeof parsed.action === 'string' ? parsed.action.trim() : '';
+  const mkExpr = (d, ex) =>
+    `(() => { try { (window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.applyPersistedState?.(${serializeJsonForEval(d)}, ${Boolean(ex)}); } catch {} })()`;
+
+  if (action === 'load') {
+    const res = typeof cdp?.readProjectPartitionsData === 'function'
+      ? cdp.readProjectPartitionsData()
+      : { exists: false, data: { version: 1, partitions: [], projectToPartition: {}, expandedProjects: {} } };
+    if (checkCtx()) await sendFireAndForgetEval(entry.session, mkExpr(res.data, res.exists), executionContextId, 2000);
+    return { ok: true, exists: Boolean(res.exists), data: res.data };
+  }
+  if (action === 'save') {
+    if (typeof cdp?.writeProjectPartitionsData !== 'function') return { ok: false, error: 'partitions_store_unavailable' };
+    let saved;
+    try { saved = cdp.writeProjectPartitionsData(parsed.data); } catch (err) { return { ok: false, error: sanitizeSecretText(err?.message || err) }; }
+    const syncExpr = mkExpr(saved, true);
+    const tasks = [];
+    for (const other of rpc.sessionRegistry?.sessions?.values?.() || []) {
+      if (!other || other === entry) continue;
+      const target = resolveTrustedBroadcastContextId(other);
+      if (target.ok) tasks.push(sendFireAndForgetEval(other.session, syncExpr, target.contextId, 2000));
+    }
+    if (tasks.length > 0) await Promise.allSettled(tasks);
+    return { ok: true, data: saved };
+  }
+  return { ok: false, error: `Unknown projectPartitions action: ${action || 'empty'}` };
+}
+
 const STATIC_BINDING_TABLE = Object.freeze({
   [REPO_BINDING]: handleRepoBinding,
   [METRICS_BINDING]: handleMetricsBinding,
@@ -671,6 +719,7 @@ const STATIC_BINDING_TABLE = Object.freeze({
   [SIDEBAR_BINDING]: handleSidebarBinding,
   [WALLPAPER_BINDING]: handleWallpaperBinding,
   [SUGGESTER_BINDING]: handleSuggesterBinding,
+  [PARTITIONS_BINDING]: handleProjectPartitionsBinding,
 });
 
 export class RpcDispatcher {
@@ -732,6 +781,10 @@ export class RpcDispatcher {
     const activeSuggesterBinding = cdp?.SUGGESTER_BINDING || SUGGESTER_BINDING;
     if (name === activeSuggesterBinding) {
       return handleSuggesterBinding(this, entry, payload, executionContextId);
+    }
+    const activePartitionsBinding = cdp?.PARTITIONS_BINDING || PARTITIONS_BINDING;
+    if (name === activePartitionsBinding) {
+      return handleProjectPartitionsBinding(this, entry, payload, executionContextId);
     }
     const handler = STATIC_BINDING_TABLE[name];
     if (typeof handler === 'function') {

@@ -9,14 +9,14 @@ const {
   computeHash,
   serializeJsonForEval,
 } = require('../utils/fs-safe.cjs');
-const { VALIDATORS, reconcileConfigAliases } = require('../config/schema.cjs');
+const { VALIDATORS, PARTITIONS_BINDING, reconcileConfigAliases } = require('../config/schema.cjs');
 const { resolveBundleCachePathOption } = require('../compiler/cache-validate.cjs');
 const { packTextJsExpr } = require('../compiler/js-serializer.cjs');
 const { minifyEmbeddedGlslTemplates } = require('../compiler/part-preprocess.cjs');
 const { minifySingleSource } = require('../compiler/js-string-pool.cjs');
 const { CHANNEL_MAIN_FRAME_HOST_GUARD } = require('./host-guard.cjs');
 
-function createAddonChannelBuilders({ rootDir, readConfig, bundleCache }) {
+function createAddonChannelBuilders({ rootDir, readConfig, readProjectPartitionsData = null, bundleCache }) {
   function shouldEnableThought(config = null) {
     const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
     const raw = typeof cfg.thoughtTranslate === 'string' ? cfg.thoughtTranslate.trim().toLowerCase() : '';
@@ -687,6 +687,13 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
 
     const bootCfgJson = serializeJsonForEval(cfg);
     const hashJson = serializeJsonForEval(codeHash);
+    const persisted =
+      typeof readProjectPartitionsData === 'function'
+        ? readProjectPartitionsData()
+        : { exists: false, data: null };
+    const bootPartitionsJson = serializeJsonForEval(persisted && persisted.exists ? persisted.data : null);
+    const bootPartitionsExists = Boolean(persisted && persisted.exists);
+    const persistBindingJson = serializeJsonForEval(PARTITIONS_BINDING);
 
     return `(() => {
   try {
@@ -705,6 +712,9 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
 
     const bootCfg = ${bootCfgJson};
     const targetHash = ${hashJson};
+    const bootPartitions = ${bootPartitionsJson};
+    const bootPartitionsExists = ${bootPartitionsExists ? 'true' : 'false'};
+    const persistBinding = ${persistBindingJson};
     const mountOrReuse = () => {
       if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {
         return { ok: false, status: 'skipped-non-host' };
@@ -731,7 +741,14 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
       const factory = window.__agPrismProjectPartitionsFactory || globalThis.__agPrismProjectPartitionsFactory;
       let mounted = null;
       if (factory && typeof factory.mountProjectPartitions === 'function') {
-        mounted = factory.mountProjectPartitions({ root: window, doc: document, config: effectiveCfg });
+        mounted = factory.mountProjectPartitions({
+          root: window,
+          doc: document,
+          config: effectiveCfg,
+          initialState: bootPartitions,
+          hasPersistedState: bootPartitionsExists,
+          persistBinding,
+        });
       }
       if (mounted && typeof mounted === 'object') {
         mounted.__prismCodeHash = targetHash;

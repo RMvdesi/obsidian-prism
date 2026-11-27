@@ -29,6 +29,8 @@ export const INLINE_DIFF_BINDING = '__agPrismInlineDiffCall';
 export const SIDEBAR_BINDING = '__agPrismSidebarCall';
 export const WALLPAPER_BINDING = '__agPrismWallpaperCall';
 export const SUGGESTER_BINDING = '__agPrismSuggestCall';
+export const PARTITIONS_BINDING = '__agPrismPartitionsCall';
+export const PARTITIONS_MAX_PAYLOAD_BYTES = 65536;
 
 export const WALLPAPER_MAX_PAYLOAD_BYTES = 131072;
 export const WALLPAPER_ALLOWED_ACTIONS = new Set([

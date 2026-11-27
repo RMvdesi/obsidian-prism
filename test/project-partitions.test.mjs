@@ -511,3 +511,207 @@ test('controller: 3-level hierarchy (Partition -> Project -> Conversations), CRU
     globalThis.document = origDoc;
   }
 });
+
+
+test('persistence: project-partitions.json atomic store, PROTECTED_USER_PATHS, and controller cross-port restore & migration', () => {
+  const { PROTECTED_USER_PATHS } = require(path.join(ROOT, 'src', 'platform', 'install-manifest.cjs'));
+  assert.ok(PROTECTED_USER_PATHS.includes('project-partitions.json'), 'project-partitions.json must be protected across upgrades');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-part-store-'));
+  const filePath = path.join(tmpDir, 'project-partitions.json');
+  try {
+    // Missing file returns exists: false with clean empty schema
+    const emptyRes = cdp.readProjectPartitionsData(filePath);
+    assert.equal(emptyRes.exists, false);
+    assert.deepEqual(emptyRes.data, { version: 1, partitions: [], projectToPartition: {}, expandedProjects: {} });
+
+    // Atomic write normalizes invalid entries, trims names, and drops orphan partition refs
+    const written = cdp.writeProjectPartitionsData(
+      {
+        partitions: [
+          { id: 'part-1', name: '  Develop  ', collapsed: 1 },
+          { id: 'part-1', name: 'Duplicate ID ignored' },
+          { id: '', name: 'Empty ID ignored' },
+        ],
+        projectToPartition: { 'proj-alpha': 'part-1', 'proj-bad': 'nonexistent' },
+        expandedProjects: { 'proj-alpha': 1, 'proj-false': false },
+      },
+      filePath
+    );
+    assert.deepEqual(written, {
+      version: 1,
+      partitions: [{ id: 'part-1', name: 'Develop', collapsed: true }],
+      projectToPartition: { 'proj-alpha': 'part-1' },
+      expandedProjects: { 'proj-alpha': true },
+    });
+
+    const readBack = cdp.readProjectPartitionsData(filePath);
+    assert.equal(readBack.exists, true);
+    assert.deepEqual(readBack.data, written);
+
+    // Corrupt JSON fails closed cleanly
+    fs.writeFileSync(filePath, '{corrupt', 'utf8');
+    assert.equal(cdp.readProjectPartitionsData(filePath).exists, false);
+
+    // Controller save emits persistBinding, survives empty localStorage (random port restart), and migrates legacy localStorage
+    const dom = createPartitionsMiniDom({ projects: [], summaries: {} });
+    const bindingPayloads = [];
+    dom.win[cdp.PARTITIONS_BINDING] = (raw) => bindingPayloads.push(JSON.parse(raw));
+    const origW = globalThis.window;
+    const origD = globalThis.document;
+    globalThis.window = dom.win;
+    globalThis.document = dom.doc;
+    try {
+      const ctrl = partitionsFactory.mountProjectPartitions({
+        root: dom.win,
+        doc: dom.doc,
+        config: { projectPartitions: 'on', language: 'en' },
+        initialState: written,
+        hasPersistedState: true,
+        persistBinding: cdp.PARTITIONS_BINDING,
+      });
+      // Immediately hydrated from initialState even with blank localStorage
+      assert.deepEqual(ctrl.getState().partitions, written.partitions);
+      assert.equal(ctrl.getState().projectToPartition['proj-alpha'], 'part-1');
+      assert.equal(bindingPayloads[0]?.action, 'load', 'init should request freshest disk state');
+
+      // Mutating calls persistBinding save
+      const added = ctrl.createPartition('Tools');
+      assert.equal(added.ok, true);
+      const saveCall = bindingPayloads.find((p) => p.action === 'save');
+      assert.ok(saveCall, 'mutations must call persistBinding save');
+      assert.deepEqual(saveCall.data.partitions.map((p) => p.name), ['Develop', 'Tools']);
+
+      // Simulate random-port restart: wipe localStorage & apply persisted disk state
+      dom.win.localStorage.removeItem(partitionsFactory.STORAGE_KEY);
+      ctrl.applyPersistedState(written, true);
+      assert.deepEqual(ctrl.getState().partitions.map((p) => p.name), ['Develop']);
+      assert.ok(dom.win.localStorage.getItem(partitionsFactory.STORAGE_KEY).includes('Develop'));
+
+      // Legacy localStorage migration: if disk does not exist yet, existing in-memory partitions persist to disk
+      bindingPayloads.length = 0;
+      ctrl.applyPersistedState(null, false);
+      assert.equal(bindingPayloads.length, 1);
+      assert.equal(bindingPayloads[0].action, 'save');
+      assert.deepEqual(bindingPayloads[0].data.partitions.map((p) => p.name), ['Develop']);
+
+      ctrl.destroy();
+    } finally {
+      globalThis.window = origW;
+      globalThis.document = origD;
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('RpcDispatcher: PARTITIONS_BINDING enforces trusted context, feature gate, 64KB cap, disk save/load, and peer broadcast', async () => {
+  const { RpcDispatcher } = await import('../src/daemon/rpc-dispatcher.mjs');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-part-rpc-'));
+  const filePath = path.join(tmpDir, 'project-partitions.json');
+  try {
+    let featureEnabled = true;
+    const fakeCdp = {
+      SETTING_BINDING: cdp.SETTING_BINDING,
+      LEGACY_SETTING_BINDING: cdp.LEGACY_SETTING_BINDING,
+      PARTITIONS_BINDING: cdp.PARTITIONS_BINDING,
+      readConfig: () => ({ projectPartitions: featureEnabled ? 'on' : 'off' }),
+      shouldEnableProjectPartitions: (cfg) => cfg?.projectPartitions === 'on',
+      readProjectPartitionsData: () => cdp.readProjectPartitionsData(filePath),
+      writeProjectPartitionsData: (raw) => cdp.writeProjectPartitionsData(raw, filePath),
+    };
+
+    const makeEntry = (id, { trusted = true } = {}) => {
+      const evals = [];
+      const ctxMeta = { frameId: 'main-frame', isDefault: true, type: 'default', docGen: 1 };
+      return {
+        id,
+        evals,
+        sidebarHostVerified: trusted,
+        sidebarDocument: 1,
+        sidebarVerifiedDocument: 1,
+        sidebarHostContextId: 10,
+        mainFrameId: 'main-frame',
+        hasFrameTree: true,
+        contextFrames: new Map([
+          [10, ctxMeta],
+          [99, { frameId: 'child-iframe', isDefault: true, type: 'default', docGen: 1 }],
+        ]),
+        session: {
+          closed: false,
+          async send(method, params) {
+            if (method === 'Runtime.evaluate') evals.push(params);
+            return {};
+          },
+        },
+      };
+    };
+
+    const entryA = makeEntry('A', { trusted: true });
+    const entryB = makeEntry('B', { trusted: true });
+    const entryUntrusted = makeEntry('C', { trusted: false });
+    const sessions = new Map([['a', entryA], ['b', entryB], ['c', entryUntrusted]]);
+
+    const rpc = new RpcDispatcher({
+      getCdp: () => fakeCdp,
+      sessionRegistry: { sessions },
+      channelOrchestrator: { isRunning: () => true },
+    });
+
+    // 1. Rejects child iframe execution context (ctx 99)
+    await rpc.handleBindingCall(entryA, {
+      name: cdp.PARTITIONS_BINDING,
+      payload: JSON.stringify({ action: 'save', data: { partitions: [{ id: 'p1', name: 'Evil' }] } }),
+      executionContextId: 99,
+    });
+    assert.equal(fs.existsSync(filePath), false, 'iframe context must be rejected fail-closed');
+
+    // 2. Rejects oversized > 64KB payload
+    await rpc.handleBindingCall(entryA, {
+      name: cdp.PARTITIONS_BINDING,
+      payload: JSON.stringify({ action: 'save', pad: 'x'.repeat(70000) }),
+      executionContextId: 10,
+    });
+    assert.equal(fs.existsSync(filePath), false, 'oversized payload must be rejected');
+
+    // 3. Rejects when feature is off
+    featureEnabled = false;
+    await rpc.handleBindingCall(entryA, {
+      name: cdp.PARTITIONS_BINDING,
+      payload: JSON.stringify({ action: 'save', data: { partitions: [{ id: 'p1', name: 'Disabled' }] } }),
+      executionContextId: 10,
+    });
+    assert.equal(fs.existsSync(filePath), false, 'save must be rejected when projectPartitions is off');
+
+    // 4. Accepts trusted save when enabled, writes disk, and broadcasts ONLY to trusted peer B (not A, not C)
+    featureEnabled = true;
+    const saveRes = await rpc.handleBindingCall(entryA, {
+      name: cdp.PARTITIONS_BINDING,
+      payload: JSON.stringify({
+        action: 'save',
+        data: { partitions: [{ id: 'p1', name: 'Develop', collapsed: false }], projectToPartition: { 'proj-1': 'p1' }, expandedProjects: {} },
+      }),
+      executionContextId: 10,
+    });
+    assert.equal(saveRes.ok, true);
+    assert.equal(cdp.readProjectPartitionsData(filePath).data.partitions[0].name, 'Develop');
+    assert.equal(entryA.evals.length, 0);
+    assert.equal(entryB.evals.length, 1);
+    assert.match(entryB.evals[0].expression, /applyPersistedState/);
+    assert.match(entryB.evals[0].expression, /Develop/);
+    assert.equal(entryUntrusted.evals.length, 0, 'untrusted peer must not receive broadcast');
+
+    // 5. Load returns disk state to caller
+    const loadRes = await rpc.handleBindingCall(entryA, {
+      name: cdp.PARTITIONS_BINDING,
+      payload: JSON.stringify({ action: 'load' }),
+      executionContextId: 10,
+    });
+    assert.equal(loadRes.ok, true);
+    assert.equal(loadRes.exists, true);
+    assert.equal(entryA.evals.length, 1);
+    assert.match(entryA.evals[0].expression, /applyPersistedState/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

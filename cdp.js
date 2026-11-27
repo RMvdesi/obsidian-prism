@@ -92,7 +92,12 @@ const studioBuilders = createStudioChannelBuilders({
   readConfig: configStore.readConfig,
   bundleCache,
 });
-const addonBuilders = createAddonChannelBuilders({ rootDir: ROOT_DIR, readConfig: configStore.readConfig, bundleCache });
+const addonBuilders = createAddonChannelBuilders({
+  rootDir: ROOT_DIR,
+  readConfig: configStore.readConfig,
+  readProjectPartitionsData: configStore.readProjectPartitionsData,
+  bundleCache,
+});
 const runtimeBuilders = createRuntimeChannelBuilders({ rootDir: ROOT_DIR, readConfig: configStore.readConfig, bundleCache });
 const channelRegistry = createChannelRegistry({
   builders: { ...coreBuilders, ...i18nBuilders, ...studioBuilders, ...addonBuilders, ...runtimeBuilders },
@@ -125,10 +130,12 @@ module.exports = {
   INLINE_DIFF_BINDING: schema.INLINE_DIFF_BINDING,
   WALLPAPER_BINDING: schema.WALLPAPER_BINDING,
   SUGGESTER_BINDING: schema.SUGGESTER_BINDING,
+  PARTITIONS_BINDING: schema.PARTITIONS_BINDING,
   PORT_FILE: fsSafe.PORT_FILE,
   PID_FILE,
   CONFIG_FILE: configStore.CONFIG_FILE,
   CONFIG_PATH: configStore.CONFIG_PATH,
+  PARTITIONS_FILE: configStore.PARTITIONS_FILE,
   CONFIG_SCHEMA: schema.CONFIG_SCHEMA,
   DEFAULT_CONFIG: schema.DEFAULT_CONFIG,
   VALIDATORS: schema.VALIDATORS,
@@ -209,6 +216,9 @@ module.exports = {
   readConfig: configStore.readConfig,
   writeConfig: configStore.writeConfig,
   invalidateConfigCache: configStore.invalidateConfigCache,
+  normalizeProjectPartitionsData: configStore.normalizeProjectPartitionsData,
+  readProjectPartitionsData: configStore.readProjectPartitionsData,
+  writeProjectPartitionsData: configStore.writeProjectPartitionsData,
   readCss: ch1Compiler.readCss,
   readPort: processProbe.readPort,
   listPages: transport.listPages,

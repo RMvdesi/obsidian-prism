@@ -10,11 +10,14 @@ const {
   OMNI_BINDING,
   SIDEBAR_BINDING,
   INLINE_DIFF_BINDING,
+  PARTITIONS_BINDING,
   validateConfigEntry,
   reconcileConfigAliases,
   isEligibleTarget,
   readConfig,
   writeConfig,
+  readProjectPartitionsData,
+  writeProjectPartitionsData,
   readPidFromLockFile,
   isExpectedDaemonProcess,
   readPort,
@@ -717,6 +720,16 @@ async function watch() {
     return pending;
   }
 
+  async function ensurePartitionsBinding(session, entry, cfg = readConfig()) {
+    if (!PARTITIONS_BINDING || !session || session.closed || !entry) return false;
+    if (cfg?.projectPartitions !== 'on' && cfg?.projectPartitions !== true) return false;
+    if (entry.projectPartitionsBindingAdded) return true;
+    return session
+      .send('Runtime.addBinding', { name: PARTITIONS_BINDING })
+      .then(() => { entry.projectPartitionsBindingAdded = true; return true; })
+      .catch(() => false);
+  }
+
   const broadcastFastConfigRefresh = createFastConfigRefreshBroadcaster({
     attached,
     readConfig,
@@ -1096,6 +1109,32 @@ async function watch() {
           }
           return;
         }
+        if (PARTITIONS_BINDING && name === PARTITIONS_BINDING) {
+          const cfgNow = readConfig();
+          if (cfgNow?.projectPartitions !== 'on' && cfgNow?.projectPartitions !== true) return;
+          if (typeof payload !== 'string' || payload.length > 65536 || Buffer.byteLength(payload, 'utf8') > 65536) return;
+          let parsed;
+          try { parsed = JSON.parse(payload); } catch { return; }
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+          const act = typeof parsed.action === 'string' ? parsed.action.trim() : '';
+          const safeJson = (v) => JSON.stringify(v).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+          if (act === 'load' && typeof readProjectPartitionsData === 'function') {
+            const res = readProjectPartitionsData();
+            const expr = `(() => { try { (window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.applyPersistedState?.(${safeJson(res.data)}, ${Boolean(res.exists)}); } catch {} })()`;
+            const params = { expression: expr, returnByValue: false };
+            if (typeof executionContextId === 'number' && executionContextId > 0) params.contextId = executionContextId;
+            await entry.session.send('Runtime.evaluate', params).catch(() => {});
+          } else if (act === 'save' && typeof writeProjectPartitionsData === 'function') {
+            let saved;
+            try { saved = writeProjectPartitionsData(parsed.data); } catch { return; }
+            const expr = `(() => { try { (window.__agPrismProjectPartitions || globalThis.__agPrismProjectPartitions)?.applyPersistedState?.(${safeJson(saved)}, true); } catch {} })()`;
+            for (const other of attached.values()) {
+              if (!other || other === entry || other.session?.closed) continue;
+              await other.session.send('Runtime.evaluate', { expression: expr, returnByValue: false }).catch(() => {});
+            }
+          }
+          return;
+        }
         if (name !== SETTING_BINDING && name !== LEGACY_SETTING_BINDING) return;
         try {
           const parsed = JSON.parse(payload);
@@ -1143,6 +1182,7 @@ async function watch() {
         entry.inlineDiffBindingAdded = true;
       }
       await ensureSidebarBinding(session, entry, readConfig());
+      await ensurePartitionsBinding(session, entry, readConfig());
       const res = await apply(entry);
       log(`[✓] 已注入 obsidian-prism: ${shortTitle(page)} (${res.status})`);
     } catch (err) {

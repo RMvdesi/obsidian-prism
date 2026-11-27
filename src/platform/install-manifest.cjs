@@ -12,7 +12,7 @@ const INSTALL_MANIFEST_LAYOUT_VERSION = 2;
 const VALID_SCOPES = Object.freeze(['install', 'plugin', 'both']);
 
 const PROTECTED_USER_PATHS = Object.freeze([
-  'config.json', 'custom.css', '.bundle-cache.json', '.bundle-cache/', '.daemon.pid', '.watch.pid',
+  'config.json', 'project-partitions.json', 'custom.css', '.bundle-cache.json', '.bundle-cache/', '.daemon.pid', '.watch.pid',
   '.relaunch-prompt-state.json', '.pending-restore-run-in-bg.json', 'repo-meta.json',
   'wallpapers/', 'backups/',
 ]);
