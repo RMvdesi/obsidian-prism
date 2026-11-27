@@ -54,16 +54,13 @@
 
   var MODEL_SELECTOR_TESTIDS = {
     'model-selector-trigger': 1,
-    'model-selector-panel': 1,
-    'model-selector-item': 1,
     'model-selector-effort-option': 1,
     'model-selector-effort-group': 1,
-    'model-selector-list': 1,
-    'model-selector-orchestrator': 1,
     'orchestrator-effort-bar': 1,
-    'orchestrator-picker-row': 1,
     'orchestrator-picker-effort': 1,
   };
+  function getModelPanelRules() { var m = resolveDefaultReverseModule(root); return (m && m.MODEL_PANEL_RULES) || null; }
+  function isSafeModelPanelChromeText(t) { var r = getModelPanelRules(); return Boolean(r && r.isSafeText(t)); }
 
   var PRISM_OWNED_IDS = {
     'ag-cs-settings-sec': 1,
@@ -123,7 +120,6 @@
 
   var USER_CONTENT_BOUNDARY = {
     testids: {
-      'conversation-list-sidebar': 1,
       'conversation-row-sidebar': 1,
       'project-header': 1,
       'workspace-switcher': 1,
@@ -239,6 +235,7 @@
     var tokens = preTokens || getClassTokens(el);
     for (var t = 0; t < tokens.length; t++) {
       var cls = tokens[t];
+      if (cls === 'ces-ag-panel-enhanced') continue;
       for (var p = 0; p < PRISM_CLASS_PREFIXES.length; p++) {
         if (cls.indexOf(PRISM_CLASS_PREFIXES[p]) === 0) return true;
       }
@@ -246,99 +243,62 @@
     return false;
   }
 
-  function isPrismOwnedElement(el) {
+  function hasAncestorSelf(el, selfPred) {
     var cur = el && el.nodeType === 3 ? el.parentElement || el.parentNode : el;
-    var depth = 0;
-    while (cur && depth < MAX_SAFE_BOUNDARY_DEPTH) {
-      if (cur.nodeType === 1 && isPrismOwnedSelf(cur)) return true;
-      cur = cur.parentElement || cur.parentNode;
-      depth++;
+    for (var d = 0; cur && d < MAX_SAFE_BOUNDARY_DEPTH; d++, cur = cur.parentElement || cur.parentNode) {
+      if (cur.nodeType === 1 && selfPred(cur)) return true;
     }
     return false;
   }
 
-  function isModelSelectorSelf(el, preTid) {
+  function isPrismOwnedElement(el) { return hasAncestorSelf(el, isPrismOwnedSelf); }
+
+  function isModelSelectorHardSelf(el, preTid) {
     if (!el || el.nodeType !== 1) return false;
     var tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
-    if (tid && hasOwn.call(MODEL_SELECTOR_TESTIDS, tid)) return true;
-    if (
-      hasAttr(el, 'data-effort') ||
-      hasAttr(el, 'data-ag-cs-model-submenu') ||
-      hasAttr(el, 'data-ag-cs-orch-l2') ||
-      hasAttr(el, 'data-ag-cs-orch-l3') ||
-      hasAttr(el, 'data-ces-orch-row')
-    ) return true;
-    return false;
+    return Boolean((tid && hasOwn.call(MODEL_SELECTOR_TESTIDS, tid)) || hasAttr(el, 'data-effort') || hasAttr(el, 'data-ag-cs-model-submenu') || hasAttr(el, 'data-ag-cs-orch-l2') || hasAttr(el, 'data-ag-cs-orch-l3') || hasAttr(el, 'data-ces-orch-row'));
   }
-
-  function isModelSelectorElement(el) {
-    var cur = el && el.nodeType === 3 ? el.parentElement || el.parentNode : el;
-    var depth = 0;
-    while (cur && depth < MAX_SAFE_BOUNDARY_DEPTH) {
-      if (cur.nodeType === 1 && isModelSelectorSelf(cur)) return true;
-      cur = cur.parentElement || cur.parentNode;
-      depth++;
-    }
-    return false;
+  function isModelSelectorScopedSelf(el, preTid) {
+    if (!el || el.nodeType !== 1) return false;
+    var r = getModelPanelRules(), tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
+    return Boolean(r && r.isScopedTid(tid));
   }
+  function isModelSelectorSelf(el, preTid) { return isModelSelectorHardSelf(el, preTid) || isModelSelectorScopedSelf(el, preTid); }
+  function isModelPanelPopupSelf(el) { return Boolean(el && el.nodeType === 1 && (getAttr(el, 'role') === 'tooltip' || hasAttr(el, 'data-hover-card-popup'))); }
+  function isModelSelectorElement(el) { return hasAncestorSelf(el, isModelSelectorSelf); }
 
-  function isChatProseSelf(el, preTokens, preTid) {
+  function matchesBoundarySpec(el, testids, attrs, classMap, preTokens, preTid) {
     if (!el || el.nodeType !== 1) return false;
     var tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
-    if (tid && hasOwn.call(CHAT_PROSE_TESTIDS, tid)) return true;
-    for (var i = 0; i < CHAT_PROSE_ATTRS.length; i++) {
-      if (hasAttr(el, CHAT_PROSE_ATTRS[i])) return true;
-    }
+    if (tid && hasOwn.call(testids, tid)) return true;
+    for (var i = 0; i < attrs.length; i++) if (hasAttr(el, attrs[i])) return true;
     var tokens = preTokens || getClassTokens(el);
-    for (var t = 0; t < tokens.length; t++) {
-      if (CHAT_PROSE_CLASS_MAP[tokens[t]]) return true;
-    }
+    for (var t = 0; t < tokens.length; t++) if (classMap[tokens[t]]) return true;
     return false;
   }
+  function isChatProseSelf(el, preTokens, preTid) { return matchesBoundarySpec(el, CHAT_PROSE_TESTIDS, CHAT_PROSE_ATTRS, CHAT_PROSE_CLASS_MAP, preTokens, preTid); }
+  function isUserContentBoundarySelf(el, preTokens, preTid) { return matchesBoundarySpec(el, USER_CONTENT_BOUNDARY.testids, USER_CONTENT_BOUNDARY.attrs, USER_CONTENT_CLASS_MAP, preTokens, preTid); }
 
-  function isUserContentBoundarySelf(el, preTokens, preTid) {
+  function isUserContentBoundary(el) { return hasAncestorSelf(el, isUserContentBoundarySelf); }
+
+  function isConversationStreamSelf(el, preTid) {
     if (!el || el.nodeType !== 1) return false;
     var tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
-    if (tid && hasOwn.call(USER_CONTENT_BOUNDARY.testids, tid)) return true;
-    for (var i = 0; i < USER_CONTENT_BOUNDARY.attrs.length; i++) {
-      if (hasAttr(el, USER_CONTENT_BOUNDARY.attrs[i])) return true;
-    }
-    var tokens = preTokens || getClassTokens(el);
-    for (var t = 0; t < tokens.length; t++) {
-      if (USER_CONTENT_CLASS_MAP[tokens[t]]) return true;
-    }
-    return false;
-  }
-
-  function isUserContentBoundary(el) {
-    var cur = el && el.nodeType === 3 ? el.parentElement || el.parentNode : el;
-    var depth = 0;
-    while (cur && depth < MAX_SAFE_BOUNDARY_DEPTH) {
-      if (cur.nodeType === 1 && isUserContentBoundarySelf(cur)) return true;
-      cur = cur.parentElement || cur.parentNode;
-      depth++;
-    }
-    return false;
-  }
-
-  function isConversationStreamSelf(el) {
-    if (!el || el.nodeType !== 1) return false;
-    var tid = getAttr(el, 'data-testid');
     if (tid === 'conversation-view' || tid === 'agent-input-box' || tid === 'agent-response') return true;
     if (hasAttr(el, 'data-cascade-id')) return true;
     return false;
   }
 
-  function isInteractiveChatChromeSelf(el, skipDirectCheck) {
+  function isInteractiveChatChromeSelf(el, skipDirectCheck, preTid) {
     if (!el || el.nodeType !== 1) return false;
-    if (!skipDirectCheck && isDirectIgnoredSelf(el)) return false;
+    var tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
+    if (!skipDirectCheck && isDirectIgnoredSelf(el, tid)) return false;
     var tag = el.tagName ? String(el.tagName).toUpperCase() : '';
     if (tag === 'BUTTON') return true;
     var role = getAttr(el, 'role');
     if (role === 'button' || role === 'menu' || role === 'menuitem' || role === 'tooltip' || role === 'toolbar' || role === 'tab' || role === 'tablist') {
       return true;
     }
-    var tid = getAttr(el, 'data-testid');
     if (tid === 'permissions-selector-trigger' || tid === 'plan-command-fyi-alert' || tid === 'changed-files-card-header') return true;
     return false;
   }
@@ -353,16 +313,7 @@
     return false;
   }
 
-  function isExternalOwnedElement(el) {
-    var cur = el && el.nodeType === 3 ? el.parentElement || el.parentNode : el;
-    var depth = 0;
-    while (cur && depth < MAX_SAFE_BOUNDARY_DEPTH) {
-      if (cur.nodeType === 1 && isExternalPluginOwnedSelf(cur)) return true;
-      cur = cur.parentElement || cur.parentNode;
-      depth++;
-    }
-    return false;
-  }
+  function isExternalOwnedElement(el) { return hasAncestorSelf(el, isExternalPluginOwnedSelf); }
 
   function isCodeDiffContainerSelf(el, tokens, tid) {
     if (hasAttr(el, 'data-ag-cs-inline-diff')) return true;
@@ -376,16 +327,16 @@
     return false;
   }
 
-  function isDirectIgnoredSelf(el) {
+  function isDirectIgnoredSelf(el, preTid) {
     if (!el || el.nodeType !== 1) return false;
     var tag = el.tagName ? String(el.tagName).toUpperCase() : '';
     if (IGNORED_TAGS[tag]) return true;
     if (el.isContentEditable === true || getAttr(el, 'contenteditable') === 'true') return true;
     var tokens = getClassTokens(el);
-    var tid = getAttr(el, 'data-testid');
+    var tid = preTid !== undefined ? preTid : getAttr(el, 'data-testid');
     if (isPrismOwnedSelf(el, tokens)) return true;
     if (isExternalPluginOwnedSelf(el)) return true;
-    if (isModelSelectorSelf(el, tid)) return true;
+    if (isModelSelectorHardSelf(el, tid)) return true;
     if (isChatProseSelf(el, tokens, tid)) return true;
     if (isUserContentBoundarySelf(el, tokens, tid)) return true;
     return isCodeDiffContainerSelf(el, tokens, tid);
@@ -399,73 +350,44 @@
    *    0: normal host UI (safe to translate)
    *    1: inside conversation stream without interactive chrome exemption (skip self/text, descend elements)
    *    2: inside interactive chrome control within conversation stream (safe to translate)
+   *    3: inside scoped model selector panel (only known chrome/badges/Usage links translate)
+   *    4: tooltip / hover card inside model panel (full panel-popup translation)
    */
   function measureSafeBoundaryDepth(el) {
     if (!el) return { blocked: false, canDescendConv: false, state: 0, remDepth: MAX_SAFE_BOUNDARY_DEPTH };
-    var startEl = el.nodeType === 3 ? el.parentElement || el.parentNode : el;
-    if (!startEl || startEl.nodeType !== 1) {
-      return { blocked: false, canDescendConv: false, state: 0, remDepth: MAX_SAFE_BOUNDARY_DEPTH };
-    }
-
-    var cur = startEl;
-    var sawInteractiveChrome = false;
-    var sawConvStream = false;
-    var blockedByConvStream = false;
-    var depth = 0;
+    var cur = el.nodeType === 3 ? el.parentElement || el.parentNode : el;
+    if (!cur || cur.nodeType !== 1) return { blocked: false, canDescendConv: false, state: 0, remDepth: MAX_SAFE_BOUNDARY_DEPTH };
+    var sawInter = false, sawConv = false, blockedConv = false, sawPanel = false, sawPopup = false, depth = 0;
     while (cur && depth < MAX_SAFE_BOUNDARY_DEPTH) {
       if (cur.nodeType === 1) {
-        if (isDirectIgnoredSelf(cur)) {
-          return { blocked: true, canDescendConv: false, state: -1, remDepth: -1 };
-        }
-        if (isInteractiveChatChromeSelf(cur, true)) {
-          sawInteractiveChrome = true;
-        }
-        if (isConversationStreamSelf(cur)) {
-          sawConvStream = true;
-          if (!sawInteractiveChrome) {
-            blockedByConvStream = true;
-          }
-        }
+        var tid = getAttr(cur, 'data-testid');
+        if (isDirectIgnoredSelf(cur, tid)) return { blocked: true, canDescendConv: false, state: -1, remDepth: -1 };
+        if (isModelPanelPopupSelf(cur) && !sawPanel) sawPopup = true;
+        if (isModelSelectorScopedSelf(cur, tid)) sawPanel = true;
+        if (isInteractiveChatChromeSelf(cur, true, tid)) sawInter = true;
+        if (isConversationStreamSelf(cur, tid)) { sawConv = true; if (!sawInter) blockedConv = true; }
       }
       cur = cur.parentElement || cur.parentNode;
       depth++;
     }
-    if (cur) {
-      return { blocked: true, canDescendConv: false, state: -1, remDepth: -1 };
-    }
-    var remDepth = MAX_SAFE_BOUNDARY_DEPTH - depth;
-    if (blockedByConvStream) {
-      return { blocked: true, canDescendConv: true, state: 1, remDepth: remDepth };
-    }
-    return {
-      blocked: false,
-      canDescendConv: false,
-      state: sawConvStream ? 2 : 0,
-      remDepth: remDepth,
-    };
+    if (cur) return { blocked: true, canDescendConv: false, state: -1, remDepth: -1 };
+    var rem = MAX_SAFE_BOUNDARY_DEPTH - depth;
+    if (blockedConv) return { blocked: true, canDescendConv: true, state: 1, remDepth: rem };
+    return { blocked: false, canDescendConv: false, state: sawPanel ? (sawPopup ? 4 : 3) : (sawConv ? 2 : 0), remDepth: rem };
   }
 
   function advanceBoundaryForChild(parentCtx, childEl) {
-    var nextRem = parentCtx.remDepth - 1;
-    if (nextRem < 0 || parentCtx.state === -1) return null;
-    if (isDirectIgnoredSelf(childEl)) return null;
-    var pState = parentCtx.state;
-    var isInter = isInteractiveChatChromeSelf(childEl, true);
-    var isConv = isConversationStreamSelf(childEl);
-    var nextState = pState;
-    if (pState === 0) {
-      if (isConv) nextState = isInter ? 2 : 1;
-    } else if (pState === 1) {
-      nextState = isInter ? 2 : 1;
-    } else if (pState === 2) {
-      if (isConv && !isInter) nextState = 1;
-    }
-    return {
-      blocked: nextState === 1,
-      canDescendConv: nextState === 1,
-      state: nextState,
-      remDepth: nextRem,
-    };
+    var rem = parentCtx.remDepth - 1;
+    if (rem < 0 || parentCtx.state === -1) return null;
+    var tid = getAttr(childEl, 'data-testid');
+    if (isDirectIgnoredSelf(childEl, tid)) return null;
+    var p = parentCtx.state, n = p, inter = isInteractiveChatChromeSelf(childEl, true, tid), conv = isConversationStreamSelf(childEl, tid);
+    if (p === 3 || p === 4) n = p === 4 || isModelPanelPopupSelf(childEl) ? 4 : 3;
+    else if (isModelSelectorScopedSelf(childEl, tid)) n = 3;
+    else if (p === 0) { if (conv) n = inter ? 2 : 1; }
+    else if (p === 1) n = inter ? 2 : 1;
+    else if (p === 2 && conv && !inter) n = 1;
+    return { blocked: n === 1, canDescendConv: n === 1, state: n, remDepth: rem };
   }
 
   function isIgnoredBoundary(el) {
@@ -665,7 +587,7 @@
       return;
     }
     if (el.nodeType !== 1) return;
-    if (isDirectIgnoredSelf(el) || isConversationStreamSelf(el)) return;
+    if (isDirectIgnoredSelf(el) || isModelSelectorScopedSelf(el) || isConversationStreamSelf(el)) return;
     var child = el.firstChild;
     while (child) {
       collectTextSkippingIgnored(child, outChunks, textSnapshots);
@@ -718,7 +640,7 @@
         return;
       }
       if (node.nodeType !== 1) return;
-      if (isDirectIgnoredSelf(node) || isConversationStreamSelf(node)) return;
+      if (isDirectIgnoredSelf(node) || isModelSelectorScopedSelf(node) || isConversationStreamSelf(node)) return;
 
       if (isLeafChromeControl(node)) {
         var chunks = [];
@@ -1239,6 +1161,8 @@
       }
     } else {
       rawPatterns = (data.patterns || []).concat(data.rules || []);
+      var supMpr = getModelPanelRules();
+      if (supMpr && supMpr.mergeSupPatterns) rawPatterns = supMpr.mergeSupPatterns(exactDict, rawPatterns);
     }
 
     var patterns = [];
@@ -1333,6 +1257,8 @@
           translatedValues[exactDict[k]] = true;
         }
       }
+      var exMpr = getModelPanelRules();
+      if (exMpr && exMpr.mergeSupExact) exMpr.mergeSupExact(exactDict, exactLookup, translatedValues);
     }
 
     // Release strong references to external input dictionary objects (~0.6 MiB/window saved)
@@ -2020,7 +1946,7 @@
     var rafId = null;
     var hoverScanTimer = null;
     var hoverCardTimer = null;
-    var pendingHoverCardNode = null;
+    var pendingHoverCardNodes = [];
     var focusWakeTimer = null;
     var layer2bTimers = [];
     var domReadyHandler = null;
@@ -2346,39 +2272,26 @@
       return hadAny;
     }
 
-    function clearAllTimersAndListeners() {
-      disconnectDirtyObserver();
-      dirtyObserver = null;
+    function cancelPendingWorkTimers() {
       pendingFullFloatScan = false;
-      clearOffRetryTimers();
       if (rafId === 'bus') {
         try { var _b = getHostDomBus(); if (_b && typeof _b.cancelTask === 'function') _b.cancelTask('conv:host-i18n-flush'); } catch (e) {}
         rafId = null;
       } else if (rafId !== null) {
-        try {
-          cancelRafFn(rafId);
-        } catch (e) {}
+        try { cancelRafFn(rafId); } catch (e) {}
         rafId = null;
       }
-      if (hoverScanTimer !== null) {
-        try {
-          clearTimeoutFn(hoverScanTimer);
-        } catch (e) {}
-        hoverScanTimer = null;
-      }
-      if (hoverCardTimer !== null) {
-        try {
-          clearTimeoutFn(hoverCardTimer);
-        } catch (e) {}
-        hoverCardTimer = null;
-      }
-      pendingHoverCardNode = null;
-      if (focusWakeTimer !== null) {
-        try {
-          clearTimeoutFn(focusWakeTimer);
-        } catch (e) {}
-        focusWakeTimer = null;
-      }
+      if (hoverScanTimer !== null) { try { clearTimeoutFn(hoverScanTimer); } catch (e) {} hoverScanTimer = null; }
+      if (hoverCardTimer !== null) { try { clearTimeoutFn(hoverCardTimer); } catch (e) {} hoverCardTimer = null; }
+      pendingHoverCardNodes.length = 0;
+      if (focusWakeTimer !== null) { try { clearTimeoutFn(focusWakeTimer); } catch (e) {} focusWakeTimer = null; }
+    }
+
+    function clearAllTimersAndListeners() {
+      disconnectDirtyObserver();
+      dirtyObserver = null;
+      clearOffRetryTimers();
+      cancelPendingWorkTimers();
       while (layer2bTimers.length > 0) {
         var tid = layer2bTimers.pop();
         try {
@@ -2876,7 +2789,7 @@
       }
     }
 
-    function translateTextNode(node, knownSafeParent) {
+    function translateTextNode(node, knownSafeParent, scopedChromeOnly) {
       if (!state.active || state.destroyed) return;
       if (!node || node.nodeType !== 3) return;
       if (node.isConnected === false) return;
@@ -2884,7 +2797,12 @@
 
       var parent = node.parentElement || node.parentNode;
       if (parent && exemptElements.has(parent)) return;
-      if (!knownSafeParent && parent && isIgnoredBoundary(parent)) return;
+      var isScopedChrome = Boolean(scopedChromeOnly);
+      if (!knownSafeParent && parent) {
+        var parentBound = measureSafeBoundaryDepth(parent);
+        if (parentBound.blocked) return;
+        if (parentBound.state === 3) isScopedChrome = true;
+      }
 
       if (!inOffRetryPass && (checkNodeConflict(node) || !state.active)) return;
 
@@ -2903,31 +2821,28 @@
         textUntranslatedCache.set(node, original);
         return;
       }
+      if (isScopedChrome && !isSafeModelPanelChromeText(trimmed)) {
+        textUntranslatedCache.set(node, original);
+        return;
+      }
 
+      var r = getModelPanelRules();
       if (state.mode === 'off') {
         if (trimmed === '。' && node.previousSibling) {
           var prevSibText = (node.previousSibling.textContent || '').trim();
-          if (prevSibText && EN_ALPHA_RE.test(prevSibText) && !ZH_CHAR_RE.test(prevSibText)) {
-            applyTextWrite(node, original, original.replace('。', '.'));
-            return;
-          }
+          if (prevSibText && EN_ALPHA_RE.test(prevSibText) && !ZH_CHAR_RE.test(prevSibText)) { applyTextWrite(node, original, original.replace('。', '.')); return; }
         }
-        var restored = translateSingleUnit(trimmed);
+        var restored = r && r.resolveUnit ? r.resolveUnit(trimmed, isScopedChrome, true, activeEngine, translateSingleUnit) : translateSingleUnit(trimmed);
         if (restored !== null && restored !== trimmed) {
           var revEdges = sliceEdgeWhitespace(original);
           applyTextWrite(node, original, revEdges.leading + restored + revEdges.trailing);
-        } else {
-          textUntranslatedCache.set(node, original);
-        }
+        } else { textUntranslatedCache.set(node, original); }
         return;
       }
 
-      if (trimmed === '.' && node.previousSibling && ZH_CHAR_RE.test(node.previousSibling.textContent || '')) {
-        applyTextWrite(node, original, original.replace('.', '。'));
-        return;
-      }
+      if (trimmed === '.' && node.previousSibling && ZH_CHAR_RE.test(node.previousSibling.textContent || '')) { applyTextWrite(node, original, original.replace('.', '。')); return; }
 
-      var translated = translateSingleUnit(trimmed);
+      var translated = r && r.resolveUnit ? r.resolveUnit(trimmed, isScopedChrome, false, activeEngine, translateSingleUnit) : translateSingleUnit(trimmed);
       if (translated !== null && translated !== trimmed) {
         var edges = sliceEdgeWhitespace(original);
         var leadingSpace = edges.leading;
@@ -2944,7 +2859,7 @@
       }
     }
 
-    function translateAttributes(el) {
+    function translateAttributes(el, scopedChromeOnly) {
       if (!el || el.nodeType !== 1 || el.isConnected === false || typeof el.getAttribute !== 'function') return;
       var wroteAnyAttr = false;
       for (var i = 0; i < TRANSLATABLE_ATTRS.length; i++) {
@@ -2952,6 +2867,7 @@
         if (!hasAttr(el, attr)) continue;
         var val = getAttr(el, attr);
         if (!val) continue;
+        if (scopedChromeOnly && !isSafeModelPanelChromeText(String(val).replace(/\s+/g, ' ').trim())) continue;
 
         var mapRec = attrSnapshots.get(el);
         var snap = mapRec && attr in mapRec.entries ? mapRec.entries[attr] : null;
@@ -3002,6 +2918,21 @@
       }
     }
 
+    function matchSandwich(first, isLead, isTail) {
+      if (!first || !first.nextSibling) return null;
+      var hasEl = false, p = first, lead = null, mid = false, tail = null;
+      for (; p; p = p.nextSibling) { if (p.nodeType === 1) { hasEl = true; break; } }
+      if (!hasEl) return null;
+      for (var c = first; c; c = c.nextSibling) {
+        if (c.nodeType === 3 && c.nodeValue) {
+          var t = c.nodeValue.trim();
+          if (!lead && isLead(t)) lead = c;
+          else if (lead && mid && isTail(t)) { tail = c; break; }
+        } else if (c.nodeType === 1 && lead) mid = true;
+      }
+      return lead && tail && !exemptNodes.has(lead) && !exemptNodes.has(tail) ? { lead: lead, tail: tail } : null;
+    }
+
     function applyReverseCrossNodeRulesOnElement(el) {
       if (!activeCrossNodeRules || activeCrossNodeRules.length === 0) return;
       for (var rIdx = 0; rIdx < activeCrossNodeRules.length; rIdx++) {
@@ -3029,44 +2960,23 @@
             }
           }
         } else if (rule.kind === 'element-sandwich') {
-          var first = el.firstChild;
-          if (first && first.nextSibling) {
-            var hasElemSib = false;
-            var probe = first;
-            while (probe) {
-              if (probe.nodeType === 1) {
-                hasElemSib = true;
-                break;
-              }
-              probe = probe.nextSibling;
-            }
-            if (hasElemSib) {
-              var leadNode = null;
-              var sawMidElement = false;
-              var tailNode = null;
-              var cur = first;
-              while (cur) {
-                if (cur.nodeType === 3 && cur.nodeValue) {
-                  var cTrim = cur.nodeValue.trim();
-                  if (!leadNode && rule.leadTrimmed && rule.leadTrimmed.indexOf(cTrim) !== -1) {
-                    leadNode = cur;
-                  } else if (leadNode && sawMidElement && rule.tailTrimmed && rule.tailTrimmed.indexOf(cTrim) !== -1) {
-                    tailNode = cur;
-                    break;
-                  }
-                } else if (cur.nodeType === 1 && leadNode) {
-                  sawMidElement = true;
-                }
-                cur = cur.nextSibling;
-              }
-              if (leadNode && tailNode && !exemptNodes.has(leadNode) && !exemptNodes.has(tailNode)) {
-                applyTextWrite(leadNode, leadNode.nodeValue, rule.leadReplacement);
-                applyTextWrite(tailNode, tailNode.nodeValue, rule.tailReplacement);
-              }
-            }
+          var revSw = rule.leadTrimmed && rule.tailTrimmed && matchSandwich(el.firstChild, function (t) { return rule.leadTrimmed.indexOf(t) !== -1; }, function (t) { return rule.tailTrimmed.indexOf(t) !== -1; });
+          if (revSw) {
+            applyTextWrite(revSw.lead, revSw.lead.nodeValue, rule.leadReplacement);
+            applyTextWrite(revSw.tail, revSw.tail.nodeValue, rule.tailReplacement);
           }
         }
       }
+    }
+
+    function maybeTranslateInputAttrs(node, parentCtx) {
+      if (!node || node.nodeType !== 1 || !parentCtx || parentCtx.blocked || parentCtx.state === 3 || parentCtx.state === -1) return false;
+      var tg = node.tagName ? String(node.tagName).toUpperCase() : '';
+      if (tg !== 'INPUT' && tg !== 'TEXTAREA') return false;
+      if (!exemptElements.has(node) && !isPrismOwnedSelf(node) && !isExternalPluginOwnedSelf(node) && !hasAttr(node, 'data-ag-no-i18n')) {
+        translateAttributes(node);
+      }
+      return true;
     }
 
     function translateElement(el, visitedSet, boundaryCtx, budget) {
@@ -3078,7 +2988,10 @@
       if (_bus && typeof _bus.isSkipped === 'function' && _bus.isSkipped(el)) return;
 
       var ctx = boundaryCtx || measureSafeBoundaryDepth(el);
-      if (!ctx || ctx.state === -1 || ctx.remDepth < 0) return;
+      if (!ctx || ctx.state === -1 || ctx.remDepth < 0) {
+        if (!boundaryCtx && el.parentElement) maybeTranslateInputAttrs(el, measureSafeBoundaryDepth(el.parentElement));
+        return;
+      }
 
       if (visitedSet) {
         if (visitedSet.has(el)) return;
@@ -3104,9 +3017,10 @@
         return;
       }
 
+      var isScopedChrome = ctx.state === 3;
       if (state.mode === 'off') {
-        translateAttributes(el);
-        applyReverseCrossNodeRulesOnElement(el);
+        translateAttributes(el, isScopedChrome);
+        if (!isScopedChrome) applyReverseCrossNodeRulesOnElement(el);
       } else {
         if (getAttr(el, 'data-testid') === 'plan-command-fyi-alert' && typeof el.querySelector === 'function') {
           var alertSpan = el.querySelector('span');
@@ -3122,47 +3036,15 @@
           }
         }
 
-        translateAttributes(el);
+        translateAttributes(el, isScopedChrome);
 
-        var first = el.firstChild;
-        if (first && first.nextSibling) {
-          var hasElementSibling = false;
-          var cur = first;
-          while (cur) {
-            if (cur.nodeType === 1) {
-              hasElementSibling = true;
-              break;
-            }
-            cur = cur.nextSibling;
+        var fwdSw = !isScopedChrome ? matchSandwich(el.firstChild, function (t) { return t === 'Also includes'; }, function (t) { return t === 'when working in this project.'; }) : null;
+        if (fwdSw) {
+          applyTextWrite(fwdSw.lead, fwdSw.lead.nodeValue, '在此项目中工作时，也包含');
+          for (var bw = fwdSw.lead.nextSibling; bw && bw !== fwdSw.tail; bw = bw.nextSibling) {
+            if (bw.nodeType === 3 && !(bw.nodeValue || '').trim()) applyTextWrite(bw, bw.nodeValue, '');
           }
-          if (hasElementSibling) {
-            var alsoNode = null;
-            var whenNode = null;
-            var scanCur = first;
-            while (scanCur) {
-              if (scanCur.nodeType === 3 && scanCur.nodeValue) {
-                var tVal = scanCur.nodeValue.trim();
-                if (tVal === 'Also includes') {
-                  alsoNode = scanCur;
-                } else if (alsoNode && tVal === 'when working in this project.') {
-                  whenNode = scanCur;
-                  break;
-                }
-              }
-              scanCur = scanCur.nextSibling;
-            }
-            if (alsoNode && whenNode && !exemptNodes.has(alsoNode) && !exemptNodes.has(whenNode)) {
-              applyTextWrite(alsoNode, alsoNode.nodeValue, '在此项目中工作时，也包含');
-              var between = alsoNode.nextSibling;
-              while (between && between !== whenNode) {
-                if (between.nodeType === 3 && !(between.nodeValue || '').trim()) {
-                  applyTextWrite(between, between.nodeValue, '');
-                }
-                between = between.nextSibling;
-              }
-              applyTextWrite(whenNode, whenNode.nodeValue, '。');
-            }
-          }
+          applyTextWrite(fwdSw.tail, fwdSw.tail.nodeValue, '。');
         }
       }
 
@@ -3172,7 +3054,7 @@
       while (child) {
         if (!state.active || state.destroyed) return;
         if (child.nodeType === 3) {
-          translateTextNode(child, true);
+          translateTextNode(child, true, isScopedChrome);
         } else if (child.nodeType === 1) {
           if (budget && budget.isExhausted()) {
             deferRemainingChildren(el, child);
@@ -3181,6 +3063,8 @@
           var childCtx = advanceBoundaryForChild(ctx, child);
           if (childCtx) {
             translateElement(child, visitedSet, childCtx, budget);
+          } else {
+            maybeTranslateInputAttrs(child, ctx);
           }
         }
         child = child.nextSibling;
@@ -3323,54 +3207,32 @@ function inspectExternalDelayedMutation(node) {
 if (state.mode !== 'auto') return false;
 if (nowFn() - bootAt > LAYER2B_WINDOW_MS) return false;
 if (!node) return false;
+function isDelayedSkipEl(el) {
+if (!el || isPrismOwnedElement(el) || isUserContentBoundary(el) || isInsideConversationStream(el)) return true;
+var b = measureSafeBoundaryDepth(el);
+return b.blocked || b.state === 3 || b.state === 4;
+}
 function checkSingleTextNode(tNode) {
 if (!tNode || tNode.nodeType !== 3) return;
 var parent = tNode.parentElement || tNode.parentNode;
-if (
-!parent ||
-isPrismOwnedElement(parent) ||
-isUserContentBoundary(parent) ||
-isInsideConversationStream(parent) ||
-isIgnoredBoundary(parent)
-) {
-return;
-}
+if (isDelayedSkipEl(parent)) return;
 var val = (tNode.nodeValue || '').trim();
 if (!val || !ZH_CHAR_RE.test(val)) return;
 var snap = textSnapshots.get(tNode);
 if (snap && snap.expected === tNode.nodeValue) return;
-if (hasOwn.call(translatedValues, val) || isInsideExplicitDelayedChrome(parent)) {
-delayedExternalNodes.add(parent);
-}
+if (hasOwn.call(translatedValues, val) || isInsideExplicitDelayedChrome(parent)) delayedExternalNodes.add(parent);
 }
 if (node.nodeType === 3) {
 checkSingleTextNode(node);
 } else if (node.nodeType === 1) {
-if (
-isPrismOwnedElement(node) ||
-isUserContentBoundary(node) ||
-isInsideConversationStream(node) ||
-isIgnoredBoundary(node)
-) {
-return false;
-}
-var stack = [node];
-var steps = 0;
+if (isDelayedSkipEl(node)) return false;
+var stack = [node], steps = 0;
 while (stack.length > 0 && steps < 120) {
 steps++;
 var cur = stack.pop();
-if (cur.nodeType === 3) {
-checkSingleTextNode(cur);
-} else if (
-cur.nodeType === 1 &&
-!isDirectIgnoredSelf(cur) &&
-!isConversationStreamSelf(cur)
-) {
-var ch = cur.firstChild;
-while (ch) {
-stack.push(ch);
-ch = ch.nextSibling;
-}
+if (cur.nodeType === 3) { checkSingleTextNode(cur); }
+else if (cur.nodeType === 1 && !isDirectIgnoredSelf(cur) && !isModelSelectorScopedSelf(cur) && !isModelPanelPopupSelf(cur) && !isConversationStreamSelf(cur)) {
+for (var ch = cur.firstChild; ch; ch = ch.nextSibling) stack.push(ch);
 }
 }
 }
@@ -3538,71 +3400,33 @@ if (needParent && state.active && !state.destroyed) translateElement(parent, vis
 } catch (err) {}
 reconnectObserver();
 }
+function takeMissedRecords(obs, activeFlag) {
+if (obs && activeFlag) { try { if (typeof obs.takeRecords === 'function') { var r = obs.takeRecords(); if (r && r.length > 0) missedWhilePaused = true; } } catch (e) {} }
+}
 function enterHibernation(markMissed) {
 if (!state.active || state.destroyed) return;
 var wasCovered = observing || dirtyProbeActive;
 hibernating = true;
-pendingFullFloatScan = false;
-if (rafId === 'bus') {
-try { var _hb = getHostDomBus(); if (_hb && typeof _hb.cancelTask === 'function') _hb.cancelTask('conv:host-i18n-flush'); } catch (e) {}
-rafId = null;
-} else if (rafId !== null) {
-cancelRafFn(rafId);
-rafId = null;
-}
-if (hoverScanTimer !== null) {
-clearTimeoutFn(hoverScanTimer);
-hoverScanTimer = null;
-}
-if (hoverCardTimer !== null) {
-clearTimeoutFn(hoverCardTimer);
-hoverCardTimer = null;
-}
-pendingHoverCardNode = null;
-if (focusWakeTimer !== null) {
-clearTimeoutFn(focusWakeTimer);
-focusWakeTimer = null;
-}
+cancelPendingWorkTimers();
 var hadOffRetry = clearOffRetryTimers();
 if (markMissed || hadOffRetry || pendingNodes.length > 0 || !wasCovered) missedWhilePaused = true;
 pendingNodes.length = 0;
 pendingNodeSet.clear();
 var hiddenNow = Boolean(doc && doc.hidden === true);
-if (hiddenNow) {
-missedWhilePaused = true;
-disconnectDirtyObserver();
-}
+if (hiddenNow) { missedWhilePaused = true; disconnectDirtyObserver(); }
 if (state.mode !== 'auto' || nowFn() - bootAt > LAYER2B_WINDOW_MS) {
-if (observer && observing) {
-try {
-if (typeof observer.takeRecords === 'function') {
-var recs = observer.takeRecords();
-if (recs && recs.length > 0) missedWhilePaused = true;
-}
-} catch (e) {}
-}
+takeMissedRecords(observer, observing);
 disconnectObserver(true);
-if (!hiddenNow && !missedWhilePaused) {
-armDirtyObserver();
-} else {
-disconnectDirtyObserver();
-}
+if (!hiddenNow && !missedWhilePaused) armDirtyObserver();
+else disconnectDirtyObserver();
 }
 }
 function wakeFromHibernation() {
-if (!state.active || state.destroyed) return;
-if (isPaused()) return;
+if (!state.active || state.destroyed || isPaused()) return;
 hibernating = false;
 var hadProbe = dirtyProbeActive;
-if (dirtyObserver && dirtyProbeActive) {
-try {
-if (typeof dirtyObserver.takeRecords === 'function') {
-var recs = dirtyObserver.takeRecords();
-if (recs && recs.length > 0) missedWhilePaused = true;
-}
-} catch (e) {}
+takeMissedRecords(dirtyObserver, dirtyProbeActive);
 disconnectDirtyObserver();
-}
 if (missedWhilePaused || pendingNodes.length > 0 || (!observing && !hadProbe)) {
 missedWhilePaused = false;
 pendingNodes.length = 0;
@@ -3631,15 +3455,16 @@ if (hasAttr(c, 'data-hover-card-popup') || hasAttr(c.firstElementChild, 'data-ho
 return false;
 };
 var scheduleHoverCardNode = function (n) {
-pendingHoverCardNode = n;
+var m = getModelPanelRules();
+if (m && m.queueNode) m.queueNode(pendingHoverCardNodes, n);
 if (hoverCardTimer !== null) clearTimeoutFn(hoverCardTimer);
 hoverCardTimer = setTimeoutFn(function () {
 hoverCardTimer = null;
-var hc = pendingHoverCardNode;
-pendingHoverCardNode = null;
-if (!state.active || state.destroyed || isPaused() || !hc || hc.isConnected === false) return;
-enqueueNode(hc);
-scheduleFlush();
+var list = pendingHoverCardNodes.slice(), scheduled = false;
+pendingHoverCardNodes.length = 0;
+if (!state.active || state.destroyed || isPaused()) return;
+for (var i = 0; i < list.length; i++) if (list[i] && list[i].isConnected !== false) { enqueueNode(list[i]); scheduled = true; }
+if (scheduled) scheduleFlush();
 }, 120);
 };
 var domBusInst = getHostDomBus();
@@ -3686,6 +3511,11 @@ if (!addedNode || addedNode.isConnected === false) continue;
 if (addedNode.nodeType === 3) {
 if (targetBound.blocked || exemptNodes.has(addedNode)) continue;
 } else if (addedNode.nodeType === 1) {
+var addedTag = addedNode.tagName ? String(addedNode.tagName).toUpperCase() : '';
+if (addedTag === 'INPUT' || addedTag === 'TEXTAREA') {
+if (!exemptElements.has(addedNode) && !pausedNow && !targetBound.blocked) enqueueNode(addedNode);
+continue;
+}
 if (exemptElements.has(addedNode) || isDirectIgnoredSelf(addedNode) || isFocusGuard(addedNode)) continue;
 if (isHoverCardPortalOrSelf(addedNode)) {
 if (!pausedNow) scheduleHoverCardNode(addedNode);

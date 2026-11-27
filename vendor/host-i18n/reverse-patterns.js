@@ -44,6 +44,13 @@
     最近会话: 'Recent Conversations', 当前会话: 'Current Conversation',
     扩展程序: 'Extensions', 键盘快捷键: 'Keyboard Shortcuts', 登出: 'Sign Out',
     升级: 'Upgrade', 开启: 'On', 恢复默认: 'Reset to Default', 折叠: 'Collapse', 极速: 'Turbo',
+    即将下线: 'Leaving Soon', 提示: 'Notice', 用量: 'Usage', 周限额: 'Weekly limit',
+    查看用量明细: 'View Usage', 'Gemini 模型': 'Gemini Models', 'Claude 与 GPT 模型': 'Claude and GPT models',
+    '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。': 'Offloads routine steps to a faster executor. Same quality, fewer tokens used.',
+    适合大多数深度推理与复杂问题: 'For most deep reasoning and complex problems',
+    适合最具挑战性的长周期任务: 'For your hardest, long-horizon tasks',
+    兼顾执行任务的速度与效率: 'For speed and efficiency in execution tasks',
+    网页: 'Web',
   });
 
   var REVERSE_PATTERNS = [
@@ -221,6 +228,27 @@
     { regex: '^几秒后重置$', replacement: 'Resets in a few seconds' },
     { regex: '^即将重置$', replacement: 'Resets soon' },
     {
+      regex: '^建议(?:改用|使用)\\s*(.+?)，(?:效果更好且额度消耗更低|质量更高且配额消耗更低)[。.]\\s*将于\\s+(.+?)\\s+下线[。.]?$',
+      replacement: 'Use $1 for better quality with lower quota usage. Leaving on $2.',
+    },
+    {
+      regex: '^建议(?:改用|使用)\\s*(.+?)，(?:效果更好且额度消耗更低|质量更高且配额消耗更低)[。.]?$',
+      replacement: 'Use $1 for better quality with lower quota usage.',
+    },
+    {
+      regex: '^适用于高阶工作流的初代\\s+(.+?)\\s+模型[。.]\\s*将于\\s+(.+?)\\s+下线[。.]?$',
+      replacement: 'The original $1 model for advanced workflows. Leaving on $2.',
+    },
+    {
+      regex: '^可将常规步骤分流给\\s+(.+?)\\s+的\\s+(.+?)[。.]\\s*保持同等\\s+(.+?)\\s*级质量[，,]\\s*Token 消耗更少[。.]?$',
+      replacement: '$2 that may offload routine steps to $1. Same $3-level quality, fewer tokens used.',
+    },
+    {
+      regex: '^(.+?)\\s+将于\\s+(.+?)\\s+从 Antigravity 下线移除[。.]?$',
+      replacement: '$1 will be removed from Antigravity on $2.',
+    },
+    { regex: '^将于\\s+(.+?)\\s+下线[。.]?$', replacement: 'Leaving on $1.' },
+    {
       regex: '^(\\d+)\\s*天\\s*(\\d+)\\s*小时\\s*(\\d+)\\s*分(?:钟)?后重置刷新$',
       replacement: 'Refreshes in $1d $2h $3m',
     },
@@ -242,6 +270,7 @@
     { regex: '^(\\d+)\\s*秒后重置刷新$', replacement: 'Refreshes in $1s' },
     { regex: '^即将重置刷新$', replacement: 'Refreshes soon' },
     { regex: '^(\\d+)\\s*天\\s*(\\d+)\\s*小时$', replacement: '$1 days, $2 hours' },
+    { regex: '^在 Google (?:中)?搜索[“"](.+?)[”"]$', replacement: 'Search Google for "$1"' },
     { regex: '^(\\d+)\\s*小时\\s*(\\d+)\\s*分钟$', replacement: '$1 hours, $2 minutes' },
     { regex: '^1\\s*天$', replacement: '1 day' },
     { regex: '^(\\d+)\\s*天$', replacement: '$1 days' },
@@ -520,9 +549,93 @@
     },
   ];
 
+  var MODEL_PANEL_RULES = {
+    scopedTestids: {
+      'model-selector-panel': 1,
+      'model-selector-list': 1,
+      'model-selector-item': 1,
+      'model-selector-orchestrator': 1,
+      'orchestrator-picker-row': 1,
+    },
+    safeExact: {
+      Model: 1, 模型: 1, New: 1, 新: 1, 新建: 1, 'Leaving Soon': 1, 即将下线: 1, Notice: 1, 提示: 1,
+      'View Usage': 1, 'View usage': 1, 'View Model Usage': 1, 'View Usage Details': 1,
+      查看用量明细: 1, 查看模型用量: 1, 查看用量详情: 1, 查看用量: 1, Usage: 1, 'Usage & Quota': 1,
+      用量: 1, 用量与配额: 1, 'Gemini Models': 1, 'Gemini models': 1, 'Gemini 模型': 1,
+      'Claude and GPT models': 1, 'Claude and GPT Models': 1, 'Claude 与 GPT 模型': 1,
+      'Weekly limit': 1, 'Weekly Limit': 1, 周限额: 1, 'Loading token usage...': 1, '正在加载 Token 用量...': 1,
+      'Offloads routine steps to a faster executor. Same quality, fewer tokens used.': 1,
+      '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。': 1,
+      'For most deep reasoning and complex problems': 1, 适合大多数深度推理与复杂问题: 1,
+      'For your hardest, long-horizon tasks': 1, 适合最具挑战性的长周期任务: 1,
+      'For speed and efficiency in execution tasks': 1, 兼顾执行任务的速度与效率: 1,
+    },
+    safeRe: /^(?:\d+\s*[hdms]\s+(?:rate\s+)?limit|\d+(?:\.\d+)?%\s+left|resets?\b|use\s+.+?\s+for\s+better\s+quality\s+with\s+lower\s+quota\s+usage|the\s+original\s+.+?\s+model\s+for\s+advanced\s+workflows|.+?\s+that\s+may\s+offload\s+routine\s+steps\s+to\s+.+?|.+\s+will\s+be\s+removed\s+from\s+antigravity\s+on\s+.+?|leaving\s+on\b|models\s+within\s+this\s+group|your\s+quota\s+for\s+this\s+model|\d+\s*(?:小时|天|分钟|秒)(?:速率限(?:制|额)|限额)|剩余\s*\d+(?:\.\d+)?%|(?:\d+\s*(?:天|小时|分(?:钟)?|秒)\s*)+后重置|不到\s*1\s*分钟后重置|几秒后重置|即将重置|重置于|建议(?:改用|使用)\s*.+?，(?:效果更好|质量更高)|适用于高阶工作流的初代\s+.+?\s+模型|可将常规步骤分流给\s+.+?|.+?\s+将于\s+.+?\s+从\s+Antigravity\s+下线移除|将于\s+.+?\s+下线)/i,
+    fwdZh: { New: '新' },
+    revZh: { 新: 'New' },
+    supExact: {
+      'Leaving Soon': '即将下线',
+      Notice: '提示',
+      'Claude and GPT Models': 'Claude 与 GPT 模型',
+      'Gemini models': 'Gemini 模型',
+      'Resets in < 1m': '不到 1 分钟后重置',
+      'Resets in < 1m.': '不到 1 分钟后重置。',
+      'Offloads routine steps to a faster executor. Same quality, fewer tokens used.': '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。',
+      'Offloads routine steps to a faster executor. Same quality, fewer tokens used': '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少',
+      'For most deep reasoning and complex problems': '适合大多数深度推理与复杂问题',
+      'For most deep reasoning and complex problems.': '适合大多数深度推理与复杂问题。',
+      'For your hardest, long-horizon tasks': '适合最具挑战性的长周期任务',
+      'For your hardest, long-horizon tasks.': '适合最具挑战性的长周期任务。',
+      'For speed and efficiency in execution tasks': '兼顾执行任务的速度与效率',
+      'For speed and efficiency in execution tasks.': '兼顾执行任务的速度与效率。',
+      Web: '网页',
+    },
+    supPatterns: [
+      { regex: '^Use (.+?) for better quality with lower quota usage\\.\\s*Leaving on (.+?)[。.]?$', replacement: '建议改用 $1，效果更好且额度消耗更低。将于 $2 下线。' },
+      { regex: '^Use (.+?) for better quality with lower quota usage[。.]?$', replacement: '建议改用 $1，效果更好且额度消耗更低。' },
+      { regex: '^The original (.+?) model for advanced workflows\\.\\s*Leaving on (.+?)[。.]?$', replacement: '适用于高阶工作流的初代 $1 模型。将于 $2 下线。' },
+      { regex: '^(.+?) that may offload routine steps to (.+?)\\.\\s*Same (.+?)-level quality,\\s*fewer tokens used[。.]?$', replacement: '可将常规步骤分流给 $2 的 $1。保持同等 $3 级质量，Token 消耗更少。' },
+      { regex: '^(.+?) will be removed from Antigravity on (.+?)[。.]?$', replacement: '$1 将于 $2 从 Antigravity 下线移除。' },
+      { regex: '^Leaving on (.+?)[。.]?$', replacement: '将于 $1 下线。' },
+      { regex: '^Search Google for "(.+?)"$', replacement: '在 Google 中搜索“$1”' },
+    ],
+    isSafeText: function (trimmed) {
+      return Boolean(trimmed && (Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.safeExact, trimmed) || MODEL_PANEL_RULES.safeRe.test(trimmed)));
+    },
+    isScopedTid: function (tid) {
+      return Boolean(tid && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.scopedTestids, tid));
+    },
+    mergeSupPatterns: function (exactDict, rawPatterns) {
+      return exactDict && exactDict['Weekly limit'] === '周限额' ? rawPatterns.concat(MODEL_PANEL_RULES.supPatterns) : rawPatterns;
+    },
+    mergeSupExact: function (exactDict, exactLookup, translatedValues) {
+      if (!exactDict || exactDict['Weekly limit'] !== '周限额') return;
+      var s = MODEL_PANEL_RULES.supExact;
+      for (var k in s) {
+        if (Object.prototype.hasOwnProperty.call(s, k) && !(k in exactLookup)) {
+          exactLookup[k] = s[k];
+          translatedValues[s[k]] = true;
+        }
+      }
+    },
+    resolveUnit: function (trimmed, isScoped, isOff, eng, fallbackFn) {
+      if (isScoped) {
+        if (isOff && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.revZh, trimmed)) return MODEL_PANEL_RULES.revZh[trimmed];
+        if (!isOff && eng && eng.exactDict && eng.exactDict['Weekly limit'] === '周限额' && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.fwdZh, trimmed)) {
+          return MODEL_PANEL_RULES.fwdZh[trimmed];
+        }
+      }
+      return fallbackFn(trimmed);
+    },
+    queueNode: function (list, n) {
+      if (n && n.nodeType === 1 && list.indexOf(n) === -1 && list.length < 16) list.push(n);
+    },
+  };
+
   return {
     REVERSE_EXACT_OVERRIDES: REVERSE_EXACT_OVERRIDES,
     REVERSE_PATTERNS: REVERSE_PATTERNS,
     REVERSE_CROSS_NODE_RULES: REVERSE_CROSS_NODE_RULES,
+    MODEL_PANEL_RULES: MODEL_PANEL_RULES,
   };
 });

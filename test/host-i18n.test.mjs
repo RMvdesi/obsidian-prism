@@ -2891,3 +2891,304 @@ test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collap
   assert.equal(cfCount.textContent, '3 files changed');
   assert.equal(cfReviewSpan.textContent, 'Review');
 });
+
+test('host-i18n translates model panel chrome, badges, deprecation tooltip, and Usage popover while preserving model names and effort levels', () => {
+  const env = createTestEnv();
+  const zhDict = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'),
+  );
+  const reversePack = require(path.join(ROOT, 'vendor', 'host-i18n', 'reverse-patterns.js'));
+  zhDict.reverseExact = reversePack.REVERSE_EXACT_OVERRIDES;
+  zhDict.reversePatterns = reversePack.REVERSE_PATTERNS;
+
+  const panel = env.makeEl('div', {
+    attrs: { 'data-testid': 'model-selector-panel', class: 'flex flex-col ces-ag-panel-enhanced' },
+  });
+  const header = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-header' }, text: 'Model' });
+  const list = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-list' } });
+
+  const item1 = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-item' } });
+  const name1 = env.makeEl('span', { text: 'Gemini 4 Argon' });
+  const effort1 = env.makeEl('span', { text: 'Medium' });
+  const badge1 = env.makeEl('span', { text: 'Leaving Soon' });
+  item1.append(name1, effort1, badge1);
+
+  const item2 = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-item' } });
+  const name2 = env.makeEl('span', { text: 'Claude Opus 5.5' });
+  const autoTag = env.makeEl('span', { text: 'Auto' });
+  const badge2 = env.makeEl('span', { text: 'New' });
+  item2.append(name2, autoTag, badge2);
+
+  const item3 = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-item' } });
+  const name3 = env.makeEl('span', { text: 'GPT-OSS 120B (Medium)' });
+  const badge3 = env.makeEl('span', { text: 'Notice' });
+  item3.append(name3, badge3);
+
+  const item4 = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-orchestrator', role: 'menuitem' } });
+  const orchLabel = env.makeEl('span', { text: 'Orchestrator' });
+  const highLabel = env.makeEl('span', { text: 'High' });
+  const orchBadge = env.makeEl('span', { text: 'New' });
+  item4.append(orchLabel, highLabel, orchBadge);
+
+  const effortGroup = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-effort-group' } });
+  const effortSettingText = env.makeEl('span', { text: 'Save' });
+  effortGroup.append(effortSettingText);
+
+  const footerBtn = env.makeEl('button', { text: 'View Usage' });
+
+  const depTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'Use Hydrogen for better quality with lower quota usage. Leaving on Nov 30.',
+  });
+  const orchTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'Offloads routine steps to a faster executor. Same quality, fewer tokens used.',
+  });
+  const neonTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'For most deep reasoning and complex problems',
+  });
+  const carbonTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'For your hardest, long-horizon tasks',
+  });
+  const argonTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'The original Gemini 4 model for advanced workflows. Leaving on Nov 30.',
+  });
+  const hydroTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'For speed and efficiency in execution tasks',
+  });
+  const gptNoticeTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'GPT-OSS will be removed from Antigravity on November 30, 2026.',
+  });
+  const orchSubTooltip = env.makeEl('div', {
+    attrs: { role: 'tooltip' },
+    text: 'Neon that may offload routine steps to Hydrogen. Same Neon-level quality, fewer tokens used.',
+  });
+
+  const usageCard = env.makeEl('div', { attrs: { 'data-hover-card-popup': '' } });
+  const usageTitle = env.makeEl('div', { text: 'Usage' });
+  const geminiGroup = env.makeEl('div', { text: 'Gemini Models' });
+  const weekly1 = env.makeEl('span', { text: 'Weekly limit' });
+  const reset1 = env.makeEl('span', { text: 'Resets in 5d 23h' });
+  const left1 = env.makeEl('span', { text: '65% left' });
+  const h5 = env.makeEl('span', { text: '5h limit' });
+  const reset2 = env.makeEl('span', { text: 'Resets in 3h 3m' });
+  const left2 = env.makeEl('span', { text: '80% left' });
+  const claudeGroup = env.makeEl('div', { text: 'Claude and GPT models' });
+  const resetSoon = env.makeEl('span', { text: 'Resets in < 1m' });
+  const left3 = env.makeEl('span', { text: '100% left' });
+  usageCard.append(usageTitle, geminiGroup, weekly1, reset1, left1, h5, reset2, left2, claudeGroup, resetSoon, left3);
+
+  list.append(item1, item2, item3, item4);
+  panel.append(header, list, effortGroup, footerBtn, depTooltip, orchTooltip, neonTooltip, carbonTooltip, argonTooltip, hydroTooltip, gptNoticeTooltip, orchSubTooltip, usageCard);
+  env.doc.body.append(panel);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // Model selector chrome, badges, deprecation tooltip, and usage details translate
+  assert.equal(header.textContent, '模型');
+  assert.equal(badge1.textContent, '即将下线');
+  assert.equal(badge2.textContent, '新');
+  assert.equal(orchBadge.textContent, '新');
+  assert.equal(badge3.textContent, '提示');
+  assert.equal(footerBtn.textContent, '查看用量明细');
+  assert.equal(depTooltip.textContent, '建议改用 Hydrogen，效果更好且额度消耗更低。将于 Nov 30 下线。');
+  assert.equal(orchTooltip.textContent, '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。');
+  assert.equal(neonTooltip.textContent, '适合大多数深度推理与复杂问题');
+  assert.equal(carbonTooltip.textContent, '适合最具挑战性的长周期任务');
+  assert.equal(argonTooltip.textContent, '适用于高阶工作流的初代 Gemini 4 模型。将于 Nov 30 下线。');
+  assert.equal(hydroTooltip.textContent, '兼顾执行任务的速度与效率');
+  assert.equal(gptNoticeTooltip.textContent, 'GPT-OSS 将于 November 30, 2026 从 Antigravity 下线移除。');
+  assert.equal(orchSubTooltip.textContent, '可将常规步骤分流给 Hydrogen 的 Neon。保持同等 Neon 级质量，Token 消耗更少。');
+  assert.equal(usageTitle.textContent, '用量');
+  assert.equal(geminiGroup.textContent, 'Gemini 模型');
+  assert.equal(weekly1.textContent, '周限额');
+  assert.equal(reset1.textContent, '5 天 23 小时后重置');
+  assert.equal(left1.textContent, '剩余 65%');
+  assert.equal(h5.textContent, '5 小时限额');
+  assert.equal(reset2.textContent, '3 小时 3 分钟后重置');
+  assert.equal(left2.textContent, '剩余 80%');
+  assert.equal(claudeGroup.textContent, 'Claude 与 GPT 模型');
+  assert.equal(resetSoon.textContent, '不到 1 分钟后重置');
+  assert.equal(left3.textContent, '剩余 100%');
+
+  // Model names, effort levels, and hard-ignored effort group remain completely untouched
+  assert.equal(name1.textContent, 'Gemini 4 Argon');
+  assert.equal(effort1.textContent, 'Medium');
+  assert.equal(name2.textContent, 'Claude Opus 5.5');
+  assert.equal(autoTag.textContent, 'Auto');
+  assert.equal(name3.textContent, 'GPT-OSS 120B (Medium)');
+  assert.equal(orchLabel.textContent, 'Orchestrator');
+  assert.equal(highLabel.textContent, 'High');
+  assert.equal(effortSettingText.textContent, 'Save');
+
+  // Turning off cleanly restores English chrome and Usage/tooltip strings
+  inst.setMode('off');
+  env.advanceTime(60);
+  assert.equal(header.textContent, 'Model');
+  assert.equal(badge1.textContent, 'Leaving Soon');
+  assert.equal(badge2.textContent, 'New');
+  assert.equal(badge3.textContent, 'Notice');
+  assert.equal(footerBtn.textContent, 'View Usage');
+  assert.equal(depTooltip.textContent, 'Use Hydrogen for better quality with lower quota usage. Leaving on Nov 30.');
+  assert.equal(orchTooltip.textContent, 'Offloads routine steps to a faster executor. Same quality, fewer tokens used.');
+  assert.equal(neonTooltip.textContent, 'For most deep reasoning and complex problems');
+  assert.equal(argonTooltip.textContent, 'The original Gemini 4 model for advanced workflows. Leaving on Nov 30.');
+  assert.equal(gptNoticeTooltip.textContent, 'GPT-OSS will be removed from Antigravity on November 30, 2026.');
+  assert.equal(orchBadge.textContent, 'New');
+  assert.equal(usageTitle.textContent, 'Usage');
+  assert.equal(geminiGroup.textContent, 'Gemini Models');
+  assert.equal(weekly1.textContent, 'Weekly limit');
+  assert.equal(claudeGroup.textContent, 'Claude and GPT models');
+
+  inst.destroy();
+});
+
+test('host-i18n queues multiple HoverCard portals mutating within 120ms without dropping earlier portals', () => {
+  const env = createTestEnv();
+  const zhDict = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'),
+  );
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  const portal1 = env.makeEl('div', { attrs: { 'data-base-ui-portal': '' } });
+  const card1 = env.makeEl('div', { attrs: { 'data-hover-card-popup': '' } });
+  const card1Text = env.makeEl('span', { text: 'Weekly limit' });
+  card1.append(card1Text);
+  portal1.append(card1);
+  env.doc.body.append(portal1);
+
+  env.advanceTime(20);
+
+  const portal2 = env.makeEl('div', { attrs: { 'data-base-ui-portal': '' } });
+  const card2 = env.makeEl('div', { attrs: { 'data-hover-card-popup': '' } });
+  const card2Text = env.makeEl('span', { text: '5h limit' });
+  card2.append(card2Text);
+  portal2.append(card2);
+  env.doc.body.append(portal2);
+
+  env.advanceTime(200);
+
+  assert.equal(card1Text.textContent, '周限额');
+  assert.equal(card2Text.textContent, '5 小时限额');
+
+  inst.destroy();
+});
+
+test('host-i18n translates sidebar section headers (Projects) and empty state (No conversations yet) while protecting project-header and conversation-row-sidebar', () => {
+  const env = createTestEnv();
+  const zhDict = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'),
+  );
+
+  const convList = env.makeEl('div', { attrs: { 'data-testid': 'conversation-list-sidebar' } });
+  const sectionHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' } });
+  const projectsSpan = env.makeEl('span', { text: 'Projects' });
+  sectionHdr.append(projectsSpan);
+
+  const projHeader = env.makeEl('button', { attrs: { 'data-testid': 'project-header' } });
+  const projName = env.makeEl('span', { text: 'Settings' });
+  projHeader.append(projName);
+
+  const emptyState = env.makeEl('span', { text: 'No conversations yet' });
+  const convRow = env.makeEl('button', { attrs: { 'data-testid': 'conversation-row-sidebar' }, text: 'Save' });
+
+  convList.append(sectionHdr, projHeader, emptyState, convRow);
+  env.doc.body.append(convList);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  assert.equal(projectsSpan.textContent, '项目列表');
+  assert.equal(emptyState.textContent, '暂无会话');
+  assert.equal(projName.textContent, 'Settings');
+  assert.equal(convRow.textContent, 'Save');
+
+  inst.destroy();
+});
+
+test('host-i18n translates launcher input placeholder (Search or enter a URL) and Web search results while protecting input values and Prism inputs', () => {
+  const env = createTestEnv();
+  const zhDict = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'),
+  );
+  const reversePack = require(path.join(ROOT, 'vendor', 'host-i18n', 'reverse-patterns.js'));
+  zhDict.reverseExact = reversePack.REVERSE_EXACT_OVERRIDES;
+  zhDict.reversePatterns = reversePack.REVERSE_PATTERNS;
+
+  const pane = env.makeEl('div');
+  const searchInput = env.makeEl('input', {
+    attrs: { 'data-testid': 'new-tab-search-input', placeholder: 'Search or enter a URL', value: 'Settings' },
+  });
+  const prismInput = env.makeEl('input', {
+    className: 'ag-prism-omni-input',
+    attrs: { placeholder: 'Search or enter a URL' },
+  });
+  const groupHdr = env.makeEl('div', { attrs: { 'data-testid': 'new-tab-group-Web' }, text: 'Web' });
+  const webBtn = env.makeEl('button', {
+    attrs: { 'data-testid': 'new-tab-result-web__search' },
+    text: 'Search Google for "ssd"',
+  });
+  pane.append(searchInput, prismInput, groupHdr, webBtn);
+  env.doc.body.append(pane);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  assert.equal(searchInput.getAttribute('placeholder'), '搜索或输入网址');
+  assert.equal(searchInput.getAttribute('value'), 'Settings', 'Input value must never be mutated');
+  assert.equal(prismInput.getAttribute('placeholder'), 'Search or enter a URL', 'Prism-owned input must stay untouched');
+  assert.equal(groupHdr.textContent, '网页');
+  assert.equal(webBtn.textContent, '在 Google 中搜索“ssd”');
+
+  inst.setMode('off');
+  env.advanceTime(60);
+  assert.equal(searchInput.getAttribute('placeholder'), 'Search or enter a URL');
+  assert.equal(groupHdr.textContent, 'Web');
+  assert.equal(webBtn.textContent, 'Search Google for "ssd"');
+
+  inst.destroy();
+});
