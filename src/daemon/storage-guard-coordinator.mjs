@@ -14,6 +14,7 @@ import { DEFAULT_ROOT_DIR, discoverActivePort } from './constants.mjs';
 import { resolveUsageScopeKey } from './telemetry-scope.mjs';
 import {
   getAutoArchiveOnExitSetting,
+  getStorageGuardSetting,
   readStorageGuardState,
   writeStorageGuardState,
   flushCatalogIndexFromMemory,
@@ -285,6 +286,13 @@ export async function resolveStorageGuardLanguage(upd, targetEntry, cfg = null, 
 
 export async function checkStorageGuardAndNotify(upd, _testOverrides = null) {
   if (!upd.isRunning() && !_testOverrides) return { shown: false, reason: 'not-running' };
+  const guardEnabled =
+    _testOverrides?.storageGuard !== undefined
+      ? _testOverrides.storageGuard !== 'off' && _testOverrides.storageGuard !== false
+      : _testOverrides?.config?.storageGuard !== undefined
+        ? _testOverrides.config.storageGuard !== 'off' && _testOverrides.config.storageGuard !== false
+        : getStorageGuardSetting(upd);
+  if (!guardEnabled) return { shown: false, reason: 'disabled' };
   const now = Number.isFinite(_testOverrides?.now) ? _testOverrides.now : Date.now();
   const state = readStorageGuardState(upd);
   if (state.snoozeUntilMs > now) {
@@ -323,6 +331,10 @@ export async function checkStorageGuardAndNotify(upd, _testOverrides = null) {
     resolvedLang = await resolveStorageGuardLanguage(upd, targetEntry, cfg, _testOverrides);
     const locales = require(path.join(upd.rootDir, 'i18n-locales.js'));
     ui = locales.getUiStrings(resolvedLang) || {};
+    try {
+      const extLoc = require(path.join(upd.rootDir, 'src', 'runtime', 'i18n-ext-beta4.js'));
+      if (extLoc?.mergeIntoUiStrings) ui = extLoc.mergeIntoUiStrings(ui, resolvedLang);
+    } catch {}
   } catch {}
 
   const fmtMb = (v) => (Number(v) >= 1024 ? `${(Number(v) / 1024).toFixed(2)} GB` : `${Math.round(Number(v) || 0)} MB`);
@@ -354,6 +366,8 @@ export async function checkStorageGuardAndNotify(upd, _testOverrides = null) {
       enableAutoExitBtn: ui.storageGuardEnableAutoExitBtn || 'Enable Auto-Archive on Exit',
       autoExitEnabledMsg: ui.storageAutoExitEnabledMsg || 'Auto-archive on exit enabled',
       snooze24hBtn: ui.storageGuardSnooze24hBtn || 'Snooze 24h',
+      disableGuardBtn: ui.storageGuardDisableBtn || "Don't Remind",
+      guardDisabledMsg: ui.storageGuardDisabledMsg || 'Storage reminders disabled',
       confirmDesc:
         ui.storageArchiveRestartConfirmDesc ||
         'Will save token ledger, close Antigravity gracefully, move finished subagents (>2h) without deleting any files, keep all main chats, and restart.',

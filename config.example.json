@@ -50,5 +50,6 @@
   "autoUpdate": "off",
   "updateChannel": "stable",
   "autoArchiveOnExit": false,
+  "storageGuard": "auto",
   "pollIntervalMs": 2500
 }

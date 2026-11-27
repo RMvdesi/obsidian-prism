@@ -2347,8 +2347,8 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
   const sp = require('../settings-panel.js');
   const i18nLocales = require('../i18n-locales.js');
 
-  // 1. Strict 39 schema keys (37 baseline + darkAura + darkAuraStyle) & 5 mascot presets aligned with src/config/schema.cjs
-  assert.equal(Object.keys(sp.PRISM_SETTINGS_SCHEMA).length, 39, 'PRISM_SETTINGS_SCHEMA must remain strictly 39 keys');
+  // 1. Strict 40 schema keys (39 baseline + storageGuardEnabled) & 5 mascot presets aligned with src/config/schema.cjs
+  assert.equal(Object.keys(sp.PRISM_SETTINGS_SCHEMA).length, 40, 'PRISM_SETTINGS_SCHEMA must remain strictly 40 keys');
   assert.deepEqual([...sp.PRISM_SETTINGS_SCHEMA.mascot.allowed], ['crab', 'minis', 'quad', 'quad-minis', 'off']);
 
   // 2. 8-language coverage (including all stage keys), /4 cap copy, zero CJK in en/es/fr/de, and 0 new keys leaked into RUNTIME_UI_KEYS

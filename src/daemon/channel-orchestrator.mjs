@@ -597,7 +597,10 @@ export class ChannelOrchestrator {
     this._configFingerprintTracker.recordSelfWrite(next);
     writeFileAtomicSync(cfgPath, JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
     cdp?.invalidateConfigCache?.();
-    if (Object.prototype.hasOwnProperty.call(expandedPatch, 'autoArchiveOnExit')) {
+    if (
+      Object.prototype.hasOwnProperty.call(expandedPatch, 'autoArchiveOnExit') ||
+      Object.prototype.hasOwnProperty.call(expandedPatch, 'storageGuard')
+    ) {
       this._deps.onAutoArchiveSettingChanged?.();
     }
     this._configSeq += 1;

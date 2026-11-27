@@ -49,6 +49,7 @@
     '.ag-cs-font-act-btn:hover{border-color:var(--primary,#669DF6);}',
     '.ag-cs-font-hint{font-size:11px;line-height:1.4;color:var(--muted-foreground,#94A3B8);}',
     '.ag-cs-font-hint[data-tone="warn"]{color:var(--warning,#F2B84B);}',
+    '.ag-cs-storage-subhead{margin-top:10px}.ag-cs-storage-adv{padding:0}.ag-cs-storage-adv>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:11px 15px;font-size:12px;font-weight:500;color:var(--muted-foreground);cursor:pointer;user-select:none;outline:0;transition:color .14s}.ag-cs-storage-adv>summary::-webkit-details-marker{display:none}.ag-cs-storage-adv>summary:focus-visible{outline:2px solid var(--primary,#669DF6);outline-offset:-2px}.ag-cs-storage-adv>summary::after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);opacity:.65;transition:transform .16s}.ag-cs-storage-adv[open]>summary,.ag-cs-storage-adv>summary:hover{color:var(--foreground)}.ag-cs-storage-adv[open]>summary::after{transform:rotate(-135deg)}.ag-cs-storage-adv-body{display:flex;flex-direction:column;gap:10px;padding:2px 15px 14px}.ag-cs-storage-adv-body .ag-cs-thought-cfg-box{background:transparent;border:0;border-top:1px solid var(--_kd,var(--ag-cs-border-1));border-radius:0;padding:10px 0 0}.ag-cs-storage-adv-body details.ag-cs-thought-cfg-box>summary{cursor:pointer;font-size:12px;font-weight:500;color:var(--secondary-foreground);user-select:none;padding:2px 0}.ag-cs-storage-adv-body pre[data-ag-cs-storage-detail="1"]{margin:6px 0 0;padding:10px 12px;max-height:260px;overflow:auto;border-radius:8px;border:1px solid var(--_kb,var(--ag-cs-border-1));background:var(--_k1,var(--ag-cs-tonal-1));color:var(--secondary-foreground);font:11.5px/1.58 var(--ag-cs-mono-stack);white-space:pre-wrap;word-break:break-word}',
   ].join('\n');
 
   const sa = (el, k, v = '') => el && el.setAttribute && el.setAttribute(k, String(v));
@@ -560,8 +561,10 @@
     const codeFontCustom = String(readLiveCfg(ctx, 'codeFontCustom', '') || '');
     const telOff = readLiveCfg(ctx, 'telemetryModule', 'auto') === 'off';
     const telQuotaMode = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
+    const autoExitOn = Boolean(readLiveCfg(ctx, 'autoArchiveOnExit', false));
+    const storageGuard = readLiveCfg(ctx, 'storageGuard', 'auto') === 'off' ? 'off' : 'auto';
 
-    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
+    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}|${autoExitOn ? 1 : 0}|${storageGuard}`;
     if (
       rootEl.__extBeta4Sig === extSig &&
       qs(rootEl, '[data-ag-cs-row="performanceMode"]') &&
@@ -730,6 +733,25 @@
             if (act) sa(b, 'data-pressed');
             else ra(b, 'data-pressed');
           }
+        }
+      }
+
+      const stHead = qs(rootEl, '[data-ag-cs-storage-subhead="1"]');
+      if (stHead && extUi.storageCardTitle && stHead.textContent !== extUi.storageCardTitle) stHead.textContent = extUi.storageCardTitle;
+      const advSum = qs(rootEl, '[data-ag-cs-storage-adv-sum="1"]');
+      if (advSum && extUi.storageAdvTitle && advSum.textContent !== extUi.storageAdvTitle) advSum.textContent = extUi.storageAdvTitle;
+      const polRow = qs(rootEl, '[data-ag-cs-storage-policy-row="1"]');
+      if (polRow) {
+        const pt = qs(polRow, '[data-k="t"]'), pd = qs(polRow, '[data-k="d"]');
+        if (pt && extUi.setStoragePolicyTitle && pt.textContent !== extUi.setStoragePolicyTitle) pt.textContent = extUi.setStoragePolicyTitle;
+        if (pd && extUi.setStoragePolicyDesc && pd.textContent !== extUi.setStoragePolicyDesc) pd.textContent = extUi.setStoragePolicyDesc;
+        const pol = autoExitOn ? 'auto' : storageGuard === 'off' ? 'off' : 'remind';
+        const lbs = { off: extUi.optStorageOff || 'Off', remind: extUi.optStorageRemind || 'Remind Only', auto: extUi.optStorageAuto || 'Auto on Exit' };
+        for (const b of polRow.querySelectorAll?.('button[data-ag-cs-storage-policy]') || []) {
+          const p = ga(b, 'data-ag-cs-storage-policy'), act = p === pol;
+          if (p && lbs[p] && b.textContent !== lbs[p]) b.textContent = lbs[p];
+          sa(b, 'aria-pressed', act ? 'true' : 'false');
+          if (act) { sa(b, 'data-pressed'); sa(b, 'data-active', '1'); } else { ra(b, 'data-pressed'); ra(b, 'data-active'); }
         }
       }
     });

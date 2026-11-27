@@ -209,6 +209,26 @@ export function buildStorageGuardBannerExpression(payload = {}) {
       });
       actions.appendChild(btnSnooze);
 
+      const btnDisable = document.createElement('button');
+      btnDisable.type = 'button';
+      btnDisable.className = 'ag-sg-btn';
+      btnDisable.setAttribute('data-ag-sg-action', 'disable-guard');
+      btnDisable.textContent = c.disableGuardBtn || "Don't Remind";
+      btnDisable.addEventListener('click', () => {
+        btnDisable.disabled = true;
+        try {
+          if (typeof window.__agPrismSetting === 'function') {
+            window.__agPrismSetting(JSON.stringify({ key: 'storageGuard', value: 'off' }));
+            root.remove();
+            return;
+          }
+        } catch {}
+        void callRepo({ action: 'storage-guard-mode', storageGuard: 'off' }).finally(() => {
+          root.remove();
+        });
+      });
+      actions.appendChild(btnDisable);
+
       const confirmBox = document.createElement('div');
       confirmBox.className = 'ag-sg-confirm';
       confirmBox.hidden = true;

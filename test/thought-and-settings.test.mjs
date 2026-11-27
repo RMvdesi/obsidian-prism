@@ -440,7 +440,8 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     await new Promise((r) => setTimeout(r, 25));
     assert.equal(clipboardWrites.length, 1);
     const exportedObj = JSON.parse(clipboardWrites[0]);
-    assert.equal(Object.keys(exportedObj.settings).length, 39);
+    assert.equal(Object.keys(exportedObj.settings).length, 40);
+    assert.equal(exportedObj.settings.storageGuard, 'auto');
     assert.equal(exportedObj.settings.darkAura, 'balanced');
     assert.equal(exportedObj.settings.darkAuraStyle, 'prism');
     assert.equal(exportedObj.settings.convRipple, 'off');
@@ -715,10 +716,13 @@ test('settings-panel lazy foldBody deferral on collapsed mount, memoized syncRoo
     const archiveBtn = sec.querySelector('button[data-ag-cs-storage-archive]');
     assert.equal(archRestartBtn.parentElement, restoreBtn.parentElement);
     assert.equal(archRestartBtn.parentElement, archiveBtn.parentElement);
-    const aboutBox = sec.querySelector('[data-ag-cs-about="1"]');
-    const actionRow = archRestartBtn.closest('.ag-cs-about-repo-row');
-    const autoExitRow = sec.querySelector('[data-ag-cs-auto-archive-exit="off"]').closest('.ag-cs-about-repo-row');
-    assert.ok(aboutBox.children.indexOf(actionRow) > -1 && aboutBox.children.indexOf(actionRow) < aboutBox.children.indexOf(autoExitRow));
+    const storageCard = sec.querySelector('[data-ag-cs-storage-card="1"]');
+    const policyRow = sec.querySelector('[data-ag-cs-storage-policy-row="1"]');
+    const advDrawer = sec.querySelector('[data-ag-cs-storage-adv="1"]');
+    assert.ok(storageCard && policyRow && advDrawer && storageCard.children.indexOf(policyRow) > -1 && storageCard.children.indexOf(policyRow) < storageCard.children.indexOf(advDrawer));
+    assert.ok(advDrawer.querySelector('button[data-ag-cs-archive-restart]'), 'Manual archive action lives inside collapsible advanced maintenance drawer');
+    const activePolicyBtns = Array.from(policyRow.querySelectorAll('button[data-ag-cs-storage-policy]')).filter((b) => b.getAttribute('aria-pressed') === 'true');
+    assert.equal(activePolicyBtns.length, 1, 'Exactly one storage policy segmented button must be active at a time');
     const ch9Style = doc.getElementById('ag-prism-settings-v101-css');
     assert.ok(ch9Style, 'Expanding settings body must inject Channel 9 settings CSS even when #ag-prism-css is present');
     assert.ok(ch9Style.textContent.includes('.ag-cs-settings-topdeck') && ch9Style.textContent.includes('.ag-cs-subtabs') && ch9Style.textContent.includes('.ag-cs-tone-dot'));

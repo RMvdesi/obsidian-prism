@@ -104,6 +104,7 @@ const CONFIG_SCHEMA = Object.freeze({
   autoUpdate: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
   updateChannel: Object.freeze({ type: 'enum', values: Object.freeze(['stable', 'beta']), default: 'stable' }),
   autoArchiveOnExit: Object.freeze({ type: 'boolean', default: false, stringBoolMode: 'strictOn' }),
+  storageGuard: Object.freeze({ type: 'enum', values: Object.freeze(['auto', 'off']), default: 'auto' }),
   pollIntervalMs: Object.freeze({ type: 'integer', default: 2500, min: 500, max: 60000, inValidators: false }),
   autoPromptCdpRelaunch: Object.freeze({ type: 'boolean', optional: true, strictBoolean: true, inValidators: false }),
   autoRelaunchOnBareLaunch: Object.freeze({ type: 'boolean', optional: true, strictBoolean: true, inValidators: false }),

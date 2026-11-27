@@ -427,6 +427,18 @@ export async function executeRepoAction(upd, rawInput = {}, secondArg = undefine
     }
     return { ok: Boolean(updated), action: 'storage-auto-exit', autoArchiveOnExit: enabled };
   }
+  if (rawInput?.action === 'storage-guard-mode') {
+    const raw = rawInput?.storageGuard ?? rawInput?.value;
+    const mode = raw === 'off' || raw === false ? 'off' : 'auto';
+    const patch = { storageGuard: mode };
+    if (typeof rawInput?.autoArchiveOnExit === 'boolean') patch.autoArchiveOnExit = rawInput.autoArchiveOnExit;
+    const updated = typeof upd.updateConfigBatch === 'function' ? upd.updateConfigBatch(patch) : upd.updateConfigSetting('storageGuard', mode);
+    if (updated) {
+      upd.invalidateStorageHealthCache();
+      await upd.invokeBroadcastConfigRefresh().catch(() => {});
+    }
+    return { ok: Boolean(updated), action: 'storage-guard-mode', ...patch };
+  }
   if (
     rawInput?.action === 'gomemlimit-status' ||
     rawInput?.action === 'gomemlimit-set' ||

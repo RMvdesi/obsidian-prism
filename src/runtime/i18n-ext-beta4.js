@@ -325,6 +325,15 @@
       'Beide (5h + W)',
       'İkisi (5s + Hf)',
     ],
+    storageCardTitle: ['存储归档与内存防护', '儲存歸檔與記憶體防護', 'Storage, Archive & Memory Guard', 'ストレージ整理とメモリ保護', '저장소 아카이브 및 메모리 보호', 'Almacenamiento, archivo y memoria', 'Stockage, archivage et mémoire', 'Speicher, Archiv & Speicherschutz', 'Depolama, Arşiv ve Bellek Koruması'],
+    setStoragePolicyTitle: ['自动归档与提醒策略', '自動歸檔與提醒策略', 'Auto-Archive & Reminders', '自動アーカイブと通知', '자동 아카이브 및 알림', 'Archivo automático y avisos', 'Archivage auto et rappels', 'Auto-Archiv & Hinweise', 'Otomatik Arşiv ve Hatırlatma'],
+    setStoragePolicyDesc: ['彻底关闭将停止自动归档与一切提醒弹窗；仅提醒在大体积时提示；退出自动归档在关闭时整理子代理。', '徹底關閉將停止自動歸檔與一切提醒彈窗；僅提醒在大體積時提示；退出自動歸檔在關閉時整理子代理。', 'Off stops auto-archive & all popups; Remind Only alerts on large DB; Auto on Exit archives old subagents.', 'オフで自動整理と通知を停止、通知のみは肥大化時に案内、終了時自動は終了時に退避。', '끄기는 자동 정리와 알림 중지, 알림만은 크기 초과 시 안내, 종료 시 자동은 종료 시 정리.', 'Desactivado detiene archivo y avisos; Solo avisar alerta si crece; Auto al salir archiva al cerrar.', 'Désactivé coupe archivage et rappels ; Rappel seul avertit ; Auto sortie archive à la fermeture.', 'Aus stoppt Archiv & Hinweise; Nur erinnern warnt bei großer DB; Auto Beenden archiviert beim Schließen.', 'Kapalı arşiv ve uyarıları durdurur; Sadece Hatırlat uyarır; Çıkışta Oto kapanırken arşivler.'],
+    optStorageOff: ['彻底关闭', '徹底關閉', 'Off', '完全にオフ', '완전 끄기', 'Desactivado', 'Désactivé', 'Aus', 'Kapalı'],
+    optStorageRemind: ['仅提醒', '僅提醒', 'Remind Only', '通知のみ', '알림만', 'Solo avisar', 'Rappel seul', 'Nur erinnern', 'Sadece Hatırlat'],
+    optStorageAuto: ['退出自动归档', '退出自動歸檔', 'Auto on Exit', '終了時自動', '종료 시 자동', 'Auto al salir', 'Auto sortie', 'Auto Beenden', 'Çıkışta Oto'],
+    storageAdvTitle: ['高级维护与内存限制', '進階維護與記憶體限制', 'Advanced Maintenance & Memory Limit', '高度なメンテナンスとメモリ制限', '고급 유지관리 및 메모리 제한', 'Mantenimiento avanzado y memoria', 'Maintenance avancée et mémoire', 'Erweiterte Wartung & Speicher', 'Gelişmiş Bakım ve Bellek'],
+    storageGuardDisableBtn: ['不再提醒', '不再提醒', "Don't Remind", '今後通知しない', '다시 알리지 않음', 'No recordar más', 'Ne plus rappeler', 'Nicht mehr erinnern', 'Bir Daha Hatırlatma'],
+    storageGuardDisabledMsg: ['已彻底关闭存储提醒弹窗（随时可在模块设置中重新开启）', '已徹底關閉儲存提醒彈窗（隨時可在模組設定中重新開啟）', 'Storage reminder popups disabled (re-enable anytime in Modules settings)', 'ストレージ通知を完全にオフにしました（モジュール設定から再開可能）', '저장소 알림 팝업을 완전히 껐습니다 (모듈 설정에서 언제든 다시 켤 수 있음)', 'Avisos de almacenamiento desactivados (reactívalos en Módulos)', 'Rappels de stockage désactivés (réactivables dans Modules)', 'Speicherhinweise dauerhaft deaktiviert (in Module wieder aktivierbar)', 'Depolama hatırlatmaları kapatıldı (Modüller ayarından yeniden açılabilir)'],
   });
 
   function normalizeLocale(lang) {

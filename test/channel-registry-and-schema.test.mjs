@@ -513,10 +513,10 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
   assert.equal(rootAttrs.get('data-theme'), 'dark', 'REMOVE_EXPRESSION must NEVER delete host documentElement[data-theme]');
 });
 
-test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 54 keys in src/config/schema.cjs', () => {
+test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 55 keys in src/config/schema.cjs', () => {
   const schema = cdp.CONFIG_SCHEMA;
   const allSchemaKeys = Object.keys(schema).sort();
-  assert.equal(allSchemaKeys.length, 54, 'CONFIG_SCHEMA expected 54 keys');
+  assert.equal(allSchemaKeys.length, 55, 'CONFIG_SCHEMA expected 55 keys');
 
   const canonicalLangs = [...schema.language.values];
   const autoOnOff = ['auto', 'on', 'off'];

@@ -183,7 +183,7 @@ async function handleRepoBinding(rpc, entry, payload, executionContextId) {
   const passthroughKeys = [
     'confirm', 'purgeData', 'force', 'manual', 'channel', 'updateChannel', 'version',
     'value', 'batchName', 'batch', 'lang', 'mode', 'oldMain', 'hours', 'listOnly',
-    'autoArchiveOnExit', 'addonId', 'manifestUrl', 'expectedManifestSha256',
+    'autoArchiveOnExit', 'storageGuard', 'addonId', 'manifestUrl', 'expectedManifestSha256',
   ];
   for (const k of passthroughKeys) {
     if (inputPayload[k] === undefined && parsed?.[k] !== undefined) inputPayload[k] = parsed[k];

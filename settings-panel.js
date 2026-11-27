@@ -28,108 +28,107 @@
   const SETTINGS_FALLBACK_CSS =
     '.ag-cs-settings-fold-body:not(.is-open),.ag-cs-settings-group[hidden]{display:none!important}';
 
-  // Ch9 设置面板专属样式（按需注入）
   const SETTINGS_CH9_CSS = (() => {
-    const S = 'html[data-ag-cs-style] #ag-cs-settings-sec';
-    const L1 = 'html[data-ag-cs-style][data-ag-cs-theme="light"] #ag-cs-settings-sec';
-    const L2 = 'html[data-ag-cs-style]>body:is(.theme-light,.light-theme,.light) #ag-cs-settings-sec';
-    const RB = `${S} :is(.ag-cs-repo-sync-btn,button[data-ag-cs-repo-sync])`;
-    return [
-      `${S} .divide-y{overflow:hidden;}`,
-      `${S} .py-2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:12px 15px;}`,
-      `${S} .ag-cs-settings-title-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}`,
-      `${S} .flex-1{display:flex;flex-direction:column;gap:2px;flex:1 1 160px;min-width:160px;}`,
-      `${S} [data-k="t"]{font-size:13.5px;font-weight:500;color:var(--foreground);}`,
-      `${S} [data-k="d"]{font-size:12px;color:var(--muted-foreground);line-height:1.4;}`,
-      `${S} .shrink-0{max-width:100%;}`,
-      `${S} [role="group"]:not([data-ui-kind="switch"]){position:relative;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;height:auto;min-height:31px;max-width:100%;}`,
-      `${S} [role="group"]:not([data-ui-kind="switch"])>button{z-index:1;display:inline-flex;align-items:center;height:26px;min-height:26px;white-space:nowrap;border:0;background:transparent;font-size:12.5px;cursor:pointer;}`,
-      `${S} .ag-cs-settings-topdeck{display:flex;flex-direction:column;gap:10px;margin-bottom:2px;padding:4px 2px 6px;border:0;background:transparent;}`,
-      `${S} :is(.ag-cs-preset-row,.ag-cs-cfg-footer){display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}`,
-      `${S} .ag-cs-preset-label{font-size:11px;font-weight:600;color:var(--muted-foreground);}`,
-      `${S} :is(.ag-cs-preset-pills,.ag-cs-cfg-actions){display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;}`,
-      `${S} :is(.ag-cs-preset-btn,.ag-cs-cfg-btn){height:27px;padding:0 12px;border-radius:999px;border:1px solid var(--_kb);background:color-mix(in srgb,var(--foreground) 3.8%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);color:var(--secondary-foreground);font-size:11.5px;font-weight:500;cursor:pointer;transition:var(--_t3),box-shadow 140ms ease;}`,
-      `${S} :is(.ag-cs-preset-btn,.ag-cs-cfg-btn):hover{background:color-mix(in srgb,var(--foreground) 7.5%,transparent);border-color:var(--ag-cs-border-2);color:var(--foreground);}`,
-      `${S} .ag-cs-cfg-btn{height:26px;padding:0 10px;border-radius:7px;}`,
-      `${S} .ag-cs-preset-btn[data-active="1"]{background:color-mix(in srgb,var(--primary) 18%,rgba(255,255,255,.05));border-color:color-mix(in srgb,var(--primary) 48%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.16);color:var(--foreground);font-weight:600;}`,
-      `${S} .ag-cs-subtabs{display:inline-flex;align-items:center;flex-wrap:wrap;width:fit-content;max-width:100%;padding:2.5px;gap:2px;border-radius:8px;border:1px solid var(--_kb);background:var(--_k1);box-shadow:var(--_kw);}`,
-      `${S} .ag-cs-subtab-btn{height:25px;padding:0 10px;border-radius:6px;border:0;background:transparent;color:var(--muted-foreground);font-size:11.5px;font-weight:500;cursor:pointer;transition:background-color 140ms ease,color 140ms ease,box-shadow 140ms ease;}`,
-      `${S} .ag-cs-subtab-btn:hover{color:var(--foreground);background:var(--ag-cs-hover-wash);}`,
-      `${S} .ag-cs-subtab-btn[aria-selected="true"]{background:var(--_k2);box-shadow:var(--_ks2);color:var(--foreground);font-weight:600;}`,
-      `${S} .ag-cs-settings-groups{display:flex;flex-direction:column;gap:12px;}`,
-      `${S} .ag-cs-settings-group{display:flex;flex-direction:column;gap:6px;}`,
-      `${S} .ag-cs-cfg-footer{margin-top:2px;padding:11px 14px;border-radius:12px;border:1px solid var(--_kb);background:var(--_k0);box-shadow:inset 0 1px 0 rgba(255,255,255,.045);}`,
-      `${S} .ag-cs-cfg-meta{display:flex;flex-direction:column;gap:2px;min-width:180px;flex:1;}`,
-      `${S} .ag-cs-cfg-title{font-size:12px;font-weight:600;color:var(--foreground);}`,
-      `${S} .ag-cs-cfg-hint{font-size:11px;color:var(--muted-foreground);}`,
-      `${S} .ag-cs-cfg-hint[data-tone="ok"]{color:#10b981;}`,
-      `${S} .ag-cs-cfg-hint[data-tone="err"]{color:#ef4444;}`,
-      `${S} .ag-cs-settings-subhead{font-size:12px;font-weight:600;color:var(--muted-foreground);letter-spacing:.02em;padding:0 2px;}`,
-      `${S} .ag-cs-beta-notice{font-size:12px;line-height:1.45;padding:7px 10px;border-radius:8px;color:color-mix(in srgb,#F59E0B 72%,var(--foreground));background:color-mix(in srgb,#F59E0B 10%,transparent);border:1px solid color-mix(in srgb,#F59E0B 26%,transparent);}`,
-      `${S} .ag-cs-tone-dot{display:inline-block;width:7px;height:7px;border-radius:999px;margin-right:6px;vertical-align:middle;box-shadow:0 0 5px currentColor;flex-shrink:0;}`,
-      `${S} .ag-cs-tone-dot[data-tone="follow"]{background:linear-gradient(135deg,#669DF6,#9B72CB);}`,
-      `${S} .ag-cs-tone-dot[data-tone="cobalt"]{background:#4F8BFF;color:#4F8BFF;}`,
-      `${S} .ag-cs-tone-dot[data-tone="iris"]{background:#A78BFA;color:#A78BFA;}`,
-      `${S} .ag-cs-tone-dot[data-tone="amber"]{background:#F59E0B;color:#F59E0B;}`,
-      `${S} .ag-cs-tone-dot[data-tone="mono"]{background:#94A3B8;color:#94A3B8;box-shadow:none;}`,
-      `${S} :is(.ag-cs-about-repo-row,.ag-cs-thought-bar){display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;}`,
-      `${S} .ag-cs-about-repo-info{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;font-size:12px;color:var(--secondary-foreground);}`,
-      `${S} .ag-cs-update-link-slot{display:inline-flex;align-items:center;}`,
+    const S = 'html[data-ag-cs-style] #ag-cs-settings-sec', L1 = 'html[data-ag-cs-style][data-ag-cs-theme="light"] #ag-cs-settings-sec', L2 = 'html[data-ag-cs-style]>body:is(.theme-light,.light-theme,.light) #ag-cs-settings-sec', RB = `${S} :is(.ag-cs-repo-sync-btn,button[data-ag-cs-repo-sync])`;
+    const sr = [
+      '.divide-y{overflow:hidden;}',
+      '.py-2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:12px 15px;}',
+      '.ag-cs-settings-title-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}',
+      '.flex-1{display:flex;flex-direction:column;gap:2px;flex:1 1 160px;min-width:160px;}',
+      '[data-k="t"]{font-size:13.5px;font-weight:500;color:var(--foreground);}',
+      '[data-k="d"]{font-size:12px;color:var(--muted-foreground);line-height:1.4;}',
+      '.shrink-0{max-width:100%;}',
+      '[role="group"]:not([data-ui-kind="switch"]){position:relative;display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px;height:auto;min-height:31px;max-width:100%;}',
+      '[role="group"]:not([data-ui-kind="switch"])>button{z-index:1;display:inline-flex;align-items:center;height:26px;min-height:26px;white-space:nowrap;border:0;background:transparent;font-size:12.5px;cursor:pointer;}',
+      '.ag-cs-settings-topdeck{display:flex;flex-direction:column;gap:10px;margin-bottom:2px;padding:4px 2px 6px;border:0;background:transparent;}',
+      ':is(.ag-cs-preset-row,.ag-cs-cfg-footer){display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}',
+      '.ag-cs-preset-label{font-size:11px;font-weight:600;color:var(--muted-foreground);}',
+      ':is(.ag-cs-preset-pills,.ag-cs-cfg-actions){display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;}',
+      ':is(.ag-cs-preset-btn,.ag-cs-cfg-btn){height:27px;padding:0 12px;border-radius:999px;border:1px solid var(--_kb);background:color-mix(in srgb,var(--foreground) 3.8%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);color:var(--secondary-foreground);font-size:11.5px;font-weight:500;cursor:pointer;transition:var(--_t3),box-shadow 140ms ease;}',
+      ':is(.ag-cs-preset-btn,.ag-cs-cfg-btn):hover{background:color-mix(in srgb,var(--foreground) 7.5%,transparent);border-color:var(--ag-cs-border-2);color:var(--foreground);}',
+      '.ag-cs-cfg-btn{height:26px;padding:0 10px;border-radius:7px;}',
+      '.ag-cs-preset-btn[data-active="1"]{background:color-mix(in srgb,var(--primary) 18%,rgba(255,255,255,.05));border-color:color-mix(in srgb,var(--primary) 48%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.16);color:var(--foreground);font-weight:600;}',
+      '.ag-cs-subtabs{display:inline-flex;align-items:center;flex-wrap:wrap;width:fit-content;max-width:100%;padding:2.5px;gap:2px;border-radius:8px;border:1px solid var(--_kb);background:var(--_k1);box-shadow:var(--_kw);}',
+      '.ag-cs-subtab-btn{height:25px;padding:0 10px;border-radius:6px;border:0;background:transparent;color:var(--muted-foreground);font-size:11.5px;font-weight:500;cursor:pointer;transition:background-color 140ms ease,color 140ms ease,box-shadow 140ms ease;}',
+      '.ag-cs-subtab-btn:hover{color:var(--foreground);background:var(--ag-cs-hover-wash);}',
+      '.ag-cs-subtab-btn[aria-selected="true"]{background:var(--_k2);box-shadow:var(--_ks2);color:var(--foreground);font-weight:600;}',
+      '.ag-cs-settings-groups{display:flex;flex-direction:column;gap:12px;}',
+      '.ag-cs-settings-group{display:flex;flex-direction:column;gap:6px;}',
+      '.ag-cs-cfg-footer{margin-top:2px;padding:11px 14px;border-radius:12px;border:1px solid var(--_kb);background:var(--_k0);box-shadow:inset 0 1px 0 rgba(255,255,255,.045);}',
+      '.ag-cs-cfg-meta{display:flex;flex-direction:column;gap:2px;min-width:180px;flex:1;}',
+      '.ag-cs-cfg-title{font-size:12px;font-weight:600;color:var(--foreground);}',
+      '.ag-cs-cfg-hint{font-size:11px;color:var(--muted-foreground);}',
+      '.ag-cs-cfg-hint[data-tone="ok"]{color:#10b981;}',
+      '.ag-cs-cfg-hint[data-tone="err"]{color:#ef4444;}',
+      '.ag-cs-settings-subhead{font-size:12px;font-weight:600;color:var(--muted-foreground);letter-spacing:.02em;padding:0 2px;}',
+      '.ag-cs-beta-notice{font-size:12px;line-height:1.45;padding:7px 10px;border-radius:8px;color:color-mix(in srgb,#F59E0B 72%,var(--foreground));background:color-mix(in srgb,#F59E0B 10%,transparent);border:1px solid color-mix(in srgb,#F59E0B 26%,transparent);}',
+      '.ag-cs-tone-dot{display:inline-block;width:7px;height:7px;border-radius:999px;margin-right:6px;vertical-align:middle;box-shadow:0 0 5px currentColor;flex-shrink:0;}',
+      '.ag-cs-tone-dot[data-tone="follow"]{background:linear-gradient(135deg,#669DF6,#9B72CB);}',
+      '.ag-cs-tone-dot[data-tone="cobalt"]{background:#4F8BFF;color:#4F8BFF;}',
+      '.ag-cs-tone-dot[data-tone="iris"]{background:#A78BFA;color:#A78BFA;}',
+      '.ag-cs-tone-dot[data-tone="amber"]{background:#F59E0B;color:#F59E0B;}',
+      '.ag-cs-tone-dot[data-tone="mono"]{background:#94A3B8;color:#94A3B8;box-shadow:none;}',
+      ':is(.ag-cs-about-repo-row,.ag-cs-thought-bar){display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;}',
+      '.ag-cs-about-repo-info{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;font-size:12px;color:var(--secondary-foreground);}',
+      '.ag-cs-update-link-slot{display:inline-flex;align-items:center;}',
+      '.ag-cs-about-credits-title{font-size:11.5px;font-weight:600;color:var(--muted-foreground);letter-spacing:.015em;}',
+      '.ag-cs-about-credits{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px;margin:0;padding:0;list-style:none;}',
+      '.ag-cs-about-box a[href]{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;min-width:0;padding:5px 9px;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--link) !important;font-size:11.5px;line-height:16px;font-weight:500;text-decoration:none !important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:var(--_t2);}',
+      '.ag-cs-about-box a[href]:hover{background:var(--ag-cs-hover-wash);border-color:color-mix(in srgb,var(--primary) 38%,var(--ag-cs-border-2));color:var(--foreground) !important;}',
+      '.ag-cs-about-credits a[href]{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:2px;padding:7px 10px;white-space:normal;}',
+      '.ag-cs-credit-top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;}',
+      '.ag-cs-credit-repo{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}',
+      '.ag-cs-credit-ext{flex-shrink:0;font-size:10.5px;opacity:.68;color:var(--muted-foreground);}',
+      '.ag-cs-credit-meta{font-size:10.5px;line-height:14px;font-weight:400;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+      '.ag-cs-about-box details{border-top:1px solid var(--ag-cs-border-1);padding-top:8px;}',
+      '.ag-cs-about-box summary{cursor:pointer;font-size:12px;font-weight:500;color:var(--secondary-foreground);user-select:none;padding:2px 0;transition:color 120ms ease;}',
+      '.ag-cs-about-box summary:hover{color:var(--foreground);}',
+      ':is(.ag-cs-license-pre,.ag-cs-about-box pre){margin:6px 0 0;padding:10px 12px;max-height:168px;overflow:auto;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:color-mix(in srgb,var(--background) 72%,var(--card));color:var(--muted-foreground);font-family:var(--ag-cs-mono-stack);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}',
+      '.ag-cs-about-box pre[data-ag-cs-storage-detail="1"]{max-height:280px;color:var(--secondary-foreground);font-size:11.5px;line-height:1.58;}',
+      '.ag-cs-thought-cfg-box{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--ag-cs-r-lg);background:color-mix(in srgb,var(--background) 36%,var(--_tb));}',
+      '.ag-cs-thought-label{font-size:12px;font-weight:600;color:var(--secondary-foreground);}',
+      '.ag-cs-thought-profiles{display:flex;flex-wrap:wrap;align-items:center;gap:5px;}',
+      '.ag-cs-thought-prof-chip{appearance:none;height:26px;padding:0 10px;border-radius:var(--ag-cs-r-sm);border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--secondary-foreground);font-size:12px;cursor:pointer;transition:var(--_t2);}',
+      '.ag-cs-thought-prof-chip:hover{border-color:var(--ag-cs-border-2);color:var(--foreground);}',
+      '.ag-cs-thought-prof-chip[data-active="1"]{background:color-mix(in srgb,var(--primary) 16%,var(--ag-cs-pill-bg));border-color:color-mix(in srgb,var(--primary) 46%,var(--ag-cs-border-2));color:var(--foreground);font-weight:500;}',
+      '.ag-cs-thought-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;}',
+      '.ag-cs-thought-field{display:flex;flex-direction:column;gap:4px;min-width:0;}',
+      '.ag-cs-thought-field[data-span="2"]{grid-column:1/-1;}',
+      '.ag-cs-thought-field label{font-size:11.5px;font-weight:500;color:var(--muted-foreground);display:flex;align-items:center;justify-content:space-between;gap:6px;}',
+      '.ag-cs-thought-input-row{display:flex;align-items:center;gap:6px;min-width:0;}',
+      ':is(.ag-cs-thought-input,.ag-cs-thought-select,.ag-cs-thought-textarea){box-sizing:border-box;width:100%;min-width:0;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:color-mix(in srgb,var(--background) 68%,var(--card));color:var(--foreground);font-family:inherit;font-size:12.5px;outline:none !important;transition:border-color 120ms ease,box-shadow 120ms ease;}',
+      ':is(.ag-cs-thought-input,.ag-cs-thought-select,.ag-cs-thought-textarea):focus{border-color:color-mix(in srgb,var(--primary) 58%,var(--ag-cs-border-2));box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 16%,transparent);}',
+      ':is(.ag-cs-thought-input,.ag-cs-thought-select){height:30px;padding:0 9px;}',
+      '.ag-cs-thought-input[data-mono="1"]{font-family:var(--ag-cs-mono-stack);font-size:12px;}',
+      '.ag-cs-thought-textarea{min-height:68px;max-height:180px;padding:7px 9px;line-height:1.45;resize:vertical;}',
+      '.ag-cs-thought-btn{appearance:none;height:28px;padding:0 11px;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-2);background:var(--ag-cs-pill-bg);color:var(--secondary-foreground);font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;cursor:pointer;flex-shrink:0;transition:var(--_t2),var(--_ts);}',
+      '.ag-cs-thought-btn:hover:not(:disabled){background:var(--ag-cs-hover-wash);color:var(--foreground);border-color:color-mix(in srgb,var(--primary) 38%,var(--ag-cs-border-2));}',
+      '.ag-cs-thought-btn[data-primary="1"]{background:color-mix(in srgb,var(--primary) 14%,var(--ag-cs-pill-bg));border-color:color-mix(in srgb,var(--primary) 40%,var(--ag-cs-border-2));color:var(--foreground);}',
+      '.ag-cs-thought-btn[data-danger="1"]:hover:not(:disabled){color:var(--error,#E5534B);border-color:color-mix(in srgb,var(--error,#E5534B) 45%,var(--ag-cs-border-2));}',
+      '.ag-cs-thought-btn:active:not(:disabled){transform:scale(.97);}',
+      '.ag-cs-thought-btn:disabled{opacity:.55;cursor:progress;}',
+      '.ag-cs-thought-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;padding-top:2px;}',
+      '.ag-cs-thought-btn-group{display:flex;flex-wrap:wrap;align-items:center;gap:6px;}',
+      '.ag-cs-thought-status{font-size:11.5px;line-height:16px;padding:3px 9px;border-radius:999px;border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--muted-foreground);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+      '.ag-cs-thought-status[data-state="ok"]{color:var(--success,#50A37B);border-color:color-mix(in srgb,var(--success,#50A37B) 38%,var(--ag-cs-border-1));}',
+      '.ag-cs-thought-status[data-state="err"]{color:var(--error,#E5534B);border-color:color-mix(in srgb,var(--error,#E5534B) 38%,var(--ag-cs-border-1));}',
+      '.ag-cs-thought-hint{margin:0;font-size:11px;line-height:1.4;color:var(--muted-foreground);opacity:.88;}',
+      '.ag-prism-wp-sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 18px;padding-top:2px;width:100%;}',
+      '.ag-prism-wp-slider-item{display:flex;flex-direction:column;gap:5px;min-width:0;}',
+      '.ag-prism-wp-slider-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted-foreground);}',
+      '.ag-prism-wp-slider-val{font-family:var(--ag-cs-mono-stack,ui-monospace,monospace);font-size:11px;font-variant-numeric:tabular-nums;color:var(--foreground);font-weight:500;padding:1px 6px;border-radius:5px;background:var(--ag-cs-pill-bg,rgba(128,128,128,0.10));border:1px solid var(--ag-cs-border-1,rgba(128,128,128,0.18));}',
+      '.ag-prism-wp-range{width:100%;margin:0;accent-color:var(--primary,#669DF6);cursor:pointer;height:18px;}',
+    ].map((r) => `${S} ${r}`);
+    sr.push(
       `${RB}[data-tone="secondary"]{border-color:var(--ag-cs-border-2);background:var(--ag-cs-pill-bg);color:var(--secondary-foreground);}`,
       `${RB}[data-tone="secondary"]:hover:not(:disabled){background:var(--ag-cs-hover-wash);border-color:color-mix(in srgb,var(--primary) 38%,var(--ag-cs-border-2));color:var(--foreground);}`,
       `${RB}[data-tone="amber"]{border-color:color-mix(in srgb,var(--warning,#F59E0B) 44%,var(--ag-cs-border-2));background:color-mix(in srgb,var(--warning,#F59E0B) 16%,var(--ag-cs-pill-bg));color:#FDE68A;font-weight:600;}`,
       `${RB}[data-tone="amber"]:hover:not(:disabled){background:color-mix(in srgb,var(--warning,#F59E0B) 24%,var(--ag-cs-pill-bg));border-color:color-mix(in srgb,var(--warning,#F59E0B) 62%,var(--ag-cs-border-2));}`,
       `${RB}[data-active="1"]{border-color:color-mix(in srgb,var(--primary) 48%,var(--ag-cs-border-2));background:color-mix(in srgb,var(--primary) 18%,var(--ag-cs-pill-bg));color:var(--foreground);font-weight:600;}`,
       `${L1} :is(.ag-cs-repo-sync-btn,button[data-ag-cs-repo-sync])[data-tone="amber"],${L2} :is(.ag-cs-repo-sync-btn,button[data-ag-cs-repo-sync])[data-tone="amber"]{color:#92400E;}`,
-      `${S} .ag-cs-about-credits-title{font-size:11.5px;font-weight:600;color:var(--muted-foreground);letter-spacing:.015em;}`,
-      `${S} .ag-cs-about-credits{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px;margin:0;padding:0;list-style:none;}`,
-      `${S} .ag-cs-about-box a[href]{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;min-width:0;padding:5px 9px;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--link) !important;font-size:11.5px;line-height:16px;font-weight:500;text-decoration:none !important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:var(--_t2);}`,
-      `${S} .ag-cs-about-box a[href]:hover{background:var(--ag-cs-hover-wash);border-color:color-mix(in srgb,var(--primary) 38%,var(--ag-cs-border-2));color:var(--foreground) !important;}`,
-      `${S} .ag-cs-about-credits a[href]{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:2px;padding:7px 10px;white-space:normal;}`,
-      `${S} .ag-cs-credit-top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;}`,
-      `${S} .ag-cs-credit-repo{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}`,
-      `${S} .ag-cs-credit-ext{flex-shrink:0;font-size:10.5px;opacity:.68;color:var(--muted-foreground);}`,
-      `${S} .ag-cs-credit-meta{font-size:10.5px;line-height:14px;font-weight:400;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}`,
-      `${S} .ag-cs-about-box details{border-top:1px solid var(--ag-cs-border-1);padding-top:8px;}`,
-      `${S} .ag-cs-about-box summary{cursor:pointer;font-size:12px;font-weight:500;color:var(--secondary-foreground);user-select:none;padding:2px 0;transition:color 120ms ease;}`,
-      `${S} .ag-cs-about-box summary:hover{color:var(--foreground);}`,
-      `${S} :is(.ag-cs-license-pre,.ag-cs-about-box pre){margin:6px 0 0;padding:10px 12px;max-height:168px;overflow:auto;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:color-mix(in srgb,var(--background) 72%,var(--card));color:var(--muted-foreground);font-family:var(--ag-cs-mono-stack);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}`,
-      `${S} .ag-cs-about-box pre[data-ag-cs-storage-detail="1"]{max-height:280px;color:var(--secondary-foreground);font-size:11.5px;line-height:1.58;}`,
-      `${S} .ag-cs-thought-cfg-box{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--ag-cs-r-lg);background:color-mix(in srgb,var(--background) 36%,var(--_tb));}`,
-      `${S} .ag-cs-thought-label{font-size:12px;font-weight:600;color:var(--secondary-foreground);}`,
-      `${S} .ag-cs-thought-profiles{display:flex;flex-wrap:wrap;align-items:center;gap:5px;}`,
-      `${S} .ag-cs-thought-prof-chip{appearance:none;height:26px;padding:0 10px;border-radius:var(--ag-cs-r-sm);border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--secondary-foreground);font-size:12px;cursor:pointer;transition:var(--_t2);}`,
-      `${S} .ag-cs-thought-prof-chip:hover{border-color:var(--ag-cs-border-2);color:var(--foreground);}`,
-      `${S} .ag-cs-thought-prof-chip[data-active="1"]{background:color-mix(in srgb,var(--primary) 16%,var(--ag-cs-pill-bg));border-color:color-mix(in srgb,var(--primary) 46%,var(--ag-cs-border-2));color:var(--foreground);font-weight:500;}`,
-      `${S} .ag-cs-thought-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;}`,
-      `@media (max-width:640px){${S} .ag-cs-thought-grid{grid-template-columns:1fr;}}`,
-      `${S} .ag-cs-thought-field{display:flex;flex-direction:column;gap:4px;min-width:0;}`,
-      `${S} .ag-cs-thought-field[data-span="2"]{grid-column:1/-1;}`,
-      `${S} .ag-cs-thought-field label{font-size:11.5px;font-weight:500;color:var(--muted-foreground);display:flex;align-items:center;justify-content:space-between;gap:6px;}`,
-      `${S} .ag-cs-thought-input-row{display:flex;align-items:center;gap:6px;min-width:0;}`,
-      `${S} :is(.ag-cs-thought-input,.ag-cs-thought-select,.ag-cs-thought-textarea){box-sizing:border-box;width:100%;min-width:0;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:color-mix(in srgb,var(--background) 68%,var(--card));color:var(--foreground);font-family:inherit;font-size:12.5px;outline:none !important;transition:border-color 120ms ease,box-shadow 120ms ease;}`,
-      `${S} :is(.ag-cs-thought-input,.ag-cs-thought-select,.ag-cs-thought-textarea):focus{border-color:color-mix(in srgb,var(--primary) 58%,var(--ag-cs-border-2));box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 16%,transparent);}`,
-      `${S} :is(.ag-cs-thought-input,.ag-cs-thought-select){height:30px;padding:0 9px;}`,
-      `${S} .ag-cs-thought-input[data-mono="1"]{font-family:var(--ag-cs-mono-stack);font-size:12px;}`,
-      `${S} .ag-cs-thought-textarea{min-height:68px;max-height:180px;padding:7px 9px;line-height:1.45;resize:vertical;}`,
-      `${S} .ag-cs-thought-btn{appearance:none;height:28px;padding:0 11px;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-2);background:var(--ag-cs-pill-bg);color:var(--secondary-foreground);font-size:12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;cursor:pointer;flex-shrink:0;transition:var(--_t2),var(--_ts);}`,
-      `${S} .ag-cs-thought-btn:hover:not(:disabled){background:var(--ag-cs-hover-wash);color:var(--foreground);border-color:color-mix(in srgb,var(--primary) 38%,var(--ag-cs-border-2));}`,
-      `${S} .ag-cs-thought-btn[data-primary="1"]{background:color-mix(in srgb,var(--primary) 14%,var(--ag-cs-pill-bg));border-color:color-mix(in srgb,var(--primary) 40%,var(--ag-cs-border-2));color:var(--foreground);}`,
-      `${S} .ag-cs-thought-btn[data-danger="1"]:hover:not(:disabled){color:var(--error,#E5534B);border-color:color-mix(in srgb,var(--error,#E5534B) 45%,var(--ag-cs-border-2));}`,
-      `${S} .ag-cs-thought-btn:active:not(:disabled){transform:scale(.97);}`,
-      `${S} .ag-cs-thought-btn:disabled{opacity:.55;cursor:progress;}`,
-      `${S} .ag-cs-thought-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;padding-top:2px;}`,
-      `${S} .ag-cs-thought-btn-group{display:flex;flex-wrap:wrap;align-items:center;gap:6px;}`,
-      `${S} .ag-cs-thought-status{font-size:11.5px;line-height:16px;padding:3px 9px;border-radius:999px;border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--muted-foreground);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}`,
-      `${S} .ag-cs-thought-status[data-state="ok"]{color:var(--success,#50A37B);border-color:color-mix(in srgb,var(--success,#50A37B) 38%,var(--ag-cs-border-1));}`,
-      `${S} .ag-cs-thought-status[data-state="err"]{color:var(--error,#E5534B);border-color:color-mix(in srgb,var(--error,#E5534B) 38%,var(--ag-cs-border-1));}`,
-      `${S} .ag-cs-thought-hint{margin:0;font-size:11px;line-height:1.4;color:var(--muted-foreground);opacity:.88;}`,
-      `${S} .ag-prism-wp-sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 18px;padding-top:2px;width:100%;}`,
-      `${S} .ag-prism-wp-slider-item{display:flex;flex-direction:column;gap:5px;min-width:0;}`,
-      `${S} .ag-prism-wp-slider-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted-foreground);}`,
-      `${S} .ag-prism-wp-slider-val{font-family:var(--ag-cs-mono-stack,ui-monospace,monospace);font-size:11px;font-variant-numeric:tabular-nums;color:var(--foreground);font-weight:500;padding:1px 6px;border-radius:5px;background:var(--ag-cs-pill-bg,rgba(128,128,128,0.10));border:1px solid var(--ag-cs-border-1,rgba(128,128,128,0.18));}`,
-      `${S} .ag-prism-wp-range{width:100%;margin:0;accent-color:var(--primary,#669DF6);cursor:pointer;height:18px;}`,
-    ].join('\n');
+      `@media (max-width:640px){${S} .ag-cs-thought-grid{grid-template-columns:1fr;}}`
+    );
+    return sr.join('\n');
   })();
 
   const mkSp = (allowed, d, aliases) => (aliases ? { allowed, default: d ?? allowed[0], aliases } : { allowed, default: d ?? allowed[0] });
@@ -179,6 +178,7 @@
     autoUpdate: S_OFF,
     updateChannel: mkSp(['stable', 'beta']),
     autoArchiveOnExit: S_F,
+    storageGuard: mkSp(['auto', 'off'], 'auto'),
   });
 
   const SCENE_PRESETS = O.freeze({
@@ -1748,6 +1748,7 @@
       'restore-archive',
       'storage-snooze',
       'storage-auto-exit',
+      'storage-guard-mode',
       'gomemlimit-status',
       'gomemlimit-set',
       'gomemlimit-clear',
@@ -1929,13 +1930,11 @@
           if (ga(grp, 'data-switch-on') !== swOn) sa(grp, 'data-switch-on', swOn);
         }
       }
-      const autoExitOn = effVal('autoArchiveOnExit', l) === true;
-      qa(rootEl, 'button[data-ag-cs-auto-archive-exit]').forEach((btn) => {
-        const isOnBtn = ga(btn, 'data-ag-cs-auto-archive-exit') === 'on';
-        const act = isOnBtn === autoExitOn;
+      const sPol = effVal('autoArchiveOnExit', l) === true ? 'auto' : effVal('storageGuard', l) === 'off' ? 'off' : 'remind';
+      qa(rootEl, 'button[data-ag-cs-storage-policy]').forEach((btn) => {
+        const act = ga(btn, 'data-ag-cs-storage-policy') === sPol;
         sa(btn, 'aria-pressed', act);
-        if (act) sa(btn, 'data-active', '1');
-        else ra(btn, 'data-active');
+        if (act) { sa(btn, 'data-pressed'); sa(btn, 'data-active', '1'); } else { ra(btn, 'data-pressed'); ra(btn, 'data-active'); }
       });
       for (const [pBtn, m] of dirtyPresets) {
         pBtn.__agAct = m;
@@ -2616,12 +2615,14 @@
           sa(subTabBar, 'role', 'tablist');
           const subTabBtns = [];
           const groupElsById = new Map();
+          let probeStorageRef = null;
           const applySubTab = (sid) => {
             activeSubTab = sid;
             writeStore(STORAGE_SETTINGS_SUBTAB_KEY, sid);
             for (const sb of subTabBtns) sa(sb, 'aria-selected', ga(sb, 'data-ag-cs-subtab') === sid);
             for (const [gid, gel] of groupElsById.entries()) setVis(gel, sid === 'all' || sid === gid);
             if (sid === 'beta' || sid === 'all') try { sec.__prismMountSg?.(); } catch {}
+            if (sid === 'modules' || sid === 'all') try { probeStorageRef?.(); } catch {}
           };
           for (const [sid, slbl] of [
             ['appearance', U('subTabAppearance', 'Appearance')],
@@ -2845,10 +2846,11 @@
           sa(archRestartBtn, 'data-tone', 'amber');
           const restoreBtn = mkB('ag-cs-repo-sync-btn', U('storageRestoreBtn', 'Restore Archive'), 'data-ag-cs-storage-restore');
           sa(restoreBtn, 'data-tone', 'secondary');
-          const autoExitOffBtn = mkB('ag-cs-repo-sync-btn', U('storageAutoExitOff', 'Off'), 'data-ag-cs-auto-archive-exit', 'off');
-          sa(autoExitOffBtn, 'data-tone', 'secondary');
-          const autoExitOnBtn = mkB('ag-cs-repo-sync-btn', U('storageAutoExitOn', 'On'), 'data-ag-cs-auto-archive-exit', 'on');
-          sa(autoExitOnBtn, 'data-tone', 'secondary');
+          const autoExitOffBtn = mkB(BTN, U('storageAutoExitOff', 'Off'), 'data-ag-cs-auto-archive-exit', 'off');
+          sa(autoExitOffBtn, 'data-ag-cs-storage-policy', 'off');
+          const autoExitRemindBtn = mkB(BTN, 'Remind', 'data-ag-cs-storage-policy', 'remind');
+          const autoExitOnBtn = mkB(BTN, U('storageAutoExitOn', 'On'), 'data-ag-cs-auto-archive-exit', 'on');
+          sa(autoExitOnBtn, 'data-ag-cs-storage-policy', 'auto');
           const archActionChip = mkEl('span', 'ag-cs-repo-chip', '');
           setVis(archActionChip, false);
           sa(archActionChip, 'data-ag-cs-archive-action-status');
@@ -2930,9 +2932,14 @@
             selectedBatchName = kept; restoreBatchSelect.value = kept; setVis(restoreBatchRow, list.length > 0);
             syncRestoreDesc();
           };
-          const syncAutoExitButtons = (en) => {
-            const on = Boolean(en);
-            runGuardedMut(() => { on ? ra(autoExitOffBtn, 'data-active') : sa(autoExitOffBtn, 'data-active', '1'); on ? sa(autoExitOnBtn, 'data-active', '1') : ra(autoExitOnBtn, 'data-active'); });
+          const syncAutoExitButtons = (en, sg) => {
+            const pol = en ? 'auto' : (sg !== undefined ? (sg === 'off' || sg === false) : resolveSettingRowActiveValue('storageGuard') === 'off') ? 'off' : 'remind';
+            runGuardedMut(() => {
+              for (const [b, p] of [[autoExitOffBtn, 'off'], [autoExitRemindBtn, 'remind'], [autoExitOnBtn, 'auto']]) {
+                const act = pol === p; sa(b, 'aria-pressed', act);
+                if (act) { sa(b, 'data-pressed'); sa(b, 'data-active', '1'); } else { ra(b, 'data-pressed'); ra(b, 'data-active'); }
+              }
+            });
           };
           syncAutoExitButtons(resolveSettingRowActiveValue('autoArchiveOnExit') === true);
 
@@ -2952,7 +2959,7 @@
                 setChip(storageChip, 'error', st.error);
                 return;
               }
-              if (typeof st.autoArchiveOnExit === 'boolean') syncAutoExitButtons(st.autoArchiveOnExit);
+              if (typeof st.autoArchiveOnExit === 'boolean' || typeof st.storageGuard === 'string') syncAutoExitButtons(typeof st.autoArchiveOnExit === 'boolean' ? st.autoArchiveOnExit : resolveSettingRowActiveValue('autoArchiveOnExit') === true, st.storageGuard);
               const clipPath = st.clipPath || st.archiveScriptPath || st.restoreScriptPath;
               if (prepared && (st.chipText || clipPath)) {
                 let chipMsg = st.chipText;
@@ -3014,198 +3021,94 @@
               .then((st) => st && applyGoMemView(st))
               .catch(() => {});
           };
+          probeStorageRef = probeStorageSilently;
           const loadStorageDetail = (force) => {
             if (storageBusy) return;
             storageBusy = true;
             const wl = getStorageWbUi(getLang());
-            runGuardedMut(() => {
-              stRefBtn.disabled = true;
-              if (!detailLoaded) stPre[K_TC] = wl.loading;
-            });
+            runGuardedMut(() => { stRefBtn.disabled = true; if (!detailLoaded) stPre[K_TC] = wl.loading; });
             void invokePrismRepoAction('storage-detail', version, { lang: getLang(), ...(force ? { force: true } : null) })
               .then((st) => st && applyStorageView(st, false))
               .catch((err) => applyStorageView({ ok: false, error: String(err?.message || err) }, false))
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (stRefBtn[K_IC]) stRefBtn.disabled = false; });
-              });
+              .finally(() => { storageBusy = false; runGuardedMut(() => { if (stRefBtn[K_IC]) stRefBtn.disabled = false; }); });
           };
-          on(stWb, 'toggle', () => {
-            if (stWb.open && !detailLoaded) loadStorageDetail(false);
-          });
+          on(stWb, 'toggle', () => { if (stWb.open && !detailLoaded) loadStorageDetail(false); });
           onClk(stRefBtn, () => loadStorageDetail(true));
-          onClk(stOldBtn, () => { toggleConfirmBox(oldMainConfirmBox); });
+          onClk(stOldBtn, () => toggleConfirmBox(oldMainConfirmBox));
           onClk(oldMainConfirmCancel, () => runGuardedMut(() => setVis(oldMainConfirmBox, false)));
-          onClk(oldMainConfirmOk, () => {
+          const runPrepAct = (btn, act, pay, hideBox, keepDis) => {
             if (storageBusy) return;
             storageBusy = true;
-            runGuardedMut(() => { oldMainConfirmOk.disabled = true; });
-            void invokePrismRepoAction('prepare-archive', version, {
-              mode: 'subagents+old-main',
-              oldMain: true,
-              confirm: true,
-              lang: getLang(),
-            })
-              .then((st) => {
-                if (!st) return;
-                applyStorageView(st, true);
-                if (st.ok !== false) runGuardedMut(() => setVis(oldMainConfirmBox, false));
-              })
+            runGuardedMut(() => { btn.disabled = true; });
+            void invokePrismRepoAction(act, version, pay)
+              .then((st) => { if (!st) return; applyStorageView(st, true); if (hideBox && st.ok !== false) runGuardedMut(() => setVis(hideBox, false)); })
               .catch((err) => applyStorageView({ ok: false, error: String(err?.message || err) }, false))
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (oldMainConfirmOk[K_IC]) oldMainConfirmOk.disabled = false; });
-              });
-          });
-          on(restoreBatchSelect, 'change', () => {
-            selectedBatchName = restoreBatchSelect.value || '';
-            runGuardedMut(() => syncRestoreDesc());
-          });
-          onClk(archiveBtn, () => {
-            if (storageBusy) return;
-            storageBusy = true;
-            runGuardedMut(() => { archiveBtn.disabled = true; });
-            void invokePrismRepoAction('prepare-archive', version, { lang: getLang() })
-              .then((st) => st && applyStorageView(st, true))
-              .catch((err) => applyStorageView({ ok: false, error: String(err?.message || err) }, false))
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (archiveBtn[K_IC]) archiveBtn.disabled = false; });
-              });
-          });
-          const toggleAutoExit = (enabled) => {
-            syncAutoExitButtons(enabled);
-            const win = getWin();
-            const repoBridge = win?.__agPrismRepoBridge;
-            const hasRepoBridge = isFn(repoBridge) || isFn(repoBridge?.['storage-auto-exit']) || isFn(repoBridge?.call);
-            const hasSettingBinding = isFn(win?.__agPrismSetting) || isFn(win?.__agClaudeStyleSetting);
-            if (!hasRepoBridge) {
-              try { saveSetting('autoArchiveOnExit', enabled); } catch {}
-              return;
-            }
-            // 无 CDP setting 绑定（纯内存状态/单测环境）时同步本地状态；真运行态仅走 storage-auto-exit 单路写盘与广播
-            if (!hasSettingBinding) {
-              try { saveSetting('autoArchiveOnExit', enabled); } catch {}
-            }
-            void invokePrismRepoAction('storage-auto-exit', version, { autoArchiveOnExit: enabled }).then((r) => {
-              if (r?.offline && hasSettingBinding) {
-                try { saveSetting('autoArchiveOnExit', enabled); } catch {}
-                return;
-              }
-              if (r && r.ok !== false && !r.offline && archActionChip[K_IC]) {
-                const u = uiText(getLang()) || ui;
-                runGuardedMut(() => {
-                  setVis(archActionChip, true);
-                  setChip(archActionChip, 'ok', enabled ? u.storageAutoExitEnabledMsg || 'On' : u.storageAutoExitOff || 'Off');
-                });
-              }
+              .finally(() => { storageBusy = false; runGuardedMut(() => { if (btn[K_IC]) btn.disabled = keepDis ? !selectedBatchName : false; }); });
+          };
+          onClk(oldMainConfirmOk, () => runPrepAct(oldMainConfirmOk, 'prepare-archive', { mode: 'subagents+old-main', oldMain: true, confirm: true, lang: getLang() }, oldMainConfirmBox));
+          on(restoreBatchSelect, 'change', () => { selectedBatchName = restoreBatchSelect.value || ''; runGuardedMut(() => syncRestoreDesc()); });
+          onClk(archiveBtn, () => runPrepAct(archiveBtn, 'prepare-archive', { lang: getLang() }));
+          const applyStoragePolicy = (pol) => {
+            const enabled = pol === 'auto', sg = pol === 'remind' ? 'auto' : 'off';
+            syncAutoExitButtons(enabled, sg);
+            const win = getWin(), rb = win?.__agPrismRepoBridge;
+            const hasRepo = isFn(rb) || isFn(rb?.['storage-auto-exit']) || isFn(rb?.call), hasBind = isFn(win?.__agPrismSetting) || isFn(win?.__agClaudeStyleSetting);
+            const persistLocal = () => { try { if (typeof applyBatch === 'function') applyBatch({ autoArchiveOnExit: enabled, storageGuard: sg }); else { saveSetting('autoArchiveOnExit', enabled); saveSetting('storageGuard', sg); } } catch {} };
+            if (!hasRepo) { persistLocal(); return; }
+            if (!hasBind) persistLocal();
+            const act = pol === 'remind' ? 'storage-guard-mode' : 'storage-auto-exit', pay = pol === 'remind' ? { storageGuard: 'auto', autoArchiveOnExit: false } : { autoArchiveOnExit: enabled };
+            void invokePrismRepoAction(act, version, pay).then((r) => {
+              if (act === 'storage-auto-exit') void invokePrismRepoAction('storage-guard-mode', version, { storageGuard: sg, autoArchiveOnExit: enabled }).catch(() => {});
+              if (r?.offline && hasBind) { persistLocal(); return; }
+              if (r && r.ok !== false && !r.offline && archActionChip[K_IC]) { const u = uiText(getLang()) || ui; runGuardedMut(() => { setVis(archActionChip, true); setChip(archActionChip, 'ok', enabled ? u.storageAutoExitEnabledMsg || 'On' : u.storageAutoExitOff || 'Off'); }); }
             });
           };
-          onClk(autoExitOffBtn, () => toggleAutoExit(false));
-          onClk(autoExitOnBtn, () => toggleAutoExit(true));
-          onClk(archRestartBtn, () => { toggleConfirmBox(archConfirmBox); });
+          onClk(autoExitOffBtn, () => applyStoragePolicy('off'));
+          onClk(autoExitRemindBtn, () => applyStoragePolicy('remind'));
+          onClk(autoExitOnBtn, () => applyStoragePolicy('auto'));
+          onClk(archRestartBtn, () => toggleConfirmBox(archConfirmBox));
           onClk(archConfirmCancel, () => runGuardedMut(() => setVis(archConfirmBox, false)));
-          onClk(archConfirmOk, () => {
+          const runSchedAct = (btn, act, pay, box, okKey, runKey, keepDis) => {
             if (storageBusy) return;
             storageBusy = true;
             const u = uiText(getLang()) || ui;
-            runGuardedMut(() => {
-              archConfirmOk.disabled = true;
-              setVis(archActionChip, true);
-              setChip(archActionChip, 'idle', u.storageArchiveRestartRunning || '...');
-            });
-            void invokePrismRepoAction('archive-and-restart', version, { confirm: true })
+            runGuardedMut(() => { btn.disabled = true; if (runKey) { setVis(archActionChip, true); setChip(archActionChip, 'idle', u[runKey] || '...'); } });
+            void invokePrismRepoAction(act, version, pay)
               .then((r) => {
                 if (!archActionChip[K_IC]) return;
                 const uNow = uiText(getLang()) || ui;
                 runGuardedMut(() => {
                   setVis(archActionChip, true);
-                  if (r && r.ok) {
-                    setChip(archActionChip, 'updated', uNow.storageArchiveRestartScheduled || 'OK');
-                    setVis(archConfirmBox, false);
-                  } else {
-                    setChip(archActionChip, 'error', r?.code === 'HOST_BUSY' ? (uNow.storageGuardBusyMsg || r.error) : (r?.error || 'Err'));
-                  }
+                  if (r && r.ok) { setChip(archActionChip, 'updated', uNow[okKey] || 'OK'); setVis(box, false); }
+                  else setChip(archActionChip, 'error', r?.code === 'HOST_BUSY' ? (uNow.storageGuardBusyMsg || r.error) : (r?.error || 'Err'));
                 });
               })
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (archConfirmOk[K_IC]) archConfirmOk.disabled = false; });
-              });
-          });
+              .finally(() => { storageBusy = false; runGuardedMut(() => { if (btn[K_IC]) btn.disabled = keepDis ? !selectedBatchName : false; }); });
+          };
+          onClk(archConfirmOk, () => runSchedAct(archConfirmOk, 'archive-and-restart', { confirm: true }, archConfirmBox, 'storageArchiveRestartScheduled', 'storageArchiveRestartRunning'));
           onClk(restoreBtn, () => {
-            const opened = toggleConfirmBox(restoreConfirmBox);
-            if (opened) {
+            if (toggleConfirmBox(restoreConfirmBox)) {
               void invokePrismRepoAction('restore-archive', version, { listOnly: true }).then((r) => {
-                if (!r || !r.ok || !Array.isArray(r.batches) || !restoreDescEl[K_IC]) return;
-                runGuardedMut(() => syncRestoreBatches(r.batches, r.batches[0] || null));
+                if (r && r.ok && isArr(r.batches) && restoreDescEl[K_IC]) runGuardedMut(() => syncRestoreBatches(r.batches, r.batches[0] || null));
               });
             }
           });
           onClk(restoreCancel, () => runGuardedMut(() => setVis(restoreConfirmBox, false)));
-          onClk(restoreScriptBtn, () => {
-            if (storageBusy || !selectedBatchName) return;
-            storageBusy = true;
-            runGuardedMut(() => { restoreScriptBtn.disabled = true; });
-            void invokePrismRepoAction('prepare-restore', version, { batchName: selectedBatchName, lang: getLang() })
-              .then((st) => st && applyStorageView(st, true))
-              .catch((err) => applyStorageView({ ok: false, error: String(err?.message || err) }, false))
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (restoreScriptBtn[K_IC]) restoreScriptBtn.disabled = !selectedBatchName; });
-              });
-          });
-          onClk(restoreConfirmOk, () => {
-            if (storageBusy || !selectedBatchName) return;
-            storageBusy = true;
-            runGuardedMut(() => { restoreConfirmOk.disabled = true; });
-            void invokePrismRepoAction('restore-archive', version, { confirm: true, batchName: selectedBatchName })
-              .then((r) => {
-                if (!archActionChip[K_IC]) return;
-                const uNow = uiText(getLang()) || ui;
-                runGuardedMut(() => {
-                  setVis(archActionChip, true);
-                  if (r && r.ok) {
-                    setChip(archActionChip, 'updated', uNow.storageRestoreScheduled || 'OK');
-                    setVis(restoreConfirmBox, false);
-                  } else {
-                    setChip(archActionChip, 'error', r?.code === 'HOST_BUSY' ? (uNow.storageGuardBusyMsg || r.error) : (r?.error || 'Err'));
-                  }
-                });
-              })
-              .finally(() => {
-                storageBusy = false;
-                runGuardedMut(() => { if (restoreConfirmOk[K_IC]) restoreConfirmOk.disabled = !selectedBatchName; });
-              });
-          });
-          onClk(goMemApplyBtn, () => {
+          onClk(restoreScriptBtn, () => { if (selectedBatchName) runPrepAct(restoreScriptBtn, 'prepare-restore', { batchName: selectedBatchName, lang: getLang() }, null, true); });
+          onClk(restoreConfirmOk, () => { if (selectedBatchName) runSchedAct(restoreConfirmOk, 'restore-archive', { confirm: true, batchName: selectedBatchName }, restoreConfirmBox, 'storageRestoreScheduled', '', true); });
+          const runGoMem = (act, pay) => {
             if (goMemBusy) return;
             goMemBusy = true;
             runGuardedMut(() => { goMemApplyBtn.disabled = true; goMemClearBtn.disabled = true; });
-            void invokePrismRepoAction('gomemlimit-set', version, { value: goMemSel.value })
+            void invokePrismRepoAction(act, version, pay)
               .then((st) => st && applyGoMemView(st))
               .finally(() => {
                 goMemBusy = false;
-                runGuardedMut(() => {
-                  if (goMemApplyBtn[K_IC]) goMemApplyBtn.disabled = false;
-                  if (goMemClearBtn[K_IC]) goMemClearBtn.disabled = false;
-                });
+                runGuardedMut(() => { if (goMemApplyBtn[K_IC]) goMemApplyBtn.disabled = false; if (goMemClearBtn[K_IC]) goMemClearBtn.disabled = false; });
               });
-          });
-          onClk(goMemClearBtn, () => {
-            if (goMemBusy) return;
-            goMemBusy = true;
-            runGuardedMut(() => { goMemApplyBtn.disabled = true; goMemClearBtn.disabled = true; });
-            void invokePrismRepoAction('gomemlimit-clear', version)
-              .then((st) => st && applyGoMemView(st))
-              .finally(() => {
-                goMemBusy = false;
-                runGuardedMut(() => {
-                  if (goMemApplyBtn[K_IC]) goMemApplyBtn.disabled = false;
-                  if (goMemClearBtn[K_IC]) goMemClearBtn.disabled = false;
-                });
-              });
-          });
+          };
+          onClk(goMemApplyBtn, () => runGoMem('gomemlimit-set', { value: goMemSel.value }));
+          onClk(goMemClearBtn, () => runGoMem('gomemlimit-clear'));
 
           const goMemBox = mkEl('div', 'ag-cs-thought-cfg-box');
           sa(goMemBox, 'data-ag-cs-gomemlimit-box', '1');
@@ -3215,16 +3118,17 @@
             mkEl('p', 'ag-cs-thought-hint', U('goMemLimitDesc'))
           );
 
-          ap(
-            aboutBox,
-            ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', 'ag-cs-about-repo-info'), mkEl('span', 'font-medium text-foreground', U('storageHealthTitle', 'DB')), storageChip)),
-            ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', 'ag-cs-thought-btn-group'), archRestartBtn, restoreBtn, archiveBtn), ap(mkEl('div', 'ag-cs-about-repo-info'), archActionChip)),
-            archConfirmBox,
-            restoreConfirmBox,
-            ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', 'ag-cs-about-repo-info'), mkEl('span', 'font-medium text-foreground', U('storageAutoExitTitle', 'Auto-Archive')), mkEl('span', 'ag-cs-thought-hint', U('storageAutoExitDesc'))), ap(mkEl('div', 'ag-cs-thought-btn-group'), autoExitOffBtn, autoExitOnBtn)),
-            stWb,
-            goMemBox
-          );
+          const storageCard = mkEl('div', CARD_CLS + ' ag-cs-storage-card'); sa(storageCard, 'data-ag-cs-storage-card', '1');
+          const polGrp = ap(mkEl('div', 'ag-cs-seg-group'), autoExitOffBtn, autoExitRemindBtn, autoExitOnBtn); sa(polGrp, 'role', 'group');
+          const polT = mkEl('span', '', U('storageAutoExitTitle', 'Auto-Archive')), polD = mkEl('span', 'whitespace-pre-wrap', U('storageAutoExitDesc')); sa(polT, 'data-k', 't'); sa(polD, 'data-k', 'd');
+          const policyRow = ap(mkEl('div'), ap(mkEl('div', 'py-2'), ap(mkEl('div', 'flex-1'), ap(mkEl('div', 'ag-cs-settings-title-line'), polT), polD), ap(mkEl('div', 'shrink-0'), polGrp))); sa(policyRow, 'data-ag-cs-storage-policy-row', '1');
+          const hlT = mkEl('span', '', U('storageHealthTitle', 'DB')); sa(hlT, 'data-k', 't');
+          const healthRow = ap(mkEl('div'), ap(mkEl('div', 'py-2'), ap(mkEl('div', 'flex-1'), ap(mkEl('div', 'ag-cs-settings-title-line'), hlT)), ap(mkEl('div', 'shrink-0'), storageChip)));
+          const advSum = mkEl('summary', '', 'Advanced'); sa(advSum, 'data-ag-cs-storage-adv-sum', '1');
+          const advDrawer = ap(mkEl('details', 'ag-cs-storage-adv'), advSum, ap(mkEl('div', 'ag-cs-storage-adv-body'), ap(mkEl('div', 'ag-cs-about-repo-row'), ap(mkEl('div', 'ag-cs-thought-btn-group'), archRestartBtn, restoreBtn, archiveBtn), ap(mkEl('div', 'ag-cs-about-repo-info'), archActionChip)), archConfirmBox, restoreConfirmBox, stWb, goMemBox)); sa(advDrawer, 'data-ag-cs-storage-adv', '1');
+          ap(storageCard, policyRow, healthRow, advDrawer);
+          const modGrpEl = groupElsById.get('modules');
+          if (modGrpEl) { const stHead = mkEl('div', 'ag-cs-settings-subhead ag-cs-storage-subhead', U('storageCardTitle', 'Storage')); sa(stHead, 'data-ag-cs-storage-subhead', '1'); ap(modGrpEl, stHead, storageCard); } else ap(aboutBox, storageCard);
 
           const creditsGrid = mkEl('div', 'ag-cs-about-credits');
           for (const item of UPSTREAM_CREDITS) {

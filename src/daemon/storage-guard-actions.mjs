@@ -22,6 +22,15 @@ export function getAutoArchiveOnExitSetting(upd) {
   }
 }
 
+export function getStorageGuardSetting(upd) {
+  try {
+    const cfg = upd.getCdp()?.readConfig?.();
+    return cfg?.storageGuard !== 'off' && cfg?.storageGuard !== false;
+  } catch {
+    return true;
+  }
+}
+
 export function readStorageGuardState(upd) {
   try {
     const file = upd._storageGuardStateFile;
@@ -620,6 +629,7 @@ export async function handleStorageAction(upd, action, _testOverrides = null, ra
       warnThresholds: scan.warnThresholds,
       archiveDir: scan.archiveDir,
       autoArchiveOnExit: getAutoArchiveOnExitSetting(upd),
+      storageGuard: getStorageGuardSetting(upd) ? 'auto' : 'off',
       batchesCount: batches.length,
       batches: recentBatches,
       latestBatch: batches[0] || null,
