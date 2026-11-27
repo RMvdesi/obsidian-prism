@@ -56,6 +56,7 @@
     const obsSet = new Set(), trkCvs = new Set(), spObs = new Set(), spVis = new Map(), spOn = new Set();
 
     const getDoc = () => (typeof document !== 'undefined' ? document : null);
+    const winOf = (d) => (typeof window !== 'undefined' ? window : d?.defaultView);
     const getHtml = () => getDoc()?.documentElement || null;
     const qsa = (s) => getDoc()?.querySelectorAll?.(s) || [];
     const unobs = (o, s, e) => { if (s.has(e)) { try { o?.unobserve?.(e); } catch {} s.delete(e); } };
@@ -173,7 +174,7 @@
         if (orchE.box) unobs(boxRo, obsSet, orchE.box);
         orchE = null;
       }
-      for (const box of Array.from(obsSet)) if (dis(box) || (ga(box, PB) !== '1' && box !== trk)) unobs(boxRo, obsSet, box);
+      for (const box of [...obsSet]) if (dis(box) || (ga(box, PB) !== '1' && box !== trk)) unobs(boxRo, obsSet, box);
     };
 
     const prOrp = (fullScan = true) => {
@@ -183,10 +184,10 @@
       if (!d || !isFn(d.querySelectorAll)) return;
       const keepHost = (h) => !dis(h) && (ga(h, PB) === '1' || (trk && h === trk));
       if (!fullScan) {
-        for (const cv of Array.from(trkCvs)) if (dis(cv) || !keepHost(cv.parentElement)) rmCv(cv);
+        for (const cv of [...trkCvs]) if (dis(cv) || !keepHost(cv.parentElement)) rmCv(cv);
         return;
       }
-      for (const cv of Array.from(trkCvs)) if (dis(cv)) trkCvs.delete(cv);
+      for (const cv of [...trkCvs]) if (dis(cv)) trkCvs.delete(cv);
       qsa(CV_S).forEach((cv) => { if (!keepHost(cv.parentElement)) rmCv(cv); else trkCvs.add(cv); });
       qsa(`[${CV_A}]`).forEach((h) => { if (!keepHost(h) || !h.querySelector?.(CV_S)) ra(h, CV_A); });
     };
@@ -257,7 +258,7 @@
       if (!active || amb <= 0.001) { clrEnt(e); return true; }
       const isM = !!e.mm, isRB = !isM && !!e.rb, ip = e.ip || 0;
       const dprCap = busOf()?.getAdaptiveDprCap?.(1.5) || 1.5;
-      const dpr = mn((typeof window !== 'undefined' && window.devicePixelRatio) || G.devicePixelRatio || 1, dprCap);
+      const dpr = mn(winOf()?.devicePixelRatio || G.devicePixelRatio || 1, dprCap);
       const w = mx(4, Math.round((e.rect.width + ip) * dpr));
       const h = mx(4, Math.round((e.rect.height + ip) * dpr));
       const cssR = e.br >= 0 ? e.br : 10;
@@ -329,7 +330,7 @@
       return resA();
     };
 
-    const busOf = () => G.__agDomBus || G.__agPrismDomBus || (typeof window !== 'undefined' && (window.__agDomBus || window.__agPrismDomBus)) || null;
+    const busOf = () => { const w = winOf(); return G.__agDomBus || G.__agPrismDomBus || w?.__agDomBus || w?.__agPrismDomBus || null; };
     const szOffs = new Map(), visOffs = new Map();
     const onResize = () => {
       pDirty = true; rectAt = 0;
@@ -394,7 +395,7 @@
             if (spVis.get(p) !== on) { spVis.set(p, on); pDirty = true; syncSp(0); }
           }));
         }
-        for (const [o, off] of Array.from(visOffs.entries())) if (!pSet.has(o) || dis(o)) {
+        for (const [o, off] of [...visOffs]) if (!pSet.has(o) || dis(o)) {
           T(off);
           visOffs.delete(o); spVis.delete(o);
         }
@@ -402,10 +403,10 @@
         const io = ps.length ? spIo() : spIoI;
         if (io) {
           for (const p of ps) if (!spObs.has(p)) T(() => { io.observe(p); spObs.add(p); });
-          for (const o of Array.from(spObs)) if (!pSet.has(o) || dis(o)) { unobs(io, spObs, o); spVis.delete(o); }
+          for (const o of [...spObs]) if (!pSet.has(o) || dis(o)) { unobs(io, spObs, o); spVis.delete(o); }
         }
       }
-      for (const s of Array.from(spOn)) if (!des.has(s)) {
+      for (const s of [...spOn]) if (!des.has(s)) {
         spOn.delete(s);
         T(() => { ra(s, PB); ra(s, PM); s.style?.removeProperty?.('--ag-px'); s.style?.removeProperty?.('--ag-py'); });
       }
@@ -432,7 +433,7 @@
       let nextO = null;
       const pre = bList.map((box) => {
         const prev = prevM.get(box), sk = !!bus?.isSkipped?.(box);
-        return [box, prev, readRad(box, 10), sk ? null : (sp.rcs.get(box) || (allowRd && box.getBoundingClientRect ? box.getBoundingClientRect() : null))];
+        return [box, prev, allowRd ? readRad(box, 10) : prev?.br >= 0 ? prev.br : -1, sk ? null : (sp.rcs.get(box) || (allowRd && box.getBoundingClientRect ? box.getBoundingClientRect() : null))];
       });
       const oRect = trk && allowRd && !bus?.isSkipped?.(trk) && trk.getBoundingClientRect ? trk.getBoundingClientRect() : null;
       const mkEntry = (box, rect, prev, ip, br, mm = false, rb = false) => {
@@ -457,8 +458,8 @@
           next.push(mkEntry(box, rect, prev, pad, br, mM, rB));
         }
         if (trk) nextO = mkEntry(trk, oRect, orchE?.box === trk ? orchE : null, 0, 999, false, false);
-        for (const [oldEl, off] of Array.from(szOffs.entries())) if (!nextObs.has(oldEl)) { T(off); szOffs.delete(oldEl); }
-        if (ro) for (const oldEl of Array.from(obsSet)) if (!nextObs.has(oldEl)) unobs(ro, obsSet, oldEl);
+        for (const [oldEl, off] of [...szOffs]) if (!nextObs.has(oldEl)) { T(off); szOffs.delete(oldEl); }
+        if (ro) for (const oldEl of [...obsSet]) if (!nextObs.has(oldEl)) unobs(ro, obsSet, oldEl);
         prOrp();
       });
       pBoxes = next; orchE = nextO; pDirty = false; cacheAt = now;
@@ -492,7 +493,7 @@
       if (
         pDirty || !pBoxes.length || (!hasRo && now - cacheAt > 2500) || now - cacheAt > 8000 ||
         trk !== (orchE ? orchE.box : null) ||
-        pBoxes.some((e) => dis(e.box) || (e.cv && e.cv.isConnected === false) || e.br < 0 || (allowRd && !e.rect && !bus?.isSkipped?.(e.box)))
+        pBoxes.some((e) => dis(e.box) || (e.cv && e.cv.isConnected === false) || (allowRd && (e.br < 0 || (!e.rect && !bus?.isSkipped?.(e.box)))))
       ) {
         rfBox(now, allowRd);
         rectAt = allowRd ? now : 0;
@@ -547,7 +548,8 @@
       if (dragOff()) { pDirty = true; return; }
       const now = performance.now(), rimOn = isRimOn();
       if (inSb(ev?.target, now)) {
-        if (rimOn && hasLitRim()) { ptr.x = ptr.y = -9999; schedRaf(); }
+        ptr.x = ptr.y = -9999;
+        if (rimOn && hasLitRim()) schedRaf();
         onPointerActivity?.(now);
         return;
       }
@@ -562,7 +564,7 @@
     const onLeave = () => { if (!isDestroyed() && !isWB()) { ptr.x = ptr.y = -9999; schedRaf(); } };
     const onVis = () => {
       if (isDestroyed()) return;
-      if (isH()) { clrRaf(); shrinkRims(1); }
+      if (isH()) hOff();
       else if (!isWB() && isRimOn() && ptrIn()) { drawAt = 0; schedRaf(); }
     };
     const onWinBlur = () => { if (!isDestroyed()) { clrRaf(); clrAll(); } };
@@ -571,7 +573,7 @@
     const isRootT = (t, d, w) => !t || t === d || t === d?.documentElement || t === d?.body || t === w;
     const onScroll = (ev) => {
       if (isDestroyed()) return;
-      const t = ev?.target, d = getDoc(), w = typeof window !== 'undefined' ? window : d?.defaultView;
+      const t = ev?.target, d = getDoc(), w = winOf(d);
       if (!isRootT(t, d, w) && !pBoxes.some((e) => ancOf(t, e?.box)) && !ancOf(t, orchE?.box)) return;
       rectAt = 0;
       if (canDraw()) { const bus = busOf(); if ((pBoxes.length || orchE) && bus?.measure) bus.measure('rim:rects', syncBusRects); schedRaf(); }
@@ -584,7 +586,7 @@
       rectAt = 0; pDirty = true; wake();
     };
     const bindEv = (m) => {
-      const d = getDoc(), w = typeof window !== 'undefined' ? window : d?.defaultView;
+      const d = getDoc(), w = winOf(d);
       if (d?.[m]) {
         d[m]('visibilitychange', onVis);
         d[m]('transitionend', onAnimEnd, CAP);
@@ -597,6 +599,8 @@
       }
     };
     bindEv('addEventListener');
+    const hOff = () => { clrRaf(); shrinkRims(1); };
+    const clrOff = (pr) => runGuardedMut(() => { if (pr) prOrp(false); clrRaf(); clrAll(true); });
 
     const invalidateMetrics = () => {
       pDirty = true; rectAt = 0;
@@ -604,7 +608,7 @@
       if (isDestroyed()) return;
       runGuardedMut(() => {
         prOrp();
-        if (isH()) { clrRaf(); shrinkRims(1); }
+        if (isH()) hOff();
         else if (!isRimOn()) { clrRaf(); clrAll(true); }
         else wake();
       });
@@ -613,28 +617,29 @@
     const mountNewBoxes = () => {
       pDirty = true; rectAt = 0;
       if (isDestroyed()) return;
-      if (isH()) { clrRaf(); shrinkRims(1); return; }
-      if (!isRimOn()) { runGuardedMut(() => { clrRaf(); clrAll(true); }); return; }
+      if (isH()) return hOff();
+      if (!isRimOn()) return clrOff(0);
       runGuardedMut(() => {
         for (const box of qsa(`[${PB}="1"]`)) if (!dis(box) && ga(box, CV_A) !== '1') ensureCv(box);
-        if (!isWB() && !dragOff()) { drawAt = 0; schedRaf(); }
+        if (!isWB() && !dragOff() && (ptrIn() || hasLitRim())) { drawAt = 0; schedRaf(); }
       });
     };
 
     const rescanNow = () => {
       pDirty = true; rectAt = 0; sbT = null; sbAt = 0;
       if (isDestroyed()) return;
-      if (isH()) { clrRaf(); shrinkRims(1); return; }
-      if (!isRimOn()) { runGuardedMut(() => { prOrp(false); clrRaf(); clrAll(true); }); return; }
+      if (isH()) return hOff();
+      if (!isRimOn()) return clrOff(1);
       const now = performance.now();
       rfBox(now, ptrIn());
       rectAt = ptrIn() ? now : 0;
       wake();
     };
 
-    const markDirty = () => {
+    const markDirty = (deferRaf) => {
       pDirty = true; sbT = null; sbAt = 0;
       if (isDestroyed()) return;
+      if (deferRaf && prismRaf) { clrRaf(); schedRaf(); }
       syncSp(0);
       runGuardedMut(() => {
         prOrp(false);
