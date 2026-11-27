@@ -288,6 +288,7 @@
       var audioFx = resolveAudioFxModule(root) || defaultAudioFx;
       var catalog = resolveModelCatalogModule(root) || defaultCatalog;
       var hostBridge = resolveHostBridgeModule(root) || defaultHostBridge;
+      var orchLiveBadge = resolveSiblingModule(root, ['__agPeriodicOrchLiveBadge'], './orch-live-badge.js');
       var bentoUi = resolveBentoUiModule(root) || defaultBentoUi;
 
       var ROOT_ID = bentoUi.ROOT_ID || 'ag-prism-periodic-picker-root';
@@ -560,7 +561,11 @@
 
       /* Lightweight documentElement-only attribute observer (NEVER observes document.body!) */
       var themeObserver = null;
+      var liveModelMgr = null;
       var isMutatingBadge = false;
+      function getLiveOrch(b) {
+        return orchLiveBadge && orchLiveBadge.resolveLiveOrchBadge(b, { doc: doc, root: root, catalog: catalog, hostBridge: hostBridge, slotByZ: SLOT_BY_Z });
+      }
 
       var docListeners = [];
       var rootListeners = [];
@@ -805,7 +810,9 @@
 
       /* ── Mini Keycap Badge Sync (.ag-pp-mini-keycap, Zero body MO) ──────── */
 
-      function inferOrchCompactBadgeFromHost(hostCtx, rawBtnLabel) {
+      function inferOrchCompactBadgeFromHost(hostCtx, rawBtnLabel, btn) {
+        var lv = btn && getLiveOrch(btn);
+        if (lv && lv.shortLabel) return lv.shortLabel;
         var candidates = [];
         if (hostCtx && hostCtx.orchestratorPick && hostCtx.orchestratorPick.model) {
           candidates.push(hostCtx.orchestratorPick.model);
@@ -853,18 +860,20 @@
         return '0·6C';
       }
 
-      function classifyDirectHostAuxBadge(rawLabel, modelId, hostCtx) {
+      function classifyDirectHostAuxBadge(rawLabel, modelId, hostCtx, btn) {
         var txt = String(rawLabel || '').trim();
         var mid = String(modelId || '').trim();
         var hay = (txt + ' ' + mid).toLowerCase();
         if (!hay.trim()) return null;
 
         if (/orchestrator|编排|调度器/.test(hay)) {
+          var lv = btn && getLiveOrch(btn);
           return {
             kind: 'aux',
             auxId: 'orchestrator',
-            shortLabel: inferOrchCompactBadgeFromHost(hostCtx, txt),
-            miniKey: 'orchestrator',
+            shortLabel: lv ? lv.shortLabel : inferOrchCompactBadgeFromHost(hostCtx, txt, btn),
+            miniKey: lv ? lv.miniKey : 'orchestrator',
+            liveModel: lv ? lv.liveModel : '',
           };
         }
         if (/\bopus\b/.test(hay)) return { kind: 'aux', auxId: 'claude-opus', shortLabel: 'OP', miniKey: 'claude' };
@@ -888,11 +897,13 @@
           var matchesBtn = cleanNow && cleanNow === activeCommittedAuxBadge.label;
           var matchesCtx = (!cleanNow || cleanNow === ctxLabel) && ctxLabel && ctxLabel === activeCommittedAuxBadge.label;
           if (matchesBtn || matchesCtx) {
+            var lv = activeCommittedAuxBadge.id === 'orchestrator' ? getLiveOrch(btn) : null;
             return {
               kind: 'aux',
               auxId: activeCommittedAuxBadge.id,
-              shortLabel: activeCommittedAuxBadge.shortLabel,
-              miniKey: activeCommittedAuxBadge.miniKey || 'fallback',
+              shortLabel: lv ? lv.shortLabel : activeCommittedAuxBadge.shortLabel,
+              miniKey: lv ? lv.miniKey : activeCommittedAuxBadge.miniKey || 'fallback',
+              liveModel: lv ? lv.liveModel : '',
             };
           }
           if (!overlayEl && (cleanNow || ctxLabel)) activeCommittedAuxBadge = null;
@@ -924,7 +935,8 @@
           var auxDirect = classifyDirectHostAuxBadge(
             cleanNow,
             ctxSel && typeof ctxSel.modelId === 'string' && (!ctxLabel || ctxLabel === cleanNow) ? ctxSel.modelId : '',
-            hostCtx
+            hostCtx,
+            btn
           );
           if (auxDirect) return auxDirect;
           return null;
@@ -932,7 +944,7 @@
         if (ctxSel) {
           var fallbackParsed = catalog.parseElementModelLabel(ctxSel);
           if (fallbackParsed) return { kind: 'element', slotZ: fallbackParsed.slotZ, symbol: fallbackParsed.symbol };
-          return classifyDirectHostAuxBadge(ctxSel.label, ctxSel.modelId, hostCtx);
+          return classifyDirectHostAuxBadge(ctxSel.label, ctxSel.modelId, hostCtx, btn);
         }
         return null;
       }
@@ -980,7 +992,7 @@
           ? bentoUi.miniKeycapColorsForAux(desc.miniKey, profile)
           : bentoUi.miniKeycapColorsForZ(desc.slotZ, profile);
         var sig =
-          (isAuxDesc ? 'aux:' + desc.auxId + ':' + symText : desc.slotZ + ':' + desc.symbol) +
+          (isAuxDesc ? 'aux:' + desc.auxId + ':' + symText + ':' + (desc.miniKey || '') : desc.slotZ + ':' + desc.symbol) +
           ':' + profile.id + ':' + (profile.accent || 'follow') + ':' + (profile.isMono ? '1' : '0');
 
         isMutatingBadge = true;
@@ -1010,8 +1022,10 @@
               badge.removeAttribute('data-z');
               badge.setAttribute('data-aux-id', desc.auxId);
               badge.setAttribute('data-symbol', symText);
+              desc.liveModel ? badge.setAttribute('data-live-model', desc.liveModel) : badge.removeAttribute('data-live-model');
             } else {
               badge.removeAttribute('data-aux-id');
+              badge.removeAttribute('data-live-model');
               badge.setAttribute('data-z', String(desc.slotZ));
               badge.setAttribute('data-symbol', desc.symbol);
             }
@@ -1043,6 +1057,10 @@
         for (var i = 0; i < buttons.length; i += 1) {
           syncMiniKeycapOnSingleButton(buttons[i], profile);
         }
+        if (!liveModelMgr && orchLiveBadge) {
+          liveModelMgr = orchLiveBadge.createLiveModelObserverManager({ doc: doc, root: root, hostBridge: hostBridge, isNodeConnectedToDoc: isNodeConnectedToDoc, setTimer: setTimer, clearTimer: clearTimer, isActive: function () { return !isDestroyed && currentMode === 'on'; }, scheduleBadgeSync: scheduleBadgeSync });
+        }
+        liveModelMgr && liveModelMgr.ensure(buttons);
       }
 
       function scheduleBadgeSync(delayMs) {
@@ -6007,6 +6025,7 @@
       function onWindowFocus() {
         windowBlurred = false;
         syncHostPauseState();
+        scheduleBadgeSync(60);
       }
 
       function onWindowMouseOut(ev) {
@@ -6080,6 +6099,7 @@
           try { themeObserver.disconnect(); } catch (e) {}
           themeObserver = null;
         }
+        liveModelMgr && liveModelMgr.disconnect();
         detachOpenSessionSyncWatchers();
       }
 

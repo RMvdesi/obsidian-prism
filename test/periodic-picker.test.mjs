@@ -16,6 +16,7 @@ const PERIODIC_MODULE_ORDER = [
   'audio-fx.js',
   'model-catalog.js',
   'host-bridge.js',
+  'orch-live-badge.js',
   'oled-cyber-screen.js',
   'keyboard-3d-gl.js',
   'bento-ui.js',
@@ -8157,4 +8158,98 @@ test('Stub SPA re-badge: auto-paints left-pinned [10Ne] on new trigger after SPA
     activeRafs: 0,
     activeObservers: 0,
   });
+});
+
+test('Orchestrator mini-keycap dynamically tracks live invoked telemetry model & falls back cleanly', () => {
+  const env = createPeriodicSandbox();
+  const factory = loadPeriodicFactoryInSandbox(env);
+
+  const convView = env.makeElement('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const inputBox = env.makeElement('div', { attrs: { 'data-testid': 'agent-input-box' } });
+  const triggerBtn = env.makeElement('button', {
+    attrs: { 'data-testid': 'model-selector-trigger' },
+    text: 'Orchestrator Gemini 4 Neon High',
+  });
+  inputBox.appendChild(triggerBtn);
+
+  const pulseBar = env.makeElement('div', {
+    attrs: { id: 'ag-pulse-status-bar', 'data-ag-pulse-bar': 'true' },
+  });
+  const shadowRoot = env.makeElement('div');
+  const ctxModel = env.makeElement('dd', { attrs: { id: 'context-model' }, text: 'Gemini 4 Hydrogen (High)' });
+  shadowRoot.appendChild(ctxModel);
+  shadowRoot.getElementById = (id) => (id === 'context-model' ? ctxModel : null);
+  pulseBar.shadowRoot = shadowRoot;
+  inputBox.appendChild(pulseBar);
+  convView.appendChild(inputBox);
+  env.body.appendChild(convView);
+
+  env.window.__agPeriodicMockHost = {
+    selectedModel: { label: 'Orchestrator Gemini 4 Neon High', modelId: 'orchestrator' },
+    orchestratorPick: { model: { label: 'Gemini 4 Neon (High)', modelId: 'gemini-4-neon' } },
+    modelOptions: [
+      { label: 'Gemini 4 Neon (High)' },
+      { label: 'Gemini 4 Carbon (High)' },
+      { label: 'Orchestrator' },
+    ],
+  };
+
+  const inst = factory.mountPeriodicPicker({ root: env.window, doc: env.document, mode: 'on' });
+  const getBadge = () => triggerBtn.querySelector('.ag-pp-mini-keycap');
+
+  // 1) Live invoked model is Hydrogen -> 0·1H with sky-blue Hydrogen tint
+  let badge = getBadge();
+  assert.ok(badge, 'Expected mini-keycap badge on Orchestrator trigger');
+  assert.equal(badge.textContent, '0·1H');
+  assert.equal(badge.getAttribute('data-symbol'), '0·1H');
+  assert.equal(badge.getAttribute('data-live-model'), 'Gemini 4 Hydrogen (High)');
+  const hydroBg = badge.style.getPropertyValue('--mk-bg');
+
+  // 2) Mutating #context-model updates via scoped MutationObserver without body observer
+  const transitions = [
+    ['Gemini 4 Neon (High)', '0·Ne'],
+    ['Gemini 4 Carbon (High)', '0·6C'],
+    ['Claude Opus 4.6 (Thinking)', '0·Op'],
+  ];
+  for (const [modelName, expectedBadge] of transitions) {
+    ctxModel.textContent = modelName;
+    env.triggerMutations(ctxModel, [{ type: 'characterData', target: ctxModel }]);
+    env.advanceTime(50);
+    badge = getBadge();
+    assert.equal(badge.textContent, expectedBadge, `Expected ${expectedBadge} when live model is ${modelName}`);
+    assert.equal(badge.getAttribute('data-live-model'), modelName);
+    if (expectedBadge === '0·Ne') {
+      assert.notEqual(badge.style.getPropertyValue('--mk-bg'), hydroBg, 'Hydrogen tint must differ from Orchestrator gold tint');
+    }
+  }
+
+  // 3) Placeholder '—' falls back to configured planner (0·Ne) and clears data-live-model
+  ctxModel.textContent = '—';
+  env.triggerMutations(ctxModel, [{ type: 'characterData', target: ctxModel }]);
+  env.advanceTime(50);
+  badge = getBadge();
+  assert.equal(badge.textContent, '0·Ne');
+  assert.equal(badge.getAttribute('data-live-model'), null);
+
+  // 4) Fallback bar with connection: local-estimate is ignored and falls back to planner (0·Ne)
+  pulseBar.setAttribute('data-ag-prism-fallback', '1');
+  ctxModel.textContent = 'Gemini 4 Hydrogen (High)';
+  env.window.__agPrismTelemetry = {
+    getSnapshotForBar: () => ({
+      connection: 'local-estimate',
+      speed: { context: { model: 'Gemini 4 Hydrogen (High)' } },
+    }),
+  };
+  inst.syncBadges();
+  badge = getBadge();
+  assert.equal(badge.textContent, '0·Ne');
+  assert.equal(badge.getAttribute('data-live-model'), null);
+
+  // 5) destroy() disconnects all observers and leaves 0 activeTimers / activeObservers
+  inst.destroy();
+  const endCounts = env.getCounts();
+  assert.equal(endCounts.activeTimers, 0);
+  assert.equal(endCounts.activeObservers, 0);
+  assert.equal(endCounts.docListeners, 0);
+  assert.equal(endCounts.winListeners, 0);
 });

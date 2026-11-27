@@ -4050,6 +4050,7 @@ test('Channel 1 budget (< 684,500 B), periodicModelPicker default on, style.css 
     'audio-fx.js',
     'model-catalog.js',
     'host-bridge.js',
+    'orch-live-badge.js',
     'oled-cyber-screen.js',
     'keyboard-3d-gl.js',
     'bento-ui.js',
