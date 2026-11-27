@@ -192,6 +192,10 @@ color-scheme:light!important;--background:#F6F4EE !important;--content:#F6F4EE!i
 & [data-testid="autoscroll-viewport"] .bleed-contain{&.overflow-y-auto{margin-right:10px!important;padding-right:8px!important;overscroll-behavior-y:auto!important}& .overflow-y-auto{margin-right:14px!important;padding-right:8px!important;overscroll-behavior-y:auto!important;& :is(.overflow-y-auto,pre){margin-right:12px!important;overscroll-behavior-y:auto!important}}}
 & :is([data-testid="pane-titlebar-toolbar"] button,[data-testid="toggle-aux-sidebar"],[data-testid="toggle-maximize-pane"],[data-testid="title-menu-bar"] button,.agy-aux-tab){border-radius:var(--ag-cs-r-sm)!important}
 &:not([data-ag-cs-home="off"]) .agy-home{position:relative!important;isolation:isolate!important;background:0 0!important}
+&[data-ag-cs-palette=obsidian][data-ag-cs-home=classic]:not([data-ag-prism-wallpaper=on]){
+&>body:not([data-has-browser-hole=true]):not([data-has-drawer-browser-hole=true]) .agy-home:not([data-has-browser-hole=true]){background-color:var(--_cv) !important;}
+& .agy-home>img[data-testid=plugin-theme-home-wallpaper]{display:none !important;}
+}
 &:not([data-ag-cs-home="off"]) .agy-home::before,&:not([data-ag-cs-home="off"]) .agy-home::after{background:none!important}
 & .ag-cs-ripple-host{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
 & .ag-cs-ripple-host[data-ripple-mode="conv"]{z-index:-1}
