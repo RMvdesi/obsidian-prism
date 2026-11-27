@@ -1425,17 +1425,9 @@ test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~60fps paced running, 1200ms idle
     assert.equal(inst.sleeping, false);
 
     advanceSimulated300Hz(1300);
-    assert.equal(inst.sleeping, true, 'Idle aura must enter 0fps sleep after 1200ms');
-    assert.equal(inst.host.getAttribute('data-aura-sleep'), '1');
-    assert.equal(rafQueue.size, 0);
-    assert.equal(timerQueue.size, 0);
-
-    const drawsAtIdleSleep = gpuDraws;
-    for (let i = 0; i < 8; i++) {
-      nowMs += 50;
-      ctl.sync();
-    }
-    assert.equal(gpuDraws, drawsAtIdleSleep, 'Redundant sync() must NOT wake settled 0fps idle aura');
+    assert.equal(inst.sleeping, false, 'Default breathe mode stays smoothly animated past 1200ms idle');
+    const drawsAfterBreathe = gpuDraws;
+    assert.ok(drawsAfterBreathe > 10, 'Continuous breathe must keep rendering smooth frames');
 
     // 2) Split-Rate 300Hz running throttle: 'native' (minGap 0) is VSync-paced at the same ~60fps as explicit targetFps (instead of 300fps, and no longer a jittery ~30fps setTimeout path)
     runningDomActive = true;
@@ -1469,14 +1461,14 @@ test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~60fps paced running, 1200ms idle
     advanceSimulated300Hz(3000);
     assert.equal(gpuDraws, drawsDuringUnfocusedHold, '0 extra frames while holding unfocused completion afterglow');
 
-    // User moves pointer back into window -> fades out over 600ms and sleeps at 0fps
+    // User moves pointer back into window -> fades out over 600ms back to idle breathe
     windowFocused = true;
     const returnFn = winListeners.get('pointermove') || winListeners.get('focus');
     assert.ok(returnFn, 'Expected one-shot focus/pointermove wake listener');
     returnFn();
     advanceSimulated300Hz(700);
     assert.equal(inst.phase, 'idle');
-    assert.equal(inst.sleeping, true);
+    assert.equal(inst.sleeping, false);
 
     // 4) awaiting-decision (ask_question takeover card) -> 1.6s warm amber breath then freezes at 0fps static snapshot!
     decisionDomActive = true;
@@ -1497,13 +1489,13 @@ test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~60fps paced running, 1200ms idle
     ctl.sync();
     assert.equal(gpuDraws, drawsWhileWaitingUser, 'Must draw 0 extra frames while user deliberates on ask_question');
 
-    // User answers ask_question -> clears cleanly back to 0fps
+    // User answers ask_question -> returns smoothly to idle breathe
     decisionDomActive = false;
     nowMs += 250;
     ctl.sync();
     advanceSimulated300Hz(1700);
     assert.equal(inst.phase, 'idle');
-    assert.equal(inst.sleeping, true);
+    assert.equal(inst.sleeping, false);
 
     // 5) error-halted -> 900ms muted coral inward convergence then clears to 0fps!
     const clearsBeforeErr = clearCount;

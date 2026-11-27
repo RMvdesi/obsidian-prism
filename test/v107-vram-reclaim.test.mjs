@@ -646,15 +646,17 @@ test('A1 conv-aura: document.hidden true->false releases & restores backing stor
   assert.equal(glowDraws, drawsHidden + 1, 'Must immediately paint first frame on visibility restore');
   assert.ok(env.timers.size + env.rafs.size >= 1, 'Running aura must resume frame scheduler (VSync rAF or timer) on restore');
 
-  // Settled 0fps idle aura: hide -> 0x0, show -> restores backing store, draws 1 static snapshot, and returns to 0fps sleep
+  // Settled 0fps static idle aura: hide -> 0x0, show -> restores backing store, draws 1 static snapshot, and returns to 0fps sleep
   running = false;
   stopBtn.isConnected = false;
   env.now += 2000;
   ctl.sync();
-  for (let i = 0; i < 6 && (env.timers.size > 0 || env.rafs.size > 0); i++) {
+  for (let i = 0; i < 6 && inst.phase !== 'idle'; i++) {
     env.advanceTimers(1500);
     env.flushRafs(16);
   }
+  fakeDoc.documentElement.setAttribute('data-ag-cs-conv-aura', 'static');
+  ctl.sync();
   assert.equal(inst.phase, 'idle');
   assert.equal(inst.sleeping, true);
   assert.equal(env.timers.size, 0);

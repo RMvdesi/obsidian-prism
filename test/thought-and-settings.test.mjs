@@ -440,7 +440,8 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     await new Promise((r) => setTimeout(r, 25));
     assert.equal(clipboardWrites.length, 1);
     const exportedObj = JSON.parse(clipboardWrites[0]);
-    assert.equal(Object.keys(exportedObj.settings).length, 39);
+    assert.equal(Object.keys(exportedObj.settings).length, 40);
+    assert.equal(exportedObj.settings.convAura, 'breathe');
     assert.equal(exportedObj.settings.darkAura, 'balanced');
     assert.equal(exportedObj.settings.darkAuraStyle, 'prism');
     assert.equal(exportedObj.settings.convRipple, 'off');

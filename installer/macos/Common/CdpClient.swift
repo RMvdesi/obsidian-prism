@@ -605,7 +605,7 @@ enum CdpHelper {
         ("scrollBottomMotion", "smooth", "smooth,instant"), ("accentTone", "follow", "follow,cobalt,iris,amber,mono"),
         ("cornerStyle", "balanced", "sharp,balanced,soft"), ("chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom"),
         ("codeFont", "default", "default,jetbrains,cascadia,sfmono,custom"), ("ambientIntensity", "100", "0,35,70,100"),
-        ("darkAura", "balanced", "subtle,balanced,vivid"), ("thoughtView", "immersive", "immersive,bilingual"),
+        ("darkAura", "balanced", "subtle,balanced,vivid"), ("convAura", "breathe", "breathe,static,off"), ("thoughtView", "immersive", "immersive,bilingual"),
         ("omniModule", "on", "O"), ("linkTarget", "builtin", "builtin,external"),
         ("sidebarStudio", "off", "O"), ("hostLocalization", "auto", "A"),
         ("autoUpdate", "off", "O"), ("updateChannel", "stable", "stable,beta"),

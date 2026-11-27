@@ -42,6 +42,7 @@
   "codeLigatures": false,
   "ambientIntensity": "100",
   "darkAura": "balanced",
+  "convAura": "breathe",
   "thoughtView": "immersive",
   "omniModule": "on",
   "linkTarget": "builtin",

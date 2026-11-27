@@ -20,6 +20,8 @@
     balanced: 'optPerfBalanced',
     quality: 'optPerfQuality',
   });
+  const CONV_AURA_MODES = Object.freeze(['breathe', 'static', 'off']);
+  const CONV_AURA_OPT_KEYS = Object.freeze({ breathe: 'optConvAuraBreathe', static: 'optConvAuraStatic', off: 'optConvAuraOff' });
   const QUOTA_MODES = Object.freeze(['compact', 'both']);
   const QUOTA_MODE_OPT_KEYS = Object.freeze({
     compact: 'optQuotaCompact',
@@ -541,6 +543,27 @@
     return row;
   }
 
+  function ensureConvAuraRow(rootEl, doc, ctx) {
+    let row = qs(rootEl, '[data-ag-cs-row="convAura"]');
+    if (row) return row;
+    const anchor = qs(rootEl, '[data-ag-cs-row="darkAura"]') || qs(rootEl, '[data-ag-cs-row="homeRipple"]');
+    if (!anchor || !anchor.parentElement) return null;
+    row = mk(doc, 'div'); sa(row, 'data-ag-cs-row', 'convAura'); sa(row, 'data-ag-cs-ext-owned', '1');
+    const inner = mk(doc, 'div', 'py-2'), textCol = mk(doc, 'div', 'flex-1'), titleLine = mk(doc, 'div', 'ag-cs-settings-title-line'), tSpan = mk(doc, 'span'), dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
+    sa(tSpan, 'data-k', 't'); sa(dSpan, 'data-k', 'd'); titleLine.appendChild(tSpan); textCol.appendChild(titleLine); textCol.appendChild(dSpan);
+    const ctrlWrap = mk(doc, 'div', 'shrink-0'), grp = mk(doc, 'div', 'ag-cs-seg-group'); sa(grp, 'role', 'group');
+    for (const val of CONV_AURA_MODES) {
+      const btn = mk(doc, 'button', 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground');
+      btn.type = 'button'; sa(btn, 'type', 'button'); sa(btn, 'data-ag-cs-ext-key', 'convAura'); sa(btn, 'data-ag-cs-ext-val', JSON.stringify(val)); sa(btn, 'data-ag-cs-ext-aura', val);
+      btn.addEventListener('click', (ev) => { ev?.stopPropagation?.(); if (doc?.documentElement) sa(doc.documentElement, 'data-ag-cs-conv-aura', val); ctx.saveSetting?.('convAura', val); row.__extResync?.(); });
+      grp.appendChild(btn);
+    }
+    ctrlWrap.appendChild(grp); inner.appendChild(textCol); inner.appendChild(ctrlWrap); row.appendChild(inner);
+    const p = anchor.parentElement;
+    if (anchor.nextSibling && typeof p.insertBefore === 'function') p.insertBefore(row, anchor.nextSibling); else p.appendChild(row);
+    return row;
+  }
+
   function sync(rootEl, rawCtx) {
     if (!rootEl || ga(rootEl, 'data-body-built') !== '1') return false;
     const doc = (rawCtx && rawCtx.doc) || rootEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
@@ -551,6 +574,9 @@
     const ctx = Object.assign({}, rawCtx || {}, { doc, win, lang, ui: extUi });
     const runMut = typeof ctx.runGuardedMut === 'function' ? ctx.runGuardedMut : (fn) => fn();
 
+    const rawAura = readLiveCfg(ctx, 'convAura', 'breathe');
+    const convAura = rawAura === 'off' || rawAura === 'static' ? rawAura : 'breathe';
+    const ambientOff = String(readLiveCfg(ctx, 'ambientIntensity', '100')) === '0';
     const perfMode = normPerfMode(readLiveCfg(ctx, 'performanceMode', 'balanced'));
     const ignoreRm = Boolean(readLiveCfg(ctx, 'ignoreReducedMotion', false));
     const motionOff = readLiveCfg(ctx, 'motionLevel', 'ultra') === 'off';
@@ -561,9 +587,10 @@
     const telOff = readLiveCfg(ctx, 'telemetryModule', 'auto') === 'off';
     const telQuotaMode = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
 
-    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
+    const extSig = `${lang}|${convAura}|${ambientOff ? 1 : 0}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
     if (
       rootEl.__extBeta4Sig === extSig &&
+      qs(rootEl, '[data-ag-cs-row="convAura"]') &&
       qs(rootEl, '[data-ag-cs-row="performanceMode"]') &&
       qs(rootEl, '[data-ag-cs-row="ignoreReducedMotion"]') &&
       qs(rootEl, '[data-ag-cs-row="chatFont"]') &&
@@ -578,6 +605,21 @@
     runMut(() => {
       ensureStyle(doc);
       ensureLocalFontDatalist(doc, rootEl);
+
+      const auraRow = ensureConvAuraRow(rootEl, doc, ctx);
+      if (auraRow) {
+        auraRow.__extResync = resyncNow;
+        const tEl = qs(auraRow, '[data-k="t"]'), dEl = qs(auraRow, '[data-k="d"]');
+        if (tEl && tEl.textContent !== extUi.setConvAuraTitle) tEl.textContent = extUi.setConvAuraTitle || 'Chat Horizon Aura';
+        if (dEl && dEl.textContent !== extUi.setConvAuraDesc) dEl.textContent = extUi.setConvAuraDesc || '';
+        if (auraRow.style) auraRow.style.opacity = ambientOff ? '0.55' : '';
+        if (ambientOff) sa(auraRow, 'data-ag-cs-dimmed', '1'); else ra(auraRow, 'data-ag-cs-dimmed');
+        for (const b of auraRow.querySelectorAll?.('button[data-ag-cs-ext-key="convAura"]') || []) {
+          const val = ga(b, 'data-ag-cs-ext-aura') || 'breathe', lbl = (CONV_AURA_OPT_KEYS[val] && extUi[CONV_AURA_OPT_KEYS[val]]) || val, act = val === convAura;
+          if (b.textContent !== lbl) b.textContent = lbl;
+          sa(b, 'aria-pressed', act ? 'true' : 'false'); if (act) sa(b, 'data-pressed'); else ra(b, 'data-pressed');
+        }
+      }
 
       // 0. 无损性能模式分段选择器（动效区顶部，不改写动效/波纹/宠物设置）
       const perfRow = ensurePerformanceModeRow(rootEl, doc, ctx);
@@ -746,13 +788,5 @@
     try { doc.querySelectorAll?.('[data-ag-cs-ext-owned="1"], [data-ag-cs-ext-custom]')?.forEach?.((n) => n.remove?.()); } catch {}
   }
 
-  return {
-    STYLE_ID,
-    DATALIST_ID,
-    PERF_MODES,
-    QUOTA_MODES,
-    CHAT_FONT_MODES,
-    sync,
-    dispose,
-  };
+  return { STYLE_ID, DATALIST_ID, PERF_MODES, CONV_AURA_MODES, QUOTA_MODES, CHAT_FONT_MODES, sync, dispose };
 });

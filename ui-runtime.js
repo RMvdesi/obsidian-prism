@@ -108,6 +108,7 @@ out.codeFont = pickOf(out.codeFont, 'default|jetbrains|cascadia|sfmono|custom', 
 for (const k of ['chatFontCustom', 'codeFontCustom']) out[k] = typeof out[k] === 'string' ? out[k].replace(/[\0\r\n]/g, '').slice(0, 160) : '';
 out.ambientIntensity = pickOf(String(out.ambientIntensity ?? '100'), '0|35|70|100', '100');
 out.darkAura = pickOf(out.darkAura, 'subtle|balanced|vivid', 'balanced');
+out.convAura = pickOf(out.convAura, 'breathe|static|off', 'breathe');
 for (const k of ['omniModule', 'effortMemory', 'periodicModelPicker']) out[k] = out[k] === 'off' || out[k] === false ? 'off' : 'on';
 for (const [k, a, b] of [['lightPreset','alabaster','crystal'],['darkAuraStyle','neon','prism'],['thoughtTrigger','expand','preload'],['scrollBottomMotion','instant','smooth'],['thoughtView','bilingual','immersive'],['linkTarget','external','builtin'],['updateChannel','beta','stable'],['telemetryQuotaMode','both','compact']]) out[k] = out[k] === a ? a : b;
 const mig = (v) => { if (typeof v !== 'string') return ''; const t = v.trim(); if (!t) return ''; const low = t.toLowerCase().replace(/_/g, '-'); return low === 'yue' || low.startsWith('yue-') || low === 'zh-yue' || low.includes('cantonese') ? 'zh-CN' : t; };
@@ -212,7 +213,7 @@ const routeConfigDirtyFlags = (prevCfg, nextCfg, patch) => {
 dirtyFlags.g = true;
 const any = (s) => s.split('|').some((k) => prevCfg[k] !== nextCfg[k] || O.hasOwn(patch, k));
 if (any('performanceMode')) dirtyFlags.t = dirtyFlags.c = dirtyFlags.r = true;
-if (any('palette|lightPreset|accentTone|ambientIntensity|darkAura|darkAuraStyle|cornerStyle|chatFont|chatFontCustom|codeFont|codeFontCustom|codeLigatures')) dirtyFlags.t = true;
+if (any('palette|lightPreset|accentTone|ambientIntensity|darkAura|darkAuraStyle|convAura|cornerStyle|chatFont|chatFontCustom|codeFont|codeFontCustom|codeLigatures')) dirtyFlags.t = true;
 if (any('accentTone|composerRestyle|placeholderStyle|mascot|smoothCaret|telemetryModule|motionLevel|ignoreReducedMotion|language')) dirtyFlags.c = true;
 if (any('homeLayout|homeRipple|convRipple|motionLevel|ignoreReducedMotion|language')) dirtyFlags.r = true;
 if (any('sidebarRestyle|sidebarCompact|sidebarNavFold')) dirtyFlags.s = true;
@@ -568,7 +569,7 @@ return activeHomeStudioInst;
 };
 const homeStudioCtl = mkDel(resolveHomeStudioCtl, HS_KS);
 const rippleCtl = homeRippleMod?.createHomeRippleController ? homeRippleMod.createHomeRippleController({ rippleCore, isDestroyed: () => destroyed, isAllowed: () => cfg.homeRipple !== false && cfg.homeLayout !== 'off', isConvAllowed: () => cfg.convRipple !== 'off', getConvLevel: () => cfg.convRipple, isConvRunning, isDarkTheme, motionReduced, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getAccentTone, getEffectivePalette, setAttrIfChanged, onPointerPressMascot: (x) => { if (msRig && msRoot) safe(() => { const mr = rc(msRoot); if (mr) notifyMascot('ripple', { x: x - mr.left }); }); } }) : mkStub('sync|refreshTheme|unmount|getMount');
-const convAuraCtl = convAuraMod?.createConvAuraController ? convAuraMod.createConvAuraController({ isDestroyed: () => destroyed, isHomeRippleEnabled: () => getAmbientFloat() > 0, isMotionStandardOrUltra, isDarkTheme, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getSpectrumMode: resolveAuraSpectrumMode, isWindowFocused: () => (isFn(D.hasFocus) ? D.hasFocus() : !D.hidden), rippleCore, setAttrIfChanged, runGuardedMut }) : mkStub('sync|refreshTheme|unmount|getInstance|setActiveView|setSemanticState|prime|wake|triggerStart', { advancePhase: () => 'off' });
+const convAuraCtl = convAuraMod?.createConvAuraController ? convAuraMod.createConvAuraController({ isDestroyed: () => destroyed, isHomeRippleEnabled: () => getAmbientFloat() > 0 && cfg.convAura !== 'off', getConvAuraMode: () => cfg.convAura || 'breathe', isMotionStandardOrUltra, isDarkTheme, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getSpectrumMode: resolveAuraSpectrumMode, isWindowFocused: () => (isFn(D.hasFocus) ? D.hasFocus() : !D.hidden), rippleCore, setAttrIfChanged, runGuardedMut }) : mkStub('sync|refreshTheme|unmount|getInstance|setActiveView|setSemanticState|prime|wake|triggerStart', { advancePhase: () => 'off' });
 const HE_KS = 'sync|onThemeChange|destroy';
 const hostEnhancerFallback = mkStub(HE_KS);
 let activeHostEnhancerMod = null, activeHostEnhancerInst = null;
@@ -789,7 +790,7 @@ style: '1', theme: dark ? 'dark' : 'light', palette, 'light-preset': lightPreset
 'perf-mode': perfMode, 'target-fps': targetFps, telemetry: telemetryMod, 'telemetry-quota': cfg.telemetryQuotaMode, 'effort-slider': effortSliderMod,
 'thought-translate': getThoughtTranslateMode(), accent: getAccentTone(), corners: getCornerStyle(),
 'scroll-bottom': cfg.scrollBottomMotion, 'code-font': getCodeFont(), ligatures: isCodeLigaturesEnabled() ? '1' : '0',
-ambient: String(getAmbientFloat()), 'dark-aura': cfg.darkAura, 'dark-aura-style': cfg.darkAuraStyle, home: cfg.homeLayout,
+ambient: String(getAmbientFloat()), 'dark-aura': cfg.darkAura, 'dark-aura-style': cfg.darkAuraStyle, 'conv-aura': cfg.convAura, home: cfg.homeLayout,
 composer: cfg.composer, 'logo-ink': cfg.logoInk === 'foreground' ? 'foreground' : 'accent',
 sidebar: cfg.sidebar, 'sidebar-compact': cfg.sidebarCompact ? 'on' : 'off', 'sb-fold': cfg.sidebarNavFold, lang,
 };
@@ -820,7 +821,7 @@ refreshOptics();
 if (prevMotion) { dirtyFlags.c = true; syncHostAnimatedIcons(null); streamChoreoCtl.syncDualStreamEngine(); modelGlyphCtl.syncModelSelectorPanel?.(latestPrimaryModelInfo); }
 }
 if (lang !== lastAppliedLang) { const prevLang = lastAppliedLang; lastAppliedLang = lang; if (prevLang) refreshOpenUiForLanguage(); }
-const themeKey = `${palette}|${lightPreset}|${dark ? 'd' : 'l'}|${getAccentTone()}|${getAmbientIntensitySetting()}|${cfg.darkAura}|${cfg.darkAuraStyle}|${getCornerStyle()}`;
+const themeKey = `${palette}|${lightPreset}|${dark ? 'd' : 'l'}|${getAccentTone()}|${getAmbientIntensitySetting()}|${cfg.darkAura}|${cfg.darkAuraStyle}|${cfg.convAura}|${getCornerStyle()}`;
 if (themeKey !== lastThemeKey) { lastThemeKey = themeKey; refreshOptics(); safe(() => hostEnhancerCtl.onThemeChange?.()); }
 const metricsKey = `${lang}|${cfg.chatFont}|${cfg.chatFontCustom}|${getCodeFont()}|${cfg.codeFontCustom}|${isCodeLigaturesEnabled() ? 1 : 0}|${getCornerStyle()}|${isCompOn() ? 1 : 0}|${perfMode}`;
 if (metricsKey !== lastMetricsKey) { const hadPrev = lastMetricsKey !== ''; lastMetricsKey = metricsKey; if (hadPrev) { invRim(); smoothCaretCtl.bumpMetricsEpoch(); smoothCaretCtl.queue(false, true, true); } }
@@ -2195,7 +2196,7 @@ const _cln = gCln(); (Array.isArray(_cln) ? _cln : (GT.__agCsCleanups = [])).pus
 let activePollMs = 0;
 const checkThemeAndHomeHealth = () => {
 if (destroyed || D.hidden) return;
-const expectedThemeKey = `${getEffectivePalette()}|${getLightPreset()}|${isDarkTheme() ? 'd' : 'l'}|${getAccentTone()}|${getAmbientIntensitySetting()}|${cfg.darkAura}|${cfg.darkAuraStyle}|${getCornerStyle()}`;
+const expectedThemeKey = `${getEffectivePalette()}|${getLightPreset()}|${isDarkTheme() ? 'd' : 'l'}|${getAccentTone()}|${getAmbientIntensitySetting()}|${cfg.darkAura}|${cfg.darkAuraStyle}|${cfg.convAura}|${getCornerStyle()}`;
 if (expectedThemeKey !== lastThemeKey || !ha(de(), 'data-ag-prism')) applyRootAttrs();
 if (isStudioHome()) {
 if (homeStudioCtl.wasHero()) homeStudioCtl.scheduleUsageRollupRefresh(1800);

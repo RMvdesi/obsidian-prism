@@ -325,6 +325,11 @@
       'Beide (5h + W)',
       'İkisi (5s + Hf)',
     ],
+    setConvAuraTitle: ['对话背景呼吸灯', '對話背景呼吸燈', 'Chat Horizon Aura', '会話背景オーラ', '대화 배경 오로라', 'Aurora del chat', 'Aura du chat', 'Chat-Aura', 'Sohbet Aurası'],
+    setConvAuraDesc: ['控制聊天框背后极光呼吸灯：平滑呼吸流畅无色带；静态柔光单帧零功耗；关闭则隐藏。', '控制聊天框背後極光呼吸燈：平滑呼吸流暢無色帶；靜態柔光單幀零功耗；關閉則隱藏。', 'Chat horizon glow: Smooth Breathe (band-free GPU), Static Glow (0 idle GPU), or Off.', '会話背面のオーラ発光：スムーズ呼吸、静止（省電力）、オフから選択。', '채팅 배경 오로라: 부드러운 호흡, 정적 광채(절전), 끄기 중 선택.', 'Brillo del chat: Suave en GPU, Estático sin consumo o Desactivado.', 'Lueur du chat : Fluide GPU, Statique sans charge ou Désactivé.', 'Chat-Aura: Sanft (GPU), Statisch (0 Leerlauf) oder Aus.', 'Sohbet parıltısı: Akıcı GPU, Sabit (0 boşta) veya Kapalı.'],
+    optConvAuraBreathe: ['平滑呼吸', '平滑呼吸', 'Smooth Breathe', 'スムーズ呼吸', '부드러운 호흡', 'Suave', 'Fluide', 'Sanft', 'Akıcı'],
+    optConvAuraStatic: ['静态柔光', '靜態柔光', 'Static Glow', '静止グロー', '정적 광채', 'Estático', 'Statique', 'Statisch', 'Sabit'],
+    optConvAuraOff: ['关闭', '關閉', 'Off', 'オフ', '꺼짐', 'Desactivado', 'Désactivé', 'Aus', 'Kapalı'],
   });
 
   function normalizeLocale(lang) {

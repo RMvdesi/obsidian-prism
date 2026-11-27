@@ -56,7 +56,7 @@
     "self.onmessage=ev=>{var m=ev?.data;if(!m||dd)return;var tp=m.type;",
     "if(tp==='init'){try{mode=m.mode||'glow';cv=m.canvas;iMs=Number(m.idleTimeoutMs)||1200;mF=Number(m.maxFps)||0;cv?.addEventListener?.('webglcontextlost',e=>{e?.preventDefault?.();sR();rd=0;pm({type:'contextlost'})});gl=cv?.getContext?.('webgl2',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false})||null;if(!gl||gl.isContextLost?.())throw new Error('webgl2-unavailable');if(mode==='field'){fc=m.cols|0;fr=m.rows|0;fw=m.cellW||7;fh=m.cellH||15;fz=m.fontSize||10;fg=m.glyphs||'';bld(m.vs,m.fs,'cells,atlas,size,grid,cellPixels,atlasCell,glyphCount,ink,wave,aura,optics,auraLift,auraPhase,lightMode,neb0,neb1,neb2,nebOpt,nebulaLift,uSpec0,uSpec1,uSpec2,uSpec3,uIdleParams,uIdleMetrics');aC2();aT=mT(1,gl.LINEAR);gl.uniform1i(u.cells,0);gl.uniform1i(u.atlas,1);u4(u.uIdleMetrics,[fw,fh,1/(m.cloudScale||100),1/(m.breathScale||280)])}else bld(m.vs,m.fs,'uRes,uDpr,uTime,uDark,uReach,uIntensity,uPresence,uPrism,uSurge,uSpeed,uSpectrum,uSemantic,uPre0,uPre1,uSpecModes,uBaseA,uBaseB,uPrismA,uPrismB,uLightA,uLightB,uSurgeLead,uChimeLead,uHotAnchor,uSemA,uSemB');if(m.pw>0&&m.ph>0){cv.width=m.pw;cv.height=m.ph;dpr=m.dpr||1}rd=1;lA=nw();pm({type:'ready'})}catch(er){sR();frG();rd=0;pm({type:'error',reason:String(er?.message||er||'init-err')})}return}",
     "if(tp==='resize'){if(!cv)return;var w=Math.max(0,m.pw|0),h=Math.max(0,m.ph|0);dpr=m.dpr||dpr||1;if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}if(mode==='field'){var c=Math.max(0,m.cols|0),r=Math.max(0,m.rows|0);if(rd&&(c!==fc||r!==fr)){fc=c;fr=r;aC2()}}else if(rd&&!pa&&w>0&&h>0&&m.syncDraw!==false)pG(12+fS);return}",
-    "if(tp==='draw'){if(mode==='field'){pa=0;if(rd)try{pF(m.params,m.cellsBuf)}catch(e){pm({type:'error',reason:String(e?.message||e||'field-draw')})}return}pa=0;if(m.maxFps!==undefined)mF=Number(m.maxFps)||0;Object.assign(cur,m,{dark:m.dark?1:0,still:m.still?1:0,anim:m.anim?1:0,continuous:m.continuous?1:0,spec:m.spec||0,sem:m.sem||0,hu:m.hu||null});fS=Math.max(0,(m.timeSec||12)-12);lA=lC=lD=nw();if(rd&&cv?.width>0&&cv.height>0)pG(cur.timeSec);if(cur.anim&&!cur.still&&!raf&&typeof requestAnimationFrame==='function')raf=requestAnimationFrame(tk);else if(!cur.anim||cur.still)sR();return}",
+    "if(tp==='draw'){if(mode==='field'){pa=0;if(rd)try{pF(m.params,m.cellsBuf)}catch(e){pm({type:'error',reason:String(e?.message||e||'field-draw')})}return}var kA=cur.anim&&cur.continuous&&!cur.still&&raf;pa=0;if(m.maxFps!==undefined)mF=Number(m.maxFps)||0;Object.assign(cur,m,{dark:m.dark?1:0,still:m.still?1:0,anim:m.anim?1:0,continuous:m.continuous?1:0,spec:m.spec||0,sem:m.sem||0,hu:m.hu||null});if(!kA||!cur.continuous||cur.still)fS=Math.max(0,(m.timeSec||12)-12);lA=nw();if(!kA)lC=lD=lA;if(rd&&cv?.width>0&&cv.height>0)pG(kA?12+fS:cur.timeSec);if(cur.anim&&!cur.still&&!raf&&typeof requestAnimationFrame==='function')raf=requestAnimationFrame(tk);else if(!cur.anim||cur.still)sR();return}",
     "if(tp==='clear'){sR();pa=1;if(gl&&cv?.width>0&&cv.height>0&&!gl.isContextLost?.()){gl.viewport(0,0,cv.width,cv.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT)}return}",
     "if(tp==='sleep'||tp==='release'){pa=1;cur.anim=0;sR();if(tp==='release'&&cv)cv.width=cv.height=0;return}",
     "if(tp==='dispose'){dd=1;pa=1;sR();frG();if(gl)try{gl.getExtension('WEBGL_lose_context')?.loseContext()}catch{}gl=cv=aC=aX=null;try{self.close?.()}catch{}}};",
@@ -208,7 +208,7 @@
       releaseBackingStore() { pw = ph = 0; sleeping = paused = true; pR = pD = null; if (ok()) ch.post({ type: 'release' }); },
       draw(_w, _h, _d, timeSec, dark, intensity, presence, reach, prism, surge, speed, spec, sem, meta) {
         sleeping = Boolean(meta?.still); if (!sleeping) paused = false;
-        const hu = core.computeHorizonUniforms?.(Boolean(dark), presence, prism, surge, speed, spec, sem) || null;
+        const hu = core.computeHorizonUniforms?.(Boolean(dark), presence, prism, surge, speed, spec, sem, meta?.mist ? 1 : 0) || null;
         const m = { type: 'draw', dark: Boolean(dark), intensity, presence, reach, prism, surge, speed, spec, sem, hu, timeSec, still: sleeping, anim: Boolean(!sleeping && o.workerAutoLoop === true), continuous: Boolean(meta?.continuous), maxFps: getPerfProfile(doc).maxFps };
         if (ch.state().ready) ch.post(m); else pD = m;
       },
@@ -236,7 +236,7 @@
         let inSync = true, syncFb = false, syncRet = null;
         const prevN = lastNested; lastNested = null;
         const w = mountGlowWorker(cv0, {
-          rippleCore, doc, width: 0, height: 0, probeTimeoutMs: cfg.probeTimeoutMs, probeRetryDelayMs: cfg.probeRetryDelayMs, initTimeoutMs: cfg.initTimeoutMs, onContextLost,
+          rippleCore, doc, width: 0, height: 0, workerAutoLoop: cfg.workerAutoLoop === true, probeTimeoutMs: cfg.probeTimeoutMs, probeRetryDelayMs: cfg.probeRetryDelayMs, initTimeoutMs: cfg.initTimeoutMs, onContextLost,
           onFallback: (r) => { if (inSync && isF(onFallbackDone)) syncFb = true; try { syncRet = onFallbackDone?.(r); } catch {} },
           onProbeReady: (r) => { try { onUpgradeReady?.(r); } catch {} },
         });

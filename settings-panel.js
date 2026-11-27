@@ -147,6 +147,7 @@
     cornerStyle: mkSp(['sharp', 'balanced', 'soft'], 'balanced'),
     ambientIntensity: mkSp(['0', '35', '70', '100'], '100'),
     darkAura: mkSp(['subtle', 'balanced', 'vivid'], 'balanced'),
+    convAura: mkSp(['breathe', 'static', 'off'], 'breathe'),
     motionLevel: mkSp(['off', 'subtle', 'standard', 'ultra'], 'ultra'),
     targetFps: mkSp(['60', '120', '180', 'native'], '180'),
     homeLayout: mkSp(['studio', 'classic', 'off']),

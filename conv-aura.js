@@ -18,131 +18,78 @@
     return skipSyncVis || !el.checkVisibility || Boolean(el.checkVisibility());
   }
 
-  let cachedRunningVal = false, cachedRunningAt = -1, cachedRunningEl = null, cachedRunningScope = null;
-  let cachedDecisionVal = false, cachedDecisionAt = -1, cachedDecisionEl = null, cachedDecisionScope = null;
+  const _cR = { v: false, at: -1, el: null, sc: null }, _cD = { v: false, at: -1, el: null, sc: null };
   let cachedErrorAt = -1, lastFullVisAt = -1;
   const seenErrorNodes = typeof WeakSet === 'function' ? new WeakSet() : null;
-
-  function readNowMs() {
-    return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-  }
+  const readNowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
   const RUNNING_SEL =
     '[data-testid="input-cancel-button"], [data-testid="stop-button"], [data-testid="cancel-button"], [data-testid="agent-loading"], [data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
   const DECISION_SEL = '[data-testid="interaction-takeover-card"], [data-testid="side-question-panel"]';
-  const SUBAGENT_SEL = '[data-testid="subagent-tab-conversation"]';
-
+  const SUBAGENT_SEL = '[data-testid="subagent-tab-conversation"]', CV_SEL = '[data-testid="conversation-view"]';
   function isWithinScope(el, scope) {
     if (!el) return false;
     const d = getD();
-    if (!scope || scope === d || el === scope) return true;
-    if (typeof scope.contains === 'function' && scope.contains(el)) return true;
-    const ownerView = el.closest?.('[data-testid="conversation-view"]') || null;
-    if (ownerView) return ownerView === scope;
-    const allViews = typeof d?.querySelectorAll === 'function'
-      ? d.querySelectorAll('[data-testid="conversation-view"]') : null;
-    return !allViews || allViews.length <= 1;
+    if (!scope || scope === d || el === scope || scope.contains?.(el)) return true;
+    const ow = el.closest?.(CV_SEL) || null;
+    if (ow) return ow === scope;
+    const av = d?.querySelectorAll?.(CV_SEL);
+    return !av || av.length <= 1;
   }
-
-  function isLiveMatchedIndicator(el, sel, skipSyncVis = false, scope = null) {
-    return !!(
-      el && el.isConnected === true && typeof el.nodeType === 'number' && typeof el.matches === 'function' &&
-      el.matches(sel) && !el.closest?.(SUBAGENT_SEL) && isWithinScope(el, scope) && isVisibleAuraNode(el, skipSyncVis)
-    );
-  }
-
-  function queryScopedIndicator(scope, sel, skipSyncVis) {
-    for (const n of scope.querySelectorAll(sel)) {
-      if (n.closest?.(SUBAGENT_SEL)) continue;
-      if (isVisibleAuraNode(n, skipSyncVis)) return n;
-    }
+  const isLiveMatchedIndicator = (el, sel, sk = false, sc = null) => !!(el && el.isConnected === true && typeof el.nodeType === 'number' && typeof el.matches === 'function' && el.matches(sel) && !el.closest?.(SUBAGENT_SEL) && isWithinScope(el, sc) && isVisibleAuraNode(el, sk));
+  function queryScopedIndicator(scope, sel, sk) {
+    for (const n of scope.querySelectorAll(sel)) if (!n.closest?.(SUBAGENT_SEL) && isVisibleAuraNode(n, sk)) return n;
     const d = getD();
     if (scope !== d && typeof d?.querySelectorAll === 'function') {
-      const allViews = d.querySelectorAll('[data-testid="conversation-view"]');
-      const singlePane = !allViews || allViews.length <= 1;
+      const av = d.querySelectorAll(CV_SEL), sp = !av || av.length <= 1;
       for (const n of d.querySelectorAll(sel)) {
         if (n.closest?.(SUBAGENT_SEL)) continue;
-        const ownerView = n.closest?.('[data-testid="conversation-view"]') || null;
-        if (ownerView && ownerView !== scope) continue;
-        if (!ownerView && !singlePane) continue;
-        if (isVisibleAuraNode(n, skipSyncVis)) return n;
+        const ow = n.closest?.(CV_SEL) || null;
+        if ((ow && ow !== scope) || (!ow && !sp)) continue;
+        if (isVisibleAuraNode(n, sk)) return n;
       }
     }
     return null;
   }
-
-  function isConvRunning(skipSyncVis = false, scopeEl = null) {
-    const d = getD();
-    if (!d) return false;
-    const scope = scopeEl && typeof scopeEl.querySelectorAll === 'function' ? scopeEl : d;
-    const now = readNowMs();
-    if (cachedRunningScope === scope && cachedRunningAt >= 0 && M.abs(now - cachedRunningAt) < 200) return cachedRunningVal;
-    if (cachedRunningScope === scope && isLiveMatchedIndicator(cachedRunningEl, RUNNING_SEL, skipSyncVis, scope)) {
-      cachedRunningVal = true; cachedRunningAt = now;
-      if (!skipSyncVis) lastFullVisAt = now;
-      return true;
-    }
-    cachedRunningEl = queryScopedIndicator(scope, RUNNING_SEL, skipSyncVis);
-    const running = !!(cachedRunningEl);
-    cachedRunningScope = scope; cachedRunningVal = running; cachedRunningAt = now;
-    if (!skipSyncVis) lastFullVisAt = now;
-    return running;
+  function checkInd(c, sel, sk, scEl, recVis) {
+    const d = getD(); if (!d) return false;
+    const sc = scEl?.querySelectorAll ? scEl : d, now = readNowMs();
+    if (c.sc === sc && c.at >= 0 && M.abs(now - c.at) < 200) return c.v;
+    if (c.sc === sc && isLiveMatchedIndicator(c.el, sel, sk, sc)) { c.v = true; c.at = now; if (recVis && !sk) lastFullVisAt = now; return true; }
+    c.el = queryScopedIndicator(sc, sel, sk); c.sc = sc; c.v = Boolean(c.el); c.at = now;
+    if (recVis && !sk) lastFullVisAt = now;
+    return c.v;
   }
-
-  function isAwaitingDecision(skipSyncVis = false, scopeEl = null) {
-    const d = getD();
-    if (!d) return false;
-    const scope = scopeEl && typeof scopeEl.querySelectorAll === 'function' ? scopeEl : d;
-    const now = readNowMs();
-    if (cachedDecisionScope === scope && cachedDecisionAt >= 0 && M.abs(now - cachedDecisionAt) < 200) return cachedDecisionVal;
-    if (cachedDecisionScope === scope && isLiveMatchedIndicator(cachedDecisionEl, DECISION_SEL, skipSyncVis, scope)) {
-      cachedDecisionVal = true; cachedDecisionAt = now;
-      return true;
-    }
-    cachedDecisionEl = queryScopedIndicator(scope, DECISION_SEL, skipSyncVis);
-    const awaiting = !!(cachedDecisionEl);
-    cachedDecisionScope = scope; cachedDecisionVal = awaiting; cachedDecisionAt = now;
-    return awaiting;
-  }
-
-  function consumeFreshDomError(convView) {
-    const d = getD();
-    if (!seenErrorNodes || !d) return false;
-    const now = readNowMs();
-    if (cachedErrorAt >= 0 && M.abs(now - cachedErrorAt) < 240) return false;
+  const isConvRunning = (sk = false, scEl = null) => checkInd(_cR, RUNNING_SEL, sk, scEl, true);
+  const isAwaitingDecision = (sk = false, scEl = null) => checkInd(_cD, DECISION_SEL, sk, scEl, false);
+  function consumeFreshDomError(cv) {
+    const d = getD(); if (!seenErrorNodes || !d) return false;
+    const now = readNowMs(); if (cachedErrorAt >= 0 && M.abs(now - cachedErrorAt) < 240) return false;
     cachedErrorAt = now;
-    const scope = convView || d;
-    if (typeof scope.querySelectorAll !== 'function') return false;
-    const errs = scope.querySelectorAll('.ag-cs-thinking-spark[data-state="error"], [data-testid="agent-error"], [role="alert"][data-error="true"]');
-    let hitFresh = false;
-    for (const n of errs) {
-      if (n.closest?.(SUBAGENT_SEL)) continue;
-      if (!seenErrorNodes.has(n) && isVisibleAuraNode(n)) { seenErrorNodes.add(n); hitFresh = true; }
+    const sc = cv || d; if (!sc?.querySelectorAll) return false;
+    let hit = false;
+    for (const n of sc.querySelectorAll('.ag-cs-thinking-spark[data-state="error"], [data-testid="agent-error"], [role="alert"][data-error="true"]')) {
+      if (!n.closest?.(SUBAGENT_SEL) && !seenErrorNodes.has(n) && isVisibleAuraNode(n)) { seenErrorNodes.add(n); hit = true; }
     }
-    return hitFresh;
+    return hit;
   }
 
   const OPTICS_BUF = { strength: 0, reach: 0.5, prism: 0, surge: 0, speed: 0, semantic: 'none', frameMs: 110 };
-  const DRAW_EXTRA_BUF = { reach: 0.5, prism: 0, surge: 0, speed: 0, semantic: 'none', ambientIntensity: 1, still: false, spectrum: undefined };
+  const DRAW_EXTRA_BUF = { reach: 0.5, prism: 0, surge: 0, speed: 0, semantic: 'none', ambientIntensity: 1, still: false, continuous: false, mist: true, spectrum: undefined };
+  const fillOptics = (o, s, r, p, u, v, m, f) => { o.strength = s; o.reach = r; o.prism = p; o.surge = u; o.speed = v; o.semantic = m; o.frameMs = f; return o; };
 
-  function fillOptics(out, strength, reach, prism, surge, speed, semantic, frameMs) {
-    out.strength = strength; out.reach = reach; out.prism = prism; out.surge = surge;
-    out.speed = speed; out.semantic = semantic; out.frameMs = frameMs;
-    return out;
-  }
-
-  const DA_V = [.62, .76, .88, .68, .9, .24, .28], DA_B = [.46, .6, .74, .5, .8, .2, .25], DA_FD = [0, .31, 0, 0, .7, 0, .22], DA_FL = [0, .64, 0, 0, .7, 0, .22];
+  const DA_V = [.54, .64, .76, .2, .3, .19, .23], DA_B = [.38, .46, .58, .14, .22, .15, .18], DA_FD = [0, .31, 0, 0, .7, 0, .22], DA_FL = [0, .64, 0, 0, .7, 0, .22];
   const gDa = (d, a) => (d ? (a === 'vivid' ? DA_V : a === 'balanced' ? DA_B : 0) : 0);
 
   function computeConvAuraOptics(phase, phaseAt, now, dark, wasRunning, out = {}, da = 'subtle') {
     const dt = gDa(dark, da);
-    const idleStr = dt ? dt[0] : dark ? 0.21 : 0.52;
-    const runBase = dt ? dt[1] : dark ? 0.31 : 0.64;
-    const peakStr = dt ? dt[2] : dark ? 0.46 : 0.78;
-    const idlePrism = dt ? dt[3] : dark ? 0.14 : 0.26;
+    const idleStr = dt ? dt[0] : dark ? 0.22 : 0.44;
+    const runBase = dt ? dt[1] : dark ? 0.30 : 0.54;
+    const peakStr = dt ? dt[2] : dark ? 0.42 : 0.66;
+    const idlePrism = dt ? dt[3] : dark ? 0.08 : 0.16;
     const runPrism = dt ? dt[4] : 0.7;
-    const idleReach = dt ? dt[5] : 0.16;
-    const runReach = dt ? dt[6] : 0.22;
+    const idleReach = dt ? dt[5] : 0.13;
+    const runReach = dt ? dt[6] : 0.17;
     const prog = (ms) => { const v = (now - phaseAt) / ms; return v < 0 ? 0 : v > 1 ? 1 : v; };
     const ep = (ms, pw) => 1 - M.pow(1 - prog(ms), pw);
     const fx = (n) => Number(n.toFixed(4));
@@ -189,13 +136,13 @@
     return f(idleStr + (dark ? 0.024 : 0.038) * M.sin(now * 0.0018), idleReach, idlePrism, 0, 0.72, 'none', 110);
   }
 
-  function invokeConvGlowDraw(glow, now, dark, still, opt, ambientIntensity = 1, spectrum = undefined) {
+  function invokeConvGlowDraw(glow, now, dark, still, opt, ambientIntensity = 1, spectrum = undefined, continuous = false) {
     if (!glow) return;
     try {
       const extra = DRAW_EXTRA_BUF;
       extra.reach = opt.reach; extra.prism = opt.prism; extra.surge = opt.surge; extra.speed = opt.speed;
       extra.semantic = opt.semantic || 'none'; extra.ambientIntensity = ambientIntensity;
-      extra.still = !!(still); extra.spectrum = spectrum !== undefined && spectrum !== null ? spectrum : undefined;
+      extra.still = !!(still); extra.continuous = Boolean(!still && continuous); extra.mist = true; extra.spectrum = spectrum !== undefined && spectrum !== null ? spectrum : undefined;
       if (still && typeof glow.drawStaticSnapshot === 'function') {
         extra.still = true;
         glow.drawStaticSnapshot(now, dark, opt.strength, extra);
@@ -208,6 +155,7 @@
   function createConvAuraController({
     isDestroyed,
     isHomeRippleEnabled,
+    getConvAuraMode,
     isMotionStandardOrUltra,
     isDarkTheme,
     getMinFrameGapMs,
@@ -226,6 +174,10 @@
     const ga = (k) => getHtml()?.getAttribute?.(k);
     const rw = () => G.__agPrismRippleWorker || null;
     const getPerfMode = () => String(getHtml()?.dataset?.agCsPerfMode || ga(PM_A) || '').trim().toLowerCase();
+    const getAuraMode = () => {
+      const m = typeof getConvAuraMode === 'function' ? getConvAuraMode() : ga('data-ag-cs-conv-aura');
+      return m === 'off' || m === 'static' ? m : 'breathe';
+    };
     const isPerf = (m = getPerfMode()) => m === 'performance' || m === 'eco';
     const isAB = () => ga(WB) === '1';
     const isPpOpen = () => ga(PP_OPEN) === '1' && isPerf();
@@ -377,7 +329,7 @@
     }
 
     function prime() {
-      cachedRunningAt = cachedDecisionAt = cachedErrorAt = -1;
+      _cR.at = _cD.at = cachedErrorAt = -1;
       if (isDestroyed() || !isHomeRippleEnabled()) return;
       const cv = findConvAuraView();
       if (!cv) return;
@@ -386,8 +338,8 @@
     }
 
     function sync(preserveCache = false) {
-      if (!preserveCache) { cachedRunningAt = cachedDecisionAt = cachedErrorAt = -1; }
-      if (isDestroyed() || !isHomeRippleEnabled()) { unmount(); return; }
+      if (!preserveCache) { _cR.at = _cD.at = cachedErrorAt = -1; }
+      if (isDestroyed() || !isHomeRippleEnabled() || getAuraMode() === 'off') { unmount(); return; }
       const convView = findConvAuraView(), docRef = getD();
       const seatParent = convView ? convView.parentElement || convView : null;
       if (!convView || !seatParent || !docRef) {
@@ -420,8 +372,9 @@
         const prevPhase = a.phase, nextPhase = advancePhase(readNowMs());
         if (!isAB()) wb = false;
         if (isH()) { a.releaseBacking?.(); return; }
-        if (!a.sleeping && (!isMotionStandardOrUltra() || isP())) { a.wake(true); return; }
-        const shouldResume = isMotionStandardOrUltra() && !isP() && a.sleeping && a.sleepReason !== 'settled' && a.sleepReason !== 'ambient-zero';
+        const am = getAuraMode(), wantFlow = am !== 'static' && isMotionStandardOrUltra();
+        if (!a.sleeping && (!wantFlow || isP())) { a.wake(true); return; }
+        const shouldResume = wantFlow && !isP() && a.sleeping && a.sleepReason !== 'settled' && a.sleepReason !== 'ambient-zero';
         if (nextPhase !== prevPhase || shouldResume || (!isH() && a.backingReleased)) {
           if (shouldResume && nextPhase === 'idle') a.phaseAt = readNowMs();
           a.sleepReason = ''; a.wake(true);
@@ -501,7 +454,7 @@
         if (wm?.mountManagedGlow) {
           g = wm.mountManagedGlow({
             getCanvas: () => glowCanvas, swapCanvas: swapCv, rippleCore, doc: getD() || docRef,
-            prefer2D: !!p2d, allowWorker: !workerFailed, onContextLost: onLost,
+            prefer2D: !!p2d, allowWorker: !workerFailed, workerAutoLoop: true, onContextLost: onLost,
             onFallbackDone: () => { workerFailed = true; if (isDestroyed() || convAura !== state) return; try { state.glow?.dispose?.(); } catch {} mountGlow(0, 1); resyncGlow(); },
             onUpgradeReady: () => { if (!isDestroyed() && convAura === state && !workerFailed && state.glow?.mode === 'webgl2') { mountGlow(0, 1); resyncGlow(); } },
           });
@@ -577,7 +530,8 @@
         const h = parentH > 0 ? M.max(1, M.round(parentH * CONV_AURA_HEIGHT_RATIO)) : 0;
         const rawDpr = (typeof window !== 'undefined' && Number(window.devicePixelRatio)) || 1;
         const pm = getPerfMode(), pmChg = pm !== lastPerfKey;
-        const dpr = (pm && rw()?.resolveGlowDpr?.(rawDpr, getD() || docRef)) || (rippleCore?.resolveHorizonDpr ? rippleCore.resolveHorizonDpr(rawDpr, pm ? 0.7 : 0.72, pm) : M.min(rawDpr, 1) * (pm ? 0.7 : 0.72));
+        const cap = pm === 'performance' ? 1 : pm === 'quality' ? 2 : 1.5;
+        const dpr = M.max(1, M.min(cap, rawDpr));
         lastPerfKey = pm;
         if (pmChg && rippleCore?.mountBrandHorizonGlow && (isPerf(pm) ? state.glow?.mode === '2d' : state.glow?.mode === 'none')) { mountGlow(0, 1); drawnOnce = false; }
         const need = bkRel || (w > 0 && h > 0 && !hasCvBuf());
@@ -625,7 +579,9 @@
           return;
         }
 
-        const allowLivingFlow = isMotionStandardOrUltra() && !isP();
+        const am = getAuraMode();
+        if (am === 'off') { if (hasCvBuf()) try { state.glow?.clear?.(); } catch {} return enterAuraSleep('aura-off'); }
+        const isStatic = am === 'static', isBreathe = am === 'breathe', allowLivingFlow = !isStatic && isMotionStandardOrUltra() && !isP();
         const liftElapsed = state.liftoffAt > 0 ? now - state.liftoffAt : -1;
         const inLiftoffEbb = allowLivingFlow && liftElapsed >= 0 && liftElapsed < 520;
         if (state.liftoffAt > 0 && !inLiftoffEbb) state.liftoffAt = 0;
@@ -649,38 +605,20 @@
           );
         }
 
-        // Split-Rate VSync throttle (14.5ms VSync-safe 60fps floor / 33ms pre-sleep)
-        const isGpuGlow = !!(state.glow && (state.glow.mode === 'webgl2' || state.glow.mode === 'worker-webgl2'));
-        const smoothGpu = isGpuGlow && typeof getMinFrameGapMs === 'function';
-        const rawPGap = rw()?.getPerfMinGapMs?.(getD() || docRef) || 0;
-        const perfGap = rawPGap > 0 ? rawPGap * 0.88 : (isPerf() ? 14.5 : 0);
-        const minGap = smoothGpu ? M.max(perfGap, Number(getMinFrameGapMs()) || 0) : perfGap;
-        const isPreSleepPhase = !inLiftoffEbb && (phase === 'idle' || phase === 'awaiting-decision' || phase === 'long-task-complete');
-        const smoothActiveGpu = smoothGpu && !isPreSleepPhase;
-        const smoothPreSleep = smoothGpu && isPreSleepPhase;
-        const isBurstTransient = inLiftoffEbb || phase === 'start';
-        const schedFrameMs = smoothPreSleep
-          ? M.max(33, minGap)
-          : smoothActiveGpu
-          ? M.max(16, minGap)
-          : (phase === 'idle' ? M.max(160, opt.frameMs || 160) : opt.frameMs || 32);
-        const burstGap = M.max(minGap, inLiftoffEbb ? 16 : 20);
-        const effectiveMinGap = smoothPreSleep
-          ? M.max(31, schedFrameMs - 2)
-          : smoothActiveGpu
-          ? M.max(14.5, minGap)
-          : isBurstTransient
-          ? burstGap
-          : M.max(minGap, M.max(0, schedFrameMs - 2));
-
+        const isG = !!(state.glow && (state.glow.mode === 'webgl2' || state.glow.mode === 'worker-webgl2')), sG = isG && typeof getMinFrameGapMs === 'function';
+        const rG = rw()?.getPerfMinGapMs?.(getD() || docRef) || 0, pG = rG > 0 ? rG * 0.88 : (isPerf() ? 14.5 : 0);
+        const mG = sG ? M.max(pG, Number(getMinFrameGapMs()) || 0) : pG;
+        const preS = !inLiftoffEbb && ((phase === 'idle' && !isBreathe) || phase === 'awaiting-decision' || phase === 'long-task-complete');
+        const smoothActiveGpu = sG && !preS, sP = sG && preS, isBurstTransient = inLiftoffEbb || phase === 'start';
+        const schedFrameMs = sP ? M.max(33, mG) : smoothActiveGpu ? M.max(16, mG) : (phase === 'idle' ? M.max(160, opt.frameMs || 160) : opt.frameMs || 32);
+        const burstGap = M.max(mG, inLiftoffEbb ? 16 : 20);
+        const effectiveMinGap = sP ? M.max(31, schedFrameMs - 2) : smoothActiveGpu ? M.max(14.5, mG) : isBurstTransient ? burstGap : M.max(mG, M.max(0, schedFrameMs - 2));
         const phaseElapsed = now - state.phaseAt;
         const settleDecisionHold = allowLivingFlow && phase === 'awaiting-decision' && phaseElapsed >= CONV_AURA_DECISION_BREATH_MS;
         const settleErrorZero = !!(state.pendingErrorClear) || (phase === 'error-halted' && phaseElapsed >= CONV_AURA_ERROR_MS);
         const settleLongComplete = allowLivingFlow && phase === 'long-task-complete' && phaseElapsed >= CONV_AURA_LONG_COMPLETE_MS;
-        const settleIdleSleep = allowLivingFlow && phase === 'idle' && !inLiftoffEbb && phaseElapsed >= CONV_AURA_IDLE_SLEEP_MS;
-
-        const bypassThrottle =
-          forceImmediateDraw || phaseJustChanged || !drawnOnce || settleDecisionHold || settleErrorZero || settleLongComplete || settleIdleSleep;
+        const settleIdleSleep = allowLivingFlow && !isBreathe && phase === 'idle' && !inLiftoffEbb && phaseElapsed >= CONV_AURA_IDLE_SLEEP_MS;
+        const bypassThrottle = forceImmediateDraw || phaseJustChanged || !drawnOnce || settleDecisionHold || settleErrorZero || settleLongComplete || settleIdleSleep;
         forceImmediateDraw = false;
 
         if (!bypassThrottle && allowLivingFlow && effectiveMinGap > 0 && lastGpuDrawAt > 0 && now - lastGpuDrawAt < effectiveMinGap) {
@@ -694,10 +632,10 @@
         lastGpuDrawAt = now;
         layout();
         const hasBuf = state.width > 0 && state.height > 0 && hasCvBuf();
-        const paint = (o, st) => {
+        const paint = (o, st, cont = false) => {
           if (!hasBuf) return;
           if (st) state.glow?.invalidate?.();
-          invokeConvGlowDraw(state.glow, now, dark, st, o, ambient, spectrum);
+          invokeConvGlowDraw(state.glow, now, dark, st, o, ambient, spectrum, cont);
           state.drawCount += 1;
           drawnOnce = true;
         };
@@ -735,16 +673,23 @@
         }
 
         const still = !allowLivingFlow || settleIdleSleep;
+        const workerContinuous = !still && isWorkerGlow() && isBreathe && phase === 'idle' && !inLiftoffEbb;
         state.lastOptics = opt;
-        paint(opt, still);
+        paint(opt, still, workerContinuous);
 
         if (isDestroyed() || !allowLivingFlow || settleIdleSleep) {
-          enterAuraSleep(!allowLivingFlow ? (isP() ? 'hidden' : 'motion-still') : 'settled');
+          enterAuraSleep(!allowLivingFlow ? (isP() ? 'hidden' : isStatic ? 'aura-static' : 'motion-still') : 'settled');
           return;
         }
 
         state.sleeping = false; state.sleepReason = '';
         if (host.hasAttribute('data-aura-sleep')) host.removeAttribute('data-aura-sleep');
+
+        if (workerContinuous) {
+          clearTimeout(state.timer);
+          state.timer = setTimeout(() => { if (!isDestroyed() && convAura === state && !state.sleeping) wake(advancePhase(readNowMs(), true) !== state.phase || isP() || getAuraMode() !== 'breathe' || !isMotionStandardOrUltra()); }, 220);
+          return;
+        }
 
         const PHASE_DUR = { start: CONV_AURA_START_MS, complete: CONV_AURA_COMPLETE_MS, 'awaiting-decision': CONV_AURA_DECISION_BREATH_MS, 'error-halted': CONV_AURA_ERROR_MS, 'long-task-complete': CONV_AURA_LONG_COMPLETE_MS, idle: CONV_AURA_IDLE_SLEEP_MS };
         let nextDelay = isBurstTransient ? burstGap : schedFrameMs;

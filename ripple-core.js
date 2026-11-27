@@ -179,119 +179,69 @@
   }
   function clampDim(n) { return n > 0 && Number.isFinite(n) ? M.floor(n) : 0; }
   function createWaveField(columns, rows, random = M.random) {
-    columns = clampDim(columns);
-    rows = clampDim(rows);
-    const cells = columns * rows;
-    const height = new Float32Array(cells);
-    const velocity = new Float32Array(cells);
-    const speedSquared = new Float32Array(cells);
-    const speedFactor = new Float32Array(cells);
-    const damping = new Float32Array(cells);
-    const seed = random() * 1000;
-    const { cellWidth, cellHeight } = RIPPLE;
-    const widthSquared = cellWidth * cellWidth;
-    const heightSquared = cellHeight * cellHeight;
-    const invW2 = 1 / widthSquared;
-    const invH2 = 1 / heightSquared;
-    const loadDecay = M.exp(-WAVE_STEP / RIPPLE.injectLoadDecay);
-    const wakeLoadDecay = M.exp(-WAVE_STEP / 0.2);
-    const knee = RIPPLE.heightKnee;
-    const span = M.max(0.01, RIPPLE.heightCap - RIPPLE.heightKnee);
-    const sources = [];
-    let moving = false;
-    let behind = 0;
-    let load = 0;
-    let wakeLoad = 0;
-    let baseSpeedPrimed = false;
-    let actC0 = columns;
-    let actC1 = -1;
-    let actR0 = rows, actR1 = -1, rExp = new Float64Array(32), cExp = new Float64Array(64);
+    columns = clampDim(columns); rows = clampDim(rows);
+    const { max, min, ceil, exp, sqrt, sin, cos, tanh } = M, RP = RIPPLE, cells = columns * rows;
+    const height = new Float32Array(cells), velocity = new Float32Array(cells), speedSquared = new Float32Array(cells), speedFactor = new Float32Array(cells), damping = new Float32Array(cells);
+    const seed = random() * 1000, { cellWidth, cellHeight, turbulenceScale: tSc, speedFar: sFar, speedFalloff: sFall } = RP;
+    const invW2 = 1 / (cellWidth * cellWidth), invH2 = 1 / (cellHeight * cellHeight), loadDecay = exp(-WAVE_STEP / RP.injectLoadDecay), wakeLoadDecay = exp(-WAVE_STEP / 0.2);
+    const knee = RP.heightKnee, span = max(0.01, RP.heightCap - knee), sources = [];
+    let moving = false, behind = 0, load = 0, wakeLoad = 0, baseSpeedPrimed = false, actC0 = columns, actC1 = -1, actR0 = rows, actR1 = -1;
+    let rExp = new Float64Array(32), cExp = new Float64Array(64);
     const setCell = (cell, col, row, noise) => {
-      speedFactor[cell] = M.min(1.4, M.max(0.3, 1 + RIPPLE.turbulence * (noise - 0.5) * 3.2));
-      const edge = M.min(col, row, columns - 1 - col, rows - 1 - row);
-      const border = M.max(0, 1 - edge / RIPPLE.borderCells);
-      damping[cell] = RIPPLE.damping + border * border * 12;
+      speedFactor[cell] = min(1.4, max(0.3, 1 + RP.turbulence * (noise - 0.5) * 3.2));
+      const border = max(0, 1 - min(col, row, columns - 1 - col, rows - 1 - row) / RP.borderCells);
+      damping[cell] = RP.damping + border * border * 12;
     };
     if (columns >= 32 && rows >= 16) {
-      const gCols = M.ceil(columns / 2) + 1;
-      const gRows = M.ceil(rows / 2) + 1;
-      const coarse = new Float32Array(gCols * gRows);
-      for (let gr = 0; gr < gRows; gr++) {
-        const r = M.min(rows - 1, gr * 2);
-        const ny = (r * cellHeight) / RIPPLE.turbulenceScale + seed;
-        for (let gc = 0; gc < gCols; gc++) {
-          const c = M.min(columns - 1, gc * 2);
-          coarse[gr * gCols + gc] = fractalNoise((c * cellWidth) / RIPPLE.turbulenceScale + seed, ny);
-        }
+      const gC = ceil(columns / 2) + 1, gR = ceil(rows / 2) + 1, coarse = new Float32Array(gC * gR);
+      for (let gr = 0; gr < gR; gr++) {
+        const ny = (min(rows - 1, gr * 2) * cellHeight) / tSc + seed;
+        for (let gc = 0; gc < gC; gc++) coarse[gr * gC + gc] = fractalNoise((min(columns - 1, gc * 2) * cellWidth) / tSc + seed, ny);
       }
       for (let row = 0; row < rows; row++) {
-        const gr = row >> 1;
-        const ty = (row & 1) * 0.5;
-        const rowOff0 = gr * gCols;
-        const rowOff1 = M.min(gRows - 1, gr + 1) * gCols;
-        for (let column = 0; column < columns; column++) {
-          const gc = column >> 1;
-          const gc1 = M.min(gCols - 1, gc + 1);
-          const tx = (column & 1) * 0.5;
-          const n0 = coarse[rowOff0 + gc] + (coarse[rowOff0 + gc1] - coarse[rowOff0 + gc]) * tx;
-          const n1 = coarse[rowOff1 + gc] + (coarse[rowOff1 + gc1] - coarse[rowOff1 + gc]) * tx;
-          setCell(row * columns + column, column, row, n0 + (n1 - n0) * ty);
+        const gr = row >> 1, ty = (row & 1) * 0.5, r0 = gr * gC, r1 = min(gR - 1, gr + 1) * gC;
+        for (let col = 0; col < columns; col++) {
+          const gc = col >> 1, gc1 = min(gC - 1, gc + 1), tx = (col & 1) * 0.5;
+          const n0 = coarse[r0 + gc] + (coarse[r0 + gc1] - coarse[r0 + gc]) * tx, n1 = coarse[r1 + gc] + (coarse[r1 + gc1] - coarse[r1 + gc]) * tx;
+          setCell(row * columns + col, col, row, n0 + (n1 - n0) * ty);
         }
       }
     } else {
-      for (let row = 0; row < rows; row++) {
-        for (let column = 0; column < columns; column++) {
-          setCell(
-            row * columns + column,
-            column,
-            row,
-            fractalNoise((column * cellWidth) / RIPPLE.turbulenceScale + seed, (row * cellHeight) / RIPPLE.turbulenceScale + seed)
-          );
-        }
-      }
+      for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) setCell(row * columns + col, col, row, fractalNoise((col * cellWidth) / tSc + seed, (row * cellHeight) / tSc + seed));
     }
     function primeFarBaseline() {
       if (baseSpeedPrimed) return;
-      const far = RIPPLE.speedFar;
-      for (let i = 0; i < cells; i++) {
-        const s = far * speedFactor[i];
-        const sq = s * s;
-        if (sq > speedSquared[i]) speedSquared[i] = sq;
-      }
+      for (let i = 0; i < cells; i++) { const s = sFar * speedFactor[i], sq = s * s; if (sq > speedSquared[i]) speedSquared[i] = sq; }
       baseSpeedPrimed = true;
     }
     function boostSpeeds(column, row, reachPx, boost, falloff) {
       primeFarBaseline();
-      const maxSq = reachPx * reachPx, rC = M.ceil(reachPx / cellWidth), rR = M.ceil(reachPx / cellHeight);
-      const r0 = M.max(0, row - rR), r1 = M.min(rows - 1, row + rR), c0 = M.max(0, column - rC), c1 = M.min(columns - 1, column + rC);
+      const maxSq = reachPx * reachPx, rC = ceil(reachPx / cellWidth), rR = ceil(reachPx / cellHeight);
+      const r0 = max(0, row - rR), r1 = min(rows - 1, row + rR), c0 = max(0, column - rC), c1 = min(columns - 1, column + rC);
       for (let r = r0; r <= r1; r++) {
         const dy = (r - row) * cellHeight, dy2 = dy * dy, rB = r * columns;
         for (let c = c0; c <= c1; c++) {
           const dx = (c - column) * cellWidth, d2 = dx * dx + dy2;
           if (d2 > maxSq) continue;
-          const cell = rB + c, sp = (RIPPLE.speedFar + boost * M.exp(-M.sqrt(d2) / falloff)) * speedFactor[cell], sq = sp * sp;
+          const cell = rB + c, sp = (sFar + boost * exp(-sqrt(d2) / falloff)) * speedFactor[cell], sq = sp * sp;
           if (sq > speedSquared[cell]) speedSquared[cell] = sq;
         }
       }
     }
-    const raiseSpeeds = (c, r) => boostSpeeds(c, r, RIPPLE.speedFalloff * 4.6, RIPPLE.speedNear - RIPPLE.speedFar, RIPPLE.speedFalloff);
-    const raiseWakeSpeeds = (c, r, sn) => boostSpeeds(c, r, RIPPLE.speedFalloff * 0.65, (RIPPLE.speedNear - RIPPLE.speedFar) * (0.14 + 0.14 * sn), RIPPLE.speedFalloff * 0.55);
-    const softGain = (k, ld) => { const n = 1 + ld; return M.tanh(k * n) / (M.tanh(k) * n); };
-    const injectGain = () => softGain(RIPPLE.injectSoftness, load);
+    const raiseSpeeds = (c, r) => boostSpeeds(c, r, sFall * 4.6, RP.speedNear - sFar, sFall);
+    const raiseWakeSpeeds = (c, r, sn) => boostSpeeds(c, r, sFall * 0.65, (RP.speedNear - sFar) * (0.14 + 0.14 * sn), sFall * 0.55);
+    const softGain = (k, ld) => { const n = 1 + ld; return tanh(k * n) / (tanh(k) * n); };
+    const injectGain = () => softGain(RP.injectSoftness, load);
     const skimmerGain = () => softGain(0.85, wakeLoad);
     function drive() {
       let keep = 0;
       for (let s = 0; s < sources.length; s++) {
         const source = sources[s];
-        if (source.delay > 0) {
-          source.delay -= WAVE_STEP;
-          sources[keep++] = source;
-          continue;
-        }
-        const freq = source.frequency || RIPPLE.sourceFrequency;
-        const envelope = M.sin((M.PI * source.time) / source.duration);
-        const rate = M.cos(TAU * freq * source.time) * TAU * RIPPLE.sourceFrequency;
-        const radius = RIPPLE.sourceRadius * source.radiusScale;
+        if (source.delay > 0) { source.delay -= WAVE_STEP; sources[keep++] = source; continue; }
+        const freq = source.frequency || RP.sourceFrequency;
+        const envelope = sin((M.PI * source.time) / source.duration);
+        const rate = cos(TAU * freq * source.time) * TAU * RP.sourceFrequency;
+        const radius = RP.sourceRadius * source.radiusScale;
         const inv2r2 = 1 / (2 * radius * radius);
         const gain = RIPPLE.sourceAmplitude * source.amplitudeScale * envelope * rate * WAVE_STEP;
         const reachColumns = M.ceil((radius * 3) / cellWidth);
@@ -567,91 +517,35 @@ mix(hash2Gpu(i + vec2(0.0, 1.0)), hash2Gpu(i + vec2(1.0, 1.0)), u.x), u.y);
 float fNoiseGpu(highp vec2 p) {
 return (vNoiseGpu(p) * 4.0 + vNoiseGpu(p * 2.1 + vec2(7.0, 3.0)) * 2.0 + vNoiseGpu(p * 4.3 + vec2(13.0, 11.0))) * (1.0 / 7.0);
 }
-void main() {
-highp vec2 position = vec2(gl_FragCoord.x, size.y - gl_FragCoord.y);
-highp vec2 cell = min(floor(position / cellPixels), grid - 1.0);
-vec4 data = texelFetch(cells, ivec2(cell), 0);
-if (data.g <= 0.0) { color = vec4(0.0); return; }
-highp vec2 local = position - cell * cellPixels;
-float glyph = floor(data.r * 255.0 + 0.5);
-highp vec2 inAtlas = vec2(glyph * atlasCell.x + local.x * atlasCell.x / cellPixels.x, local.y * atlasCell.y / cellPixels.y);
-float coverage = texture(atlas, inAtlas / vec2(glyphCount * atlasCell.x, atlasCell.y)).a;
-if (coverage <= 0.001) { color = vec4(0.0); return; }
-vec3 rgb = mix(ink, wave, data.b);
-float alpha = data.g;
-if (uIdleParams.w > 0.5 && data.b <= 0.001) {
-highp vec2 cssPos = (cell + 0.5) * uIdleMetrics.xy;
-float cNoise = fNoiseGpu(vec2((cssPos.x + uIdleParams.x) * uIdleMetrics.z, cssPos.y * uIdleMetrics.z));
-float cCloud = 0.22 + 0.78 * smoothstep(0.595, 0.795, cNoise);
-float bPhase = fNoiseGpu(cssPos * uIdleMetrics.w + vec2(53.0, 71.0)) * 10.681415;
-float breath = 1.0 - 0.12 * (1.0 + uIdleParams.y * cos(bPhase) + uIdleParams.z * sin(bPhase));
-alpha *= cCloud * breath;
-if (alpha < 0.01) { color = vec4(0.0); return; }
+void main(){
+highp vec2 P=vec2(gl_FragCoord.x,size.y-gl_FragCoord.y),C=min(floor(P/cellPixels),grid-1.);
+vec4 D=texelFetch(cells,ivec2(C),0);
+if(D.g<=0.){color=vec4(0.);return;}
+highp vec2 L=P-C*cellPixels;
+float cv=texture(atlas,vec2(floor(D.r*255.+.5)*atlasCell.x+L.x*atlasCell.x/cellPixels.x,L.y*atlasCell.y/cellPixels.y)/vec2(glyphCount*atlasCell.x,atlasCell.y)).a;
+if(cv<=.001){color=vec4(0.);return;}
+vec3 rgb=mix(ink,wave,D.b);float al=D.g;
+if(uIdleParams.w>.5&&D.b<=.001){
+highp vec2 cp=(C+.5)*uIdleMetrics.xy;
+float bp=fNoiseGpu(cp*uIdleMetrics.w+vec2(53.,71.))*10.681415;
+al*=(.22+.78*smoothstep(.595,.795,fNoiseGpu(vec2((cp.x+uIdleParams.x)*uIdleMetrics.z,cp.y*uIdleMetrics.z))))*(1.-.12*(1.+uIdleParams.y*cos(bp)+uIdleParams.z*sin(bp)));
+if(al<.01){color=vec4(0.);return;}
 }
-float packed = floor(data.a * 255.0 + 0.5);
-float level = floor(packed / 32.0);
-float prismAmt = level / 7.0;
-float hue = (packed - level * 32.0) / 32.0;
-float wAura = 0.0;
-vec3 auraRgb = uSpec0;
-if (aura.w > 0.001) {
-vec2 rel = position - aura.xy;
-float ar = max(1.0, aura.z);
-if (abs(rel.x) < ar && abs(rel.y) < ar) {
-float d2 = dot(rel, rel);
-if (d2 < ar * ar) {
-float invD = inversesqrt(max(d2, 1e-6));
-float rNorm = (d2 * invD) / ar;
-float u = 1.0 - rNorm;
-float s = u * u * (3.0 - 2.0 * u);
-wAura = s * (0.35 + 0.65 * s);
-float ang = fastAtan2Turns(rel) + 0.5;
-auraRgb = spectrum(ang - rNorm * 0.45 + auraPhase);
+float pk=floor(D.a*255.+.5),lv=floor(pk/32.),pA=lv/7.,hu=(pk-lv*32.)/32.,wA=0.;vec3 aR=uSpec0;
+if(aura.w>.001){
+vec2 rl=P-aura.xy;float ar=max(1.,aura.z);
+if(abs(rl.x)<ar&&abs(rl.y)<ar){float d2=dot(rl,rl);if(d2<ar*ar){float rN=(d2*inversesqrt(max(d2,1e-6)))/ar,u=1.-rN,s=u*u*(3.-2.*u);wA=s*(.35+.65*s);aR=spectrum(fastAtan2Turns(rl)+.5-rN*.45+auraPhase);}}
 }
+float wN=0.;vec3 nA=vec3(0.);
+for(int i=0;i<3;i++){
+vec4 nb=i==0?neb0:(i==1?neb1:neb2);float nh=i==0?nebOpt.x:(i==1?nebOpt.y:nebOpt.z);
+if(nb.w>.001){vec2 nr=P-nb.xy;float rd=max(1.,nb.z);if(abs(nr.x)<rd&&abs(nr.y)<rd){float d2=dot(nr,nr);if(d2<rd*rd){float rn=(d2*inversesqrt(max(d2,1e-6)))/rd,u=1.-rn,s=u*u*(3.-2.*u),wi=s*(.3+.7*s)*nb.w;wN+=wi;nA+=spectrum(nh+fastAtan2Turns(nr)*.22-rn*.26)*wi;}}}
 }
-}
-float wNeb = 0.0;
-vec3 nebAcc = vec3(0.0);
-for (int i = 0; i < 3; i++) {
-vec4 nb = i == 0 ? neb0 : (i == 1 ? neb1 : neb2);
-float nh = i == 0 ? nebOpt.x : (i == 1 ? nebOpt.y : nebOpt.z);
-if (nb.w > 0.001) {
-vec2 nr = position - nb.xy;
-float rad = max(1.0, nb.z);
-if (abs(nr.x) < rad && abs(nr.y) < rad) {
-float nd2 = dot(nr, nr);
-if (nd2 < rad * rad) {
-float invNd = inversesqrt(max(nd2, 1e-6));
-float rn = (nd2 * invNd) / rad;
-float u = 1.0 - rn;
-float s = u * u * (3.0 - 2.0 * u);
-float wi = s * (0.30 + 0.70 * s) * nb.w;
-float nang = fastAtan2Turns(nr);
-wNeb += wi;
-nebAcc += spectrum(nh + nang * 0.22 - rn * 0.26) * wi;
-}
-}
-}
-}
-vec3 nebRgb = wNeb > 0.0001 ? nebAcc / wNeb : uSpec0;
-float wNebC = min(1.0, wNeb);
-float nebT = wNebC * nebOpt.w;
-float auraT = wAura * optics.x * aura.w;
-float prismT = prismAmt * optics.y * optics.w * (0.88 + 0.12 * wAura);
-float total = auraT + prismT + nebT;
-if (lightMode > 0.5) {
-alpha = min(0.88, alpha * (1.0 + (auraLift + 0.72) * wAura * aura.w + prismT * 0.62 + nebulaLift * 0.66 * wNebC));
-} else if (wAura > 0.0 || wNebC > 0.0) {
-alpha = min(1.0, alpha * (1.0 + auraLift * wAura * aura.w + nebulaLift * wNebC));
-}
-if (total > 0.0001) {
-float capped = min(optics.z, total);
-float mixAmt = mix(capped, min(0.96, capped * 1.36), lightMode);
-vec3 tintRgb = (auraRgb * auraT + spectrum(hue) * prismT + nebRgb * nebT) / total;
-rgb = mix(rgb, tintRgb, mixAmt);
-}
-float a = alpha * coverage;
-color = vec4(rgb * a, a);
+vec3 nR=wN>.0001?nA/wN:uSpec0;float wC=min(1.,wN),nT=wC*nebOpt.w,aT=wA*optics.x*aura.w,pT=pA*optics.y*optics.w*(.88+.12*wA),tt=aT+pT+nT;
+if(lightMode>.5)al=min(.88,al*(1.+(auraLift+.72)*wA*aura.w+pT*.62+nebulaLift*.66*wC));
+else if(wA>0.||wC>0.)al=min(1.,al*(1.+auraLift*wA*aura.w+nebulaLift*wC));
+if(tt>.0001){float cp=min(optics.z,tt);rgb=mix(rgb,(aR*aT+spectrum(hu)*pT+nR*nT)/tt,mix(cp,min(.96,cp*1.36),lightMode));}
+float a=al*cv;color=vec4(rgb*a,a);
 }`;
   function getGlyphSpectrumStops(dark, specCode) {
     const bank = dark === false ? GLYPH_SPECTRA_LIGHT : GLYPH_SPECTRA_DARK;
@@ -750,18 +644,13 @@ color = vec4(rgb * a, a);
       isContextLost: () => Boolean(gl.isContextLost?.()),
       draw(palette, dpr, uploadCells = true) {
         if (!program || gl.isContextLost?.()) return;
-        const p = packFieldDrawParams(palette, dpr);
+        const p = packFieldDrawParams(palette, dpr), u = uniforms, u1 = (l, v) => { if (l) gl.uniform1f(l, v); };
         buildAtlas(p.font, dpr);
         gl.viewport(0, 0, canvas.width, canvas.height);
-        gl.uniform2f(uniforms.size, canvas.width, canvas.height);
-        gl.uniform2f(uniforms.grid, cols, rowsN);
-        gl.uniform2f(uniforms.cellPixels, RIPPLE.cellWidth * dpr, RIPPLE.cellHeight * dpr);
-        u3(uniforms.ink, p.ink); u3(uniforms.wave, p.wave);
-        u4(uniforms.aura, p.aura); u4(uniforms.optics, p.optics);
-        gl.uniform1f(uniforms.auraLift, p.auraLift); gl.uniform1f(uniforms.auraPhase, p.auraPhase); gl.uniform1f(uniforms.lightMode, p.lightMode);
-        u3(uniforms.uSpec0, p.sp0); u3(uniforms.uSpec1, p.sp1); u3(uniforms.uSpec2, p.sp2); u3(uniforms.uSpec3, p.sp3);
-        u4(uniforms.uIdleParams, p.idle); u4(uniforms.neb0, p.n0); u4(uniforms.neb1, p.n1); u4(uniforms.neb2, p.n2);
-        u4(uniforms.nebOpt, p.nOpt); gl.uniform1f(uniforms.nebulaLift, p.nLift);
+        gl.uniform2f(u.size, canvas.width, canvas.height); gl.uniform2f(u.grid, cols, rowsN); gl.uniform2f(u.cellPixels, RIPPLE.cellWidth * dpr, RIPPLE.cellHeight * dpr);
+        u3(u.ink, p.ink); u3(u.wave, p.wave); u3(u.uSpec0, p.sp0); u3(u.uSpec1, p.sp1); u3(u.uSpec2, p.sp2); u3(u.uSpec3, p.sp3);
+        u4(u.aura, p.aura); u4(u.optics, p.optics); u4(u.uIdleParams, p.idle); u4(u.neb0, p.n0); u4(u.neb1, p.n1); u4(u.neb2, p.n2); u4(u.nebOpt, p.nOpt);
+        u1(u.auraLift, p.auraLift); u1(u.auraPhase, p.auraPhase); u1(u.lightMode, p.lightMode); u1(u.nebulaLift, p.nLift);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cellTexture);
         if (uploadCells !== false) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rowsN, gl.RGBA, gl.UNSIGNED_BYTE, data);
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -832,157 +721,53 @@ color = vec4(rgb * a, a);
         api2d.data = data;
         return true;
       },
-      draw(palette, dpr) {
-        buildAtlas(palette.fontFamily, dpr);
-        ensureImage();
-        pixels.fill(0);
-        const W = image.width;
-        const H = image.height;
-        const ink = palette.ink;
-        const wave = palette.wave;
-        const isLight = palette.dark === false;
-        const amb = Number.isFinite(Number(palette.ambientIntensity)) ? M.max(0, M.min(1, Number(palette.ambientIntensity))) : 1;
-        const specCode = Number(palette.spectrumCode ?? 0);
-        const aura = readAura(palette);
-        const auraStrength = aura.strength * amb;
-        const auraOn = auraStrength > 0.001;
-        const auraPhase = palette.auraPhase || 0;
-        const ax = aura.x * dpr;
-        const ay = aura.y * dpr;
-        const ar = aura.radius * dpr;
-        const ar2 = ar * ar;
-        const nebSrc = amb > 0.001 ? palette.nebula : null;
-        let nebActiveCount = 0;
+      draw(p, dpr) {
+        buildAtlas(p.fontFamily, dpr); ensureImage(); pixels.fill(0);
+        const { max, min, round, sqrt, atan2 } = M, W = image.width, H = image.height, ink = p.ink, wv = p.wave, isL = p.dark === false;
+        const amb = clampFinite(p.ambientIntensity, 1, 0, 1), sc = Number(p.spectrumCode ?? 0), au = readAura(p), aS = au.strength * amb, aOn = aS > 0.001, aPh = p.auraPhase || 0;
+        const ax = au.x * dpr, ay = au.y * dpr, ar = au.radius * dpr, ar2 = ar * ar, nebS = amb > 0.001 ? p.nebula : null;
+        let nAct = 0;
         for (let i = 0; i < 3; i++) {
-          const srcLobe = nebSrc && nebSrc[i];
-          const dstLobe = nebLobeScaled[i];
-          if (srcLobe && srcLobe.strength * amb > 0.001) {
-            dstLobe.x = srcLobe.x * dpr;
-            dstLobe.y = srcLobe.y * dpr;
-            dstLobe.r = M.max(1, srcLobe.radius * dpr);
-            dstLobe.r2 = dstLobe.r * dstLobe.r;
-            dstLobe.s = srcLobe.strength * amb;
-            dstLobe.hue = srcLobe.hue;
-            nebActiveCount++;
-          } else {
-            dstLobe.s = 0;
-          }
+          const sl = nebS && nebS[i], dl = nebLobeScaled[i];
+          if (sl && sl.strength * amb > 0.001) { dl.x = sl.x * dpr; dl.y = sl.y * dpr; dl.r = max(1, sl.radius * dpr); dl.r2 = dl.r * dl.r; dl.s = sl.strength * amb; dl.hue = sl.hue; nAct++; }
+          else dl.s = 0;
         }
-        const auraTintScale = RIPPLE.auraTint * (specCode === 5 ? 0.55 : 1);
-        const auraLiftScale = RIPPLE.auraLift * (palette.auraLiftScale ?? 1);
-        const nebL = palette.nebulaLiftScale ?? 1;
-        const nebTintScale = RIPPLE.nebulaTint * amb * (specCode === 5 ? 0.45 : 1) * (0.35 + 0.65 * nebL);
-        const nebLiftScale = RIPPLE.nebulaLift * amb * nebL;
-        const prismGain = RIPPLE.prismTint * palette.prismStrength * (specCode === 5 ? 0.45 : 1);
-        const stepX = RIPPLE.cellWidth * dpr;
-        const stepY = RIPPLE.cellHeight * dpr;
-        const cellArea = gw * gh;
+        const aTS = RIPPLE.auraTint * (sc === 5 ? 0.55 : 1), aLS = RIPPLE.auraLift * (p.auraLiftScale ?? 1), nL = p.nebulaLiftScale ?? 1;
+        const nTS = RIPPLE.nebulaTint * amb * (sc === 5 ? 0.45 : 1) * (0.35 + 0.65 * nL), nLS = RIPPLE.nebulaLift * amb * nL;
+        const pGn = RIPPLE.prismTint * p.prismStrength * (sc === 5 ? 0.45 : 1), sX = RIPPLE.cellWidth * dpr, sY = RIPPLE.cellHeight * dpr, cA = gw * gh;
         for (let r = 0; r < rowsN; r++) {
-          const dy0 = M.round(r * stepY);
-          if (dy0 >= H) break;
-          const hRows = M.min(gh, H - dy0);
-          const cyPx = r * stepY + stepY / 2;
-          const py = cyPx - ay;
-          const py2 = py * py;
-          const ndy0 = cyPx - nebLobeScaled[0].y;
-          const ndy1 = cyPx - nebLobeScaled[1].y;
-          const ndy2 = cyPx - nebLobeScaled[2].y;
-          const ndy02 = ndy0 * ndy0;
-          const ndy12 = ndy1 * ndy1;
-          const ndy22 = ndy2 * ndy2;
+          const dy0 = round(r * sY); if (dy0 >= H) break;
+          const hR = min(gh, H - dy0), cy = r * sY + sY / 2, py = cy - ay, py2 = py * py;
           for (let c = 0; c < cols; c++) {
-            const at = (r * cols + c) * 4;
-            let alpha = data[at + 1] / 255;
-            if (alpha <= 0) continue;
-            const mixT = data[at + 2] / 255;
-            let cr = ink[0] + (wave[0] - ink[0]) * mixT;
-            let cg = ink[1] + (wave[1] - ink[1]) * mixT;
-            let cb = ink[2] + (wave[2] - ink[2]) * mixT;
-            const packed = data[at + 3];
-            const cxPx = c * stepX + stepX / 2;
-            let wAura = 0;
-            let auraT = 0;
-            let auraHue = 0;
-            if (auraOn) {
-              const px = cxPx - ax;
-              const d2 = px * px + py2;
-              if (d2 < ar2) {
-                const rNorm = M.sqrt(d2) / ar;
-                const u = 1 - rNorm;
-                const s = u * u * (3 - 2 * u);
-                wAura = s * (0.35 + 0.65 * s);
-                auraT = wAura * auraTintScale * auraStrength;
-                const ang = M.atan2(py, px + 1e-5) / TAU + 0.5;
-                auraHue = ang - rNorm * 0.45 + auraPhase;
-              }
+            const at = (r * cols + c) * 4; let al = data[at + 1] / 255; if (al <= 0) continue;
+            const mt = data[at + 2] / 255, pk = data[at + 3], cx = c * sX + sX / 2;
+            let cr = ink[0] + (wv[0] - ink[0]) * mt, cg = ink[1] + (wv[1] - ink[1]) * mt, cb = ink[2] + (wv[2] - ink[2]) * mt, wA = 0, aT = 0, aH = 0, wN = 0, nR = 0, nG = 0, nB = 0;
+            if (aOn) {
+              const px = cx - ax, d2 = px * px + py2;
+              if (d2 < ar2) { const rN = sqrt(d2) / ar, u = 1 - rN, s = u * u * (3 - 2 * u); wA = s * (0.35 + 0.65 * s); aT = wA * aTS * aS; aH = atan2(py, px + 1e-5) / TAU + 0.5 - rN * 0.45 + aPh; }
             }
-            let wNeb = 0;
-            let nebR = 0;
-            let nebG = 0;
-            let nebB = 0;
-            if (nebActiveCount > 0) {
-              for (let i = 0; i < 3; i++) {
-                const lb = nebLobeScaled[i];
-                if (lb.s <= 0) continue;
-                const ndx = cxPx - lb.x;
-                const ndy = i === 0 ? ndy0 : (i === 1 ? ndy1 : ndy2);
-                const nd2 = ndx * ndx + (i === 0 ? ndy02 : (i === 1 ? ndy12 : ndy22));
-                if (nd2 < lb.r2) {
-                  const rn = M.sqrt(nd2) / lb.r;
-                  const u = 1 - rn;
-                  const s = u * u * (3 - 2 * u);
-                  const wi = s * (0.30 + 0.70 * s) * lb.s;
-                  const nang = M.atan2(ndy, ndx + 1e-5) / TAU;
-                  spectrumRgb(lb.hue + nang * 0.22 - rn * 0.26, nebSampleRgb, !isLight, specCode);
-                  wNeb += wi;
-                  nebR += nebSampleRgb[0] * wi;
-                  nebG += nebSampleRgb[1] * wi;
-                  nebB += nebSampleRgb[2] * wi;
-                }
-              }
+            if (nAct) for (let i = 0; i < 3; i++) {
+              const lb = nebLobeScaled[i]; if (lb.s <= 0) continue;
+              const nx = cx - lb.x, ny = cy - lb.y, nd2 = nx * nx + ny * ny;
+              if (nd2 < lb.r2) { const rn = sqrt(nd2) / lb.r, u = 1 - rn, s = u * u * (3 - 2 * u), wi = s * (0.3 + 0.7 * s) * lb.s; spectrumRgb(lb.hue + (atan2(ny, nx + 1e-5) / TAU) * 0.22 - rn * 0.26, nebSampleRgb, !isL, sc); wN += wi; nR += nebSampleRgb[0] * wi; nG += nebSampleRgb[1] * wi; nB += nebSampleRgb[2] * wi; }
             }
-            const wNebC = wNeb > 1 ? 1 : wNeb;
-            const nebT = wNebC * nebTintScale;
-            const prismT = packed > 31 ? ((packed >> 5) / PRISM_LEVELS) * prismGain * (0.88 + 0.12 * wAura) : 0;
-            if (isLight) {
-              alpha = M.min(0.88, alpha * (1 + (auraLiftScale + 0.72) * wAura * auraStrength + prismT * 0.62 + nebLiftScale * 0.66 * wNebC));
-            } else if (wAura > 0 || wNebC > 0) {
-              alpha = M.min(1, alpha * (1 + auraLiftScale * wAura * auraStrength + nebLiftScale * wNebC));
+            const wNC = wN > 1 ? 1 : wN, nT = wNC * nTS, pT = pk > 31 ? ((pk >> 5) / PRISM_LEVELS) * pGn * (0.88 + 0.12 * wA) : 0;
+            al = isL ? min(0.88, al * (1 + (aLS + 0.72) * wA * aS + pT * 0.62 + nLS * 0.66 * wNC)) : (wA > 0 || wNC > 0 ? min(1, al * (1 + aLS * wA * aS + nLS * wNC)) : al);
+            const tt = aT + pT + nT;
+            if (tt > 0.0001) {
+              const cp = min(RIPPLE.prismCap, tt), mA = isL ? min(0.96, cp * 1.36) : cp;
+              if (aT > 0) spectrumRgb(aH, auraTintRgb, !isL, sc);
+              if (pT > 0) spectrumRgb((pk & 31) / HUE_LEVELS, prismTintRgb, !isL, sc);
+              const invN = wN > 0.0001 ? nT / wN : 0;
+              cr += ((auraTintRgb[0] * aT + prismTintRgb[0] * pT + nR * invN) / tt - cr) * mA;
+              cg += ((auraTintRgb[1] * aT + prismTintRgb[1] * pT + nG * invN) / tt - cg) * mA;
+              cb += ((auraTintRgb[2] * aT + prismTintRgb[2] * pT + nB * invN) / tt - cb) * mA;
             }
-            const total = auraT + prismT + nebT;
-            if (total > 0.0001) {
-              const capped = M.min(RIPPLE.prismCap, total);
-              const mixAmt = isLight ? M.min(0.96, capped * 1.36) : capped;
-              if (auraT > 0) spectrumRgb(auraHue, auraTintRgb, !isLight, specCode);
-              if (prismT > 0) spectrumRgb((packed & 31) / HUE_LEVELS, prismTintRgb, !isLight, specCode);
-              const nr = wNeb > 0.0001 ? nebR / wNeb : 0;
-              const ng = wNeb > 0.0001 ? nebG / wNeb : 0;
-              const nb = wNeb > 0.0001 ? nebB / wNeb : 0;
-              const tr = (auraTintRgb[0] * auraT + prismTintRgb[0] * prismT + nr * nebT) / total;
-              const tg = (auraTintRgb[1] * auraT + prismTintRgb[1] * prismT + ng * nebT) / total;
-              const tb = (auraTintRgb[2] * auraT + prismTintRgb[2] * prismT + nb * nebT) / total;
-              cr += (tr - cr) * mixAmt;
-              cg += (tg - cg) * mixAmt;
-              cb += (tb - cb) * mixAmt;
-            }
-            const a8 = M.round(alpha * 256);
-            const R = M.round(cr) & 255;
-            const G = M.round(cg) & 255;
-            const B = M.round(cb) & 255;
-            const rgb = LITTLE_ENDIAN ? (B << 16) | (G << 8) | R : (R << 24) | (G << 16) | (B << 8);
-            const dx0 = M.round(c * stepX);
+            const a8 = round(al * 256), R = round(cr) & 255, G = round(cg) & 255, B = round(cb) & 255;
+            const rgb = LITTLE_ENDIAN ? (B << 16) | (G << 8) | R : (R << 24) | (G << 16) | (B << 8), dx0 = round(c * sX);
             if (dx0 >= W) continue;
-            const wCols = M.min(gw, W - dx0);
-            const m0 = (data[at] % GLYPHS.length) * cellArea;
-            let o = dy0 * W + dx0;
-            for (let y = 0, m = m0; y < hRows; y++, m += gw, o += W) {
-              for (let x = 0; x < wCols; x++) {
-                const v = mask[m + x];
-                if (v === 0) continue;
-                const av = (v * a8) >> 8;
-                pixels[o + x] = LITTLE_ENDIAN ? ((av << 24) | rgb) >>> 0 : (rgb | av) >>> 0;
-              }
-            }
+            for (let y = 0, m = (data[at] % GLYPHS.length) * cA, o = dy0 * W + dx0, wC = min(gw, W - dx0); y < hR; y++, m += gw, o += W)
+              for (let x = 0; x < wC; x++) { const v = mask[m + x]; if (v) pixels[o + x] = LITTLE_ENDIAN ? ((((v * a8) >> 8) << 24) | rgb) >>> 0 : (rgb | ((v * a8) >> 8)) >>> 0; }
           }
         }
         ctx.putImageData(image, 0, 0);
@@ -1047,35 +832,23 @@ color = vec4(rgb * a, a);
     const { cellWidth, cellHeight } = RIPPLE;
     let cells = 0, glow, patch, glyphs, edge, mask, breathSin, breathCos, wasLit, colClouds;
     let lastIdleRefreshMs = -Infinity, lastIdleDark = null, lastIdleAlphaScale = -1;
-    const cloudColumns = new Map();
-    const nebulaState = [
-      { x: 0, y: 0, radius: 1, strength: 0, hue: 0 },
-      { x: 0, y: 0, radius: 1, strength: 0, hue: 0 },
-      { x: 0, y: 0, radius: 1, strength: 0, hue: 0 },
-    ];
+    const cloudColumns = new Map(), nebulaState = [0, 1, 2].map(() => ({ x: 0, y: 0, radius: 1, strength: 0, hue: 0 }));
     const effective = { dark: true, ink: [0, 0, 0], wave: [0, 0, 0], fontFamily: 'monospace', aura: null, nebula: nebulaState, prismStrength: 1, auraPhase: 0, ambientIntensity: 1, spectrumCode: 0, alphaScale: 1, nebulaLiftScale: 1, auraLiftScale: 1, cloudDriftPx: 0, breathSinW: 0, breathCosW: 1 };
-    let lastNebulaEnabled = true, instanceZones = normalizeZones(options && options.calmZones);
-    let appliedKey = null, lastZonesRef = null, lastZonesNormalized = [];
-    let lastTick = -1, lastDraw = -Infinity, glowing = false, prismBurst = 0, stale = true;
+    let lastNebulaEnabled = true, instanceZones = normalizeZones(options?.calmZones), appliedKey = null, lastZonesRef = null, lastZonesNormalized = [], lastTick = -1, lastDraw = -Infinity, glowing = false, prismBurst = 0, stale = true;
     function initGrid(cN, rN) {
       columns = clampDim(cN); rows = clampDim(rN); cells = columns * rows;
-      glow = new Float32Array(cells); patch = new Float32Array(cells); glyphs = new Uint8Array(cells);
-      edge = new Float32Array(cells); mask = new Float32Array(cells);
-      breathSin = new Float32Array(cells); breathCos = new Float32Array(cells); wasLit = new Uint8Array(cells);
-      colClouds = new Array(M.max(0, columns));
-      cloudColumns.clear();
+      const F = () => new Float32Array(cells), U = () => new Uint8Array(cells);
+      glow = F(); patch = F(); edge = F(); mask = F(); breathSin = F(); breathCos = F(); glyphs = U(); wasLit = U();
+      colClouds = new Array(M.max(0, columns)); cloudColumns.clear();
       appliedKey = null; lastTick = -1; lastIdleRefreshMs = -Infinity; glowing = false; stale = true;
-      const featherCols = M.max(1, columns * RIPPLE.edgeFeather), featherRows = M.max(1, rows * RIPPLE.edgeFeather);
+      const fC = M.max(1, columns * RIPPLE.edgeFeather), fR = M.max(1, rows * RIPPLE.edgeFeather), bS = RIPPLE.breathScale;
       for (let row = 0; row < rows; row++) {
-        const y = row * cellHeight + cellHeight / 2;
-        const ey = smooth((M.min(row, rows - 1 - row) + 0.5) / featherRows);
-        const rowBase = row * columns;
-        for (let column = 0; column < columns; column++) {
-          const cell = rowBase + column, x = column * cellWidth + cellWidth / 2;
+        const y = row * cellHeight + cellHeight / 2, ey = smooth((M.min(row, rows - 1 - row) + 0.5) / fR), rowBase = row * columns;
+        for (let col = 0; col < columns; col++) {
+          const cell = rowBase + col, x = col * cellWidth + cellWidth / 2;
           patch[cell] = patchClear(x, y);
-          const ex = smooth((M.min(column, columns - 1 - column) + 0.5) / featherCols);
-          edge[cell] = mask[cell] = ex * ey;
-          const phase = fractalNoise(x / RIPPLE.breathScale + 53, y / RIPPLE.breathScale + 71) * TAU * 1.7;
+          edge[cell] = mask[cell] = smooth((M.min(col, columns - 1 - col) + 0.5) / fC) * ey;
+          const phase = fractalNoise(x / bS + 53, y / bS + 71) * TAU * 1.7;
           breathSin[cell] = M.sin(phase); breathCos[cell] = M.cos(phase);
         }
       }
@@ -1085,23 +858,17 @@ color = vec4(rgb * a, a);
       const key = zonesKey(list);
       if (key === appliedKey) return;
       appliedKey = key;
-      for (let row = 0; row < rows; row++) {
-        const y = row * cellHeight + cellHeight / 2;
-        for (let column = 0; column < columns; column++) {
-          const cell = row * columns + column;
-          const x = column * cellWidth + cellWidth / 2;
+      const { max, min, sqrt } = M;
+      for (let r = 0; r < rows; r++) {
+        const y = r * cellHeight + cellHeight / 2;
+        for (let c = 0; c < columns; c++) {
+          const cell = r * columns + c, x = c * cellWidth + cellWidth / 2;
           let calm = 1;
           for (let i = 0; i < list.length; i++) {
-            const z = list[i];
-            const dx = M.max(z.x - x, 0, x - (z.x + z.w));
-            const dy = M.max(z.y - y, 0, y - (z.y + z.h));
-            const signed = dx > 0 || dy > 0
-              ? M.sqrt(dx * dx + dy * dy)
-              : -M.min(x - z.x, z.x + z.w - x, y - z.y, z.y + z.h - y);
-            if (signed >= z.feather) continue;
-            const inset = z.feather * 0.35;
-            const t = smooth((signed + inset) / (z.feather + inset));
-            const f = z.alpha + (1 - z.alpha) * t;
+            const z = list[i], dx = max(z.x - x, 0, x - (z.x + z.w)), dy = max(z.y - y, 0, y - (z.y + z.h));
+            const s = dx > 0 || dy > 0 ? sqrt(dx * dx + dy * dy) : -min(x - z.x, z.x + z.w - x, y - z.y, z.y + z.h - y);
+            if (s >= z.feather) continue;
+            const ins = z.feather * 0.35, f = z.alpha + (1 - z.alpha) * smooth((s + ins) / (z.feather + ins));
             if (f < calm) calm = f;
           }
           mask[cell] = edge[cell] * calm;
@@ -1136,112 +903,53 @@ color = vec4(rgb * a, a);
       }
       return col;
     }
-    function prepareEffective(palette, seconds, still) {
-      const dark = palette.dark !== false;
-      const rawSpec = palette.spectrum ?? palette.accentTone ?? palette.accent;
-      const specCode =
-        rawSpec !== undefined && rawSpec !== null
-          ? resolveHorizonSpectrumCode(rawSpec)
-          : detectHostSpectrumCode(canvas, dark);
-      const cl01 = (v, d) => (v !== undefined ? clampFinite(v, 1, 0, 1) : d);
-      const ambient = cl01(palette.ambientIntensity, 1);
-      const ink = palette.ink || [146, 148, 156];
-      const wave = palette.wave || [214, 218, 228];
-      const useCoolLightMix = !dark && (specCode === 0 || specCode === 2);
-      const mix = useCoolLightMix ? RIPPLE.lightCoolMix : 0;
-      for (let i = 0; i < 3; i++) {
-        effective.ink[i] = M.round(ink[i] + (RIPPLE.lightInkCool[i] - ink[i]) * mix);
-        effective.wave[i] = M.round(wave[i] + (RIPPLE.lightWaveCool[i] - wave[i]) * mix * 0.65);
-      }
-      const c = palette.conv === true;
-      effective.dark = dark;
-      effective.fontFamily = palette.fontFamily || 'monospace';
-      effective.aura = ambient <= 0.001 ? null : (palette.aura || null);
-      effective.ambientIntensity = ambient;
-      effective.spectrumCode = specCode;
-      effective.alphaScale = cl01(palette.alphaScale, c ? (ambient <= 0.001 ? 0 : 0.85) : 1);
-      effective.nebulaLiftScale = cl01(palette.nebulaLiftScale, c ? 0.75 : 1);
-      effective.auraLiftScale = cl01(palette.auraLiftScale, c ? 0.75 : 1);
-      if (palette.nebula === false || ambient <= 0.001) {
-        effective.nebula = null;
-        lastNebulaEnabled = false;
-      } else {
-        effective.nebula = computeNebulaLobes(seconds, columns * cellWidth, rows * cellHeight, Boolean(still), nebulaState);
-        lastNebulaEnabled = true;
-      }
-      const ps = Number(palette.prismStrength ?? (palette.aura && palette.aura.active ? palette.aura.strength : 1));
-      effective.prismStrength = (Number.isFinite(ps) ? M.max(0, M.min(1, ps)) : 1) * ambient;
-      const ph = Number.isFinite(Number(palette.auraPhase)) ? Number(palette.auraPhase) : seconds * 0.12;
-      effective.auraPhase = ph - M.floor(ph);
-      return effective;
+    function prepareEffective(p, seconds, still) {
+      const dark = p.dark !== false, rawSpec = p.spectrum ?? p.accentTone ?? p.accent, e = effective;
+      const specCode = rawSpec != null ? resolveHorizonSpectrumCode(rawSpec) : detectHostSpectrumCode(canvas, dark);
+      const cl01 = (v, d) => (v !== undefined ? clampFinite(v, 1, 0, 1) : d), amb = cl01(p.ambientIntensity, 1);
+      const ink = p.ink || [146, 148, 156], wave = p.wave || [214, 218, 228], mix = !dark && (specCode === 0 || specCode === 2) ? RIPPLE.lightCoolMix : 0;
+      for (let i = 0; i < 3; i++) { e.ink[i] = M.round(ink[i] + (RIPPLE.lightInkCool[i] - ink[i]) * mix); e.wave[i] = M.round(wave[i] + (RIPPLE.lightWaveCool[i] - wave[i]) * mix * 0.65); }
+      const c = p.conv === true, ph = Number.isFinite(Number(p.auraPhase)) ? Number(p.auraPhase) : seconds * 0.12;
+      Object.assign(e, {
+        dark, fontFamily: p.fontFamily || 'monospace', aura: amb <= 0.001 ? null : (p.aura || null), ambientIntensity: amb, spectrumCode: specCode,
+        alphaScale: cl01(p.alphaScale, c ? (amb <= 0.001 ? 0 : 0.85) : 1), nebulaLiftScale: cl01(p.nebulaLiftScale, c ? 0.75 : 1), auraLiftScale: cl01(p.auraLiftScale, c ? 0.75 : 1),
+        nebula: (lastNebulaEnabled = !(p.nebula === false || amb <= 0.001)) ? computeNebulaLobes(seconds, columns * cellWidth, rows * cellHeight, Boolean(still), nebulaState) : null,
+        prismStrength: clampFinite(p.prismStrength ?? (p.aura?.active ? p.aura.strength : 1), 1, 0, 1) * amb, auraPhase: ph - M.floor(ph),
+      });
+      return e;
     }
-    function isFieldBusy() {
-      return Boolean(waves && waves.active()) || glowing || prismBurst > 0;
-    }
+    const isFieldBusy = () => Boolean(waves?.active()) || glowing || prismBurst > 0;
+    const clC = (nx) => M.max(0, M.min(columns - 1, M.round(nx * (columns - 1))));
     return {
       mode: renderer ? renderer.mode : 'none',
-      isContextLost: () => Boolean(renderer && renderer.isContextLost && renderer.isContextLost()),
-      getBufferSize: () => (renderer && renderer.getBufferSize ? renderer.getBufferSize() : { width: canvas?.width || 0, height: canvas?.height || 0 }),
+      isContextLost: () => Boolean(renderer?.isContextLost?.()),
+      getBufferSize: () => (renderer?.getBufferSize ? renderer.getBufferSize() : { width: canvas?.width || 0, height: canvas?.height || 0 }),
       releaseBackingStore() { renderer?.releaseBackingStore?.(); },
       invalidate() { stale = true; },
       resize(nextCols, nextRows, nextWaves, nextDpr) {
         if (nextWaves) waves = nextWaves;
         const nc = clampDim(nextCols), nr = clampDim(nextRows);
-        if (!renderer || typeof renderer.resize !== 'function' || nc <= 0 || nr <= 0) return false;
-        if (nc === columns && nr === rows) {
-          if (renderer.mode === 'worker-webgl2' && nextDpr) renderer.resize(nc, nr, nextDpr);
-          stale = true;
-          return true;
-        }
+        if (!renderer?.resize || nc <= 0 || nr <= 0) return false;
+        if (nc === columns && nr === rows) { if (renderer.mode === 'worker-webgl2' && nextDpr) renderer.resize(nc, nr, nextDpr); stale = true; return true; }
         if (!renderer.resize(nc, nr, nextDpr)) return false;
-        initGrid(nc, nr);
-        return true;
+        initGrid(nc, nr); return true;
       },
-      setCalmZones(zones) {
-        instanceZones = normalizeZones(zones);
-        stale = true;
-      },
-      busy: isFieldBusy,
-      isSettled: () => !isFieldBusy(),
+      setCalmZones(zones) { instanceZones = normalizeZones(zones); stale = true; },
+      busy: isFieldBusy, isSettled: () => !isFieldBusy(),
       triggerLiftoffBurst(normX = 0.5, normY = 0.62) {
-        if (!waves || typeof waves.disturb !== 'function' || columns <= 0 || rows <= 0) return false;
-        const nx = clampFinite(normX, 0.5, 0, 1);
-        const ny = clampFinite(normY, 0.62, 0, 1);
-        const col = M.max(0, M.min(columns - 1, M.round(nx * (columns - 1))));
-        const row = M.max(0, M.min(rows - 1, M.round(ny * (rows - 1))));
-        waves.disturb(col, row, {
-          amplitudeScale: 1.55,
-          radiusScale: 1.45,
-          duration: 0.42,
-          frequency: 6.4,
-          loadWeight: 0.22,
-        });
-        waves.disturb(col, M.max(0, row - 1), {
-          amplitudeScale: 1.28,
-          radiusScale: 2.35,
-          duration: 0.56,
-          frequency: 4.5,
-          delay: 0.035,
-          loadWeight: 0.22,
-        });
-        prismBurst = 1;
-        stale = true;
-        return true;
+        if (!waves?.disturb || columns <= 0 || rows <= 0) return false;
+        const col = clC(clampFinite(normX, 0.5, 0, 1)), row = M.max(0, M.min(rows - 1, M.round(clampFinite(normY, 0.62, 0, 1) * (rows - 1))));
+        waves.disturb(col, row, { amplitudeScale: 1.55, radiusScale: 1.45, duration: 0.42, frequency: 6.4, loadWeight: 0.22 });
+        waves.disturb(col, M.max(0, row - 1), { amplitudeScale: 1.28, radiusScale: 2.35, duration: 0.56, frequency: 4.5, delay: 0.035, loadWeight: 0.22 });
+        prismBurst = 1; stale = true; return true;
       },
       triggerTideSwell() {
-        if (!waves || typeof waves.disturb !== 'function' || columns <= 0 || rows <= 0) return false;
+        if (!waves?.disturb || columns <= 0 || rows <= 0) return false;
         const baseRow = M.max(0, rows - 1 - M.min(2, M.floor(rows * 0.06)));
-        for (const [nx, delay, amplitudeScale, radiusScale, duration, frequency] of [
-          [0.5, 0, 0.78, 1.32, 0.62, 3.2],
-          [0.22, 0.07, 0.66, 1.18, 0.6, 3.1],
-          [0.78, 0.14, 0.66, 1.18, 0.6, 3.1],
-        ]) {
-          waves.disturb(M.max(0, M.min(columns - 1, M.round(nx * (columns - 1)))), baseRow, {
-            amplitudeScale, radiusScale, duration, frequency, delay, loadWeight: 0.16,
-          });
+        for (const [nx, delay, amplitudeScale, radiusScale, duration, frequency] of [[0.5, 0, 0.78, 1.32, 0.62, 3.2], [0.22, 0.07, 0.66, 1.18, 0.6, 3.1], [0.78, 0.14, 0.66, 1.18, 0.6, 3.1]]) {
+          waves.disturb(clC(nx), baseRow, { amplitudeScale, radiusScale, duration, frequency, delay, loadWeight: 0.16 });
         }
-        stale = true;
-        return true;
+        stale = true; return true;
       },
       needsDraw(now, still) {
         if (isCanvasDocHidden(canvas)) return false;
@@ -1578,168 +1286,111 @@ float aa = clamp(fwidth(dist) * 1.15, 0.035, 0.14);
 float r = 0.08 + 0.16 * msk;
 return (1.0 - smoothstep(r - aa, r + aa * 0.35, dist)) * msk;
 }
-const float INV_FIELD_NORM = 1.1304178;
-const vec3 DEEP_SPACE_BLUE = vec3(0.059, 0.090, 0.227);
-const vec3 ZENITH_BLUE = vec3(0.192, 0.525, 1.000);
-const vec3 SKY_BLUE = vec3(0.361, 0.776, 0.988);
-const vec3 HAZE_BLUE = vec3(0.733, 0.886, 1.000);
-const vec3 PRISM_COBALT = vec3(0.259, 0.522, 0.957);
-const vec3 PRISM_IRIS = vec3(0.608, 0.447, 0.796);
-const vec3 DAY_COBALT = vec3(0.145, 0.388, 0.922);
-const vec3 DAY_IRIS = vec3(0.486, 0.227, 0.929);
-const vec3 DAY_CORAL = vec3(0.918, 0.263, 0.208);
-const vec3 DAY_AMBER = vec3(0.851, 0.467, 0.024);
-const vec3 DAY_CERULEAN = vec3(0.008, 0.518, 0.780);
-const vec3 DAY_TERRACOTTA = vec3(0.761, 0.349, 0.204);
-const vec3 DAY_SIENNA = vec3(0.635, 0.247, 0.141);
-const vec3 ICE_MIST = vec3(0.839, 0.933, 1.000);
-const vec3 WARM_DARK_B = vec3(0.851, 0.467, 0.341);
-const vec3 MONO_DARK_HI = vec3(0.847, 0.878, 0.929);
+const float INV_FIELD_NORM=1.1304178;
+const vec3 DB=vec3(.059,.09,.227),ZB=vec3(.192,.525,1.),SB=vec3(.361,.776,.988),HB=vec3(.733,.886,1.),PC=vec3(.259,.522,.957),PI=vec3(.608,.447,.796),DAY_COBALT=vec3(.145,.388,.922),DAY_IRIS=vec3(.486,.227,.929),DAY_CORAL=vec3(.918,.263,.208),DAY_AMBER=vec3(.851,.467,.024),DE=vec3(.008,.518,.78),DAY_TERRACOTTA=vec3(.761,.349,.204),DS=vec3(.635,.247,.141),ICE_MIST=vec3(.839,.933,1.),WARM_DARK_B=vec3(.851,.467,.341),MONO_DARK_HI=vec3(.847,.878,.929);
 float sf(float t){return smoothstep(0.,1.,fract(t));}
-vec3 blueLoop(float x){
-float t=fract(x)*4.,f=sf(t);
-vec3 i=mix(DEEP_SPACE_BLUE,ZENITH_BLUE,.84),c=mix(SKY_BLUE,HAZE_BLUE,.35);
-return t<1.?mix(ZENITH_BLUE,i,f):t<2.?mix(i,SKY_BLUE,f):t<3.?mix(SKY_BLUE,c,f):mix(c,ZENITH_BLUE,f);
-}
-vec3 prismLoop(float x){
-float t=fract(x)*7.,f=sf(t);
-vec3 cr=vec3(.94,.4,.48),am=vec3(.95,.64,.32);
-return t<1.?mix(PRISM_COBALT,PRISM_IRIS,f):t<2.?mix(PRISM_IRIS,cr,f):t<3.?mix(cr,am,f):t<4.?mix(am,cr,f):t<5.?mix(cr,PRISM_IRIS,f):t<6.?mix(PRISM_IRIS,SKY_BLUE,f):mix(SKY_BLUE,PRISM_COBALT,f);
-}
-vec3 neonLoop(float x){
-float t=fract(x)*4.,f=sf(t);
-vec3 m=vec3(.863,.361,.878);
-return t<1.?mix(SKY_BLUE,PRISM_IRIS,f):t<2.?mix(PRISM_IRIS,m,f):t<3.?mix(m,PRISM_COBALT,f):mix(PRISM_COBALT,SKY_BLUE,f);
-}
-vec3 daylightInkLoop(float x){
-float t=fract(x)*5.,f=sf(t);
-return t<1.?mix(DAY_COBALT,DAY_IRIS,f):t<2.?mix(DAY_IRIS,DAY_CORAL,f):t<3.?mix(DAY_CORAL,DAY_AMBER,f):t<4.?mix(DAY_AMBER,DAY_CERULEAN,f):mix(DAY_CERULEAN,DAY_COBALT,f);
-}
-vec3 evalBaseDark(float ph){
-return uSpecModes.x>.5?mix(uBaseA,uBaseB,.5+.5*sin(ph*6.2831853)):blueLoop(ph);
-}
-vec3 evalPrismDark(float ph){
-if(uSpecModes.y>.5)return uSpecModes.y>1.5?neonLoop(ph):mix(uPrismA,uPrismB,.5+.5*sin(ph*6.2831853+1.1));
-return prismLoop(ph);
-}
-vec3 evalInkLight(float ph,float washPh){
-float m=uSpecModes.z;
-if(m<.5)return daylightInkLoop(ph);
-float w=.5+.5*sin(ph*6.2831853),sw=.5+.5*sin(washPh);
-if(m<1.5)return mix(uLightA,uLightB,w);
-if(m<2.5)return mix(DAY_TERRACOTTA,mix(DAY_AMBER,DAY_SIENNA,sw),.45+.45*w);
-if(m<3.5)return mix(uLightA,uLightB,sw);
-return mix(uLightA,uLightB,.5*(w+sw));
-}
+highp vec3 lmix(highp vec3 a,highp vec3 b,highp float f){return sqrt(max(mix(a*a,b*b,clamp(f,0.,1.)),vec3(0.)));}
+highp vec3 bLp(highp float x){highp float t=fract(x)*4.,f=sf(t);highp vec3 i=lmix(DB,ZB,.84),c=lmix(SB,HB,.35);return t<1.?lmix(ZB,i,f):t<2.?lmix(i,SB,f):t<3.?lmix(SB,c,f):lmix(c,ZB,f);}
+highp vec3 prismLoop(highp float x){highp float t=fract(x)*7.,f=sf(t);highp vec3 cr=vec3(.94,.4,.48),am=vec3(.95,.64,.32);return t<1.?lmix(PC,PI,f):t<2.?lmix(PI,cr,f):t<3.?lmix(cr,am,f):t<4.?lmix(am,cr,f):t<5.?lmix(cr,PI,f):t<6.?lmix(PI,SB,f):lmix(SB,PC,f);}
+highp vec3 neonLoop(highp float x){highp float t=fract(x)*4.,f=sf(t);highp vec3 m=vec3(.863,.361,.878);return t<1.?lmix(SB,PI,f):t<2.?lmix(PI,m,f):t<3.?lmix(m,PC,f):lmix(PC,SB,f);}
+vec3 daylightInkLoop(float x){float t=fract(x)*5.,f=sf(t);return t<1.?mix(DAY_COBALT,DAY_IRIS,f):t<2.?mix(DAY_IRIS,DAY_CORAL,f):t<3.?mix(DAY_CORAL,DAY_AMBER,f):t<4.?mix(DAY_AMBER,DE,f):mix(DE,DAY_COBALT,f);}
+highp vec3 eBD(highp float p){return uSpecModes.x>.5?lmix(uBaseA,uBaseB,.5+.5*sin(p*6.2831853)):bLp(p);}
+highp vec3 ePD(highp float p){return uSpecModes.y>.5?(uSpecModes.y>1.5?neonLoop(p):lmix(uPrismA,uPrismB,.5+.5*sin(p*6.2831853+1.1))):prismLoop(p);}
+vec3 eIL(float p,float wP){float m=uSpecModes.z;if(m<.5)return daylightInkLoop(p);float w=.5+.5*sin(p*6.2831853),sw=.5+.5*sin(wP);return m<1.5?mix(uLightA,uLightB,w):m<2.5?mix(DAY_TERRACOTTA,mix(DAY_AMBER,DS,sw),.45+.45*w):m<3.5?mix(uLightA,uLightB,sw):mix(uLightA,uLightB,.5*(w+sw));}
 vec3 sm(vec3 a,float p){return uPre1.y>.001?mix(a,mix(uSemA,uSemB,.5+.5*sin(p*6.2831853)),uPre1.y):a;}
 void main() {
 highp vec2 uv = gl_FragCoord.xy / max(uRes, vec2(1.0));
+highp float t = uTime;
 float reach = max(uReach, 0.01);
+highp float outAlpha=0.;highp vec3 premulRgb=vec3(0.);
+if(uPre1.x>.5){
+highp float topF=1.-smoothstep(.38,.98,uv.y);
+if(topF<.0008){outColor=vec4(0.);return;}
+highp float wv=.065*sin(uv.x*2.15-t*.22)+.038*sin(uv.x*1.35+t*.14+1.3),yE=max(uv.y/max(reach,.12)+wv*.5,0.);
+highp float core=exp(-yE*yE*2.9),env=(core*.76+exp(-yE*yE*.88)*.36)*(.24+.76*pow(sin(clamp(uv.x,0.,1.)*3.14159265),.72))*topF;
+if(env<.0008){outColor=vec4(0.);return;}
+highp float ph=uv.x*.38+t*.045+.07*sin(uv.x*1.8-t*.13),w1=.5+.5*sin(ph*6.2831853),w2=.5+.5*sin(ph*6.2831853+2.05);
+highp vec3 col;
+if(uDark>.5){
+col=uSpecModes.x>.5?lmix(uBaseA,uBaseB,w1):lmix(lmix(vec3(.085,.175,.46),ZB,w1),lmix(SB,vec3(.41,.42,.88),w2),.36+.18*w2);
+if(uSpecModes.y>1.5)col=lmix(col,lmix(SB,PI,w2),.32);
+col=lmix(col,SB,core*.18);
+}else col=uSpecModes.z>.5?mix(uLightA,uLightB,w1):mix(DAY_COBALT,mix(DE,DAY_IRIS,.22*w2),w1);
+outAlpha=clamp(env*(uDark>.5?mix(.34,.52,clamp(uIntensity,0.,1.))*uPresence:mix(.22,.34,clamp(uIntensity,0.,1.))*uPre0.w),0.,uDark>.5?.56:.38);
+premulRgb=clamp(col,0.,1.)*outAlpha;
+}else{
 float stretch = uPre1.w;
 float surgeUp = max(uSurge, 0.0);
-float y = uv.y / reach;
-float yCut = y - 0.25 * stretch;
-if (yCut > 1.6 + 0.22 * surgeUp) { outColor = vec4(0.0); return; }
-float topFeather = 1.0 - smoothstep(1.15 + 0.14 * surgeUp, 1.58 + 0.22 * surgeUp, yCut);
-highp float t = uTime;
-float waveA = sin(uv.x * 5.2 - t * 0.68);
-float waveB = sin(uv.x * 8.6 + t * 0.46 + 1.4);
-float curtain = 0.5 + 0.32 * waveA + 0.18 * waveB;
-float xEdge = mix(0.35, 1.0, smoothstep(0.0, 0.3, uv.x) * (1.0 - smoothstep(0.7, 1.0, uv.x)));
-float jutWave = (waveA * 0.65 + waveB * 0.35) * 0.24;
-float hMin = max(y + stretch * (0.36 * (-0.2975 + jutWave) - 0.048125), 0.0);
-float glowUpper = exp(-hMin * hMin * 4.0) * (0.76 + 0.42 * curtain) * xEdge;
-if (glowUpper * topFeather < 0.0008 && abs(uSurge) < 0.0001) { outColor = vec4(0.0); return; }
-highp vec2 px = gl_FragCoord.xy / max(uDpr, 0.5);
-highp vec2 res = uRes / max(uDpr, 0.5);
-highp vec2 p = (px - res * 0.5) / max(res.y, 1.0);
-highp vec2 q = p + 0.09 * vec2(fbm3(p * 2.0 + vec2(t * 0.16, 0.0)), fbm3(p * 2.0 + vec2(3.1, -t * 0.13))) - 0.045;
-float jut = (fbm3(vec2(px.x / 220.0 + t * 0.18, t * 0.11)) - 0.5) * 0.68 + jutWave;
-float h = max(y + stretch * (0.36 * jut + 0.11 * (fbm3(vec2(px.x / 90.0 - t * 0.21, t * 0.14 + 3.0)) - 0.5)), 0.0);
-float glow = exp(-h * h * 4.0) * (0.76 + 0.42 * curtain) * xEdge;
+highp float y=uv.y/reach,yCut=y-.25*stretch;
+if(yCut>1.6+.22*surgeUp){outColor=vec4(0.);return;}
+highp float topFeather=1.-smoothstep(1.15+.14*surgeUp,1.58+.22*surgeUp,yCut);
+highp float waveA=sin(uv.x*5.2-t*.68),waveB=sin(uv.x*8.6+t*.46+1.4),curtain=.5+.32*waveA+.18*waveB;
+highp float xEdge=mix(.35,1.,smoothstep(0.,.3,uv.x)*(1.-smoothstep(.7,1.,uv.x))),jutWave=(waveA*.65+waveB*.35)*.24;
+highp float hMin=max(y+stretch*(.36*(-.2975+jutWave)-.048125),0.);
+highp float glowUpper=exp(-hMin*hMin*4.)*(.76+.42*curtain)*xEdge;
+if(glowUpper * topFeather < 0.0008&&abs(uSurge)<.0001){outColor=vec4(0.);return;}
+highp vec2 px=gl_FragCoord.xy/max(uDpr,.5),res=uRes/max(uDpr,.5),p=(px-res*.5)/max(res.y,1.);
+highp vec2 q=p+.09*vec2(fbm3(p * 2.0+vec2(t*.16,0.)),fbm3(p * 2.0+vec2(3.1,-t*.13)))-.045;
+highp float jut=(fbm3(vec2(px.x/220.+t*.18,t*.11))-.5)*.68+jutWave;
+highp float h=max(y+stretch*(.36*jut+.11*(fbm3(vec2(px.x/90.-t*.21,t*.14+3.))-.5)),0.);
+highp float glow=exp(-h*h*4.)*(.76+.42*curtain)*xEdge;
 if (glow * topFeather < 0.0008 && abs(uSurge) < 0.0001) { outColor = vec4(0.0); return; }
-float basePhase = px.x / max(res.x, 1.0) * 0.9 + t * 0.15 + 0.22 * fbm3(q * 1.5);
-float semW = uPre1.y;
-vec3 base = sm(evalBaseDark(basePhase), basePhase);
-float n = fbm(q * 3.0 + t * 0.16);
-float field = (1.0 - exp(-1.8 * glow * (0.75 + 0.45 * n))) * INV_FIELD_NORM;
-float effPrism = uPre1.z;
-float pPhase = 0.0;
-if (uDark <= 0.5 || effPrism > 0.0001 || abs(uSurge) > 0.0001) {
-pPhase = uv.x * 1.18 - t * 0.18 + 0.28 * fbm3(q * 2.1 + vec2(0.0, t * 0.12)) + 0.14 * y;
+highp float basePhase=px.x/max(res.x,1.)*.9+t*.15+.22*fbm3(q*1.5);
+float semW=uPre1.y;
+highp vec3 base=sm(eBD(basePhase),basePhase);
+highp float n=fbm(q*3.+t*.16),field=(1.-exp(-1.8*glow*(.75+.45*n)))*INV_FIELD_NORM;
+float effPrism=uPre1.z,pPhase=0.,dPM=0.,dB=0.,sAr=0.,sDy=0.,cWv=0.,cPh=0.;vec3 dPT=vec3(0.);
+if(uDark<=.5||effPrism>.0001||abs(uSurge)>.0001)pPhase=uv.x*1.18-t*.18+.28*fbm3(q*2.1+vec2(0.,t*.12))+.14*y;
+if(effPrism>.0001||abs(uSurge)>.0001){
+vec3 pCol=sm(ePD(pPhase),pPhase);
+if(effPrism>.0001){
+float wg=smoothstep(.04,.34,field)*(1.-.18*smoothstep(.76,.99,field)),cs=.62+.38*smoothstep(-.24,.26,jut);
+base = mix(base, pCol, clamp(effPrism * 1.45, 0.0, 1.0)) * (0.86 + 0.28 * wg * cs);
+dPT=pCol;dPM=clamp(effPrism*1.25*(.45+.55*cs),0.,.78);
 }
-vec3 dotPrismTint = vec3(0.0);
-float dotPrismMix = 0.0, dotBoost = 0.0, surgeArc = 0.0, surgeDy = 0.0, chimeWave = 0.0, chimePhase = 0.0;
-if (effPrism > 0.0001 || abs(uSurge) > 0.0001) {
-vec3 pCol = sm(evalPrismDark(pPhase), pPhase);
-if (effPrism > 0.0001) {
-float wing=smoothstep(.04,.34,field)*(1.-.18*smoothstep(.76,.99,field)),caustics=.62+.38*smoothstep(-.24,.26,jut);
-base = mix(base, pCol, clamp(effPrism * 1.45, 0.0, 1.0)) * (0.86 + 0.28 * wing * caustics);
-dotPrismTint=pCol;dotPrismMix=clamp(effPrism*1.25*(.45+.55*caustics),0.,.78);
-}
-if (uSurge > 0.0001) {
-float sp = clamp(uSurge, 0.0, 1.0), xRel = (uv.x - 0.5) * 2.0, xSpan = smoothstep(0.0, 0.22, uv.x) * (1.0 - smoothstep(0.78, 1.0, uv.x)), frontY = uPre0.y - 0.15 * xRel * xRel + 0.06 * jut, dy = y - frontY, arc = (dy >= 0.0 ? exp(-dy * dy * 24.0) : exp(-dy * dy * 5.2)) * uPre0.x * xSpan;
-surgeArc = arc; surgeDy = dy - sp * 0.35;
-vec3 surgeLead = sm(uSurgeLead, pPhase + 0.2), surgeTrail = sm(evalPrismDark(pPhase + surgeDy * 1.3), pPhase + surgeDy * 1.3), surgeCol = mix(surgeLead, surgeTrail, 0.62);
-field = clamp(field + arc * 0.52, 0.0, 1.0);
-base = mix(base, surgeCol, clamp(arc * 0.78, 0.0, 0.85));
-dotBoost += arc * 0.58; dotPrismTint = mix(dotPrismTint, surgeCol, clamp(arc * 0.85, 0.0, 1.0)); dotPrismMix = max(dotPrismMix, clamp(arc * 0.82, 0.0, 0.85));
-} else if (uSurge < -0.0001) {
-float cp = clamp(-uSurge, 0.0, 1.0), rx = abs(uv.x - 0.5), dr = (rx - uPre0.y) / 0.135, hRip = exp(-dr * dr) + 0.32 * (1.0 - cp) * exp(-rx * rx * 18.0), dsy = y - uPre0.z, vSet = exp(-dsy * dsy * 13.5) * (1.0 - smoothstep(1.05, 1.35, y)), chime = hRip * vSet * uPre0.x;
-chimeWave = chime; chimePhase = uv.x * 1.5 + rx * 2.0 - cp * 0.35;
-vec3 chimeLead = sm(uChimeLead, chimePhase), chimeCol = mix(mix(chimeLead, evalPrismDark(chimePhase), 0.22), chimeLead, semW);
-field = clamp(field + chime * 0.46, 0.0, 1.0);
-base = mix(base, chimeCol, clamp(chime * 0.82, 0.0, 0.88));
-dotBoost += chime * 0.42; dotPrismTint = mix(dotPrismTint, chimeCol, clamp(chime * 0.8, 0.0, 1.0)); dotPrismMix = max(dotPrismMix, clamp(chime * 0.75, 0.0, 0.82));
+if(uSurge>.0001){
+float sp=clamp(uSurge,0.,1.),xR=(uv.x-.5)*2.,xS=smoothstep(0.,.22,uv.x)*(1.-smoothstep(.78,1.,uv.x)),dy=y-(uPre0.y-.15*xR*xR+.06*jut),ar=(dy>=0.?exp(-dy*dy*24.):exp(-dy*dy*5.2))*uPre0.x*xS;
+sAr=ar;sDy=dy-sp*.35;
+vec3 sC=mix(sm(uSurgeLead,pPhase+.2),sm(ePD(pPhase+sDy*1.3),pPhase+sDy*1.3),.62);
+field=clamp(field+ar*.52,0.,1.);base=mix(base,sC,clamp(ar*.78,0.,.85));
+dB+=ar*.58;dPT=mix(dPT,sC,clamp(ar*.85,0.,1.));dPM=max(dPM,clamp(ar*.82,0.,.85));
+}else if(uSurge<-.0001){
+float cp=clamp(-uSurge,0.,1.),rx=abs(uv.x-.5),dr=(rx-uPre0.y)/.135,dsy=y-uPre0.z,ch=(exp(-dr*dr)+.32*(1.-cp)*exp(-rx*rx*18.))*exp(-dsy*dsy*13.5)*(1.-smoothstep(1.05,1.35,y))*uPre0.x;
+cWv=ch;cPh=uv.x*1.5+rx*2.-cp*.35;
+vec3 cL=sm(uChimeLead,cPh),cC=mix(mix(cL,ePD(cPh),.22),cL,semW);
+field=clamp(field+ch*.46,0.,1.);base=mix(base,cC,clamp(ch*.82,0.,.88));
+dB+=ch*.42;dPT=mix(dPT,cC,clamp(ch*.8,0.,1.));dPM=max(dPM,clamp(ch*.75,0.,.82));
 }
 }
-float hot = 0.75 * smoothstep(0.65, 1.0, field);
-field *= topFeather;
-dotBoost *= topFeather;
-float band = smoothstep(0.3, 0.55, field) * (1.0 - smoothstep(0.7, 0.98, field));
-float dotMsk = clamp(band * 0.8 * smoothstep(0.12, 0.32, -jut) + dotBoost, 0.0, 1.0);
-float dA = dotMsk > 0.001 ? halftone(px, res, uv.y, t, 7.0, dotMsk) : 0.0;
-float grain=hash(px+fract(t*7.)*91.)-.5;
+float hot=.75*smoothstep(.65,1.,field);field*=topFeather;dB*=topFeather;
+float bnd=smoothstep(.3,.55,field)*(1.-smoothstep(.7,.98,field)),dotMsk=clamp(bnd*.8*smoothstep(.12,.32,-jut)+dB,0.,1.),dA=dotMsk > 0.001 ? halftone(px,res,uv.y,t,7.,dotMsk):0.,gr=hash(px+fract(t*7.)*91.)-.5;
 vec3 c,dc;float a,da;
 if(uDark>.5){
-vec3 fill=base*(1.+.28*hot)*mix(.92,1.24,uIntensity);
-c=fill+grain*.024;dc=min(fill*1.6,1.);
-if(dotPrismMix>.0001)dc=mix(dc,min(dotPrismTint*1.22+.08,1.),dotPrismMix);
-float breathMod=mix(.68,1.24,clamp(uIntensity,0.,1.));
-a=clamp(field*.56*breathMod*uPresence,0.,1.);
-da=clamp(dA*sqrt(a)*.78,0.,1.);
+vec3 fl=base*(1.+.28*hot)*mix(.92,1.24,uIntensity);
+c=fl+gr*.024;dc=min(fl*1.6,1.);
+if(dPM>.0001)dc=mix(dc,min(dPT*1.22+.08,1.),dPM);
+a=clamp(field*.56*mix(.68,1.24,clamp(uIntensity,0.,1.))*uPresence,0.,1.);da=clamp(dA*sqrt(a)*.78,0.,1.);
 }else{
-float washPh = uv.x * 3.1 + t * 0.48 + 1.3 * n;
-vec3 prismInk = sm(evalInkLight(pPhase, washPh), pPhase);
-vec3 washBase = sm(uSpecModes.w > 0.5 ? mix(DAY_COBALT, DAY_CERULEAN, 0.5 + 0.5 * sin(washPh)) : evalInkLight(basePhase, washPh), basePhase);
-float causticsL = 0.48 + 0.52 * smoothstep(-0.24, 0.26, jut);
-float dichroicW = clamp((0.48 + 0.46 * effPrism) * (0.58 + 0.42 * causticsL), 0.0, 0.94);
-vec3 inkRgb = mix(washBase, prismInk, dichroicW);
-if (surgeArc > 0.0001) {
-vec3 surgeInk = sm(mix(washBase, evalInkLight(pPhase + surgeDy * 1.3, washPh), 0.68), pPhase + surgeDy * 1.3);
-inkRgb = mix(inkRgb, surgeInk, clamp(surgeArc * 0.85, 0.0, 0.90));
-} else if (chimeWave > 0.0001) {
-vec3 chimeInk = sm(mix(washBase, evalInkLight(chimePhase, washPh), 0.45), chimePhase);
-inkRgb = mix(inkRgb, chimeInk, clamp(chimeWave * 0.86, 0.0, 0.90));
+float wP=uv.x*3.1+t*.48+1.3*n;
+vec3 pI=sm(eIL(pPhase,wP),pPhase),wB=sm(uSpecModes.w>.5?mix(DAY_COBALT,DE,.5+.5*sin(wP)):eIL(basePhase,wP),basePhase);
+vec3 iR=mix(wB,pI,clamp((.48+.46*effPrism)*(.58+.42*(.48+.52*smoothstep(-.24,.26,jut))),0.,.94));
+if(sAr>.0001)iR=mix(iR,sm(mix(wB,eIL(pPhase+sDy*1.3,wP),.68),pPhase+sDy*1.3),clamp(sAr*.85,0.,.9));
+else if(cWv>.0001)iR=mix(iR,sm(mix(wB,eIL(cPh,wP),.45),cPh),clamp(cWv*.86,0.,.9));
+iR=mix(iR,mix(uHotAnchor,wB*.88,semW),hot*.24);
+c=clamp(iR+gr*.022,0.,1.);dc=clamp(mix(wB*.86,pI*.92,clamp(.26+dPM*.68,0.,.9)),0.,1.);
+a=clamp(field*.66*mix(1.02,1.62,clamp(uIntensity,0.,1.))*uPre0.w,0.,.84);da=clamp(dA*(.52+.44*sqrt(a))*uPre0.w,0.,.88);
 }
-vec3 hotAnchor = mix(uHotAnchor, washBase * 0.88, semW);
-inkRgb = mix(inkRgb, hotAnchor, hot * 0.24);
-c = clamp(inkRgb + grain * 0.022, 0.0, 1.0);
-dc = clamp(mix(washBase * 0.86, prismInk * 0.92, clamp(0.26 + dotPrismMix * 0.68, 0.0, 0.90)), 0.0, 1.0);
-float effPres = uPre0.w;
-float washGain = mix(1.02, 1.62, clamp(uIntensity, 0.0, 1.0));
-a = clamp(field * 0.66 * washGain * effPres, 0.0, 0.84);
-da = clamp(dA * (0.52 + 0.44 * sqrt(a)) * effPres, 0.0, 0.88);
+outAlpha=clamp(a+da*(1.-a),0.,1.);
+premulRgb=clamp(c,0.,1.)*a*(1.-da)+clamp(dc,0.,1.)*da;
 }
-float outAlpha = clamp(a + da * (1.0 - a), 0.0, 1.0);
-vec3 premulRgb = clamp(c, 0.0, 1.0) * a * (1.0 - da) + clamp(dc, 0.0, 1.0) * da;
-if (outAlpha > 0.0015) {
-highp vec2 dp = gl_FragCoord.xy + fract(t * 3.0) * vec2(37.0, 19.0);
-float tpdf = ign(dp) - ign(dp.yx + vec2(11.3, 27.1));
-premulRgb += (tpdf / 255.0) * min(1.0, outAlpha * 2.5);
-outAlpha = clamp(outAlpha + tpdf * (0.5 / 255.0), 0.0, 1.0);
+if(outAlpha>.0006){
+highp vec2 dp=gl_FragCoord.xy+fract(t*1.7)*vec2(37.,19.);
+highp vec3 d3=vec3(ign(dp)-ign(dp.yx+vec2(11.3,27.1)),ign(dp+vec2(17.1,31.7))-ign(dp.yx+vec2(43.9,7.3)),ign(dp+vec2(53.3,13.9))-ign(dp.yx+vec2(29.7,61.1)));
+highp float dF=smoothstep(.0006,.008,outAlpha);
+outAlpha=clamp(outAlpha+d3.x*(.85/255.)*dF,0.,1.);
+premulRgb=clamp(premulRgb+d3*(1.15/255.)*dF,vec3(0.),vec3(outAlpha));
 }
-outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
+outColor=clamp(vec4(premulRgb,outAlpha),0.,1.);
 }`;
   const GLOW_FRAG_SHADER = HORIZON_FRAGMENT_SHADER;
   const _H_BASE_D = [
@@ -1784,7 +1435,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
   const _HHA = { 0: [.19956, .36224, .92312], 1: [.635, .247, .141], 5: [.267, .318, .4] };
   const _HG3 = 'baseA,baseB,prismA,prismB,lightA,lightB,surgeLead,chimeLead,hotAnchor,semA,semB'.split(',');
   const _uCap = (k) => 'u' + k[0].toUpperCase() + k.slice(1);
-  function computeHorizonUniforms(dark, presence, prism, surge, speed, spectrumCode, semanticCode) {
+  function computeHorizonUniforms(dark, presence, prism, surge, speed, spectrumCode, semanticCode, mist = 0) {
     const sp = surge > 1e-4 ? M.min(1, M.max(0, surge)) : 0, cp = surge < -1e-4 ? M.min(1, M.max(0, -surge)) : 0;
     const p1m = sp > 0 ? M.pow(1 - sp, 1.45) : cp > 0 ? M.pow(1 - cp, 1.35) : 1;
     const sc = M.max(0, M.min(6, M.round(Number(spectrumCode) || 0))), semId = M.floor((Number(semanticCode) || 0) + .001);
@@ -1792,7 +1443,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
     const semPair = (dark ? _H_SEM_D : _H_SEM_L)[semId < 1.5 ? 1 : semId < 2.5 ? 2 : 3];
     return {
       pre0: [sp > 0 ? M.sin(sp * M.PI) * (1 - .32 * sp) : cp > 0 ? M.sin(cp * M.PI) * (1 - .28 * cp) : 0, sp > 0 ? 1.15 * (1 - p1m) : cp > 0 ? .04 + .43 * (1 - p1m) : 0, cp > 0 ? .7 * p1m + .04 : 0, M.pow(M.max(0, M.min(1, presence)), .68)],
-      pre1: [semId, semId > .5 ? M.max(0, M.min(1, 1 - (semanticCode - semId) / .98)) : 0, sc === 5 ? prism * .28 : prism, .6 * (1 + .08 * (speed - 1))],
+      pre1: [mist ? 1 : 0, semId > .5 ? M.max(0, M.min(1, 1 - (semanticCode - semId) / .98)) : 0, sc === 5 ? prism * .28 : prism, .6 * (1 + .08 * (speed - 1))],
       modes: [bd[0], pd[0], ld[0], sc === 0 ? 1 : 0],
       baseA: bd[1], baseB: bd[2], prismA: pd[1], prismB: pd[2], lightA: ld[1], lightB: ld[2],
       surgeLead: _HSL[sc] || _HSL[0], chimeLead: _HCL[sc] || _HCL[0], hotAnchor: _HHA[sc] || _HHA[0],
@@ -1810,20 +1461,16 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
       prog = built.prog; u = built.u;
     }
     try { build(); } catch { try { free(); } catch {} return null; }
-    const u1 = (loc, v) => { if (loc) gl.uniform1f(loc, v); };
-    const u3 = (loc, v) => { if (loc && typeof gl.uniform3f === 'function') gl.uniform3f(loc, v[0], v[1], v[2]); };
-    const u4 = (loc, v) => { if (loc && typeof gl.uniform4f === 'function') gl.uniform4f(loc, v[0], v[1], v[2], v[3]); };
+    const u1 = (l, v) => { if (l) gl.uniform1f(l, v); }, u3 = (l, v) => { if (l && gl.uniform3f) gl.uniform3f(l, v[0], v[1], v[2]); }, u4 = (l, v) => { if (l && gl.uniform4f) gl.uniform4f(l, v[0], v[1], v[2], v[3]); };
     return {
       mode: 'webgl2', build, isContextLost: () => Boolean(gl.isContextLost?.()),
       clear() { if (!prog || gl.isContextLost?.()) return; gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); },
-      draw(w, h, dpr, timeSec, dark, intensity, presence, reach = DEFAULT_HORIZON_AURA.reach, prism = 0, surge = 0, speed = 1, spectrumCode = 0, semanticCode = 0) {
+      draw(w, h, dpr, timeSec, dark, intensity, presence, reach = DEFAULT_HORIZON_AURA.reach, prism = 0, surge = 0, speed = 1, spectrumCode = 0, semanticCode = 0, meta = null) {
         if (!prog || gl.isContextLost?.()) return;
-        const hu = computeHorizonUniforms(dark, presence, prism, surge, speed, spectrumCode, semanticCode);
-        gl.viewport(0, 0, w, h); gl.useProgram(prog);
-        gl.uniform2f(u.uRes, w, h); u1(u.uDpr, dpr); u1(u.uTime, timeSec);
-        u1(u.uDark, dark ? 1 : 0); u1(u.uReach, reach); u1(u.uIntensity, intensity);
-        u1(u.uPresence, presence); u1(u.uPrism, prism); u1(u.uSurge, surge);
-        u1(u.uSpeed, speed); u1(u.uSpectrum, spectrumCode); u1(u.uSemantic, semanticCode);
+        const hu = computeHorizonUniforms(dark, presence, prism, surge, speed, spectrumCode, semanticCode, meta?.mist ? 1 : 0);
+        gl.viewport(0, 0, w, h); gl.useProgram(prog); gl.uniform2f(u.uRes, w, h);
+        u1(u.uDpr, dpr); u1(u.uTime, timeSec); u1(u.uDark, dark ? 1 : 0); u1(u.uReach, reach); u1(u.uIntensity, intensity);
+        u1(u.uPresence, presence); u1(u.uPrism, prism); u1(u.uSurge, surge); u1(u.uSpeed, speed); u1(u.uSpectrum, spectrumCode); u1(u.uSemantic, semanticCode);
         u4(u.uPre0, hu.pre0); u4(u.uPre1, hu.pre1); u4(u.uSpecModes, hu.modes);
         for (const k of _HG3) u3(u[_uCap(k)], hu[k]);
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1857,16 +1504,39 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
         if (typeof ctx.clearRect === 'function') ctx.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
         else if (canvas.width > 0 && canvas.height > 0) { ensureImage(canvas.width, canvas.height); pixels.fill(0); ctx.putImageData(image, 0, 0); }
       },
-      draw(w, h, dpr, timeSec, dark, intensity, presence, reach = DEFAULT_HORIZON_AURA.reach, prism = 0, surge = 0, speed = 1, spectrumCode = 0, semanticCode = 0) {
+      draw(w, h, dpr, timeSec, dark, intensity, presence, reach = DEFAULT_HORIZON_AURA.reach, prism = 0, surge = 0, speed = 1, spectrumCode = 0, semanticCode = 0, meta = null) {
         if (!w || !h) return;
         ensureImage(w, h); pixels.fill(0);
         const { max, min, sin, exp, pow, round, abs, floor, sqrt, log } = M;
         const cl01 = (v) => max(0, min(1, v)), cl255 = (v) => round(min(255, max(0, v))) & 255;
         const sTone = (dk, ph, out) => sampleHorizonTone2D(spectrumCode, semanticCode, dk, ph, out);
+        const dprS = max(0.5, dpr), step = max(1, round(dpr)), effPresL = dark ? presence : pow(cl01(presence), 0.68);
+        const putD = (px, py, R, G, B, rawA) => {
+          for (let sy = 0; sy < step && py + sy < h; sy++) for (let sx = 0, yy = py + sy, ro = yy * w + px; sx < step && px + sx < w; sx++) {
+            const xx = px + sx, dn = (((xx * 17 + yy * 31) ^ (xx * 7 - yy * 13)) & 15) / 15 - 0.5, A = cl255(rawA + dn * 1.5);
+            if (!A) continue;
+            const dr = cl255(R + dn * 1.4), dg = cl255(G + dn * 1.4), db = cl255(B + dn * 1.4);
+            pixels[ro + sx] = LITTLE_ENDIAN ? ((A << 24) | (db << 16) | (dg << 8) | dr) >>> 0 : ((dr << 24) | (dg << 16) | (db << 8) | A) >>> 0;
+          }
+        };
+        if (meta?.mist) {
+          const rM = max(0.12, reach), aScale = dark ? (0.34 + 0.18 * cl01(intensity)) * presence : (0.22 + 0.12 * cl01(intensity)) * effPresL, aCap = dark ? 0.56 : 0.38, scM = spectrumCode === 0 || spectrumCode === 6 ? 2 : spectrumCode;
+          for (let py = 0; py < h; py += step) {
+            const uvY = 1 - py / h, topF = 1 - smooth((uvY - 0.38) / 0.6); if (topF < 0.0008) continue;
+            for (let px = 0; px < w; px += step) {
+              const uvX = px / w, yE = max(0, uvY / rM + (0.065 * sin(uvX * 2.15 - timeSec * 0.22) + 0.038 * sin(uvX * 1.35 + timeSec * 0.14 + 1.3)) * 0.5);
+              const rawA = min(aCap, (exp(-yE * yE * 2.9) * 0.76 + exp(-yE * yE * 0.88) * 0.36) * (0.24 + 0.76 * pow(sin(uvX * M.PI), 0.72)) * topF * aScale) * 255;
+              if (rawA < 0.25) continue;
+              sampleHorizonTone2D(scM, 0, dark, uvX * 0.38 + timeSec * 0.045 + 0.07 * sin(uvX * 1.8 - timeSec * 0.13), toneRgb);
+              putD(px, py, toneRgb[0], toneRgb[1], toneRgb[2], rawA);
+            }
+          }
+          ctx.putImageData(image, 0, 0); return;
+        }
         const rEff = max(0.01, reach), stretchScale = 1 + 0.08 * (speed - 1), surgeUp = max(0, surge);
         const effPrism = spectrumCode === 5 ? prism * 0.28 : prism, hasPrism = effPrism > 0.0001, hasSurge = abs(surge) > 0.0001, customMode = spectrumCode > 0 || semanticCode > 0;
-        const dprS = max(0.5, dpr), cssW = w / dprS, cssH = h / dprS, step = max(1, round(dpr));
-        const effPresL = dark ? presence : pow(cl01(presence), 0.68), washGainL = dark ? 1 : (1.02 + 0.6 * cl01(intensity)), darkBreathMod = dark ? (0.68 + 0.56 * cl01(intensity)) : 1;
+        const cssW = w / dprS, cssH = h / dprS;
+        const washGainL = dark ? 1 : (1.02 + 0.6 * cl01(intensity)), darkBreathMod = dark ? (0.68 + 0.56 * cl01(intensity)) : 1;
         const sp0 = surge > 0.0001 ? min(1, surge) : 0, cp0 = surge < -0.0001 ? min(1, -surge) : 0;
         const sEnv = sp0 ? sin(sp0 * M.PI) * (1 - 0.32 * sp0) : 0, fY0 = sp0 ? 1.15 * (1 - pow(1 - sp0, 1.45)) : 0;
         const cEnv = cp0 ? sin(cp0 * M.PI) * (1 - 0.28 * cp0) : 0, p1c = cp0 ? pow(1 - cp0, 1.35) : 1, rR0 = 0.04 + 0.43 * (1 - p1c), sY0 = 0.7 * p1c + 0.04;
@@ -1944,10 +1614,9 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
               G = cl255((baseG * (1 - hL) + (customMode ? baseG * 0.85 : 92) * hL) * wF + dotG * wD);
               B = cl255((baseB * (1 - hL) + (customMode ? baseB * 0.85 : 235) * hL) * wF + dotB * wD);
             }
-            const A = round(cl01(fillA + dotA * (1 - fillA)) * 255) & 255;
-            if (A === 0) continue;
-            const packed = LITTLE_ENDIAN ? ((A << 24) | (B << 16) | (G << 8) | R) >>> 0 : ((R << 24) | (G << 16) | (B << 8) | A) >>> 0;
-            for (let sy = 0; sy < step && py + sy < h; sy++) for (let sx = 0, ro = (py + sy) * w + px; sx < step && px + sx < w; sx++) pixels[ro + sx] = packed;
+            const baseA = cl01(fillA + dotA * (1 - fillA));
+            if (baseA < 0.001) continue;
+            putD(px, py, R, G, B, baseA * 255);
           }
         }
         ctx.putImageData(image, 0, 0);
@@ -1963,60 +1632,28 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
   }
 
   function mountBrandHorizonGlow(canvas, opts = {}) {
-    if (!canvas) {
-      return {
-        mode: 'none', resize() {}, invalidate() {}, clear() {}, draw() {}, dispose() {},
-        setAuraParams: () => ({ ...DEFAULT_HORIZON_AURA }), getAuraParams: () => ({ ...DEFAULT_HORIZON_AURA }),
-        getExtendedState: () => ({ ...DEFAULT_HORIZON_AURA, spectrum: 'default', semantic: 'none', ambientIntensity: 1, sleeping: true }),
-        drawStaticSnapshot: () => false, isSleeping: () => true, isContextLost: () => false,
-      };
-    }
-    const extRen = opts.externalRenderer || null;
-    const ren = pickRen(canvas, opts, () => createBrandHorizonGLRenderer(canvas), () => createBrandHorizon2DRenderer(canvas));
-    let cssW = M.max(0, Number(opts.width ?? canvas.clientWidth ?? 0)), cssH = M.max(0, Number(opts.height ?? canvas.clientHeight ?? 0));
-    const maxDpr = extRen ? 2 : 1.75;
-    let dpr = M.max(0.5, M.min(maxDpr, Number(opts.dpr || 1)));
-    const bAura = {
-      reach: clampFinite(opts.reach, DEFAULT_HORIZON_AURA.reach, 0.05, 1),
-      prism: clampFinite(opts.prism, DEFAULT_HORIZON_AURA.prism, 0, 1),
-      surge: clampFinite(opts.surge, DEFAULT_HORIZON_AURA.surge, -1, 1),
-      speed: clampFinite(opts.speed, DEFAULT_HORIZON_AURA.speed, 0, 3),
-    };
-    const aAura = { ...bAura };
-    let bSpec = opts.spectrum !== undefined ? String(opts.spectrum) : (opts.accent !== undefined ? String(opts.accent) : null);
-    let bSem = opts.semantic !== undefined ? String(opts.semantic) : 'none', bAmb = clampFinite(opts.ambientIntensity, 1, 0, 1);
-    let aSpec = bSpec || 'default', aSem = bSem, aAmb = bAmb;
-    let hasCust = Boolean(extRen) || opts.reach !== undefined || opts.prism !== undefined || opts.surge !== undefined || opts.speed !== undefined;
-    let startMs = null, lastClk = null, lastRaw = null, flowSec = 0, lastDraw = -Infinity;
-    let lDark = null, lStr = -1, lReach = -1, lPrism = -1, lSurge = -9, lSpeed = -1;
-    let lSpec = -1, lSem = -1, semMix = 0, holdSem = 0, clrZ = false, stale = true, slp = false;
-    const onCL = (e) => { e?.preventDefault?.(); try { opts?.onContextLost?.(e); } catch {} };
-    const onCR = () => { try { ren?.build?.(); } catch {} stale = true; };
+    const D = DEFAULT_HORIZON_AURA, { max, min, round } = M, no = () => {};
+    if (!canvas) return { mode: 'none', resize: no, invalidate: no, clear: no, draw: no, dispose: no, setAuraParams: () => ({ ...D }), getAuraParams: () => ({ ...D }), getExtendedState: () => ({ ...D, spectrum: 'default', semantic: 'none', ambientIntensity: 1, sleeping: true }), drawStaticSnapshot: () => false, isSleeping: () => true, isContextLost: () => false };
+    const extRen = opts.externalRenderer || null, ren = pickRen(canvas, opts, () => createBrandHorizonGLRenderer(canvas), () => createBrandHorizon2DRenderer(canvas));
+    let cssW = max(0, Number(opts.width ?? canvas.clientWidth ?? 0)), cssH = max(0, Number(opts.height ?? canvas.clientHeight ?? 0)), maxDpr = extRen ? 2 : 1.75, dpr = max(0.5, min(maxDpr, Number(opts.dpr || 1)));
+    const bAura = { reach: clampFinite(opts.reach, D.reach, 0.05, 1), prism: clampFinite(opts.prism, D.prism, 0, 1), surge: clampFinite(opts.surge, D.surge, -1, 1), speed: clampFinite(opts.speed, D.speed, 0, 3) }, aAura = { ...bAura };
+    let bSpec = opts.spectrum !== undefined ? String(opts.spectrum) : (opts.accent !== undefined ? String(opts.accent) : null), bSem = opts.semantic !== undefined ? String(opts.semantic) : 'none', bAmb = clampFinite(opts.ambientIntensity, 1, 0, 1);
+    let aSpec = bSpec || 'default', aSem = bSem, aAmb = bAmb, hasCust = Boolean(extRen) || opts.reach !== undefined || opts.prism !== undefined || opts.surge !== undefined || opts.speed !== undefined;
+    let startMs = null, lastClk = null, lastRaw = null, flowSec = 0, lastDraw = -Infinity, lDark = null, lStr = -1, lReach = -1, lPrism = -1, lSurge = -9, lSpeed = -1, lSpec = -1, lSem = -1, semMix = 0, holdSem = 0, clrZ = false, stale = true, slp = false;
+    const onCL = (e) => { e?.preventDefault?.(); try { opts?.onContextLost?.(e); } catch {} }, onCR = () => { try { ren?.build?.(); } catch {} stale = true; };
     if (!extRen && canvas.addEventListener) { canvas.addEventListener('webglcontextlost', onCL); canvas.addEventListener('webglcontextrestored', onCR); }
     function syncSize(w, h, ndIn) {
-      const nw = M.max(0, M.round(Number(w || 0))), nh = M.max(0, M.round(Number(h || 0)));
-      const nd = M.max(0.5, M.min(maxDpr, Number(ndIn || dpr || 1)));
-      if (extRen) {
-        if (extRen.resize(nw, nh, nd)) { cssW = nw; cssH = nh; dpr = nd; clrZ = false; stale = true; }
-        return;
-      }
-      const pw = M.max(1, M.round(nw * nd)), ph = M.max(1, M.round(nh * nd));
-      if (nw !== cssW || nh !== cssH || nd !== dpr || canvas.width !== pw || canvas.height !== ph) {
-        cssW = nw; cssH = nh; dpr = nd;
-        if (nw > 0 && nh > 0) { canvas.width = pw; canvas.height = ph; }
-        clrZ = false; stale = true;
-      }
+      const nw = max(0, round(Number(w || 0))), nh = max(0, round(Number(h || 0))), nd = max(0.5, min(maxDpr, Number(ndIn || dpr || 1)));
+      if (extRen) { if (extRen.resize(nw, nh, nd)) { cssW = nw; cssH = nh; dpr = nd; clrZ = false; stale = true; } return; }
+      const pw = max(1, round(nw * nd)), ph = max(1, round(nh * nd));
+      if (nw !== cssW || nh !== cssH || nd !== dpr || canvas.width !== pw || canvas.height !== ph) { cssW = nw; cssH = nh; dpr = nd; if (nw > 0 && nh > 0) { canvas.width = pw; canvas.height = ph; } clrZ = false; stale = true; }
     }
     if (!extRen && cssW > 0 && cssH > 0 && (!canvas.width || !canvas.height)) syncSize(cssW, cssH, dpr);
     function setAuraParams(ex) {
-      if (!ex || typeof ex !== 'object') {
-        Object.assign(bAura, DEFAULT_HORIZON_AURA);
-        bSpec = null; bSem = aSem = 'none'; bAmb = aAmb = 1; aSpec = 'default'; hasCust = Boolean(extRen);
-      } else {
-        if (ex.reach !== undefined) bAura.reach = clampFinite(ex.reach, bAura.reach, 0.05, 1);
-        if (ex.prism !== undefined) bAura.prism = clampFinite(ex.prism, bAura.prism, 0, 1);
-        if (ex.surge !== undefined) bAura.surge = clampFinite(ex.surge, bAura.surge, -1, 1);
-        if (ex.speed !== undefined) bAura.speed = clampFinite(ex.speed, bAura.speed, 0, 3);
+      if (!ex || typeof ex !== 'object') { Object.assign(bAura, D); bSpec = null; bSem = aSem = 'none'; bAmb = aAmb = 1; aSpec = 'default'; hasCust = Boolean(extRen); }
+      else {
+        const cl = (k, lo, hi) => { if (ex[k] !== undefined) bAura[k] = clampFinite(ex[k], bAura[k], lo, hi); };
+        cl('reach', 0.05, 1); cl('prism', 0, 1); cl('surge', -1, 1); cl('speed', 0, 3);
         if (ex.spectrum !== undefined || ex.accent !== undefined) bSpec = aSpec = String(ex.spectrum ?? ex.accent);
         if (ex.semantic !== undefined) bSem = aSem = String(ex.semantic);
         if (ex.ambientIntensity !== undefined) bAmb = aAmb = clampFinite(ex.ambientIntensity, bAmb, 0, 1);
@@ -2027,31 +1664,27 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
     }
     const clearCv = () => { ren?.clear?.(); clrZ = true; slp = true; };
     function renderIn(nowIn, arg1 = {}, sArg, exArg, fStatic = false) {
-      if (!ren) return false;
-      if (extRen) { if (!extRen.canDraw()) return false; }
-      else if (canvas.width <= 0 || canvas.height <= 0 || isCanvasDocHidden(canvas)) return false;
+      if (!ren || (extRen ? !extRen.canDraw() : canvas.width <= 0 || canvas.height <= 0 || isCanvasDocHidden(canvas))) return false;
       if (fStatic && nowIn && typeof nowIn === 'object') { exArg = sArg; sArg = arg1; arg1 = nowIn; nowIn = 0; }
-      const isObj = typeof arg1 === 'object' && arg1 !== null;
+      const isObj = typeof arg1 === 'object' && arg1 !== null, abs = M.abs;
       let still = fStatic, dark = true, rawS = 1, ex = null;
       if (isObj) {
         still = fStatic || Boolean(arg1.still || arg1.staticSnapshot);
         dark = arg1.dark !== false; rawS = arg1.strength ?? arg1.prismStrength ?? 1;
         const nest = sArg && typeof sArg === 'object' ? sArg : (arg1.extra && typeof arg1.extra === 'object' ? arg1.extra : null);
-        if (nest || arg1.reach !== undefined || arg1.prism !== undefined || arg1.surge !== undefined || arg1.speed !== undefined || arg1.spectrum !== undefined || arg1.accent !== undefined || arg1.semantic !== undefined || arg1.ambientIntensity !== undefined || arg1.continuous !== undefined) {
+        if (nest || ['reach', 'prism', 'surge', 'speed', 'spectrum', 'accent', 'semantic', 'ambientIntensity', 'continuous', 'mist'].some((k) => arg1[k] !== undefined)) {
           ex = nest ? { ...arg1, ...nest } : arg1;
         }
       } else {
         dark = arg1 !== false; rawS = sArg ?? 1; ex = exArg && typeof exArg === 'object' ? exArg : null;
         still = fStatic || Boolean(ex && (ex.still || ex.staticSnapshot));
       }
-      const amb = ex && ex.ambientIntensity !== undefined ? clampFinite(ex.ambientIntensity, bAmb, 0, 1) : bAmb;
+      const amb = ex?.ambientIntensity !== undefined ? clampFinite(ex.ambientIntensity, bAmb, 0, 1) : bAmb;
       aAmb = amb;
       const str = clampFinite(rawS, 1, 0, 1) * amb;
       if (amb <= 0 || (fStatic && str <= 0)) { if (!clrZ) clearCv(); else slp = true; return false; }
-      const reach = ex?.reach !== undefined ? clampFinite(ex.reach, bAura.reach, 0.05, 1) : bAura.reach;
-      const prism = ex?.prism !== undefined ? clampFinite(ex.prism, bAura.prism, 0, 1) : bAura.prism;
-      const surge = ex?.surge !== undefined ? clampFinite(ex.surge, bAura.surge, -1, 1) : bAura.surge;
-      const speed = ex?.speed !== undefined ? clampFinite(ex.speed, bAura.speed, 0, 3) : bAura.speed;
+      const gA = (k, lo, hi) => (ex?.[k] !== undefined ? clampFinite(ex[k], bAura[k], lo, hi) : bAura[k]);
+      const reach = gA('reach', 0.05, 1), prism = gA('prism', 0, 1), surge = gA('surge', -1, 1), speed = gA('speed', 0, 3);
       const rawSp = ex && (ex.spectrum !== undefined || ex.accent !== undefined) ? (ex.spectrum ?? ex.accent) : bSpec;
       const specC = rawSp != null ? resolveHorizonSpectrumCode(rawSp) : detectHostSpectrumCode(canvas, dark);
       const rawSem = ex?.semantic !== undefined ? ex.semantic : bSem, semC = resolveHorizonSemanticCode(rawSem);
@@ -2059,32 +1692,31 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
       aSpec = rawSp || (specC === 1 ? 'warm' : 'default'); aSem = String(rawSem || 'none');
 
       const rawNow = Number(nowIn || 0);
-      const inSec = !extRen && (Boolean(ex?.timeUnit === 'sec') || (!isObj && lastRaw !== null && rawNow > 0 && rawNow < 1e4 && M.abs(rawNow - lastRaw) > 0 && M.abs(rawNow - lastRaw) < 0.5));
+      const inSec = !extRen && (Boolean(ex?.timeUnit === 'sec') || (!isObj && lastRaw !== null && rawNow > 0 && rawNow < 1e4 && abs(rawNow - lastRaw) > 0 && abs(rawNow - lastRaw) < 0.5));
       lastRaw = rawNow;
       const nowMs = inSec ? rawNow * 1000 : rawNow;
       if (startMs === null) startMs = nowMs;
-      const ext = Boolean(ex) || hasCust, realSec = still ? 0 : M.max(0, (nowMs - startMs) / 1000);
-      const ramp = still || fStatic || ext ? 1 : -(M.cos(M.PI * M.min(1, M.max(0, realSec / 1.4))) - 1) * 0.5;
-      const baseP = M.max(0.22, ramp);
-      const dirty = fStatic || dark !== lDark || specC !== lSpec || semC !== lSem || M.abs((semC > 0 ? 1 : 0) - semMix) > 0.005 || M.abs(str - lStr) >= 0.005 || M.abs(reach - lReach) >= 0.002 || M.abs(prism - lPrism) >= 0.002 || M.abs(surge - lSurge) >= 0.001 || M.abs(speed - lSpeed) >= 0.005;
+      const ext = Boolean(ex) || hasCust, realSec = still ? 0 : max(0, (nowMs - startMs) / 1000);
+      const baseP = max(0.22, still || fStatic || ext ? 1 : -(M.cos(M.PI * min(1, max(0, realSec / 1.4))) - 1) * 0.5);
+      const dirty = fStatic || dark !== lDark || specC !== lSpec || semC !== lSem || abs((semC > 0 ? 1 : 0) - semMix) > 0.005 || abs(str - lStr) >= 0.005 || abs(reach - lReach) >= 0.002 || abs(prism - lPrism) >= 0.002 || abs(surge - lSurge) >= 0.001 || abs(speed - lSpeed) >= 0.005;
       const gap = ren.mode === 'webgl2' || extRen ? 0 : ext ? 14 : baseP < 1 ? 33 : 42;
-      if (!extRen && !stale && !dirty && (still || (gap > 0 && M.abs(nowMs - lastDraw) < gap))) { if (fStatic) slp = true; return false; }
+      if (!extRen && !stale && !dirty && (still || (gap > 0 && abs(nowMs - lastDraw) < gap))) { if (fStatic) slp = true; return false; }
       let dt = 0;
       if (fStatic) { if (flowSec === 0) flowSec = 2.4; lastClk = nowMs; slp = true; }
       else if (still) { lastClk = nowMs; slp = true; }
       else {
         slp = false;
-        if (lastClk === null || nowMs < lastClk) { if (lastClk === null && !extRen) flowSec = M.min(2.4, realSec * speed); lastClk = nowMs; }
-        else { dt = M.min(0.35, M.max(0, (nowMs - lastClk) / 1000)); lastClk = nowMs; flowSec += dt * speed; }
+        if (lastClk === null || nowMs < lastClk) { if (lastClk === null && !extRen) flowSec = min(2.4, realSec * speed); lastClk = nowMs; }
+        else { dt = min(0.35, max(0, (nowMs - lastClk) / 1000)); lastClk = nowMs; flowSec += dt * speed; }
       }
       if (semC > 0) holdSem = semC;
       if (fStatic || still) semMix = semC > 0 ? 1 : 0;
-      else { const tgt = semC > 0 ? 1 : 0; semMix += (tgt - semMix) * M.min(1, M.max(0.04, dt / 0.45)); if (M.abs(tgt - semMix) < 0.01) semMix = tgt; }
+      else { const tgt = semC > 0 ? 1 : 0; semMix += (tgt - semMix) * min(1, max(0.04, dt / 0.45)); if (abs(tgt - semMix) < 0.01) semMix = tgt; }
       const effSem = holdSem > 0 && semMix > 0.005 ? holdSem + (1 - semMix) * 0.98 : 0;
       const breath = fStatic ? 0.64 : still ? 0.58 : 0.46 + 0.24 * M.sin(flowSec * 1.15) + 0.06 * M.sin(flowSec * 2.05 + 0.9);
       const inten = !ext && str >= 0.999 ? breath * (0.2 + 0.8 * str) : breath * (0.55 + 0.45 * str);
       const pres = baseP * (str <= 0 ? 0 : str >= 0.999 ? 1 : M.pow(str, 0.78));
-      ren.draw(canvas.width || 0, canvas.height || 0, dpr, 12 + flowSec, dark, inten, pres, reach, prism, surge, speed, specC, effSem, { still: Boolean(still), continuous: Boolean(ex?.continuous) });
+      ren.draw(canvas.width || 0, canvas.height || 0, dpr, 12 + flowSec, dark, inten, pres, reach, prism, surge, speed, specC, effSem, { still: Boolean(still), continuous: Boolean(ex?.continuous), mist: Boolean(ex?.mist) });
       clrZ = stale = false;
       lastDraw = nowMs; lDark = dark; lStr = str; lReach = reach; lPrism = prism; lSurge = surge; lSpeed = speed; lSpec = specC; lSem = semC;
       return true;

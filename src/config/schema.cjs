@@ -96,6 +96,7 @@ const CONFIG_SCHEMA = Object.freeze({
   codeLigatures: Object.freeze({ type: 'boolean', default: false, stringBoolMode: 'strictOn' }),
   ambientIntensity: Object.freeze({ type: 'enum', values: Object.freeze(['0', '35', '70', '100']), default: '100' }),
   darkAura: Object.freeze({ type: 'enum', values: Object.freeze(['subtle', 'balanced', 'vivid']), default: 'balanced' }),
+  convAura: Object.freeze({ type: 'enum', values: Object.freeze(['breathe', 'static', 'off']), default: 'breathe' }),
   thoughtView: Object.freeze({ type: 'enum', values: Object.freeze(['immersive', 'bilingual']), default: 'immersive' }),
   omniModule: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'on', coerceBoolToOnOff: true }),
   linkTarget: Object.freeze({ type: 'enum', values: Object.freeze(['builtin', 'external']), default: 'builtin' }),
