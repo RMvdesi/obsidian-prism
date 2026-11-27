@@ -147,7 +147,7 @@
       out[sKey] = on ? 'on' : 'off';
     }
     out.placeholderStyle = out.promptStyle = (out.placeholderStyle ?? out.promptStyle) === 'host' ? 'host' : 'studio';
-    out.mascot = out.mascot === 'off' || out.mascot === false ? 'off' : /^(minis|quad(-minis)?|r:[ckdw0-4,+m]+)$/.test(out.mascot) ? out.mascot : 'crab';
+    out.mascot = out.mascot === 'off' || out.mascot === false ? 'off' : /^(minis|quad(-minis)?|swarm-team|r:[ckdw0-4,+m]+)$/.test(out.mascot) ? out.mascot : 'crab';
     out.convRipple = normConvRipple(out.convRipple);
     for (const k of ['sidebarCompact', 'codeLigatures', 'autoArchiveOnExit']) out[k] = out[k] === true || out[k] === 'on';
     for (const k of ['sidebarNavFold', 'sidebarStudio', 'autoUpdate']) out[k] = out[k] === 'on' || out[k] === true ? 'on' : 'off';
@@ -543,19 +543,22 @@
     let isRunning = Boolean(qs(card, '[data-testid="input-cancel-button"]'));
     let isThinking = false;
     let hasError = false;
+    let hasSwarmOrSubagent = Boolean(qs(D, '[data-testid="subagent-tab-conversation"], [data-testid="swarm-board"], a[href^="sidecar://swarm/"], [data-testid*="subagent"], [data-testid*="swarm"]'));
     if (cascadeId) {
       const st = ensureHooks(true)?.store?.getState?.();
       const sums = st?.trajectorySummaries?.summaries || st?.cascadeTrajectorySummaries || {};
       const entry = sums[cascadeId];
       const sum = entry?.summary || entry || {};
       if (sum.notFullyIdle || sum.hasActivity || sum.status === 2 || sum.hasRunningSubagents) isRunning = true;
+      if (sum.hasRunningSubagents) hasSwarmOrSubagent = true;
       if (sum.status === 3 || sum.hasError) hasError = true;
     }
+    if (swarmBurstUntil > Date.now() && isRunning) hasSwarmOrSubagent = true;
     if (cv && isRunning) {
       const thinkingEl = qs(cv, '[data-testid="thinking-collapsible-trigger"], [data-testid="worked-for-collapsible"]');
       if (thinkingEl && String(thinkingEl[K_TC] || '').includes('...')) isThinking = true;
     }
-    return { cascadeId, isRunning, isThinking, hasError };
+    return { cascadeId, isRunning, isThinking, hasError, hasSwarmOrSubagent };
   };
 
   let crabRemoveAttrTimer = 0, queuedCrabAnchor = null;
@@ -608,16 +611,18 @@
 
     const isOrch = !!(modelInfo?.isOrchestrator);
     const curTier = String(modelInfo?.tier || '').toLowerCase();
+    const isSwarmTeamMode = cfg.mascot === 'swarm-team';
+    const effectiveMascot = isSwarmTeamMode ? (activeInfo?.hasSwarmOrSubagent ? 'quad-minis' : 'crab') : cfg.mascot;
     const nextState = {
       camp: modelInfo?.mascotCamp || modelInfo?.camp || 'gemini',
-      mascot: cfg.mascot,
+      mascot: effectiveMascot,
       streaming: !!(activeInfo?.isRunning),
       streamTier: curTier === 'high' || curTier === 'xhigh' || isOrch ? 3 : 2,
       hasError: !!(activeInfo?.hasError),
       yieldMode: nextYield,
       leapOffsetY: 0,
       popoverRightWidth: 0,
-      miniPileEnabled: /minis$|\+m$/.test(cfg.mascot),
+      miniPileEnabled: /minis$|\+m$/.test(effectiveMascot),
       orchestrator: isOrch,
       reducedMotion: motionReduced(),
     };
@@ -2585,12 +2590,15 @@
   const SLASH_CMD_RE = /^\/(plan|goal|boost|teamwork|swarm|browser|compact|schedule|grill-me|learn)(?:\s|$)/i;
   let lastSlashNotifyAt = 0;
   let lastSlashNotifyCmd = '';
+  let swarmBurstUntil = 0;
+  let lastUserTypingAt = 0;
   const dispatchComposerSubmit = (scopeEl) => {
     const box = cl(scopeEl, `${S_IB}, .surface-composer-card, [data-testid="${T_SQ}"], [data-side-panel-focus-scope="true"]`);
     const ed = (box && qs(box, '[contenteditable="true"], textarea, input')) || scopeEl;
     const m = SLASH_CMD_RE.exec(String(ed?.innerText ?? ed?.[K_TC] ?? ed?.value ?? '').trim());
     if (m) {
       const cmd = m[1].toLowerCase(), now = Date.now();
+      if (cmd === 'swarm' || cmd === 'teamwork') swarmBurstUntil = now + 30000;
       if (cmd !== lastSlashNotifyCmd || now - lastSlashNotifyAt >= 800) { lastSlashNotifyCmd = cmd; lastSlashNotifyAt = now; notifyMascot('slash-cmd', { cmd }); }
       return;
     }
@@ -2601,6 +2609,13 @@
     try {
       if (destroyed || !ev) return;
       wakeWinBlur();
+      if (ev.key !== 'Enter' && !ev.ctrlKey && !ev.altKey && !ev.metaKey && ev.key && (ev.key.length === 1 || ev.key === 'Backspace' || ev.key === ' ') && cl(ev.target, `${S_IB} [contenteditable="true"]`)) {
+        const nowT = Date.now();
+        if (nowT - lastUserTypingAt >= 450) {
+          lastUserTypingAt = nowT;
+          notifyMascot('user-typing', {});
+        }
+      }
       if (ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !ev.isComposing && ev.keyCode !== 229 && cl(ev.target, `${S_IB} [contenteditable="true"]`)) {
         const sm = qs(D, '[data-testid="slash-command-menu"]');
         if (sm && (!sm.getClientRects || sm.getClientRects().length > 0)) return;
@@ -2667,8 +2682,28 @@
     try {
       if (destroyed) return;
       trackActivePaneFromTarget(ev?.target, true);
+      if (cl(ev?.target, `${S_IB} [contenteditable="true"]`)) {
+        notifyMascot('user-typing', {});
+      }
     } catch {}
   };
+
+  const onWinFocusOut = (ev) => {
+    try {
+      if (destroyed) return;
+      if (cl(ev?.target, `${S_IB} [contenteditable="true"]`)) {
+        notifyMascot('user-blur', {});
+      }
+    } catch {}
+  };
+  ST(() => {
+    try {
+      if (!destroyed && !cl(D.activeElement, `${S_IB} [contenteditable="true"]`)) {
+        notifyMascot('user-blur', {});
+      }
+    } catch {}
+  }, 250);
+  if (typeof W !== 'undefined' && W.addEventListener) W.addEventListener('focusout', onWinFocusOut, true);
 
   const onDocPointerDown = (ev) => {
     try {

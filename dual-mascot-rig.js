@@ -1240,6 +1240,7 @@
   const MASCOT_PRESET_MAP = {
     off: { c: 0, k: 0, d: 0, w: 0, minis: false },
     crab: { c: 1, k: 1, d: 0, w: 0, minis: false },
+    'swarm-team': { c: 1, k: 1, d: 0, w: 0, minis: false },
     dual: { c: 1, k: 1, d: 0, w: 0, minis: false },
     minis: { c: 1, k: 1, d: 0, w: 0, minis: true },
     quad: { c: 1, k: 1, d: 1, w: 1, minis: false },
@@ -1542,9 +1543,9 @@
     const chromaSparks = [];
     let fxCanvasCleared = true;
 
-    // 打盹生态：45s（深夜 30s）无用户操作 → 哈欠 → 打盹；任何操作唤醒
-    const DOZE_AFTER_MS = 45000;
-    const DOZE_AFTER_NIGHT_MS = 30000;
+    // 打盹生态：5s（深夜 4s）无用户操作 → 哈欠 → 打盹；任何操作唤醒
+    const DOZE_AFTER_MS = 5000;
+    const DOZE_AFTER_NIGHT_MS = 4000;
     let dozing = false;
     let lastActivityAt = nowMs();
     let lastHandoffAt = 0;
@@ -2953,9 +2954,26 @@
                     ? evalChromaColorAt(gx, gy, chromaPhase, true)
                     : pal[ch]
             : null;
+          const isLaptopWrite = effectivePose === 'write' && a.kind === 'clawd';
           const overlayPainter =
-            rulerOn || (isChromaCat && (earSparkPhase < 3 || (earSparkPhase >= 5 && earSparkPhase < 8)))
+            rulerOn || isLaptopWrite || (isChromaCat && (earSparkPhase < 3 || (earSparkPhase >= 5 && earSparkPhase < 8)))
               ? (c2, oxG, oyG, pxS) => {
+                  if (isLaptopWrite) {
+                    const lx = (oxG - 5) * pxS;
+                    const ly = (oyG + 7) * pxS;
+                    const tap = localTick % 2 === 0;
+                    // Side-profile monochrome gray laptop (\_ shape) to the left of Clawd
+                    c2.fillStyle = '#94A3B8';
+                    c2.fillRect(lx, ly + 3 * pxS, 6 * pxS, pxS);
+                    c2.fillStyle = '#CBD5E1';
+                    c2.fillRect(lx - 2 * pxS, ly, pxS, 2 * pxS);
+                    c2.fillRect(lx - pxS, ly + pxS, pxS, 2 * pxS);
+                    c2.fillRect(lx, ly + 2 * pxS, pxS, pxS);
+                    // Alternating typing claws tapping the horizontal gray base
+                    c2.fillStyle = '#D97757';
+                    c2.fillRect(lx + (tap ? 2 : 3) * pxS, ly + (tap ? 1 : 2) * pxS, 2 * pxS, pxS);
+                    c2.fillRect(lx + (tap ? 4 : 5) * pxS, ly + (tap ? 2 : 1) * pxS, 2 * pxS, pxS);
+                  }
                   if (isChromaCat && (earSparkPhase < 3 || (earSparkPhase >= 5 && earSparkPhase < 8))) {
                     const leftEar = earSparkPhase < 3;
                     const sx = (oxG + (leftEar ? 2 : 13)) * pxS;
@@ -4744,8 +4762,36 @@
     };
 
     // 外部事件处理表（未知事件静默忽略）
+    let lastUserTypingAt = 0;
     const NOTIFY = {
       activity() {},
+      'user-typing'() {
+        const now = nowMs();
+        const wasDozing = dozing;
+        dozing = false;
+        lastActivityAt = now;
+        if (wasDozing) syncPowerState();
+        if (now - lastUserTypingAt < 650) return;
+        lastUserTypingAt = now;
+        const mains = activeMainActors();
+        if (!mains.length) return;
+        const scribe = mains.find((a) => a.kind === 'clawd') || mains[0];
+        if (scribe && !scribe.dragging && !scribe.stackedOn) {
+          startClip(scribe, 'write', 3000, { face: 'left', sym: 'note' });
+        }
+        for (const p of mains) {
+          if (p !== scribe && !p.dragging && !p.stackedOn) {
+            gaze(p, faceToward(p, scribe), 3000);
+          }
+        }
+        syncPowerState();
+      },
+      'user-blur'() {
+        if (!streaming) {
+          dozing = true;
+          syncPowerState();
+        }
+      },
       'slash-cmd'(p) {
         if (!runSlashTheater(p?.cmd)) NOTIFY.send();
       },
