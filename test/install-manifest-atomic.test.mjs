@@ -950,3 +950,73 @@ test('tools/install-plugin.cjs is managed by SYNC_ROOT_FILES and atomic manifest
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('cross-version Git sync: SYNC_ROOT_FILES covers src/** for legacy beta.3 daemons and copyUpdatedRuntimeFromRepo honors fresh SYNC_SUBDIRS', () => {
+  const cdpMod = require(path.join(ROOT, 'cdp.js'));
+  assert.ok(Array.isArray(cdpMod.SYNC_SUBDIRS), 'cdp.js must export SYNC_SUBDIRS');
+  assert.ok(cdpMod.SYNC_SUBDIRS.includes('src'), 'SYNC_SUBDIRS must include src');
+  assert.ok(cdpMod.SYNC_ROOT_FILES.includes('src/utils/fs-safe.cjs'), 'SYNC_ROOT_FILES must include src/utils/fs-safe.cjs for legacy <=beta.3 sync');
+  assert.ok(cdpMod.SYNC_ROOT_FILES.includes('src/daemon/index.mjs'), 'SYNC_ROOT_FILES must include src/daemon/index.mjs for legacy <=beta.3 sync');
+  assert.equal(
+    new Set(cdpMod.SYNC_ROOT_FILES).size,
+    cdpMod.SYNC_ROOT_FILES.length,
+    'SYNC_ROOT_FILES must not contain duplicate entries'
+  );
+
+  const tmpDir = mkTmp('prism-legacy-sync-');
+  try {
+    // 1) Simulate legacy v1.0.8-beta.3 copyUpdatedRuntimeFromRepo (reads fresh SYNC_ROOT_FILES + hardcoded assets/vendor/sidecars only)
+    const legacyTarget = path.join(tmpDir, 'legacy-plugin');
+    fs.mkdirSync(legacyTarget, { recursive: true });
+    for (const rel of cdpMod.SYNC_ROOT_FILES) {
+      const srcPath = path.join(ROOT, ...rel.split('/'));
+      if (!fs.existsSync(srcPath) || !fs.statSync(srcPath).isFile()) continue;
+      const dstPath = path.join(legacyTarget, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(dstPath), { recursive: true });
+      fs.copyFileSync(srcPath, dstPath);
+    }
+    for (const legacySub of ['assets', 'vendor', 'sidecars']) {
+      fs.cpSync(path.join(ROOT, legacySub), path.join(legacyTarget, legacySub), { recursive: true });
+    }
+    assert.equal(fs.existsSync(path.join(legacyTarget, 'src', 'utils', 'fs-safe.cjs')), true);
+    assert.equal(fs.existsSync(path.join(legacyTarget, 'src', 'daemon', 'index.mjs')), true);
+    // Verify the synced plugin directory boots cdp.js cleanly without MODULE_NOT_FOUND
+    const booted = require(path.join(legacyTarget, 'cdp.js'));
+    assert.equal(booted.PLUGIN_VERSION, cdpMod.PLUGIN_VERSION);
+
+    // 2) Verify copyUpdatedRuntimeFromRepo dynamically adopts freshRepoCdp.SYNC_SUBDIRS while rejecting unsafe/protected entries
+    const futureRepo = path.join(tmpDir, 'future-repo');
+    const futurePlugin = path.join(tmpDir, 'future-plugin');
+    fs.mkdirSync(path.join(futureRepo, 'extra-runtime'), { recursive: true });
+    fs.mkdirSync(path.join(futureRepo, 'wallpapers'), { recursive: true });
+    fs.mkdirSync(path.join(futurePlugin, 'wallpapers'), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(futureRepo, 'cdp.js'),
+      "module.exports = { SYNC_ROOT_FILES: ['cdp.js'], SYNC_SUBDIRS: ['extra-runtime', 'wallpapers', '../escape'] };\n",
+      'utf8'
+    );
+    fs.writeFileSync(path.join(futureRepo, 'extra-runtime', 'future-mod.cjs'), 'module.exports = 42;\n', 'utf8');
+    fs.writeFileSync(path.join(futureRepo, 'wallpapers', 'evil.png'), 'OVERWRITE', 'utf8');
+    fs.writeFileSync(path.join(futurePlugin, 'wallpapers', 'keep.png'), 'USER_KEEP', 'utf8');
+
+    const syncedCount = copyUpdatedRuntimeFromRepo(futureRepo, futurePlugin, ['cdp.js']);
+    assert.ok(syncedCount >= 2);
+    assert.equal(
+      fs.readFileSync(path.join(futurePlugin, 'extra-runtime', 'future-mod.cjs'), 'utf8'),
+      'module.exports = 42;\n',
+      'copyUpdatedRuntimeFromRepo must dynamically sync new top-level directories listed in freshRepoCdp.SYNC_SUBDIRS'
+    );
+    assert.equal(
+      fs.existsSync(path.join(futurePlugin, 'wallpapers', 'evil.png')),
+      false,
+      'Protected user directories must remain blocked even if listed in SYNC_SUBDIRS'
+    );
+    assert.equal(
+      fs.readFileSync(path.join(futurePlugin, 'wallpapers', 'keep.png'), 'utf8'),
+      'USER_KEEP'
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

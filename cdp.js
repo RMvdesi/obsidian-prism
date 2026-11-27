@@ -203,6 +203,7 @@ module.exports = {
   LINUX_DETACHED_RELAUNCH_SH: relaunchHelper.LINUX_DETACHED_RELAUNCH_SH,
   spawnDetachedHostRelaunchHelper: relaunchHelper.spawnDetachedHostRelaunchHelper,
   RUNTIME_PARTS: partPreprocess.RUNTIME_PARTS,
+  SYNC_SUBDIRS: partPreprocess.SYNC_SUBDIRS,
   SYNC_ROOT_FILES: partPreprocess.SYNC_ROOT_FILES,
   REMOVE_EXPRESSION: teardown.REMOVE_EXPRESSION,
   PURGE_DATA_FILES: teardown.PURGE_DATA_FILES,

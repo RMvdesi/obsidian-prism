@@ -325,7 +325,9 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
   const repoManifest = readInstallManifestFromDir(repoRoot);
   const protectedPaths = mergeProtectedUserPaths(repoManifest?.protectedUserPaths);
 
+  const DEFAULT_SYNC_SUBDIRS = ['assets', 'src', 'vendor', 'sidecars'];
   let resolvedFiles = null;
+  let resolvedSubDirs = null;
   const repoCdpPath = path.join(repoRoot, 'cdp.js');
   try {
     const cdpStat = fs.lstatSync(repoCdpPath);
@@ -336,6 +338,12 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
         const freshRepoCdp = require(repoCdpPath);
         if (Array.isArray(freshRepoCdp?.SYNC_ROOT_FILES) && freshRepoCdp.SYNC_ROOT_FILES.length > 0) {
           resolvedFiles = freshRepoCdp.SYNC_ROOT_FILES;
+        }
+        if (Array.isArray(freshRepoCdp?.SYNC_SUBDIRS) && freshRepoCdp.SYNC_SUBDIRS.length > 0) {
+          const safeSubs = freshRepoCdp.SYNC_SUBDIRS
+            .map((s) => String(s || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''))
+            .filter((s) => s && isSafeManagedRelPath(s) && !isProtectedUserPath(s, protectedPaths));
+          if (safeSubs.length > 0) resolvedSubDirs = [...new Set(safeSubs)];
         }
       }
     }
@@ -360,7 +368,8 @@ function copyUpdatedRuntimeFromRepo(repoDir, pluginDir, syncFilesList, opts = nu
     });
   }
 
-  for (const sub of ['assets', 'src', 'vendor', 'sidecars']) {
+  const subDirs = resolvedSubDirs || DEFAULT_SYNC_SUBDIRS;
+  for (const sub of subDirs) {
     collectSafeSubDirIntoStage({
       sub,
       sourceRoot: repoRoot,

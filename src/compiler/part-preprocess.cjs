@@ -47,6 +47,47 @@ const RUNTIME_PARTS = [
   'ui-runtime.js',
 ];
 
+const SYNC_SUBDIRS = Object.freeze(['assets', 'src', 'vendor', 'sidecars']);
+
+function collectRuntimeSrcFiles(rootDir) {
+  const srcRoot = path.join(rootDir, 'src');
+  const out = [];
+  const walk = (absDir, relPrefix) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const ent of entries) {
+      const name = ent.name;
+      if (!name || name === '.DS_Store' || name === '__pycache__' || name.endsWith('.log') || name.endsWith('.tmp')) {
+        continue;
+      }
+      if (ent.isSymbolicLink()) continue;
+      const absChild = path.join(absDir, name);
+      let st;
+      try {
+        st = fs.lstatSync(absChild);
+      } catch {
+        continue;
+      }
+      if (st.isSymbolicLink()) continue;
+      const relChild = `${relPrefix}/${name}`;
+      if (st.isDirectory()) {
+        walk(absChild, relChild);
+      } else if (st.isFile()) {
+        out.push(relChild);
+      }
+    }
+  };
+  walk(srcRoot, 'src');
+  return out;
+}
+
+// Keep src/** inside SYNC_ROOT_FILES so legacy <= v1.0.8-beta.3 daemons (which dynamically read
+// freshRepoCdp.SYNC_ROOT_FILES and only hardcode assets/vendor/sidecars) copy src/ cleanly on Git sync.
 const SYNC_ROOT_FILES = [
   'plugin.json',
   'package.json',
@@ -61,6 +102,7 @@ const SYNC_ROOT_FILES = [
   'tools/install-plugin.cjs',
   ...DEFERRED_ROOT_MODULES,
   ...RUNTIME_PARTS.filter((p) => !p.includes('/')),
+  ...collectRuntimeSrcFiles(path.resolve(__dirname, '..', '..')),
 ];
 
 function minifyEmbeddedGlslTemplates(src) {
@@ -485,6 +527,7 @@ function foldStaticCssConstTokens(tokens) {
 module.exports = {
   DEFERRED_ROOT_MODULES,
   RUNTIME_PARTS,
+  SYNC_SUBDIRS,
   SYNC_ROOT_FILES,
   minifyEmbeddedGlslTemplates,
   stripJsFunctionsByName,
