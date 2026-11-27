@@ -549,6 +549,72 @@
     },
   ];
 
+  var SUP_MODEL_PANEL_LOCALE = {
+    zh: {
+      exact: {
+        'Leaving Soon': '即将下线',
+        Notice: '提示',
+        'Claude and GPT Models': 'Claude 与 GPT 模型',
+        'Gemini models': 'Gemini 模型',
+        'Resets in < 1m': '不到 1 分钟后重置',
+        'Resets in < 1m.': '不到 1 分钟后重置。',
+        'Offloads routine steps to a faster executor. Same quality, fewer tokens used.': '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。',
+        'Offloads routine steps to a faster executor. Same quality, fewer tokens used': '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少',
+        'For most deep reasoning and complex problems': '适合大多数深度推理与复杂问题',
+        'For most deep reasoning and complex problems.': '适合大多数深度推理与复杂问题。',
+        'For your hardest, long-horizon tasks': '适合最具挑战性的长周期任务',
+        'For your hardest, long-horizon tasks.': '适合最具挑战性的长周期任务。',
+        'For speed and efficiency in execution tasks': '兼顾执行任务的速度与效率',
+        'For speed and efficiency in execution tasks.': '兼顾执行任务的速度与效率。',
+        Web: '网页',
+      },
+      patterns: [
+        { regex: '^Use (.+?) for better quality with lower quota usage\\.\\s*Leaving on (.+?)[。.]?$', replacement: '建议改用 $1，效果更好且额度消耗更低。将于 $2 下线。' },
+        { regex: '^Use (.+?) for better quality with lower quota usage[。.]?$', replacement: '建议改用 $1，效果更好且额度消耗更低。' },
+        { regex: '^The original (.+?) model for advanced workflows\\.\\s*Leaving on (.+?)[。.]?$', replacement: '适用于高阶工作流的初代 $1 模型。将于 $2 下线。' },
+        { regex: '^(.+?) that may offload routine steps to (.+?)\\.\\s*Same (.+?)-level quality,\\s*fewer tokens used[。.]?$', replacement: '可将常规步骤分流给 $2 的 $1。保持同等 $3 级质量，Token 消耗更少。' },
+        { regex: '^(.+?) will be removed from Antigravity on (.+?)[。.]?$', replacement: '$1 将于 $2 从 Antigravity 下线移除。' },
+        { regex: '^Leaving on (.+?)[。.]?$', replacement: '将于 $1 下线。' },
+        { regex: '^Search Google for "(.+?)"$', replacement: '在 Google 中搜索“$1”' },
+      ],
+    },
+    tr: {
+      exact: {
+        'Leaving Soon': 'Yakında Kaldırılacak',
+        Notice: 'Bildirim',
+        'Claude and GPT Models': 'Claude ve GPT modelleri',
+        'Gemini models': 'Gemini modelleri',
+        'Resets in < 1m': '< 1 dk içinde sıfırlanır',
+        'Resets in < 1m.': '< 1 dk içinde sıfırlanır.',
+        'Offloads routine steps to a faster executor. Same quality, fewer tokens used.': 'Rutin adımları daha hızlı bir yürütücüye aktarır. Aynı kalite, daha az token.',
+        'Offloads routine steps to a faster executor. Same quality, fewer tokens used': 'Rutin adımları daha hızlı bir yürütücüye aktarır. Aynı kalite, daha az token',
+        'For most deep reasoning and complex problems': 'Çoğu derin akıl yürütme ve karmaşık sorun için',
+        'For most deep reasoning and complex problems.': 'Çoğu derin akıl yürütme ve karmaşık sorun için.',
+        'For your hardest, long-horizon tasks': 'En zorlu ve uzun vadeli görevleriniz için',
+        'For your hardest, long-horizon tasks.': 'En zorlu ve uzun vadeli görevleriniz için.',
+        'For speed and efficiency in execution tasks': 'Yürütme görevlerinde hız ve verimlilik için',
+        'For speed and efficiency in execution tasks.': 'Yürütme görevlerinde hız ve verimlilik için.',
+        Web: 'Web',
+      },
+      patterns: [
+        { regex: '^Use (.+?) for better quality with lower quota usage\\.\\s*Leaving on (.+?)[。.]?$', replacement: 'Daha düşük kota kullanımıyla daha iyi kalite için $1 kullanın. $2 tarihinde kaldırılacak.' },
+        { regex: '^Use (.+?) for better quality with lower quota usage[。.]?$', replacement: 'Daha düşük kota kullanımıyla daha iyi kalite için $1 kullanın.' },
+        { regex: '^The original (.+?) model for advanced workflows\\.\\s*Leaving on (.+?)[。.]?$', replacement: 'Gelişmiş iş akışları için özgün $1 modeli. $2 tarihinde kaldırılacak.' },
+        { regex: '^(.+?) that may offload routine steps to (.+?)\\.\\s*Same (.+?)-level quality,\\s*fewer tokens used[。.]?$', replacement: 'Rutin adımları $2 modeline aktarabilen $1. Aynı $3 seviyesinde kalite, daha az token.' },
+        { regex: '^(.+?) will be removed from Antigravity on (.+?)[。.]?$', replacement: '$1, $2 tarihinde Antigravity\'den kaldırılacak.' },
+        { regex: '^Leaving on (.+?)[。.]?$', replacement: '$1 tarihinde kaldırılacak.' },
+        { regex: '^Search Google for "(.+?)"$', replacement: 'Google\'da "$1" ara' },
+      ],
+    },
+  };
+
+  function detectSupLocale(exactDict) {
+    var wl = exactDict && exactDict['Weekly limit'];
+    if (wl === '周限额') return 'zh';
+    if (wl === 'Haftalık sınır') return 'tr';
+    return null;
+  }
+
   var MODEL_PANEL_RULES = {
     scopedTestids: {
       'model-selector-panel': 1,
@@ -558,47 +624,32 @@
       'orchestrator-picker-row': 1,
     },
     safeExact: {
-      Model: 1, 模型: 1, New: 1, 新: 1, 新建: 1, 'Leaving Soon': 1, 即将下线: 1, Notice: 1, 提示: 1,
+      Model: 1, 模型: 1, New: 1, 新: 1, 新建: 1, Yeni: 1, 'Leaving Soon': 1, 即将下线: 1, 'Yakında Kaldırılacak': 1,
+      Notice: 1, 提示: 1, Bildirim: 1,
       'View Usage': 1, 'View usage': 1, 'View Model Usage': 1, 'View Usage Details': 1,
-      查看用量明细: 1, 查看模型用量: 1, 查看用量详情: 1, 查看用量: 1, Usage: 1, 'Usage & Quota': 1,
-      用量: 1, 用量与配额: 1, 'Gemini Models': 1, 'Gemini models': 1, 'Gemini 模型': 1,
-      'Claude and GPT models': 1, 'Claude and GPT Models': 1, 'Claude 与 GPT 模型': 1,
-      'Weekly limit': 1, 'Weekly Limit': 1, 周限额: 1, 'Loading token usage...': 1, '正在加载 Token 用量...': 1,
+      查看用量明细: 1, 查看模型用量: 1, 查看用量详情: 1, 查看用量: 1, 'Kullanımı görüntüle': 1,
+      Usage: 1, 'Usage & Quota': 1, 用量: 1, 用量与配额: 1, Kullanım: 1,
+      'Gemini Models': 1, 'Gemini models': 1, 'Gemini 模型': 1, 'Gemini modelleri': 1,
+      'Claude and GPT models': 1, 'Claude and GPT Models': 1, 'Claude 与 GPT 模型': 1, 'Claude ve GPT modelleri': 1,
+      'Weekly limit': 1, 'Weekly Limit': 1, 周限额: 1, 'Haftalık sınır': 1,
+      'Loading token usage...': 1, '正在加载 Token 用量...': 1,
       'Offloads routine steps to a faster executor. Same quality, fewer tokens used.': 1,
       '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。': 1,
+      'Rutin adımları daha hızlı bir yürütücüye aktarır. Aynı kalite, daha az token.': 1,
       'For most deep reasoning and complex problems': 1, 适合大多数深度推理与复杂问题: 1,
+      'Çoğu derin akıl yürütme ve karmaşık sorun için': 1,
       'For your hardest, long-horizon tasks': 1, 适合最具挑战性的长周期任务: 1,
+      'En zorlu ve uzun vadeli görevleriniz için': 1,
       'For speed and efficiency in execution tasks': 1, 兼顾执行任务的速度与效率: 1,
+      'Yürütme görevlerinde hız ve verimlilik için': 1,
     },
-    safeRe: /^(?:\d+\s*[hdms]\s+(?:rate\s+)?limit|\d+(?:\.\d+)?%\s+left|resets?\b|use\s+.+?\s+for\s+better\s+quality\s+with\s+lower\s+quota\s+usage|the\s+original\s+.+?\s+model\s+for\s+advanced\s+workflows|.+?\s+that\s+may\s+offload\s+routine\s+steps\s+to\s+.+?|.+\s+will\s+be\s+removed\s+from\s+antigravity\s+on\s+.+?|leaving\s+on\b|models\s+within\s+this\s+group|your\s+quota\s+for\s+this\s+model|\d+\s*(?:小时|天|分钟|秒)(?:速率限(?:制|额)|限额)|剩余\s*\d+(?:\.\d+)?%|(?:\d+\s*(?:天|小时|分(?:钟)?|秒)\s*)+后重置|不到\s*1\s*分钟后重置|几秒后重置|即将重置|重置于|建议(?:改用|使用)\s*.+?，(?:效果更好|质量更高)|适用于高阶工作流的初代\s+.+?\s+模型|可将常规步骤分流给\s+.+?|.+?\s+将于\s+.+?\s+从\s+Antigravity\s+下线移除|将于\s+.+?\s+下线)/i,
+    safeRe: /^(?:\d+\s*[hdms]\s+(?:rate\s+)?limit|\d+(?:\.\d+)?%\s+left|resets?\b|use\s+.+?\s+for\s+better\s+quality\s+with\s+lower\s+quota\s+usage|the\s+original\s+.+?\s+model\s+for\s+advanced\s+workflows|.+?\s+that\s+may\s+offload\s+routine\s+steps\s+to\s+.+?|.+\s+will\s+be\s+removed\s+from\s+antigravity\s+on\s+.+?|leaving\s+on\b|models\s+within\s+this\s+group|your\s+quota\s+for\s+this\s+model|\d+\s*(?:小时|天|分钟|秒)(?:速率限(?:制|额)|限额)|剩余\s*\d+(?:\.\d+)?%|(?:\d+\s*(?:天|小时|分(?:钟)?|秒)\s*)+后重置|不到\s*1\s*分钟后重置|几秒后重置|即将重置|重置于|建议(?:改用|使用)\s*.+?，(?:效果更好|质量更高)|适用于高阶工作流的初代\s+.+?\s+模型|可将常规步骤分流给\s+.+?|.+?\s+将于\s+.+?\s+从\s+Antigravity\s+下线移除|将于\s+.+?\s+下线|\d+\s*(?:sa|gün|dk|sn)(?:\s+hız\s+sınırı|\s+limit)?|%\d+(?:\.\d+)?\s+kaldı|<?\s*1\s*dk\s+içinde\s+sıfırlanır|.+?\s+(?:içinde|sonra)\s+sıfırlanır|yakında\s+sıfırlanır|daha\s+düşük\s+kota\s+kullanımıyla\s+daha\s+iyi\s+kalite\s+için\s+.+?|gelişmiş\s+iş\s+akışları\s+için\s+özgün\s+.+?|rutin\s+adımları\s+.+?\s+modeline\s+aktarabilen\s+.+?|.+\s+tarihinde\s+(?:antigravity'den\s+)?kaldırılacak)/i,
     fwdZh: { New: '新' },
     revZh: { 新: 'New' },
-    supExact: {
-      'Leaving Soon': '即将下线',
-      Notice: '提示',
-      'Claude and GPT Models': 'Claude 与 GPT 模型',
-      'Gemini models': 'Gemini 模型',
-      'Resets in < 1m': '不到 1 分钟后重置',
-      'Resets in < 1m.': '不到 1 分钟后重置。',
-      'Offloads routine steps to a faster executor. Same quality, fewer tokens used.': '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少。',
-      'Offloads routine steps to a faster executor. Same quality, fewer tokens used': '将常规步骤分流给更快的执行器。质量不变，Token 消耗更少',
-      'For most deep reasoning and complex problems': '适合大多数深度推理与复杂问题',
-      'For most deep reasoning and complex problems.': '适合大多数深度推理与复杂问题。',
-      'For your hardest, long-horizon tasks': '适合最具挑战性的长周期任务',
-      'For your hardest, long-horizon tasks.': '适合最具挑战性的长周期任务。',
-      'For speed and efficiency in execution tasks': '兼顾执行任务的速度与效率',
-      'For speed and efficiency in execution tasks.': '兼顾执行任务的速度与效率。',
-      Web: '网页',
-    },
-    supPatterns: [
-      { regex: '^Use (.+?) for better quality with lower quota usage\\.\\s*Leaving on (.+?)[。.]?$', replacement: '建议改用 $1，效果更好且额度消耗更低。将于 $2 下线。' },
-      { regex: '^Use (.+?) for better quality with lower quota usage[。.]?$', replacement: '建议改用 $1，效果更好且额度消耗更低。' },
-      { regex: '^The original (.+?) model for advanced workflows\\.\\s*Leaving on (.+?)[。.]?$', replacement: '适用于高阶工作流的初代 $1 模型。将于 $2 下线。' },
-      { regex: '^(.+?) that may offload routine steps to (.+?)\\.\\s*Same (.+?)-level quality,\\s*fewer tokens used[。.]?$', replacement: '可将常规步骤分流给 $2 的 $1。保持同等 $3 级质量，Token 消耗更少。' },
-      { regex: '^(.+?) will be removed from Antigravity on (.+?)[。.]?$', replacement: '$1 将于 $2 从 Antigravity 下线移除。' },
-      { regex: '^Leaving on (.+?)[。.]?$', replacement: '将于 $1 下线。' },
-      { regex: '^Search Google for "(.+?)"$', replacement: '在 Google 中搜索“$1”' },
-    ],
+    supExactByLocale: { zh: SUP_MODEL_PANEL_LOCALE.zh.exact, tr: SUP_MODEL_PANEL_LOCALE.tr.exact },
+    supPatternsByLocale: { zh: SUP_MODEL_PANEL_LOCALE.zh.patterns, tr: SUP_MODEL_PANEL_LOCALE.tr.patterns },
+    supExact: SUP_MODEL_PANEL_LOCALE.zh.exact,
+    supPatterns: SUP_MODEL_PANEL_LOCALE.zh.patterns,
     isSafeText: function (trimmed) {
       return Boolean(trimmed && (Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.safeExact, trimmed) || MODEL_PANEL_RULES.safeRe.test(trimmed)));
     },
@@ -606,11 +657,13 @@
       return Boolean(tid && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.scopedTestids, tid));
     },
     mergeSupPatterns: function (exactDict, rawPatterns) {
-      return exactDict && exactDict['Weekly limit'] === '周限额' ? rawPatterns.concat(MODEL_PANEL_RULES.supPatterns) : rawPatterns;
+      var loc = detectSupLocale(exactDict);
+      return loc ? rawPatterns.concat(SUP_MODEL_PANEL_LOCALE[loc].patterns) : rawPatterns;
     },
     mergeSupExact: function (exactDict, exactLookup, translatedValues) {
-      if (!exactDict || exactDict['Weekly limit'] !== '周限额') return;
-      var s = MODEL_PANEL_RULES.supExact;
+      var loc = detectSupLocale(exactDict);
+      if (!loc) return;
+      var s = SUP_MODEL_PANEL_LOCALE[loc].exact;
       for (var k in s) {
         if (Object.prototype.hasOwnProperty.call(s, k) && !(k in exactLookup)) {
           exactLookup[k] = s[k];
@@ -621,7 +674,7 @@
     resolveUnit: function (trimmed, isScoped, isOff, eng, fallbackFn) {
       if (isScoped) {
         if (isOff && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.revZh, trimmed)) return MODEL_PANEL_RULES.revZh[trimmed];
-        if (!isOff && eng && eng.exactDict && eng.exactDict['Weekly limit'] === '周限额' && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.fwdZh, trimmed)) {
+        if (!isOff && eng && detectSupLocale(eng.exactDict) === 'zh' && Object.prototype.hasOwnProperty.call(MODEL_PANEL_RULES.fwdZh, trimmed)) {
           return MODEL_PANEL_RULES.fwdZh[trimmed];
         }
       }

@@ -3192,3 +3192,72 @@ test('host-i18n translates launcher input placeholder (Search or enter a URL) an
 
   inst.destroy();
 });
+
+test('host-i18n translates supplemental model panel, usage, and launcher strings in Turkish (tr.json)', () => {
+  const trDict = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'tr.json'), 'utf8'),
+  );
+  const trEngine = runtime.createHostI18nEngine(trDict);
+
+  assert.equal(trEngine.translateUnit('Web'), 'Web');
+  assert.equal(trEngine.translateUnit('Leaving Soon'), 'Yakında Kaldırılacak');
+  assert.equal(trEngine.translateUnit('Notice'), 'Bildirim');
+  assert.equal(trEngine.translateUnit('Claude and GPT Models'), 'Claude ve GPT modelleri');
+  assert.equal(trEngine.translateUnit('Gemini models'), 'Gemini modelleri');
+  assert.equal(trEngine.translateUnit('Resets in < 1m'), '< 1 dk içinde sıfırlanır');
+  assert.equal(
+    trEngine.translateUnit('Offloads routine steps to a faster executor. Same quality, fewer tokens used.'),
+    'Rutin adımları daha hızlı bir yürütücüye aktarır. Aynı kalite, daha az token.',
+  );
+  assert.equal(
+    trEngine.translateUnit('For most deep reasoning and complex problems'),
+    'Çoğu derin akıl yürütme ve karmaşık sorun için',
+  );
+  assert.equal(
+    trEngine.translateText('Search Google for "ssd"'),
+    'Google\'da "ssd" ara',
+  );
+  assert.equal(
+    trEngine.translateText('Use Hydrogen for better quality with lower quota usage. Leaving on Nov 30.'),
+    'Daha düşük kota kullanımıyla daha iyi kalite için Hydrogen kullanın. Nov 30 tarihinde kaldırılacak.',
+  );
+  assert.equal(
+    trEngine.translateText('GPT-OSS 120B (Medium) will be removed from Antigravity on Dec 15.'),
+    'GPT-OSS 120B (Medium), Dec 15 tarihinde Antigravity\'den kaldırılacak.',
+  );
+
+  const env = createTestEnv();
+  const panel = env.makeEl('div', { attrs: { 'data-testid': 'model-selector-panel' } });
+  const newBadge = env.makeEl('span', { text: 'New' });
+  const leavingBadge = env.makeEl('span', { text: 'Leaving Soon' });
+  const noticeBadge = env.makeEl('span', { text: 'Notice' });
+  const searchInput = env.makeEl('input', {
+    attrs: { 'data-testid': 'new-tab-search-input', placeholder: 'Search or enter a URL' },
+  });
+  const webBtn = env.makeEl('button', {
+    attrs: { 'data-testid': 'new-tab-result-web__search' },
+    text: 'Search Google for "ssd"',
+  });
+  panel.append(newBadge, leavingBadge, noticeBadge);
+  env.doc.body.append(panel, searchInput, webBtn);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: trDict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  assert.equal(newBadge.textContent, 'Yeni');
+  assert.equal(leavingBadge.textContent, 'Yakında Kaldırılacak');
+  assert.equal(noticeBadge.textContent, 'Bildirim');
+  assert.equal(searchInput.getAttribute('placeholder'), 'Ara veya bir URL girin');
+  assert.equal(webBtn.textContent, 'Google\'da "ssd" ara');
+
+  inst.destroy();
+});
