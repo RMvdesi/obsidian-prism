@@ -555,6 +555,125 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
   })()`;
   }
 
+  // ── Channel 17: Context Guard (default-off auto-compact, scroll shield & /clear) ──
+  function shouldEnableContextGuard(config = null) {
+    const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
+    return cfg.contextGuard === 'on' || cfg.contextGuard === true;
+  }
+
+  function readCompiledContextGuardAssets(opts = null) {
+    const filePath = path.join(rootDir, 'vendor', 'context-guard', 'context-guard-client.js');
+    if (!fs.existsSync(filePath)) {
+      return { sig: '', minRuntime: '', codeHash: '' };
+    }
+    const sig = getFileSig(filePath);
+    const cachePath = resolveBundleCachePathOption(opts);
+    const curMem = bundleCache.getChannelMemCache('contextGuard');
+    if (!cachePath && curMem && curMem.sig === sig && curMem.codeHash) {
+      return curMem;
+    }
+    return bundleCache.resolveChannelAssetsWithDiskCache({
+      channelName: 'contextGuard',
+      sig,
+      fileEntries: [{ rel: 'vendor/context-guard/context-guard-client.js', fullPath: filePath }],
+      opts,
+      compileFn: () => {
+        const minRuntime = minifySingleSource(fs.readFileSync(filePath, 'utf8'), { allowMemberProps: false });
+        const codeHash = computeHash(minRuntime);
+        return { minRuntime, codeHash };
+      },
+      toCacheEntry: (assets, sourceHash) => ({
+        sourceHash,
+        codeHash: assets.codeHash,
+        minRuntime: assets.minRuntime,
+        payloadSha256: sha256Text(`${assets.codeHash}\0${assets.minRuntime}`),
+        updatedAt: Date.now(),
+      }),
+      fromCacheEntry: (entry) => ({
+        minRuntime: entry.minRuntime,
+        codeHash: entry.codeHash,
+      }),
+    });
+  }
+
+  function buildContextGuardChannelExpression(config = null, opts = null) {
+    const { resolvedCfg, resolvedOpts } = unwrapConfigAndOpts(config, opts, ['contextGuard', 'compactThreshold', 'language', 'lang']);
+    const cfg = resolvedCfg && typeof resolvedCfg === 'object' ? reconcileConfigAliases(resolvedCfg) : readConfig();
+    if (!shouldEnableContextGuard(cfg)) return '';
+    const { minRuntime, codeHash } = readCompiledContextGuardAssets(resolvedOpts);
+    if (!minRuntime || !codeHash) return '';
+
+    const bootCfgJson = serializeJsonForEval(cfg);
+    const hashJson = serializeJsonForEval(codeHash);
+
+    return `(() => {
+  try {
+${CHANNEL_MAIN_FRAME_HOST_GUARD}
+
+    const cleanupCg = () => {
+      try { (window.__agPrismContextGuard || globalThis.__agPrismContextGuard)?.destroy?.(); } catch {}
+      try { document.querySelectorAll?.('[data-ag-prism-cg-owned="1"]')?.forEach?.((n) => n.remove()); } catch {}
+      try { delete window.__agPrismContextGuard; } catch {}
+      try { delete globalThis.__agPrismContextGuard; } catch {}
+      try { delete window.__agPrismContextGuardFactory; } catch {}
+      try { delete globalThis.__agPrismContextGuardFactory; } catch {}
+    };
+    const getLiveCfg = () => {
+      try {
+        const st = (window.__agPrism || window.__agClaudeStyle)?.getState?.();
+        return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null;
+      } catch { return null; }
+    };
+
+    const bootCfg = ${bootCfgJson};
+    const targetHash = ${hashJson};
+    const mountOrReuse = () => {
+      if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {
+        return { ok: false, status: 'skipped-non-host' };
+      }
+      const liveCfg = getLiveCfg();
+      if (liveCfg && liveCfg.contextGuard !== 'on' && liveCfg.contextGuard !== true) {
+        cleanupCg();
+        return { ok: true, status: 'off', skippedByLiveCfg: true };
+      }
+      const effectiveCfg = liveCfg || bootCfg;
+      const syncOpts = {
+        enabled: effectiveCfg.contextGuard === 'on' || effectiveCfg.contextGuard === true,
+        compactThreshold: String(effectiveCfg.compactThreshold || '80'),
+        lang: effectiveCfg.language || effectiveCfg.lang || 'auto',
+      };
+      const existing = window.__agPrismContextGuard || globalThis.__agPrismContextGuard;
+      if (existing && !existing.getDebugState?.()?.destroyed && existing.__prismCodeHash === targetHash) {
+        try { existing.sync?.(syncOpts); } catch {}
+        return { ok: true, reused: true, codeHash: targetHash };
+      }
+
+      cleanupCg();
+      ;${minRuntime};
+
+      const fac = window.__agPrismContextGuardFactory || globalThis.__agPrismContextGuardFactory;
+      const inst = fac && typeof fac.createContextGuardController === 'function'
+        ? fac.createContextGuardController({ win: window, doc: document, ...syncOpts })
+        : null;
+      if (inst && typeof inst === 'object') {
+        inst.__prismCodeHash = targetHash;
+        try { window.__agPrismContextGuard = inst; } catch {}
+        try { globalThis.__agPrismContextGuard = inst; } catch {}
+      }
+      return { ok: Boolean(inst), status: inst ? 'mounted' : 'error', codeHash: targetHash };
+    };
+
+    if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {
+      document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });
+      return { ok: true, status: 'deferred', codeHash: targetHash };
+    }
+    return mountOrReuse();
+  } catch (err) {
+    return { ok: false, status: 'error', channel: 'contextGuard', error: String(err && err.message || err).slice(0, 300), stack: String(err && err.stack || '').slice(0, 600) };
+  }
+  })()`;
+  }
+
   return {
     shouldEnableTelemetry,
     buildTelemetryChannelExpression,
@@ -564,6 +683,8 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     buildWorkbenchEnhancerChannelExpression,
     shouldEnableContextMenu,
     buildContextMenuChannelExpression,
+    shouldEnableContextGuard,
+    buildContextGuardChannelExpression,
   };
 }
 

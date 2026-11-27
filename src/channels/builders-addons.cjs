@@ -209,13 +209,15 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     const stageGlPath = path.join(rootDir, 'vendor', 'clawd-mascot', 'octopath-stage-webgl.js');
     const i18nExtPath = path.join(rootDir, 'src', 'runtime', 'i18n-ext-beta4.js');
     const setExtPath = path.join(rootDir, 'src', 'runtime', 'settings-ext-beta4.js');
+    const cgExtPath = path.join(rootDir, 'src', 'runtime', 'settings-context-guard.js');
     const hasLocTr = fs.existsSync(locTrPath);
     const hasBrand = fs.existsSync(brandPath);
     const hasAtlas = fs.existsSync(atlasPath);
     const hasStageGl = fs.existsSync(stageGlPath);
     const hasI18nExt = fs.existsSync(i18nExtPath);
     const hasSetExt = fs.existsSync(setExtPath);
-    const sig = `${hasLocTr ? getFileSig(locTrPath) : '0'}|${getFileSig(locPath)}|${hasBrand ? getFileSig(brandPath) : '0'}|${hasAtlas ? getFileSig(atlasPath) : '0'}|${hasStageGl ? getFileSig(stageGlPath) : '0'}|${getFileSig(setPath)}|${hasI18nExt ? getFileSig(i18nExtPath) : '0'}|${hasSetExt ? getFileSig(setExtPath) : '0'}`;
+    const hasCgExt = fs.existsSync(cgExtPath);
+    const sig = `${hasLocTr ? getFileSig(locTrPath) : '0'}|${getFileSig(locPath)}|${hasBrand ? getFileSig(brandPath) : '0'}|${hasAtlas ? getFileSig(atlasPath) : '0'}|${hasStageGl ? getFileSig(stageGlPath) : '0'}|${getFileSig(setPath)}|${hasI18nExt ? getFileSig(i18nExtPath) : '0'}|${hasSetExt ? getFileSig(setExtPath) : '0'}|${hasCgExt ? getFileSig(cgExtPath) : '0'}`;
     const cachePath = resolveBundleCachePathOption(opts);
     const curMem = bundleCache.getChannelMemCache('settings');
     if (!cachePath && curMem && curMem.sig === sig && curMem.codeHash) {
@@ -230,6 +232,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     if (hasI18nExt) fileEntries.push({ rel: 'src/runtime/i18n-ext-beta4.js', fullPath: i18nExtPath });
     fileEntries.push({ rel: 'settings-panel.js', fullPath: setPath });
     if (hasSetExt) fileEntries.push({ rel: 'src/runtime/settings-ext-beta4.js', fullPath: setExtPath });
+    if (hasCgExt) fileEntries.push({ rel: 'src/runtime/settings-context-guard.js', fullPath: cgExtPath });
     return bundleCache.resolveChannelAssetsWithDiskCache({
       channelName: 'settings',
       sig,
@@ -251,6 +254,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
         if (hasI18nExt) parts.push(minifySingleSource(fs.readFileSync(i18nExtPath, 'utf8'), { allowMemberProps: false }));
         parts.push(minifySingleSource(fs.readFileSync(setPath, 'utf8'), { allowMemberProps: false }));
         if (hasSetExt) parts.push(minifySingleSource(fs.readFileSync(setExtPath, 'utf8'), { allowMemberProps: false }));
+        if (hasCgExt) parts.push(minifySingleSource(fs.readFileSync(cgExtPath, 'utf8'), { allowMemberProps: false }));
         const minRuntime = parts.join(';\n');
         const codeHash = computeHash(minRuntime);
         return { minRuntime, codeHash };
