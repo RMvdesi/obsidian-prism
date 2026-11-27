@@ -340,3 +340,188 @@ test('crystal-prism-core & model-glyph-crystal honor accentTone (mono/cobalt/iri
     globalThis.document = prevDoc;
   }
 });
+
+test('syncModelSelectorPanel mounts Orchestrator crystal bar when composerRestyle is false while keeping row glyphs gated', () => {
+  const modelGlyphMod = require('../model-glyph-crystal.js');
+  const prevDoc = globalThis.document;
+  const htmlAttrs = new Map([
+    ['data-ag-cs-accent', 'follow'],
+    ['data-ag-cs-ambient', '1'],
+    ['data-ag-cs-effort-slider', 'auto'],
+  ]);
+
+  function makeFakeEl(tag, initialAttrs = {}, initialClasses = [], text = '') {
+    const attrs = new Map(Object.entries(initialAttrs));
+    const classes = new Set(initialClasses);
+    const children = [];
+    const el = {
+      tagName: tag.toUpperCase(),
+      isConnected: true,
+      parentElement: null,
+      children,
+      textContent: text,
+      style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => '' },
+      get className() { return Array.from(classes).join(' '); },
+      set className(val) {
+        classes.clear();
+        for (const c of String(val || '').split(/\s+/).filter(Boolean)) classes.add(c);
+      },
+      classList: {
+        add: (...cs) => cs.forEach((c) => classes.add(c)),
+        remove: (...cs) => cs.forEach((c) => classes.delete(c)),
+        contains: (c) => classes.has(c),
+      },
+      get firstChild() { return children[0] || null; },
+      get firstElementChild() { return children[0] || null; },
+      setAttribute(k, v) { attrs.set(k, String(v)); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      hasAttribute(k) { return attrs.has(k); },
+      removeAttribute(k) { attrs.delete(k); },
+      appendChild(n) {
+        if (n.parentElement && n.parentElement !== el) n.parentElement.removeChild?.(n);
+        n.parentElement = el;
+        children.push(n);
+        return n;
+      },
+      insertBefore(n, ref) {
+        if (n.parentElement && n.parentElement !== el) n.parentElement.removeChild?.(n);
+        n.parentElement = el;
+        const idx = ref ? children.indexOf(ref) : -1;
+        if (idx >= 0) children.splice(idx, 0, n);
+        else children.unshift(n);
+        return n;
+      },
+      removeChild(n) {
+        const idx = children.indexOf(n);
+        if (idx >= 0) {
+          children.splice(idx, 1);
+          n.parentElement = null;
+        }
+      },
+      remove() {
+        el.parentElement?.removeChild?.(el);
+        el.isConnected = false;
+      },
+      addEventListener() {},
+      removeEventListener() {},
+      closest(sel) {
+        const parts = sel.split(',').map((s) => s.trim()).filter(Boolean);
+        for (let cur = el; cur; cur = cur.parentElement) {
+          if (parts.some((p) => matchesSimple(cur, p))) return cur;
+        }
+        return null;
+      },
+      querySelector(sel) {
+        return el.querySelectorAll(sel)[0] || null;
+      },
+      querySelectorAll(sel) {
+        const parts = sel.split(',').map((s) => s.trim()).filter(Boolean);
+        const out = [];
+        const walk = (node) => {
+          for (const ch of node.children) {
+            if (parts.some((p) => matchesSimple(ch, p))) out.push(ch);
+            walk(ch);
+          }
+        };
+        walk(el);
+        return out;
+      },
+    };
+    return el;
+  }
+
+  function matchesSimple(el, sel) {
+    if (!el || !sel) return false;
+    if (sel === 'button') return el.tagName === 'BUTTON';
+    if (sel === '[role="menuitem"]' || sel === '[role="option"]') {
+      return `[role="${el.getAttribute('role')}"]` === sel;
+    }
+    if (sel === '.ces-ag-section') return el.classList.contains('ces-ag-section');
+    if (sel === '.ces-track') return el.classList.contains('ces-track');
+    if (sel === '.ces-knob') return el.classList.contains('ces-knob');
+    if (sel === '.agy-overlay') return el.classList.contains('agy-overlay');
+    if (sel === '.ag-cs-orch-track') return el.classList.contains('ag-cs-orch-track');
+    if (sel === '.ag-cs-model-glyph' || sel === '.ag-cs-panel-row-glyph') {
+      return el.classList.contains(sel.slice(1));
+    }
+    if (sel === '[data-testid="model-selector-panel"]') return el.getAttribute('data-testid') === 'model-selector-panel';
+    if (sel === '[data-testid="orchestrator-effort-bar"]') return el.getAttribute('data-testid') === 'orchestrator-effort-bar';
+    if (sel === '[data-ces-model-selected="true"]') return el.getAttribute('data-ces-model-selected') === 'true';
+    if (sel === 'canvas[data-orch-crystal-canvas="true"]') {
+      return el.tagName === 'CANVAS' && el.getAttribute('data-orch-crystal-canvas') === 'true';
+    }
+    if (sel === '.ces-ag-effort-row:not([data-testid="orchestrator-effort-bar"])') {
+      return el.classList.contains('ces-ag-effort-row') && el.getAttribute('data-testid') !== 'orchestrator-effort-bar';
+    }
+    if (sel === '.ces-ag-effort-row[data-ag-orch-p]') {
+      return el.classList.contains('ces-ag-effort-row') && el.hasAttribute('data-ag-orch-p');
+    }
+    return false;
+  }
+
+  const root = makeFakeEl('html');
+  root.setAttribute = (k, v) => htmlAttrs.set(k, String(v));
+  root.getAttribute = (k) => (htmlAttrs.has(k) ? htmlAttrs.get(k) : null);
+  root.hasAttribute = (k) => htmlAttrs.has(k);
+  root.removeAttribute = (k) => htmlAttrs.delete(k);
+
+  const overlay = makeFakeEl('div', {}, ['agy-overlay']);
+  const panel = makeFakeEl('div', { 'data-testid': 'model-selector-panel', 'data-ces-orch-tunable': 'true' });
+  const orchRow = makeFakeEl('div', {
+    role: 'menuitem',
+    'data-testid': 'model-selector-orchestrator',
+    'data-ces-model-selected': 'true',
+  }, [], 'Orchestrator Gemini 4 Neon');
+  const section = makeFakeEl('div', {}, ['ces-ag-section']);
+  const effortRow = makeFakeEl('div', {}, ['ces-ag-effort-row']);
+  const track = makeFakeEl('div', {}, ['ces-track']);
+  const knob = makeFakeEl('div', {}, ['ces-knob']);
+  track.appendChild(knob);
+  effortRow.appendChild(track);
+  section.appendChild(effortRow);
+  panel.appendChild(orchRow);
+  panel.appendChild(section);
+  overlay.appendChild(panel);
+  root.appendChild(overlay);
+
+  globalThis.document = {
+    hidden: false,
+    documentElement: root,
+    createElement: (tag) => makeFakeEl(tag),
+    querySelector: (sel) => root.querySelector(sel),
+    querySelectorAll: (sel) => root.querySelectorAll(sel),
+  };
+
+  try {
+    let composerRestyle = false;
+    const ctl = modelGlyphMod.createModelGlyphCrystalController({
+      animatedIcons: null,
+      crystalPrismCore: crystalCore,
+      isDestroyed: () => false,
+      isComposerRestyleEnabled: () => composerRestyle,
+      isZh: () => true,
+      isDarkTheme: () => true,
+      motionReduced: () => false,
+      getMinFrameGapMs: () => 0,
+      canMountRealCanvas: () => false,
+      getLastPointerPos: () => ({ x: -9999, y: -9999 }),
+      setAttrIfChanged: (el, k, v) => el.setAttribute(k, v),
+    });
+
+    ctl.syncModelSelectorPanel({ isOrchestrator: true, tier: 'high' });
+    assert.equal(orchRow.querySelector('.ag-cs-panel-row-glyph'), null, 'Row glyphs stay disabled when composerRestyle is false');
+    assert.equal(effortRow.getAttribute('data-ag-orch-p'), '1', 'Orchestrator slider still receives crystal prism overlay when composerRestyle is false');
+    assert.equal(track.classList.contains('ag-cs-orch-track'), true);
+    assert.ok(track.querySelector('canvas[data-orch-crystal-canvas="true"]'), 'Crystal prism canvas mounts on Orchestrator slider track');
+    assert.equal(ctl.getActiveCrystalTrack(), track);
+
+    // Turning effortSliderModule off tears down the crystal overlay cleanly
+    htmlAttrs.set('data-ag-cs-effort-slider', 'off');
+    ctl.syncModelSelectorPanel({ isOrchestrator: true, tier: 'high' });
+    assert.equal(effortRow.hasAttribute('data-ag-orch-p'), false);
+    assert.equal(track.querySelector('canvas[data-orch-crystal-canvas="true"]'), null);
+    assert.equal(ctl.getActiveCrystalTrack(), null);
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});

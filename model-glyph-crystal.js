@@ -348,9 +348,10 @@
     };
     const syncModelSelectorPanel = (prim) => {
       const p = qs(docOf(), '[data-testid="model-selector-panel"]'); syncModelMenuAttrs(p);
-      if (!isComposerRestyleEnabled() || !p) { clearPanelRowGlyphs(); if (mPanel || mBar) { teardownCrystalMount(); if (p) syncModelMenuAttrs(p); } return; }
+      if (!p) { clearPanelRowGlyphs(); if (mPanel || mBar) teardownCrystalMount(); return; }
       if (mPanel && mPanel !== p) { teardownCrystalMount(); syncModelMenuAttrs(p); }
-      syncPanelRowGlyphs(p);
+      if (isComposerRestyleEnabled()) syncPanelRowGlyphs(p);
+      else clearPanelRowGlyphs(p);
       if (isEffortSliderOff()) { qa(p, '[data-testid="orchestrator-effort-bar"]').forEach((b) => b.remove?.()); stopCrystalOnPanel(p); return; }
       const isO = detectPanelIsOrchestrator(p, prim), isOT = isO && ga(p, 'data-ces-orch-tunable') === 'true', cs = qs(p, '.ces-ag-section');
       if (cs) { if (ga(cs, 'data-effort-slot') !== 'true') sa(cs, 'data-effort-slot', 'true'); qs(cs, '[role="separator"]') ? setAttrIfChanged(cs, 'data-has-sep', '1') : ha(cs, 'data-has-sep') && ra(cs, 'data-has-sep'); }
