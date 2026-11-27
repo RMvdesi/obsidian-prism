@@ -425,6 +425,21 @@ const CONTEXT_MENU_REMOVE_EXPRESSION = `(() => {
   return { ok: true, status: 'off' };
 })()`;
 
+const CONTEXT_GUARD_REMOVE_EXPRESSION = `(() => {
+  try { (window.__agPrismContextGuard || globalThis.__agPrismContextGuard)?.destroy?.(); } catch {}
+  try { document.querySelectorAll?.('[data-ag-prism-cg-owned="1"]')?.forEach?.((n) => n.remove()); } catch {}
+  try {
+    const p = document.getElementById?.('ag-prism-pulse-bar') || document.querySelector?.('[data-ag-prism-pulse-bar="true"],#ag-pulse-status-bar');
+    p?.shadowRoot?.querySelectorAll?.('[data-ag-prism-cg-owned="1"]')?.forEach?.((n) => n.remove());
+  } catch {}
+  try { if (window.__agSessionGuardOwner === 'obsidian-prism') delete window.__agSessionGuardOwner; } catch {}
+  try { delete window.__agPrismContextGuard; } catch {}
+  try { delete globalThis.__agPrismContextGuard; } catch {}
+  try { delete window.__agPrismContextGuardFactory; } catch {}
+  try { delete globalThis.__agPrismContextGuardFactory; } catch {}
+  return { ok: true, status: 'off' };
+})()`;
+
 const CHANNEL_TEARDOWN_MAP = Object.freeze({
   omni: OMNI_REMOVE_EXPRESSION,
   sidebar: SIDEBAR_REMOVE_EXPRESSION,
@@ -442,6 +457,7 @@ const CHANNEL_TEARDOWN_MAP = Object.freeze({
   effortSlider: EFFORT_SLIDER_REMOVE_EXPRESSION,
   workbenchEnhancer: WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   contextMenu: CONTEXT_MENU_REMOVE_EXPRESSION,
+  contextGuard: CONTEXT_GUARD_REMOVE_EXPRESSION,
 });
 
 module.exports = {
@@ -463,5 +479,6 @@ module.exports = {
   EFFORT_SLIDER_REMOVE_EXPRESSION,
   WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   CONTEXT_MENU_REMOVE_EXPRESSION,
+  CONTEXT_GUARD_REMOVE_EXPRESSION,
   CHANNEL_TEARDOWN_MAP,
 };

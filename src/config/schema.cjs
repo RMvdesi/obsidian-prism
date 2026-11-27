@@ -64,6 +64,8 @@ const CONFIG_SCHEMA = Object.freeze({
   targetFps: Object.freeze({ type: 'enum', values: Object.freeze(['60', '120', '180', 'native']), default: '180' }),
   telemetryModule: Object.freeze({ type: 'enum', values: AUTO_ON_OFF_VALUES, default: 'auto', coerceBoolToOnOff: true }),
   telemetryQuotaMode: Object.freeze({ type: 'enum', values: Object.freeze(['compact', 'both']), default: 'compact' }),
+  contextGuard: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
+  compactThreshold: Object.freeze({ type: 'enum', values: Object.freeze(['off', '75', '80', '85', '90']), default: '80' }),
   effortSliderModule: Object.freeze({ type: 'enum', values: AUTO_ON_OFF_VALUES, default: 'auto', coerceBoolToOnOff: true }),
   effortMemory: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'on', coerceBoolToOnOff: true }),
   periodicModelPicker: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'on', coerceBoolToOnOff: true }),

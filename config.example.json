@@ -10,6 +10,8 @@
   "targetFps": "180",
   "telemetryModule": "auto",
   "telemetryQuotaMode": "compact",
+  "contextGuard": "off",
+  "compactThreshold": "80",
   "effortSliderModule": "auto",
   "effortMemory": "on",
   "periodicModelPicker": "on",

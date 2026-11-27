@@ -836,9 +836,9 @@ namespace AgyClaudeStyle
         private static readonly string[] AutoOnOffValues = new string[] { "auto", "on", "off" };
         private static readonly string[] StrictOnBoolKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
         private static readonly string[] NotOffBoolKeys = new string[] { "smoothCaret", "contextMenu" };
-        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "omniModule", "sidebarStudio", "autoUpdate" };
+        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "contextGuard", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "omniModule", "sidebarStudio", "autoUpdate" };
 
-        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 54 键 100% 对齐：40 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
+        // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 56 键 100% 对齐：42 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
         private static readonly string[,] EnumSchemaSpecs = new string[,]
         {
             { "language", "auto", "L" }, { "lang", "auto", "L" },
@@ -846,6 +846,7 @@ namespace AgyClaudeStyle
             { "darkAuraStyle", "prism", "prism,neon" }, { "motionLevel", "ultra", "off,subtle,standard,ultra" },
             { "performanceMode", "balanced", "balanced,performance,quality,auto,eco" }, { "targetFps", "180", "60,120,180,native" },
             { "telemetryModule", "auto", "A" }, { "telemetryQuotaMode", "compact", "compact,both" },
+            { "contextGuard", "off", "O" }, { "compactThreshold", "80", "off,75,80,85,90" },
             { "effortSliderModule", "auto", "A" }, { "effortMemory", "on", "O" }, { "periodicModelPicker", "on", "O" },
             { "thoughtTranslate", "off", "off,machine,ai" }, { "thoughtTrigger", "preload", "preload,expand" },
             { "homeLayout", "studio", "studio,classic,off" }, { "homeMode", "studio", "studio,classic,off" },

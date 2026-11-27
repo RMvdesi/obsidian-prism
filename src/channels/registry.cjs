@@ -228,11 +228,11 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'settings', channelNumber: 9, order: 90, tier: 'addon', injectMode: 'on-demand-rpc', precompileOnBoot: false,
     label: 'Settings Panel & Full Locales',
-    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode'],
+    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode', 'contextGuard', 'compactThreshold'],
     files: [
       'src/runtime/i18n-tr-locale.js', 'i18n-locales.js', 'assets/brand-mark-svg.js', 'vendor/clawd-mascot/tavern-atlas-data.js',
       'vendor/clawd-mascot/octopath-stage-webgl.js', 'src/runtime/i18n-ext-beta4.js',
-      'settings-panel.js', 'src/runtime/settings-ext-beta4.js',
+      'settings-panel.js', 'src/runtime/settings-ext-beta4.js', 'src/runtime/settings-context-guard.js',
     ],
     mountGlobal: '__agPrismSettingsPanel', probeKey: 'hasSettingsPanel',
     probeExtraKeys: ['needsSettingsChannel'], budgetBytes: 500 * 1024,
@@ -373,6 +373,21 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     defaultShouldEnable: (cfg) => cfg?.contextMenu !== false && cfg?.contextMenu !== 'off',
     cfgSig: (cfg) => (cfg?.contextMenu === false || cfg?.contextMenu === 'off' ? 'off' : 'on'),
   }),
+  defineSpec({
+    id: 'contextGuard', channelNumber: 17, order: 170, tier: 'addon', topLevelPack: true,
+    label: 'Context Auto-Compact & /clear',
+    configKeys: ['contextGuard', 'compactThreshold', 'language'],
+    files: ['vendor/context-guard/context-guard-client.js'],
+    mountGlobal: '__agPrismContextGuard',
+    respectSkippedByLiveCfg: true,
+    budgetBytes: 32 * 1024,
+    probeLines: [
+      'hasContextGuard: Boolean((window.__agPrismContextGuard || globalThis.__agPrismContextGuard) && !(window.__agPrismContextGuard || globalThis.__agPrismContextGuard).getDebugState?.()?.destroyed)',
+      "contextGuardCodeHash: String((window.__agPrismContextGuard || globalThis.__agPrismContextGuard)?.__prismCodeHash || '')",
+    ],
+    defaultShouldEnable: (cfg) => cfg?.contextGuard === 'on' || cfg?.contextGuard === true,
+    cfgSig: (cfg) => (cfg?.contextGuard === 'on' || cfg?.contextGuard === true ? `on:${cfg?.compactThreshold || '80'}` : 'off'),
+  }),
 ]);
 
 // 从唯一真相源自动派生：磁盘缓存键清单、缓存格式映射、Runtime 下沉通道 ID 清单
@@ -476,6 +491,7 @@ function createChannelRegistry({ builders, readConfig }) {
     bindEntry('effortSlider', builders.shouldEnableEffortSlider, builders.buildEffortSliderChannelExpression),
     bindEntry('workbenchEnhancer', builders.shouldEnableWorkbenchEnhancer, builders.buildWorkbenchEnhancerChannelExpression),
     bindEntry('contextMenu', builders.shouldEnableContextMenu, builders.buildContextMenuChannelExpression),
+    bindEntry('contextGuard', builders.shouldEnableContextGuard, builders.buildContextGuardChannelExpression),
   ]);
 
   const registryById = new Map(CHANNEL_REGISTRY.map((ch) => [ch.id, ch]));

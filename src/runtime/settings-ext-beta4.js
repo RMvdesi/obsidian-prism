@@ -560,8 +560,10 @@
     const codeFontCustom = String(readLiveCfg(ctx, 'codeFontCustom', '') || '');
     const telOff = readLiveCfg(ctx, 'telemetryModule', 'auto') === 'off';
     const telQuotaMode = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
+    const cgMod = readLiveCfg(ctx, 'contextGuard', 'off') === 'on' ? 'on' : 'off';
+    const cgTh = String(readLiveCfg(ctx, 'compactThreshold', '80') || '80');
 
-    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
+    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}|${cgMod}|${cgTh}`;
     if (
       rootEl.__extBeta4Sig === extSig &&
       qs(rootEl, '[data-ag-cs-row="performanceMode"]') &&
@@ -732,6 +734,7 @@
           }
         }
       }
+      try { (win.__agPrismSettingsContextGuard || G.__agPrismSettingsContextGuard)?.sync?.(rootEl, ctx); } catch {}
     });
 
     rootEl.__extBeta4Sig = extSig;
@@ -741,6 +744,7 @@
   function dispose(docOverride) {
     const doc = docOverride || (typeof document !== 'undefined' ? document : null);
     if (!doc) return;
+    try { G.__agPrismSettingsContextGuard?.dispose?.(doc); } catch {}
     try { doc.getElementById?.(STYLE_ID)?.remove?.(); } catch {}
     try { doc.getElementById?.(DATALIST_ID)?.remove?.(); } catch {}
     try { doc.querySelectorAll?.('[data-ag-cs-ext-owned="1"], [data-ag-cs-ext-custom]')?.forEach?.((n) => n.remove?.()); } catch {}
