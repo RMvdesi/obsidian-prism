@@ -1437,11 +1437,14 @@
       fillKeys(mc, 'stackedOn,leap,act,lastDomX,lastDomY,lastDomZ,lastFrameKey', null);
     });
 
-    const rAF =
-      (win && isFn(win.requestAnimationFrame) && win.requestAnimationFrame.bind(win)) ||
-      (typeof requestAnimationFrame === 'function'
-        ? requestAnimationFrame
-        : (fn) => later(16, () => fn(nowMs())));
+    let dRafSeq = 0;
+    const rAF = (fn) => {
+      const b = win && (win.__agDomBus || win.__agPrismDomBus);
+      if (b?.requestFrame) return b.requestFrame(`mascot-${++dRafSeq}`, fn);
+      if (win && isFn(win.requestAnimationFrame)) return win.requestAnimationFrame(fn);
+      if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(fn);
+      return later(16, () => fn(nowMs()));
+    };
 
     const CHROMA_STORE_KEY = '__op_chroma_v1';
     const getStorage = () => {
@@ -4442,7 +4445,7 @@
         (reducedMotion && !inTrans())
       ) {
         targetMs = 0;
-      } else if (dozing && !stageBusy() && !hasDozeTransition(now)) {
+      } else if ((dozing || (now - lastActivityAt >= 12000 && !streaming)) && !stageBusy() && !hasDozeTransition(now)) {
         targetMs = DOZE_TICK;
       }
       if (targetMs === 0 || dozing || reducedMotion) {

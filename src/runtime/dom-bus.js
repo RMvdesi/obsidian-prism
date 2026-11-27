@@ -48,6 +48,80 @@
     let scBusy = false, scTmr = 0, stBusy = false, mUntil = 0, mTmr = 0;
     let lsOn = false, curPerf = '', chkEp = 0, mc = null;
     const mcQ = [];
+    const fSubs = new Map();
+    let fRaf = 0, fLastTs = 0, fEmaDt = 16.67, fDrop = 0, fOk = 0, fDprCap = 2;
+    const baseMemCap = () => {
+      const m = typeof navigator !== 'undefined' ? Number(navigator.deviceMemory) : 0;
+      return m > 0 && m <= 2 ? 1 : m > 0 && m <= 4 ? 1.25 : 2;
+    };
+    const getAdaptiveDprCap = () => Math.min(baseMemCap(), fDprCap);
+    const getFrameMetrics = () => ({ avgFrameMs: +fEmaDt.toFixed(2), adaptiveDprCap: getAdaptiveDprCap(), activeFrameTasks: fSubs.size });
+    const ensureFrameLoop = () => {
+      if (fRaf || !fSubs.size) return;
+      const d = getDoc();
+      if (d?.hidden) return;
+      let anyVis = false;
+      for (const s of fSubs.values()) if (s.vis) { anyVis = true; break; }
+      if (!anyVis) return;
+      const rAF = gFn('requestAnimationFrame');
+      if (!rAF) return;
+      fRaf = T(() => rAF(runFrameLoop)) || 0;
+    };
+    function runFrameLoop(ts) {
+      fRaf = 0;
+      const d = getDoc();
+      if (!fSubs.size || d?.hidden) { fLastTs = 0; return; }
+      const now = Number(ts) > 0 ? Number(ts) : nowMs();
+      if (fLastTs > 0) {
+        const dt = now - fLastTs;
+        if (dt > 0 && dt < 250) {
+          fEmaDt = fEmaDt * 0.85 + dt * 0.15;
+          if (fEmaDt > 24) { fDrop++; fOk = 0; if (fDrop >= 6) { fDrop = 0; fDprCap = fDprCap > 1.25 ? 1.25 : fDprCap > 1 ? 1 : 0.75; } }
+          else if (fEmaDt < 18) { fOk++; fDrop = 0; if (fOk >= 45 && fDprCap < baseMemCap()) { fOk = 0; fDprCap = Math.min(baseMemCap(), fDprCap < 1 ? 1 : fDprCap < 1.25 ? 1.25 : 2); } }
+          else { fDrop = 0; }
+        }
+      }
+      fLastTs = now;
+      const capGap = Number(getPerfCaps(null, d).minFrameGapMs) || 0;
+      const batch = Array.from(fSubs.values());
+      for (let i = 0; i < batch.length; i++) {
+        const s = batch[i];
+        if (!s.vis) continue;
+        const gap = Math.max(s.minGap || 0, capGap);
+        if (gap > 0 && s.last > 0 && now - s.last < gap) continue;
+        s.last = now;
+        if (s.once !== false) { fSubs.delete(s.id); if (s.unVis) T(s.unVis); }
+        T(() => s.fn(now));
+      }
+      if (fSubs.size) ensureFrameLoop();
+    }
+    function requestFrame(id, fn, opts = {}) {
+      if (!id || !isF(fn)) return 0;
+      const prev = fSubs.get(id);
+      if (prev) {
+        prev.fn = fn;
+        prev.minGap = Number(opts.minGapMs) || 0;
+        prev.once = opts.once !== false;
+        ensureFrameLoop();
+        return 1;
+      }
+      const el = opts.el || null;
+      const s = { id, fn, el, minGap: Number(opts.minGapMs) || 0, once: opts.once !== false, last: 0, vis: !el || !isSkipped(el), unVis: null };
+      if (el && isF(observeVisibility)) {
+        s.unVis = observeVisibility(el, (vis) => { s.vis = Boolean(vis); if (s.vis) ensureFrameLoop(); });
+      }
+      fSubs.set(id, s);
+      ensureFrameLoop();
+      return 1;
+    }
+    function cancelFrame(id) {
+      const s = fSubs.get(id);
+      if (!s) return 0;
+      fSubs.delete(id);
+      if (s.unVis) T(s.unVis);
+      if (!fSubs.size && fRaf) { T(() => gFn('cancelAnimationFrame')?.(fRaf)); fRaf = 0; }
+      return 1;
+    }
 
     const getDoc = (o) => o || bDoc || (typeof document !== 'undefined' ? document : null);
     const getWin = (o, d) => o || bWin || d?.defaultView || (typeof window !== 'undefined' ? window : G);
@@ -459,6 +533,9 @@
       if (scTmr) { clearTimeout(scTmr); scTmr = 0; }
       if (mTmr) { clearTimeout(mTmr); mTmr = 0; }
       scBusy = stBusy = false; mUntil = 0; curPerf = '';
+      if (fRaf) { T(() => gFn('cancelAnimationFrame', getWin(wO))?.(fRaf)); fRaf = 0; }
+      for (const s of fSubs.values()) if (s.unVis) T(s.unVis);
+      fSubs.clear(); fLastTs = 0;
       detach();
       while (mcQ.length) T(() => mcQ.shift()());
       if (mc) { T(() => { mc.port1.onmessage = null; mc.port1.close?.(); mc.port2.close?.(); }); mc = null; }
@@ -471,6 +548,7 @@
       attach, subscribe, drainMutations, measure, mutate, flushNow,
       scheduleTask, cancelTask, cancelGroup, reprioritizeTask, yieldSlice, runChunked,
       observeSize, getSize, readBoxSize, observeVisibility, isSkipped,
+      requestFrame, cancelFrame, getAdaptiveDprCap, getFrameMetrics,
       setStreaming, bumpBusy, bumpScrollBusy, isBusy, isStreaming,
       normalizePerformanceMode, applyPerformanceMode, getPerfCaps,
       getDebugState: () => ({
@@ -478,6 +556,7 @@
         scrollBusy: scBusy, streamBusy: stBusy, busy: isBusy(), perfMode: getPerfCaps().mode,
         pendingMeasures: mQ.size, pendingMutates: wQ.size, pendingTasks: tasks.size,
         sizeObservedCount: szCbs.size, visibilityObservedCount: vMap.size,
+        activeFrameTasks: fSubs.size, adaptiveDprCap: getAdaptiveDprCap(),
       }),
       dispose, destroy: dispose, createInstance: createDomBus,
     };

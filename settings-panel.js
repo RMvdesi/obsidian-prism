@@ -147,8 +147,8 @@
     cornerStyle: mkSp(['sharp', 'balanced', 'soft'], 'balanced'),
     ambientIntensity: mkSp(['0', '35', '70', '100'], '100'),
     darkAura: mkSp(['subtle', 'balanced', 'vivid'], 'balanced'),
-    motionLevel: mkSp(['off', 'subtle', 'standard', 'ultra'], 'ultra'),
-    targetFps: mkSp(['60', '120', '180', 'native'], '180'),
+    motionLevel: mkSp(['off', 'subtle', 'standard', 'ultra'], 'standard'),
+    targetFps: mkSp(['60', '120', '180', 'native'], '60'),
     homeLayout: mkSp(['studio', 'classic', 'off']),
     homeRipple: S_T,
     convRipple: mkSp(['off', 'subtle', 'medium', 'full'], 'off', { on: 'medium', true: 'medium', false: 'off' }),
@@ -183,7 +183,7 @@
 
   const SCENE_PRESETS = O.freeze({
     ultra: O.freeze({ motionLevel: 'ultra', targetFps: '180', homeRipple: true, mascot: 'crab', sidebarCompact: false, smoothCaret: true, ambientIntensity: '100' }),
-    focus: O.freeze({ motionLevel: 'subtle', targetFps: '120', homeRipple: false, convRipple: 'off', mascot: 'off', sidebarCompact: true, smoothCaret: true, ambientIntensity: '35' }),
+    focus: O.freeze({ motionLevel: 'subtle', targetFps: '60', homeRipple: false, convRipple: 'off', mascot: 'off', sidebarCompact: true, smoothCaret: true, ambientIntensity: '35' }),
     eco: O.freeze({ motionLevel: 'off', targetFps: '60', homeRipple: false, convRipple: 'off', mascot: 'off', sidebarCompact: false, smoothCaret: false, ambientIntensity: '0' }),
   });
 

@@ -23,13 +23,20 @@
   const getPerfMode = (d) => PERF_PROFILES[rawPerf(d)]?.mode || 'balanced';
   const getPerfProfile = (doc) => PERF_PROFILES[getPerfMode(doc)] || PERF_PROFILES.balanced;
   const getPerfMinGapMs = (doc) => getPerfProfile(doc).minGapMs;
-  const resolveRippleDpr = (raw, doc) => M.min(Number(raw) > 0 ? Number(raw) : 1, getPerfProfile(doc).rippleMaxDpr);
+  const getAdaptiveCap = () => {
+    const busCap = G.__agDomBus?.getAdaptiveDprCap?.();
+    const m = typeof navigator !== 'undefined' ? Number(navigator.deviceMemory) : 0;
+    const memCap = m > 0 && m <= 2 ? 1 : m > 0 && m <= 4 ? 1.25 : 2;
+    return Number.isFinite(busCap) && busCap > 0 ? M.min(busCap, memCap) : memCap;
+  };
+  const resolveRippleDpr = (raw, doc) => M.min(Number(raw) > 0 ? Number(raw) : 1, getPerfProfile(doc).rippleMaxDpr, getAdaptiveCap());
   function resolveGlowDpr(rawDpr, doc, baseScale) {
-    const raw = Number(rawDpr) > 0 ? Number(rawDpr) : 1, p = getPerfProfile(doc), sc = Number(baseScale);
-    if (p.mode === 'performance') return M.max(0.5, M.min(0.95, +(raw * 0.55).toFixed(3)));
-    if (p.mode === 'quality') return M.max(0.75, M.min(2, +(raw * (sc > 0 ? M.min(1, sc) : 1)).toFixed(3)));
+    const raw = Number(rawDpr) > 0 ? Number(rawDpr) : 1, p = getPerfProfile(doc), sc = Number(baseScale), cap = getAdaptiveCap();
+    if (p.mode === 'performance') return M.max(0.5, M.min(0.95, cap, +(raw * 0.55).toFixed(3)));
+    if (p.mode === 'quality') return M.max(0.75, M.min(2, cap, +(raw * (sc > 0 ? M.min(1, sc) : 1)).toFixed(3)));
     const s = sc > 0 ? M.min(p.glowDprScale, sc) : p.glowDprScale;
-    return raw <= 1 ? M.max(0.5, +(raw * s).toFixed(3)) : M.max(0.7, M.min(1.25, +(raw * M.min(0.63, s * 0.9)).toFixed(3)));
+    const val = raw <= 1 ? M.max(0.5, +(raw * s).toFixed(3)) : M.max(0.7, M.min(1.25, +(raw * M.min(0.63, s * 0.9)).toFixed(3)));
+    return M.min(val, cap);
   }
   function isHostPaused(doc) {
     const d = getDoc(doc), h = d?.documentElement;

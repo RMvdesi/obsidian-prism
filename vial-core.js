@@ -1331,6 +1331,7 @@
 
     const stepInternal = (dtSec, isInitBoot) => {
       if (!glState && !ctx2d) return;
+      if (!isInitBoot && !dirtyRender && isSettled()) return;
       const dt = Math.max(0.001, Math.min(MAX_FRAME_DT, Number(dtSec || 0.016)));
       const st = resolveEffectiveState();
       phys.setStreaming(Boolean(st.streaming));
@@ -1346,7 +1347,10 @@
       }
 
       const pm = readVialPerf();
-      const maxDpr = pm === 'performance' ? 1 : pm === 'quality' ? 2 : 1.5;
+      const mem = typeof navigator !== 'undefined' ? Number(navigator.deviceMemory) : 0;
+      const busCap = typeof globalThis !== 'undefined' ? Number(globalThis.__agDomBus?.getAdaptiveDprCap?.()) : 0;
+      const adaptCap = Math.min(mem > 0 && mem <= 2 ? 1 : mem > 0 && mem <= 4 ? 1.25 : 2, busCap > 0 ? busCap : 2);
+      const maxDpr = Math.min(pm === 'performance' ? 1 : pm === 'quality' ? 2 : 1.5, adaptCap);
       const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, maxDpr);
       const targetW = Math.round(cssW * dpr);
       const targetH = Math.round(cssH * dpr);

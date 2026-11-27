@@ -498,21 +498,20 @@ void main() {
     ctx.roundRect(0, 0, cssW, cssH, r);
     ctx.clip();
 
-    // 全局明暗梯度：上冠面亮银白 -> 中部清透 -> 下亭部 TIR 暗渊
-    const baseGrad = ctx.createLinearGradient(0, 0, 0, cssH);
-    if (isDark) {
-      baseGrad.addColorStop(0, '#c4ccd8');
-      baseGrad.addColorStop(0.22, '#dfe5ee');
-      baseGrad.addColorStop(0.55, '#8d97a8');
-      baseGrad.addColorStop(0.85, '#2a2e37');
-      baseGrad.addColorStop(1, '#0b0b0e');
-    } else {
-      baseGrad.addColorStop(0, '#e9eef5');
-      baseGrad.addColorStop(0.22, '#f7f9fc');
-      baseGrad.addColorStop(0.55, '#c9d1dd');
-      baseGrad.addColorStop(1, '#5d6778');
+    // 全局明暗梯度：上冠面亮银白 -> 中部清透 -> 下亭部 TIR 暗渊（按尺寸与主题缓存）
+    const bKey = `${cssH}|${isDark ? 1 : 0}`;
+    if (!ctx._agBaseGrad || ctx._agBaseKey !== bKey) {
+      const bg = ctx.createLinearGradient(0, 0, 0, cssH);
+      if (isDark) {
+        bg.addColorStop(0, '#c4ccd8'); bg.addColorStop(0.22, '#dfe5ee');
+        bg.addColorStop(0.55, '#8d97a8'); bg.addColorStop(0.85, '#2a2e37'); bg.addColorStop(1, '#0b0b0e');
+      } else {
+        bg.addColorStop(0, '#e9eef5'); bg.addColorStop(0.22, '#f7f9fc');
+        bg.addColorStop(0.55, '#c9d1dd'); bg.addColorStop(1, '#5d6778');
+      }
+      ctx._agBaseGrad = bg; ctx._agBaseKey = bKey;
     }
-    ctx.fillStyle = baseGrad;
+    ctx.fillStyle = ctx._agBaseGrad;
     ctx.fillRect(0, 0, cssW, cssH);
 
     // 确定性斜切长切面：每列一条斜分割线，约 10~12 块
@@ -663,27 +662,31 @@ void main() {
     if (sliderFillRatio >= 0) {
       const splitX = clamp(sliderFillRatio, 0, 1) * cssW;
       if (splitX < cssW) {
-        const gr = ctx.createLinearGradient(0, 0, 0, cssH);
-        if (isDark) {
-          gr.addColorStop(0, '#07090f');
-          gr.addColorStop(0.45, '#10141f');
-          gr.addColorStop(0.92, '#141a28');
-          gr.addColorStop(1, '#263046');
-        } else {
-          gr.addColorStop(0, '#96a2b6');
-          gr.addColorStop(0.55, '#bcc6d6');
-          gr.addColorStop(1, '#e4eaf4');
+        const gKey = `${cssH}|${isDark ? 1 : 0}`;
+        if (!ctx._agSlotGrad || ctx._agSlotKey !== gKey) {
+          const gr = ctx.createLinearGradient(0, 0, 0, cssH);
+          if (isDark) {
+            gr.addColorStop(0, '#07090f'); gr.addColorStop(0.45, '#10141f');
+            gr.addColorStop(0.92, '#141a28'); gr.addColorStop(1, '#263046');
+          } else {
+            gr.addColorStop(0, '#96a2b6'); gr.addColorStop(0.55, '#bcc6d6'); gr.addColorStop(1, '#e4eaf4');
+          }
+          ctx._agSlotGrad = gr; ctx._agSlotKey = gKey;
         }
-        ctx.fillStyle = gr;
+        ctx.fillStyle = ctx._agSlotGrad;
         ctx.fillRect(splitX, 0, cssW - splitX, cssH);
       }
       if (splitX > 1) {
-        const gloss = ctx.createLinearGradient(0, 0, 0, cssH);
-        gloss.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-        gloss.addColorStop(0.22, isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.24)');
-        gloss.addColorStop(0.42, 'rgba(255, 255, 255, 0.02)');
-        gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = gloss;
+        const glKey = `${cssH}|${isDark ? 1 : 0}`;
+        if (!ctx._agGlossGrad || ctx._agGlossKey !== glKey) {
+          const gloss = ctx.createLinearGradient(0, 0, 0, cssH);
+          gloss.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+          gloss.addColorStop(0.22, isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.24)');
+          gloss.addColorStop(0.42, 'rgba(255, 255, 255, 0.02)');
+          gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx._agGlossGrad = gloss; ctx._agGlossKey = glKey;
+        }
+        ctx.fillStyle = ctx._agGlossGrad;
         ctx.fillRect(0, 0, splitX, cssH);
       }
     }

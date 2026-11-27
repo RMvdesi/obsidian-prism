@@ -80,7 +80,8 @@
     }
     const bindR = (el, m, add) => { const fn = add ? 'addEventListener' : 'removeEventListener', o = add ? { passive: true } : undefined; el[fn]('pointerdown', m.onPress, o); m.onMove && el[fn]('pointermove', m.onMove, o); m.onLeave && el[fn]('pointerleave', m.onLeave, o); };
 
-    const stopT = (m) => { timer = cT(timer); m.rafId = cAF(m.rafId); rRaf = cAF(rRaf); };
+    const getBus = () => G.__agDomBus || G.__agPrismDomBus;
+    const stopT = (m) => { timer = cT(timer); getBus()?.cancelFrame?.(`ripple-${m.mode}`); m.rafId = cAF(m.rafId); rRaf = cAF(rRaf); };
     const clrRec = () => { recT = cT(recT); recRaf = cAF(recRaf); };
     const detR = (m) => { if (m?.root) { bindR(m.root, m, false); m.root = null; } };
 
@@ -164,8 +165,9 @@
       const setV = (el, on) => { if (el?.style) el.style.display = on ? '' : 'none'; };
       const isLost = (c, i) => Boolean(i?.isContextLost?.() || (i?.mode !== '2d' && i?.mode !== 'worker-webgl2' && c?.getContext?.('webgl2')?.isContextLost?.()));
       const hasG = isF(rc.mountBrandHorizonGlow);
-      const rDpr = () => { const r = (typeof window !== 'undefined' && window.devicePixelRatio) || 1, w = rw(); return w?.resolveRippleDpr ? w.resolveRippleDpr(r, d) : M.min(r, pMode() === 'performance' ? 1 : pMode() === 'balanced' ? 1.5 : 2); };
-      const gDpr = () => { const r = (typeof window !== 'undefined' && window.devicePixelRatio) || 1, w = rw(); return w?.resolveGlowDpr ? w.resolveGlowDpr(r, d, 0.7) : pMode() === 'performance' ? 0.55 : pMode() === 'balanced' ? 0.7 : pMode() === 'quality' ? M.min(r, 2) : 0.6; };
+      const aCap = () => { const m = typeof navigator !== 'undefined' ? Number(navigator.deviceMemory) : 0, b = Number(getBus()?.getAdaptiveDprCap?.()); return M.min(m > 0 && m <= 2 ? 1 : m > 0 && m <= 4 ? 1.25 : 2, b > 0 ? b : 2); };
+      const rDpr = () => { const r = (typeof window !== 'undefined' && window.devicePixelRatio) || 1, w = rw(); return w?.resolveRippleDpr ? w.resolveRippleDpr(r, d) : M.min(r, pMode() === 'performance' ? 1 : pMode() === 'balanced' ? 1.5 : 2, aCap()); };
+      const gDpr = () => { const r = (typeof window !== 'undefined' && window.devicePixelRatio) || 1, w = rw(); return w?.resolveGlowDpr ? w.resolveGlowDpr(r, d, 0.7) : M.min(pMode() === 'performance' ? 0.55 : pMode() === 'balanced' ? 0.7 : pMode() === 'quality' ? M.min(r, 2) : 0.6, aCap()); };
       const pGap = () => rw()?.getPerfMinGapMs?.(d) || (pMode() === 'performance' ? 16.67 : 0);
 
       function swapCv(o, cls, tid, bf) {
@@ -329,9 +331,11 @@
         if (shrunk) layout();
         st.sleeping = false; ra(host, 'data-ripple-sleep');
         if (hP() || isStr()) { if ((!drawn || f1) && hasFSz()) drawFrame(nowOf()); return enterIdleSleep(); }
-        if (imm) { st.rafId = cAF(st.rafId); wanted = false; f1 = true; return drawFrame(nowOf()); }
+        if (imm) { getBus()?.cancelFrame?.(`ripple-${st.mode}`); st.rafId = cAF(st.rafId); wanted = false; f1 = true; return drawFrame(nowOf()); }
         if (wanted) return;
-        wanted = true; st.rafId = rAF(drawFrame);
+        wanted = true;
+        if (getBus()?.requestFrame) { getBus().requestFrame(`ripple-${st.mode}`, drawFrame, { el: host }); }
+        else { st.rafId = rAF(drawFrame); }
       }
 
       strChk = () => { if (isStr()) { as.active = false; if (!st.sleeping) enterIdleSleep(); } };

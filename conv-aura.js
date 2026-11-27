@@ -570,9 +570,10 @@
         const h = parentH > 0 ? M.max(1, M.round(parentH * CONV_AURA_HEIGHT_RATIO)) : 0;
         const rawDpr = (typeof window !== 'undefined' && Number(window.devicePixelRatio)) || 1;
         const pm = getPerfMode();
-        const dpr = pm
+        const aCap = M.min((typeof navigator !== 'undefined' && Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) <= 4) ? (Number(navigator.deviceMemory) <= 2 ? 1 : 1.25) : 2, Number(globalThis?.__agDomBus?.getAdaptiveDprCap?.()) || 2);
+        const dpr = M.min(aCap, pm
           ? (rw()?.resolveGlowDpr ? rw().resolveGlowDpr(rawDpr, document) : rippleCore?.resolveHorizonDpr ? rippleCore.resolveHorizonDpr(rawDpr, pm === 'performance' ? 0.55 : pm === 'quality' ? 1 : 0.7, pm) : M.min(rawDpr, 1) * 0.7)
-          : (rippleCore?.resolveHorizonDpr ? rippleCore.resolveHorizonDpr(rawDpr, 0.72) : M.min(rawDpr, 1) * 0.72);
+          : (rippleCore?.resolveHorizonDpr ? rippleCore.resolveHorizonDpr(rawDpr, 0.72) : M.min(rawDpr, 1) * 0.72));
         lastPerfKey = pm;
         const need = bkRel || (w > 0 && h > 0 && !hasCvBuf());
         if (!need && w === state.width && h === state.height && dpr === state.dpr) return;
@@ -762,13 +763,15 @@
           return enterAuraSleep('hidden');
         }
         if (immediate) {
+          globalThis?.__agDomBus?.cancelFrame?.('conv-aura');
           if (state.rafId && typeof cancelAnimationFrame === 'function') { cancelAnimationFrame(state.rafId); state.rafId = 0; }
           frameWanted = false; forceImmediateDraw = true;
           return drawNow(readNowMs());
         }
         if (frameWanted) return;
         frameWanted = true;
-        if (typeof requestAnimationFrame === 'function') state.rafId = requestAnimationFrame(drawNow);
+        if (globalThis?.__agDomBus?.requestFrame) globalThis.__agDomBus.requestFrame('conv-aura', drawNow, { el: host });
+        else if (typeof requestAnimationFrame === 'function') state.rafId = requestAnimationFrame(drawNow);
         else drawNow(readNowMs());
       }
 

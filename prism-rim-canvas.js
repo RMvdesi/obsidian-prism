@@ -301,8 +301,10 @@
             ctx.restore();
           }
           if (isFn(ctx.createLinearGradient) && isFn(ctx.save)) {
+            const mkKey = `${h}`;
+            if (e._mkKey !== mkKey) { e._mkG = addS(ctx.createLinearGradient(0, h, 0, 0), [0, 'rgba(0,0,0,1)', .22, 'rgba(0,0,0,.68)', .48, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0)']); e._mkKey = mkKey; }
             ctx.save(); ctx.globalCompositeOperation = 'destination-in'; ctx.globalAlpha = 1;
-            ctx.fillStyle = addS(ctx.createLinearGradient(0, h, 0, 0), [0, 'rgba(0,0,0,1)', .22, 'rgba(0,0,0,.68)', .48, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0)']);
+            ctx.fillStyle = e._mkG;
             ctx.fillRect(0, 0, w, h); ctx.restore();
           }
         }
@@ -524,8 +526,8 @@
       armIdle();
     };
 
-    const schedRaf = () => { if (!prismRaf && typeof requestAnimationFrame === 'function') prismRaf = requestAnimationFrame(flushPtr); };
-    const clrRaf = () => { if (prismRaf) { typeof cancelAnimationFrame === 'function' && cancelAnimationFrame(prismRaf); prismRaf = 0; } };
+    const schedRaf = () => { if (!prismRaf) { const b = busOf(); if (b?.requestFrame) { prismRaf = 1; b.requestFrame('prism-rim', flushPtr); } else if (typeof requestAnimationFrame === 'function') prismRaf = requestAnimationFrame(flushPtr); } };
+    const clrRaf = () => { if (prismRaf) { busOf()?.cancelFrame?.('prism-rim'); typeof cancelAnimationFrame === 'function' && cancelAnimationFrame(prismRaf); prismRaf = 0; } };
 
     const SB_SEL = 'aside,[data-testid="sidebar-split"]>div:first-child,[data-testid="conversation-row-sidebar"],[data-testid="project-header"],[data-hover-card-popup]';
     let sbT = null, sbR = false, sbAt = 0;

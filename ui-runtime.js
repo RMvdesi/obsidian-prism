@@ -83,9 +83,9 @@ const normPerfMode = (v) => (v === 'eco' || v === 'performance' ? 'performance' 
 const normalizeConfigShape = (rawCfg) => {
 const out = { ...(rawCfg || {}) };
 out.palette = pickOf(out.palette === 'claude' ? 'warm' : out.palette, 'host|obsidian|warm', 'obsidian');
-out.motionLevel = pickOf(out.motionLevel, 'off|subtle|standard|ultra', 'ultra');
+out.motionLevel = pickOf(out.motionLevel, 'off|subtle|standard|ultra', 'standard');
 out.performanceMode = normPerfMode(out.performanceMode);
-out.targetFps = pickOf(out.targetFps, '60|120|180|native', '180');
+out.targetFps = pickOf(out.targetFps, '60|120|180|native', '60');
 for (const k of ['telemetryModule', 'effortSliderModule', 'hostLocalization']) out[k] = pickOf(out[k], 'on|off', 'auto');
 out.thoughtTranslate = pickOf(out.thoughtTranslate, 'machine|ai', 'off');
 out.homeLayout = out.homeMode = pickOf(out.homeLayout ?? out.homeMode, 'classic|off', 'studio');
@@ -295,8 +295,8 @@ return true;
 
 const getEffectivePalette = () => pickOf(cfg.palette === 'claude' ? 'warm' : cfg.palette, 'obsidian|warm|host', 'obsidian');
 const getLightPreset = () => (cfg.lightPreset === 'alabaster' ? 'alabaster' : 'crystal');
-const getMotionLevel = () => pickOf(cfg.motionLevel, 'off|subtle|standard|ultra', 'ultra');
-const getTargetFps = () => pickOf(String(cfg.targetFps || ''), '60|120|180|native', '180');
+const getMotionLevel = () => pickOf(cfg.motionLevel, 'off|subtle|standard|ultra', 'standard');
+const getTargetFps = () => pickOf(String(cfg.targetFps || ''), '60|120|180|native', '60');
 const getMinFrameGapMs = () => {
 const userGap = ({ native: 0, 60: 15.2, 120: 7.5 })[getTargetFps()] ?? 4.8;
 const capGap = Number((W.__agPrismPerfCaps || GT.__agPrismPerfCaps)?.()?.minFrameGapMs || 0);
@@ -478,8 +478,11 @@ msRoot = msRig = msAnc = msOrch = queuedCrabAnchor = null;
 msLastTier = undefined; msLastHostSleep = false; lastQueuedRoofH = 48; prevRoofKind = '';
 };
 
+let mascotLazyReady = typeof D.readyState !== 'string';
+const wakeMascotLazy = () => { if (!mascotLazyReady) { mascotLazyReady = true; if (isMascotEnabled() && !destroyed) { dirtyFlags.c = true; scheduleSync(); } } };
 const syncCrab = (activeCard, activeInfo, modelInfo, yieldMode = 'none', roofH = 0) => {
 if (!isMascotEnabled()) return unmountCrab();
+if (!mascotLazyReady && !msRig) return;
 const html = de(), hop = getMascotHop();
 if (!activeCard) {
 try { hop?.cancelForStage?.(msRoot); } catch {}
@@ -1879,14 +1882,15 @@ if (hb) dirtyAddedRoots.add(el);
 
   function scheduleSync() {
     if (destroyed) return;
+    const streaming = isConvRunning();
     const highPri = !!(dirtyFlags.f || dirtyFlags.r || dirtyFlags.t || dirtyFlags.s || dirtyFlags.c || dirtyFlags.o || dirtyFlags.g);
     if (syncQueued) {
-      if (highPri && !syncIsRaf && !D.hidden && syncTimer) { CT(syncTimer); syncTimer = null; syncQueued = false; }
+      if (!streaming && highPri && !syncIsRaf && !D.hidden && syncTimer) { CT(syncTimer); syncTimer = null; syncQueued = false; }
       else return;
     }
     syncQueued = true;
     const run = () => { syncTimer = null; syncQueued = false; runSync(false); };
-    if (!D.hidden && (highPri || !isConvRunning()) && typeof requestAnimationFrame === 'function') { syncIsRaf = true; syncTimer = requestAnimationFrame(run); }
+    if (!D.hidden && (streaming || highPri || !streaming) && typeof requestAnimationFrame === 'function') { syncIsRaf = true; syncTimer = requestAnimationFrame(run); }
     else { syncIsRaf = false; syncTimer = ST(run, D.hidden ? 50 : 96); }
   }
 
@@ -2029,6 +2033,7 @@ if (hb) dirtyAddedRoots.add(el);
   const onWinKeyDown = (ev) => {
     try {
       if (destroyed || !ev) return;
+      wakeMascotLazy();
       wakeWinBlur();
       if (ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !ev.isComposing && ev.keyCode !== 229 && cl(ev.target, `${S_IB} [contenteditable="true"]`)) {
         const sm = qs(D, '[data-testid="slash-command-menu"]');
@@ -2053,6 +2058,7 @@ if (hb) dirtyAddedRoots.add(el);
   const onWinClick = (ev) => {
     try {
       if (destroyed || !ev?.target?.closest || isThoughtIsolatedNode(ev.target)) return;
+      wakeMascotLazy();
       const t = ev.target;
       const hitPulse = isPulseHostNode(t) ? t : cl(t, PULSE_HOST_SEL) || (isFn(ev.composedPath) ? ev.composedPath().find(isPulseHostNode) : null);
       if (hitPulse) {
@@ -2095,6 +2101,7 @@ if (hb) dirtyAddedRoots.add(el);
   const onWinFocusIn = (ev) => { try { if (!destroyed) trackActivePaneFromTarget(ev?.target, true); } catch {} };
   const onDocPointerDown = (ev) => {
     try {
+      wakeMascotLazy();
       wakeWinBlur();
       const t = ev?.target;
       if (t?.closest) {
@@ -2226,9 +2233,14 @@ dirtyFlags.a = anyRelevant = true;
 }
 continue;
 }
+if (m.type === 'characterData') continue;
 if (m.type === 'childList') {
 const tgt = m.target;
 if (tagU(tgt) === 'STYLE' && !tgt.id && ga(tgt, TS_A) !== '1') { dirtyTurboRoots.add(tgt); anyRelevant = true; continue; }
+let hasElMut = isElementLike(tgt) && ha(tgt, 'data-ag-cs-bg-cmd-wrap');
+if (!hasElMut && m.addedNodes) { for (let j = 0; j < m.addedNodes.length; j++) if (isElementLike(m.addedNodes[j])) { hasElMut = true; break; } }
+if (!hasElMut && m.removedNodes) { for (let j = 0; j < m.removedNodes.length; j++) if (isElementLike(m.removedNodes[j])) { hasElMut = true; break; } }
+if (!hasElMut) continue;
 let pCtx = null;
 if (isElementLike(tgt)) {
 if (!ctxCache) ctxCache = new Map();
@@ -2307,7 +2319,7 @@ activePaneCard = activeConvView = lastNotifiedPaneCard = lastNotifiedConvView = 
 const safe = (fn) => { try { fn?.(); } catch {} };
 cancelScheduledSync(); streamChoreoCtl.clearTransientTimers();
 for (const s of [dirtyAddedRoots, dirtyCollapsibleTargets, dirtyBgCmds, dirtyTurboRoots, bleedEls]) s.clear();
-clearWinBlur(); finishResizing(false); unmountCrab(); msLastHostSleep = false;
+clearWinBlur(); finishResizing(false); unmountCrab(); mascotLazyReady = typeof D.readyState !== 'string'; msLastHostSleep = false;
 if (crabRemoveAttrTimer) { CT(crabRemoveAttrTimer); crabRemoveAttrTimer = 0; }
 for (const t of pulseHealTimers) CT(t);
 pulseHealTimers.clear(); syncMotionOffStyle(false); streamChoreoCtl.disconnectStreamObserver();
