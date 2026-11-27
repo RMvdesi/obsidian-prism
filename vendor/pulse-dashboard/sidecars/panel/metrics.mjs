@@ -287,15 +287,22 @@ function resolveContextMetrics(response, trajectory, steps, lastChatInfo, lastCh
       cwuLastStepIdx !== null &&
       lastChatInfo.anchorStepIndex > cwuLastStepIdx;
     const chatStrictlyNewer = Boolean(chatNewerByGm || chatNewerByStep);
-    const lastChatHasCw = tokenCount(lastChatCw?.estimatedTokensUsed) !== null;
+    const prevChatUsed = tokenCount(lastChatCw?.estimatedTokensUsed);
+    const lastChatHasCw = prevChatUsed !== null;
     const cwuNewerStep =
       lastChatInfo &&
       lastChatInfo.anchorStepIndex !== null &&
       cwuLastStepIdx !== null &&
       cwuLastStepIdx > lastChatInfo.anchorStepIndex;
+    const cwuSharpDrop = Boolean(
+      prevChatUsed !== null &&
+      prevChatUsed >= 20000 &&
+      cwuUsed < prevChatUsed * 0.65 &&
+      prevChatUsed - cwuUsed >= 10000
+    );
 
-    if (!chatStrictlyNewer && (cwuAfterCompact || !lastChatHasCw || latestCompaction !== null || cwuNewerStep)) {
-      const isCompacted = cwuAfterCompact || Boolean(latestCompaction);
+    if (!chatStrictlyNewer && (cwuAfterCompact || !lastChatHasCw || latestCompaction !== null || cwuNewerStep || cwuSharpDrop)) {
+      const isCompacted = cwuAfterCompact || Boolean(latestCompaction) || cwuSharpDrop;
       return contextMetrics(
         { estimatedTokensUsed: cwuUsed, maxContextTokens: cwuMax },
         {

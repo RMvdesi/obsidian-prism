@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile as cpExecFile } from 'node:child_process';
+import { resolveWindowsWatcherExePath, decodeBase64Utf8Path } from '../../src/security/win-picker.mjs';
 
 import {
   SCHEMA_VERSION,
@@ -78,20 +79,6 @@ const EVICTED_RECEIPT_BUCKET_KEY = 'evicted-receipts-index';
 const MAX_LIVE_RECEIPTS = LIMITS.MAX_RECEIPTS - 1;
 const MAX_EVICTED_RECEIPT_KEYS = 512;
 const KNOWLEDGE_SCOPE_REF = 'scope-knowledge-default';
-
-// Windows 选目录静态 PowerShell 脚本（零动态拼接，参数仅通过环境变量传入，UTF-8 Base64 输出防中文乱码）
-const WIN_PICK_FOLDER_PS = [
-  'Add-Type -AssemblyName System.Windows.Forms;',
-  '$dlg = New-Object System.Windows.Forms.FolderBrowserDialog;',
-  'if ($env:AG_PRISM_PICK_TITLE) { $dlg.Description = $env:AG_PRISM_PICK_TITLE }',
-  'if ($env:AG_PRISM_PICK_INIT_DIR -and (Test-Path -LiteralPath $env:AG_PRISM_PICK_INIT_DIR -PathType Container)) { $dlg.SelectedPath = $env:AG_PRISM_PICK_INIT_DIR }',
-  '$dlg.ShowNewFolderButton = $true;',
-  '$res = $dlg.ShowDialog();',
-  'if ($res -eq [System.Windows.Forms.DialogResult]::OK -and $dlg.SelectedPath) {',
-  '  [Console]::Out.Write([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($dlg.SelectedPath)))',
-  '}',
-].join(' ');
-const WIN_PICK_FOLDER_ENCODED = Buffer.from(WIN_PICK_FOLDER_PS, 'utf16le').toString('base64');
 
 // macOS 选目录静态 AppleScript（通过 system attribute 读取环境变量）
 const MAC_PICK_FOLDER_AS = [
@@ -817,6 +804,9 @@ export class SidebarStudioService {
     this.logger = typeof options.logger === 'function' ? options.logger : () => {};
     this._execFile = typeof options.execFile === 'function' ? options.execFile : defaultExecFilePromise;
     this._now = typeof options.now === 'function' ? options.now : () => Date.now();
+    this._platform = options.platform || process.platform;
+    this._hasExplicitWatcherExe = Object.prototype.hasOwnProperty.call(options, 'watcherExePath');
+    this._watcherExePath = options.watcherExePath;
     this._disposed = false;
     this._writeSeq = 0;
     this._queue = Promise.resolve();
@@ -4148,19 +4138,26 @@ export class SidebarStudioService {
     };
 
     try {
-      if (process.platform === 'win32') {
-        const { stdout } = await this._execFile(
-          'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', WIN_PICK_FOLDER_ENCODED],
-          { env, windowsHide: true, timeout: 120000 }
+      if (this._platform === 'win32') {
+        const watcherExe = resolveWindowsWatcherExePath(
+          this._hasExplicitWatcherExe ? { watcherExePath: this._watcherExePath } : { env }
         );
-        const b64 = String(stdout || '').trim();
-        if (!b64) return { ok: true, canceled: true, path: null };
-        const picked = Buffer.from(b64, 'base64').toString('utf8').trim();
+        if (!watcherExe) {
+          return {
+            ok: false,
+            manualRequired: true,
+            code: 'manual-input-required',
+            error: 'manual-input-required',
+          };
+        }
+        const pickArgs = ['--pick-folder', '--base64', '--title', safeTitle];
+        if (safeInitDir) pickArgs.push('--initial-dir', safeInitDir);
+        const { stdout } = await this._execFile(watcherExe, pickArgs, { env, windowsHide: true, timeout: 120000 });
+        const picked = decodeBase64Utf8Path(stdout);
         return picked ? { ok: true, canceled: false, path: picked } : { ok: true, canceled: true, path: null };
       }
 
-      if (process.platform === 'darwin') {
+      if (this._platform === 'darwin') {
         const { stdout } = await this._execFile(
           '/usr/bin/osascript',
           ['-e', MAC_PICK_FOLDER_AS],

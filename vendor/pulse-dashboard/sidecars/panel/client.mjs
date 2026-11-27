@@ -8,6 +8,7 @@ import { platformPaths } from '../../compat/platform.mjs';
 import { discoverProcesses, httpLogPorts, extractHubPort } from './discovery.mjs';
 import { TrajectoryJson } from './trajectory-json.mjs';
 import { TrajectoryReader } from './trajectory-reader.mjs';
+import { QuotaForceRefreshGuard } from '../../../../src/daemon/quota-guard.mjs';
 
 const SERVICE = '/exa.language_server_pb.LanguageServerService/';
 
@@ -68,6 +69,7 @@ export class AntigravityClient {
     this._proxyTrajInFlight = new Map();
     this.agent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 15000, maxSockets: 2, maxFreeSockets: 2, timeout: 25000 });
     this.reader = new TrajectoryReader(this);
+    this._quotaForceRefreshGuard = new QuotaForceRefreshGuard({ now: this.now });
   }
   server = null;
   discoveredAt = 0;
@@ -273,28 +275,56 @@ export class AntigravityClient {
     return lmStr || sc !== '' ? `${lmStr}|${sc}` : '';
   }
 
+  _proxyTimeMs(val) {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number' || typeof val === 'bigint') {
+      const n = Number(val);
+      return Number.isFinite(n) && n > 0 ? (n > 1e11 ? n : n * 1000) : 0;
+    }
+    if (typeof val === 'string') { const ms = Date.parse(val); return Number.isFinite(ms) && ms > 0 ? ms : 0; }
+    if (typeof val === 'object' && val.seconds !== undefined) {
+      const s = Number(val.seconds), ns = Number(val.nanos ?? 0);
+      return Number.isFinite(s) && s > 0 ? s * 1000 + (Number.isFinite(ns) && ns > 0 ? Math.floor(ns / 1e6) : 0) : 0;
+    }
+    return 0;
+  }
+
+  _proxyLastStepMs(data) {
+    const steps = data?.trajectory?.steps;
+    let best = 0;
+    if (Array.isArray(steps)) {
+      for (let i = steps.length - 1, stop = Math.max(0, steps.length - 8); i >= stop; i -= 1) {
+        const m = steps[i]?.metadata;
+        if (!m) continue;
+        const t = this._proxyTimeMs(m.completedAt) || this._proxyTimeMs(m.startedAt) || this._proxyTimeMs(m.createdAt);
+        if (t > best) best = t;
+      }
+    }
+    return best;
+  }
+
   _proxyContextSig(data) {
-    if (!data || typeof data !== 'object') return { steps: 0, cwu: '', compact: '' };
+    if (!data || typeof data !== 'object') return { steps: 0, cwu: '', compact: '', used: null, afterCompact: false };
     const stepsRaw = data.numTotalSteps ?? data.stepCount ?? data.trajectory?.steps?.length ?? 0;
     const steps = Number.isFinite(Number(stepsRaw)) && Number(stepsRaw) >= 0 ? Number(stepsRaw) : 0;
     const cwuObj = data.contextWindowUsage || data.trajectory?.contextWindowUsage;
-    const cwu =
-      cwuObj && typeof cwuObj === 'object'
-        ? `${cwuObj.estimatedTokensUsed ?? ''}:${cwuObj.maxContextTokens ?? ''}:${cwuObj.estimatedAfterCompaction ? 1 : 0}:${cwuObj.lastStepIndex ?? ''}:${cwuObj.generatorMetadataIndex ?? ''}`
-        : '';
-    const compArr =
-      data.compactedAtStepIndices ||
-      data.compactionInfo?.compactedAtStepIndices ||
-      data.trajectory?.compactedAtStepIndices;
+    const cwu = cwuObj && typeof cwuObj === 'object'
+      ? `${cwuObj.estimatedTokensUsed ?? ''}:${cwuObj.maxContextTokens ?? ''}:${cwuObj.estimatedAfterCompaction ? 1 : 0}:${cwuObj.lastStepIndex ?? ''}:${cwuObj.generatorMetadataIndex ?? ''}`
+      : '';
+    let used = cwuObj && typeof cwuObj === 'object' && Number.isFinite(Number(cwuObj.estimatedTokensUsed)) ? Number(cwuObj.estimatedTokensUsed) : null;
+    if (used === null && Array.isArray(data.trajectory?.generatorMetadata)) {
+      for (let i = data.trajectory.generatorMetadata.length - 1; i >= 0; i -= 1) {
+        const est = data.trajectory.generatorMetadata[i]?.chatModel?.chatStartMetadata?.contextWindowMetadata?.estimatedTokensUsed;
+        if (est !== undefined && est !== null && Number.isFinite(Number(est))) { used = Number(est); break; }
+      }
+    }
+    const compArr = data.compactedAtStepIndices || data.compactionInfo?.compactedAtStepIndices || data.trajectory?.compactedAtStepIndices;
     const compact = Array.isArray(compArr) && compArr.length ? `${compArr.length}:${compArr[compArr.length - 1]}` : '';
-    return { steps, cwu, compact };
+    return { steps, cwu, compact, used, afterCompact: Boolean(cwuObj && cwuObj.estimatedAfterCompaction === true) };
   }
 
   _resolveProxyTrajectoryTtl(cached, sumStamp) {
-    const settled = this._isProxySettled(cached.data);
-    if (settled) {
-      return sumStamp && cached.sumStamp && sumStamp === cached.sumStamp ? 60000 : 20000;
-    }
+    if (this._isProxySettled(cached.data)) return sumStamp && cached.sumStamp && sumStamp === cached.sumStamp ? 60000 : 20000;
     // 运行中对话按轨迹体量动态拉长全量 GetCascadeTrajectory TTL（12s~20s），避免长对话每 4s 触发 LS 整树反序列化
     const steps = Number(cached.ctxSig?.steps ?? cached.data?.numTotalSteps ?? 0) || 0;
     const bytes = Number(cached.bytes || 0) || 0;
@@ -304,18 +334,15 @@ export class AntigravityClient {
   }
 
   async _getProxyTrajectory(cascadeId, force = false, summaryOrOpts = null) {
-    const explicitScope =
-      summaryOrOpts && typeof summaryOrOpts === 'object' && typeof summaryOrOpts.scopeKey === 'string'
-        ? summaryOrOpts.scopeKey
-        : '';
-    const scope = this._resolveScopeKey(explicitScope);
+    const isOptsObj = Boolean(
+      summaryOrOpts && typeof summaryOrOpts === 'object' &&
+      ('summary' in summaryOrOpts || 'isCurrent' in summaryOrOpts || 'scopeKey' in summaryOrOpts || 'freshContext' in summaryOrOpts)
+    );
+    const scope = this._resolveScopeKey(isOptsObj && typeof summaryOrOpts.scopeKey === 'string' ? summaryOrOpts.scopeKey : '');
+    const freshContext = Boolean(isOptsObj && summaryOrOpts.freshContext);
     const key = `${scope}::${String(cascadeId || '').toLowerCase()}`;
     const now = this.now();
-    const summary =
-      summaryOrOpts && typeof summaryOrOpts === 'object' && ('summary' in summaryOrOpts || 'isCurrent' in summaryOrOpts || 'scopeKey' in summaryOrOpts)
-        ? summaryOrOpts.summary || null
-        : summaryOrOpts;
-    const sumStamp = this._proxySummaryStamp(summary);
+    const sumStamp = this._proxySummaryStamp(isOptsObj ? summaryOrOpts.summary || null : summaryOrOpts);
     const cached = !force ? this._proxyTrajCache.get(key) : null;
     if (cached) {
       const age = now - cached.at;
@@ -325,8 +352,9 @@ export class AntigravityClient {
         const ttl = this._resolveProxyTrajectoryTtl(cached, sumStamp);
         if (age < ttl) {
           let peekChanged = false;
-          // 1) 已结束会话：无 summary stamp 时用零 LS-RPC 内存态探针秒级感知 /compact 变化
-          if (settled && !sumStamp && age >= 3500 && (!cached.peekAt || now - cached.peekAt >= 2000)) {
+          const canSettledPeek = settled && !sumStamp && (freshContext || (age >= 3500 && (!cached.peekAt || now - cached.peekAt >= 2000)));
+          const canActivePeek = !settled && (freshContext || (ttl >= 12000 && age >= 3500 && (!cached.peekAt || now - cached.peekAt >= 2500)));
+          if (canSettledPeek || canActivePeek) {
             cached.peekAt = now;
             try {
               const peek = await this.rendererRpc('PeekContextState', { cascadeId });
@@ -334,46 +362,42 @@ export class AntigravityClient {
                 const pSig = this._proxyContextSig(peek);
                 const cSig = cached.ctxSig || this._proxyContextSig(cached.data);
                 const peekMod = this._proxySummaryStamp({ lastModifiedTime: peek.lastModifiedTime });
+                const peekModMs = this._proxyTimeMs(peek.lastModifiedTime);
                 const hasPeekSteps = peek.stepCount !== undefined && peek.stepCount !== null;
-                const stepsChanged =
-                  hasPeekSteps &&
-                  (pSig.steps > cSig.steps || (cached.peekSteps !== undefined && pSig.steps !== cached.peekSteps));
-                if (
-                  stepsChanged ||
-                  (pSig.cwu && pSig.cwu !== cSig.cwu) ||
-                  (pSig.compact && pSig.compact !== cSig.compact) ||
-                  (peekMod && cached.peekMod && peekMod !== cached.peekMod)
-                ) {
-                  peekChanged = true;
+                const hasAnySignal = Boolean(hasPeekSteps || pSig.cwu || pSig.compact || peekMod || peek.status !== undefined);
+                if (canSettledPeek) {
+                  // 1) 已结束会话：用零 LS-RPC 内存态探针秒级感知 /compact 变化；freshContext 绕过 3.5s 门禁
+                  const stepsChanged = hasPeekSteps && (pSig.steps !== cSig.steps || (cached.peekSteps !== undefined && pSig.steps !== cached.peekSteps));
+                  const modAdvanced = Boolean(peekMod && ((cached.peekMod && peekMod !== cached.peekMod) || (!cached.peekMod && cached.lastStepMs > 0 && peekModMs > cached.lastStepMs + 1000)));
+                  const becameRunning = peek.status !== undefined && !this._isProxySettled(peek);
+                  if (stepsChanged || (pSig.cwu && pSig.cwu !== cSig.cwu) || (pSig.compact && pSig.compact !== cSig.compact) || modAdvanced || becameRunning || (freshContext && !hasAnySignal && age >= 800)) {
+                    peekChanged = true;
+                  } else {
+                    if (hasPeekSteps) cached.peekSteps = pSig.steps;
+                    if (peekMod && !cached.peekMod) cached.peekMod = peekMod;
+                  }
                 } else {
-                  if (hasPeekSteps) cached.peekSteps = pSig.steps;
-                  if (peekMod && !cached.peekMod) cached.peekMod = peekMod;
-                }
-              }
-            } catch {}
-          } else if (!settled && ttl >= 12000 && age >= 3500 && (!cached.peekAt || now - cached.peekAt >= 2500)) {
-            // 2) 运行中长对话：在 12s~20s 动态 TTL 内优先通过零 LS-RPC PeekContextState 刷新上下文水位与结束态
-            cached.peekAt = now;
-            try {
-              const peek = await this.rendererRpc('PeekContextState', { cascadeId });
-              if (peek && typeof peek === 'object') {
-                const pSig = this._proxyContextSig(peek);
-                const cSig = cached.ctxSig || this._proxyContextSig(cached.data);
-                const becameSettled = peek.status !== undefined && this._isProxySettled(peek);
-                const compactedChanged = Boolean(pSig.compact && pSig.compact !== cSig.compact);
-                if (becameSettled || compactedChanged) {
-                  peekChanged = true;
-                } else if (cached.data && typeof cached.data === 'object') {
-                  if (peek.contextWindowUsage && typeof peek.contextWindowUsage === 'object') {
-                    cached.data.contextWindowUsage = peek.contextWindowUsage;
+                  // 2) 运行中会话：优先原地刷新水位；遇压缩完成/水位骤降/结束态/freshContext 变化立即击穿 12s~20s TTL
+                  const becameSettled = peek.status !== undefined && this._isProxySettled(peek);
+                  const compactedChanged = Boolean(pSig.compact && pSig.compact !== cSig.compact);
+                  const afterCompactHit = Boolean(pSig.afterCompact && pSig.cwu && pSig.cwu !== cSig.cwu);
+                  const sharpDrop = Boolean(cSig.used !== null && cSig.used >= 20000 && pSig.used !== null && pSig.used < cSig.used * 0.7 && cSig.used - pSig.used >= 10000);
+                  const freshProgress = Boolean(freshContext && ((hasPeekSteps && pSig.steps !== cSig.steps) || (pSig.cwu && pSig.cwu !== cSig.cwu) || (!hasAnySignal && age >= 800)));
+                  if (becameSettled || compactedChanged || afterCompactHit || sharpDrop || freshProgress) {
+                    peekChanged = true;
+                  } else if (cached.data && typeof cached.data === 'object') {
+                    if (peek.contextWindowUsage && typeof peek.contextWindowUsage === 'object') cached.data.contextWindowUsage = peek.contextWindowUsage;
+                    if (Array.isArray(peek.compactedAtStepIndices) && peek.compactedAtStepIndices.length) cached.data.compactedAtStepIndices = peek.compactedAtStepIndices;
+                    if (pSig.steps > cSig.steps) cached.data.numTotalSteps = pSig.steps;
+                    cached.ctxSig = this._proxyContextSig(cached.data);
                   }
-                  if (pSig.steps > cSig.steps) {
-                    cached.data.numTotalSteps = pSig.steps;
-                  }
-                  cached.ctxSig = this._proxyContextSig(cached.data);
                 }
+              } else if (freshContext && age >= 800) {
+                peekChanged = true;
               }
-            } catch {}
+            } catch {
+              if (freshContext && age >= 800) peekChanged = true;
+            }
           }
           if (!peekChanged) return cached.data;
         }
@@ -385,21 +409,16 @@ export class AntigravityClient {
     const req = (async () => {
       const data = await this.rendererRpc('GetCascadeTrajectory', { cascadeId });
       const bytes = Buffer.byteLength(JSON.stringify(data || {}));
-      if (bytes > 8 * 1024 * 1024) {
-        throw new Error('接口响应超过采集上限');
-      }
+      if (bytes > 8 * 1024 * 1024) throw new Error('接口响应超过采集上限');
       const fetchedAt = this.now();
       const ctxSig = this._proxyContextSig(data);
+      const lastStepMs = this._proxyLastStepMs(data);
       this._proxyTrajCache.delete(key);
-      this._proxyTrajCache.set(key, { at: fetchedAt, data, bytes, sumStamp, ctxSig, peekAt: fetchedAt, peekMod: '' });
-      while (this._proxyTrajCache.size > 32) {
-        this._proxyTrajCache.delete(this._proxyTrajCache.keys().next().value);
-      }
+      this._proxyTrajCache.set(key, { at: fetchedAt, data, bytes, sumStamp, ctxSig, lastStepMs, peekAt: fetchedAt, peekMod: '' });
+      while (this._proxyTrajCache.size > 32) this._proxyTrajCache.delete(this._proxyTrajCache.keys().next().value);
       return data;
     })().finally(() => {
-      if (this._proxyTrajInFlight.get(key) === req) {
-        this._proxyTrajInFlight.delete(key);
-      }
+      if (this._proxyTrajInFlight.get(key) === req) this._proxyTrajInFlight.delete(key);
     });
     this._proxyTrajInFlight.set(key, req);
     return req;
@@ -436,12 +455,20 @@ export class AntigravityClient {
   }
 
   async call(method, body = {}, retry = true) {
+    let effectiveBody = body;
+    if (method === 'RetrieveUserQuotaSummary' && this._quotaForceRefreshGuard && retry) {
+      const decision = this._quotaForceRefreshGuard.prepare(body);
+      if (decision.action === 'cached') return decision.result;
+      effectiveBody = decision.body;
+    }
     const scope = this._resolveScopeKey();
     const slot = this._discoverySlot(scope);
     const server = await this.discover(false, scope);
     if (server && server.mode === 'renderer-proxy') {
       try {
-        return await this._callRendererProxy(method, body);
+        const res = await this._callRendererProxy(method, effectiveBody);
+        if (method === 'RetrieveUserQuotaSummary') this._quotaForceRefreshGuard?.recordSuccess(res);
+        return res;
       } catch (error) {
         if (slot.server === server) {
           slot.server = null;
@@ -450,17 +477,17 @@ export class AntigravityClient {
         }
         if (retry) {
           await this.discover(true, scope);
-          return this.call(method, body, false);
+          return this.call(method, effectiveBody, false);
         }
         throw error;
       }
     }
     try {
-      return await new Promise((resolve, reject) => {
+      const result = await new Promise((resolve, reject) => {
         const reqBody =
-          method === 'GetCascadeTrajectoryGeneratorMetadata' && body && typeof body === 'object' && body.includeMessages === undefined
-            ? { ...body, includeMessages: false }
-            : body;
+          method === 'GetCascadeTrajectoryGeneratorMetadata' && effectiveBody && typeof effectiveBody === 'object' && effectiveBody.includeMessages === undefined
+            ? { ...effectiveBody, includeMessages: false }
+            : effectiveBody;
         const data = JSON.stringify(reqBody);
         const projection = ['GetCascadeTrajectory', 'GetCascadeTrajectorySteps', 'GetCascadeTrajectoryGeneratorMetadata', 'GetAllCascadeTrajectories'].includes(method);
         const started = this.now();
@@ -523,6 +550,8 @@ export class AntigravityClient {
         req.once('close', () => clearTimeout(deadline));
         req.end(data);
       });
+      if (method === 'RetrieveUserQuotaSummary') this._quotaForceRefreshGuard?.recordSuccess(result);
+      return result;
     } catch (error) {
       const endpointLost = [401, 403].includes(error.status) || ['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ENOTCONN'].includes(error.code);
       if (!endpointLost) throw error;
@@ -691,6 +720,7 @@ export class AntigravityClient {
       const data = await this._getProxyTrajectory(id, Boolean(options?.force), {
         summary: options?.summary || null,
         scopeKey: scope,
+        freshContext: Boolean(options?.freshContext),
       });
       if (options?.isCurrent && options.isCurrent() !== true) {
         throw new Error('后台已重新连接，请等待刷新');

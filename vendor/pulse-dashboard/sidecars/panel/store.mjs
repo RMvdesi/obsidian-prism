@@ -400,19 +400,27 @@ export class MetricsStore {
     return started;
   }
 
-  async session(id, force = false) {
+  async session(id, force = false, opts = null) {
     if (!GUID.test(id)) throw new Error('会话标识无效');
     if (!this.owned()) throw new Error('后台已重新连接，请等待刷新');
     id = id.toLowerCase();
+    const freshContext = Boolean(opts?.freshContext);
     const identity = this.identity, scope = this.storageScope(identity), epoch = this.epoch;
     let entry = this.sessions.get(id);
-    if (entry?.pending) return entry.pending;
-    if (!force && entry?.data && Date.now() - entry.updatedAt < 4500) return entry.data;
+    if (entry?.pending) {
+      if (!freshContext || entry.pendingFreshContext) return entry.pending;
+      try { await entry.pending; } catch {}
+      if (!this.owned() || identity !== this.identity || epoch !== this.epoch) throw new Error('后台已重新连接，请等待刷新');
+      entry = this.sessions.get(id);
+      if (entry?.pending) return entry.pending;
+    }
+    if (!force && !freshContext && entry?.data && Date.now() - entry.updatedAt < 4500) return entry.data;
     entry ||= {};
     this.sessions.delete(id);
     this.sessions.set(id, entry);
     this.evictSessions(id);
     const current = () => this.owned() && identity === this.identity && epoch === this.epoch && this.sessions.get(id) === entry;
+    entry.pendingFreshContext = freshContext;
     entry.pending = (async () => {
       if (!entry.data) {
         const saved = await this.history.load(scope, id);
@@ -428,18 +436,18 @@ export class MetricsStore {
         if (state?.state === 'processing') return entry.data || null;
         if (entry.backgroundReady) {
           const age = Date.now() - (entry.backgroundCompletedAt || 0);
-          if (force && age < BACKGROUND_MANUAL_COOLDOWN_MS) return entry.data;
-          if (!force && Date.now() - entry.backgroundCheckedAt < 30000) return entry.data;
-          const summary = await this.client.reader.summary(id, null, force);
+          if (force && !freshContext && age < BACKGROUND_MANUAL_COOLDOWN_MS) return entry.data;
+          if (!force && !freshContext && Date.now() - entry.backgroundCheckedAt < 30000) return entry.data;
+          const summary = await this.client.reader.summary(id, null, force, freshContext);
           if (!current()) throw Error('后台已重新连接，请等待刷新');
           entry.backgroundCheckedAt = Date.now();
           const revision = JSON.stringify([summary.stepCount ?? null, summary.lastModifiedTime ?? null, summary.status ?? null, summary.lastUserInputStepIndex ?? null]);
-          if (revision === entry.backgroundRevision && age < (force ? BACKGROUND_MANUAL_COOLDOWN_MS : BACKGROUND_RECHECK_MS)) return entry.data;
+          if (revision === entry.backgroundRevision && age < (force || freshContext ? BACKGROUND_MANUAL_COOLDOWN_MS : BACKGROUND_RECHECK_MS)) return entry.data;
         }
         this.startBackground(scope, id, entry, current);
         return entry.data || null;
       }
-      const raw = await this.client.trajectory(id, { force, isCurrent: current });
+      const raw = await this.client.trajectory(id, { force, freshContext, isCurrent: current });
       if (!current()) throw new Error('后台已重新连接，请等待刷新');
       if (this.onTrajectory) {
         try {
@@ -482,11 +490,11 @@ export class MetricsStore {
         }
         throw error;
       })
-      .finally(() => { entry.pending = null; });
+      .finally(() => { entry.pending = null; entry.pendingFreshContext = false; });
     return entry.pending;
   }
 
-  async snapshot({ conversationId, force = false, quotaRefresh = false, selectLatest = true, cdpPort = null } = {}) {
+  async snapshot({ conversationId, force = false, freshContext = false, quotaRefresh = false, selectLatest = true, cdpPort = null } = {}) {
     if (cdpPort) this.setCdpPort(cdpPort);
     let connection = 'live', error = null, speed = null, sessionError = null, collection = null;
     try {
@@ -525,7 +533,7 @@ export class MetricsStore {
       const selected = conversationId || (selectLatest !== false ? summaries[0]?.id : null);
       if (selected) {
         try {
-          speed = await this.session(selected, force);
+          speed = await this.session(selected, force, { freshContext });
         } catch (e) {
           sessionError = e.message;
         }

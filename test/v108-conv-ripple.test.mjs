@@ -517,12 +517,14 @@ test('Issue #63 CSS, hygiene & Channel 1 budget gate (< 549,500 B, ~2 KB delta, 
     css.includes('&[data-ag-cs-conv-ripple="1"]:not([data-ag-prism-wallpaper="on"]):not([data-has-browser-hole="true"]):not([data-has-drawer-browser-hole="true"])'),
     'style.css must gate conversation transparency under data-ag-cs-conv-ripple with wallpaper & Browser Hole guards'
   );
-  assert.ok(
-    css.includes('.ag-cs-ripple-host[data-ripple-mode="conv"]{z-index:-1;}'),
+  assert.match(
+    css,
+    /\.ag-cs-ripple-host\[data-ripple-mode="conv"\]\{z-index:-1;?\}/,
     'conv ripple host must sit at z-index:-1 inside isolated shell stacking context'
   );
-  assert.ok(
-    css.includes('[data-testid="conversation-view"]::before{background:none !important;opacity:0 !important;}'),
+  assert.match(
+    css,
+    /\[data-testid="conversation-view"\]::before\{background:none\s*!important;opacity:0\s*!important;?\}/,
     'conv ripple must suppress harsh top gradient bar on conversation-view::before'
   );
   for (const tok of ['div.flex-1.min-h-0', '[data-split-root]', '[data-tiling-pane]', '[data-pane-id]', '[data-testid="overview-panel-host"]', '[data-ag-cs-conv-seat="1"]']) {
@@ -894,11 +896,22 @@ test('Issue #63 conv pointer filtering, streaming 0fps guard, 1200ms idle sleep,
     assert.equal(m.sleeping, true, 'stationary pointer >= 1200ms must enter 0fps idle sleep');
     assert.equal(rafQueue.filter((x) => !x.cancelled).length, 0);
 
-    // 5) Periodic picker & win blur pause cleanly
+    // 5) Periodic picker keeps conv ripple alive in balanced/quality, pauses strictly in performance/eco or win-blur
+    env.html.setAttribute('data-ag-cs-perf-mode', 'balanced');
     env.html.setAttribute('data-ag-pp-open', '1');
+    nowMs += 100;
     layoutDom.mainBody.dispatchEvent({ type: 'pointermove', clientX: 360, clientY: 320, target: layoutDom.panes[0].blank });
-    assert.equal(m.sleeping, true, 'periodic picker open must keep conv ripple paused');
+    assert.equal(m.sleeping, false, 'balanced mode must keep conv ripple alive while periodic picker is open');
+    env.html.setAttribute('data-ag-cs-perf-mode', 'performance');
+    assert.equal(m.sleeping, true, 'performance mode + periodic picker open must pause conv ripple');
+    nowMs += 100;
+    layoutDom.mainBody.dispatchEvent({ type: 'pointermove', clientX: 380, clientY: 340, target: layoutDom.panes[0].blank });
+    assert.equal(m.sleeping, true, 'performance mode + periodic picker open must keep conv ripple paused on pointermove');
     env.html.removeAttribute('data-ag-pp-open');
+    env.html.removeAttribute('data-ag-cs-perf-mode');
+    env.html.setAttribute('data-ag-cs-win-blur', '1');
+    assert.equal(m.sleeping, true, 'win-blur must still pause conv ripple');
+    env.html.removeAttribute('data-ag-cs-win-blur');
 
     // 6) Custom wallpaper active -> immediately parks & clears data-ag-cs-conv-ripple, restores on disable
     env.html.setAttribute('data-ag-prism-wallpaper', 'on');

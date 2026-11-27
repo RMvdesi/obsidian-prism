@@ -30,6 +30,10 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 
+function mkRealTempDir(prefix) {
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+}
+
 // ── Lightweight DOM mock (supports MutationObserver, visibilitychange, classList, nextElementSibling) ──
 function createMockDomEnv(extraGlobals = {}) {
   const listenersByNode = new WeakMap();
@@ -664,7 +668,7 @@ test('1) cdp.js: merges PR #20 nav-outline-trigger cleanup, excludes thought fro
 });
 
 test('2) Native Node SOCKS5/SOCKS5H tunnel: RFC 1928 no-auth, RFC 1929 auth + remote DNS, TLS-over-SOCKS5, credential redaction & zero socket leaks', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-socks5-e2e-'));
+  const tmpDir = mkRealTempDir('prism-socks5-e2e-');
   const targetSockets = new Set();
   const seenTargetHeaders = [];
 
@@ -731,7 +735,7 @@ test('2) Native Node SOCKS5/SOCKS5H tunnel: RFC 1928 no-auth, RFC 1929 auth + re
 
   try {
     // A) RFC 1928 no-auth SOCKS5 HTTP forwarding (no Proxy-Authorization leaked to target)
-    const svcNoAuth = new ThoughtTranslatorService({ configDir: tmpDir, proxyEnv: {} });
+    const svcNoAuth = new ThoughtTranslatorService({ configDir: tmpDir, proxyEnv: {}, allowInsecureHttp: true });
     const saveNoAuth = svcNoAuth.saveConfig({
       customProxyUrl: `socks5://127.0.0.1:${noAuthPort}`,
       profiles: [{ id: 'default', name: 'S5', baseUrl: 'http://external.socks5-noauth.test/v1', apiKey: 'sk-s5-1', model: 'm1' }],
@@ -748,7 +752,7 @@ test('2) Native Node SOCKS5/SOCKS5H tunnel: RFC 1928 no-auth, RFC 1929 auth + re
     // B) RFC 1929 username/password auth SOCKS5H + SSE streaming + masked config round-trip
     const encodedPass = encodeURIComponent(secretPass);
     const rawAuthProxy = `socks5h://${secretUser}:${encodedPass}@127.0.0.1:${authPort}`;
-    const svcAuth = new ThoughtTranslatorService({ configDir: tmpDir, proxyEnv: {} });
+    const svcAuth = new ThoughtTranslatorService({ configDir: tmpDir, proxyEnv: {}, allowInsecureHttp: true });
     const saveAuth = svcAuth.saveConfig({
       customProxyUrl: rawAuthProxy,
       profiles: [{ id: 'default', name: 'S5H', baseUrl: 'http://external.socks5-auth.test/v1', apiKey: 'sk-s5-2', model: 'm2' }],
@@ -801,7 +805,7 @@ test('2) Native Node SOCKS5/SOCKS5H tunnel: RFC 1928 no-auth, RFC 1929 auth + re
 
     // E) Wrong SOCKS5 credentials fail cleanly AND redact username/password from all error text
     const badPass = 'WrongTopSecret777';
-    const svcBadAuth = new ThoughtTranslatorService({ configDir: tmpDir, proxyEnv: {} });
+    const svcBadAuth = new ThoughtTranslatorService({ configDir: tmpDir, proxyEnv: {}, allowInsecureHttp: true });
     svcBadAuth.saveConfig({
       customProxyUrl: `socks5h://${secretUser}:${badPass}@127.0.0.1:${authPort}`,
       profiles: [{ id: 'default', name: 'Bad', baseUrl: 'http://external.socks5-auth.test/v1', apiKey: 'sk-s5-3', model: 'm3' }],
@@ -853,7 +857,7 @@ test('2) Native Node SOCKS5/SOCKS5H tunnel: RFC 1928 no-auth, RFC 1929 auth + re
 });
 
 test('3) Custom proxy priority, proxyMode (auto/custom/direct), OS SOCKS5 detection, backward compat & instant proxy cache refresh', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-proxy-prio-'));
+  const tmpDir = mkRealTempDir('prism-proxy-prio-');
   try {
     // Legacy config without new fields loads cleanly with safe defaults
     const cfgPath = path.join(tmpDir, 'obsidian-prism-thought.json');
@@ -977,7 +981,7 @@ test('4) Issue #27 five root-cause regressions: streaming wakeup without flags.l
   assert.ok(split.chunks.length >= 2, 'Oversized >48k thought must split into safe chunks at paragraph boundaries');
   assert.equal(split.truncated, false);
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-oversize-'));
+  const tmpDir = mkRealTempDir('prism-oversize-');
   let gtxBatches = 0;
   const mockSvc = new ThoughtTranslatorService({
     configDir: tmpDir,
@@ -1194,7 +1198,7 @@ test('5) Issue #27 tool execution summaries: default OFF, merged single batch re
   assert.equal(isToolSummaryTranslatable('List key project directories finished', 'zh-CN'), true);
 
   // B) Backend + Frontend E2E merged batch translation + default OFF + lossless restore
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-tool-sum-'));
+  const tmpDir = mkRealTempDir('prism-tool-sum-');
   let gtxCalls = 0;
   const svc = new ThoughtTranslatorService({
     configDir: tmpDir,
@@ -1468,7 +1472,7 @@ test('7) Workspace cleanliness: zero .bundle-cache.json leftover in repository r
 });
 
 test('8) Red-team #192 [P0-2]: tool-batch rejects >64KB payload, flattens newlines/escapes [N], rejects duplicate idx & removes single-item unnumbered blind accept', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt-p02-'));
+  const tmpDir = mkRealTempDir('prism-rt-p02-');
   try {
     const capturedQueries = [];
     const svc = new ThoughtTranslatorService({
@@ -1551,7 +1555,7 @@ test('8) Red-team #192 [P0-2]: tool-batch rejects >64KB payload, flattens newlin
     assert.deepEqual(dupSvc._parseNumberedBatchLines('[0] 正常单条译文', 1), ['正常单条译文']);
 
     // D) Single-item unnumbered AI refusal falls back to raw & is never cached
-    const refuseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt-p02-refuse-'));
+    const refuseDir = mkRealTempDir('prism-rt-p02-refuse-');
     const aiRefuseSvc = new ThoughtTranslatorService({
       configDir: refuseDir,
       fetchImpl: async () =>
@@ -1582,7 +1586,7 @@ test('8) Red-team #192 [P0-2]: tool-batch rejects >64KB payload, flattens newlin
 });
 
 test('9) Red-team #192 [P1-1 & P2-3 UI]: proxyMode=auto ignores customProxyUrl, mask mismatch rejected consistently, auto-switch custom on input, and unloaded save/test guard', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt-p11-'));
+  const tmpDir = mkRealTempDir('prism-rt-p11-');
   try {
     // A) Legacy config with non-empty customProxyUrl and missing proxyMode normalizes to 'custom'
     const cfgFile = path.join(tmpDir, 'obsidian-prism-thought.json');
@@ -1772,7 +1776,7 @@ test('10) Red-team #192 [P1-2, P1-3 & P2-4]: detached DOM pruning, React TextNod
   assert.ok(directRest.text.includes('`__OPID_0__`') && directRest.text.includes('`foo.js`'));
 
   // P1-3: _translateMachineBatch with __OPCODE_0__ in source uses random nonce so source literal is untouched
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt-p13-'));
+  const tmpDir = mkRealTempDir('prism-rt-p13-');
   try {
     let seenGtxQuery = '';
     const svc = new ThoughtTranslatorService({
@@ -1897,7 +1901,7 @@ test('10) Red-team #192 [P1-2, P1-3 & P2-4]: detached DOM pruning, React TextNod
 });
 
 test('11) Red-team #192 [P2-1 & P2-2]: CONNECT 15s timeout, handover RST crash guard, and socks5: local DNS + SSRF check vs socks5h: remote DNS', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt-p2-'));
+  const tmpDir = mkRealTempDir('prism-rt-p2-');
   const servers = [];
   const sockets = new Set();
   const track = (s) => {
@@ -1986,6 +1990,7 @@ test('11) Red-team #192 [P2-1 & P2-2]: CONNECT 15s timeout, handover RST crash g
     const svcSocksV4 = new ThoughtTranslatorService({
       configDir: tmpDir,
       proxyEnv: {},
+      allowInsecureHttp: true,
       dnsLookup: async (host) => {
         dnsCalls++;
         if (host === 'pub-v4.example.test') return { address: '93.184.216.34', family: 4 };
@@ -2162,7 +2167,7 @@ test('13) CodeQL High alerts zero-regression: 0 rejectUnauthorized:false, 0 HTML
 });
 
 test('14) Conversation titles auto-translation: config persistence, safe filtering, identifier protection, React TextNode reuse, detached pruning, lossless restore & 8-locale UI', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-titles-'));
+  const tmpDir = mkRealTempDir('prism-titles-');
   try {
     // A) Legacy config backward compat: missing translateTitles defaults to false
     const legacyFile = path.join(tmpDir, 'obsidian-prism-thought.json');
@@ -2457,7 +2462,7 @@ function hasUrlHostname(rawUrl, expectedHostname) {
 }
 
 test('15) One-click Thought Diagnostics: all states, 5s bounded timeout, strict secret redaction & 8-locale 4-item UI strip', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-diag-'));
+  const tmpDir = mkRealTempDir('prism-diag-');
   try {
     // A) Off mode & incomplete AI profile (no network call)
     let fetchHits = 0;
@@ -2668,7 +2673,7 @@ test('15) One-click Thought Diagnostics: all states, 5s bounded timeout, strict 
 });
 
 test('16) Red-team #229 regressions: full secret redaction (URL-encoded/Base64/env/osCfg/socks4), diagnose body cancel on 200/404/405 & zero-ReDoS whitespace slicing', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt229-'));
+  const tmpDir = mkRealTempDir('prism-rt229-');
   try {
     const customApiKey = 'gw_secret+token/99=end';
     const encApiKey = encodeURIComponent(customApiKey);
@@ -2903,7 +2908,7 @@ test('16) Red-team #229 regressions: full secret redaction (URL-encoded/Base64/e
 });
 
 test('17) Red-team #230 regressions: sidebarStudio attr, breadcrumb last-segment-only, sidebar primary-title-only, unloaded diagnose & late get-cache race', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-rt230-'));
+  const tmpDir = mkRealTempDir('prism-rt230-');
   try {
     // A) #230 [P1-5]: data-ag-prism-sidebar-studio attr (without W.__agPrism), multi-segment breadcrumbs & sidebar primary title only
     const clientSrc = fs.readFileSync(path.join(ROOT_DIR, 'vendor', 'thought-translator', 'thought-client.js'), 'utf8');
@@ -3169,7 +3174,7 @@ test('18) Red-team #256 [P1 #7]: composeAbortSignal uses managed ref-d timeout a
   assert.ok(managedFnMatch, 'createManagedTimeoutSignal must exist');
   assert.equal(managedFnMatch[0].includes('.unref('), false, 'createManagedTimeoutSignal must keep ref-d timer (never call timer.unref())');
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-managed-abort-'));
+  const tmpDir = mkRealTempDir('prism-managed-abort-');
   const origSetTimeout = globalThis.setTimeout;
   const origClearTimeout = globalThis.clearTimeout;
   const activeTimers = new Map();

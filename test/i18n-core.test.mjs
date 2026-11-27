@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -236,7 +237,7 @@ function createMiniDom() {
   };
 }
 
-test('normalizeLanguage, LANG_OPTIONS, and UI_TABLE support all 8 required languages + yue migration', () => {
+test('normalizeLanguage, LANG_OPTIONS, and UI_TABLE support all 9 required languages + yue migration', () => {
   assert.deepEqual(
     i18nCore.LANG_OPTIONS.map((o) => [o.id, o.label]),
     [
@@ -248,6 +249,7 @@ test('normalizeLanguage, LANG_OPTIONS, and UI_TABLE support all 8 required langu
       ['es', 'Español'],
       ['fr', 'Français'],
       ['de', 'Deutsch'],
+      ['tr', 'Türkçe'],
     ]
   );
 
@@ -265,16 +267,19 @@ test('normalizeLanguage, LANG_OPTIONS, and UI_TABLE support all 8 required langu
   assert.equal(i18nCore.normalizeLanguage('es-ES'), 'es');
   assert.equal(i18nCore.normalizeLanguage('fr-FR'), 'fr');
   assert.equal(i18nCore.normalizeLanguage('de-DE'), 'de');
+  assert.equal(i18nCore.normalizeLanguage('tr-TR'), 'tr');
+  assert.equal(i18nCore.normalizeLanguage('turkish'), 'tr');
+  assert.equal(i18nCore.normalizeLanguage('türkçe'), 'tr');
   assert.equal(i18nCore.normalizeLanguage(true), 'zh-CN');
   assert.equal(i18nCore.normalizeLanguage(false), 'en');
   for (const cjkLang of ['zh-CN', 'zh-TW', 'ja', 'ko']) {
     assert.equal(i18nCore.isCjkLanguage(cjkLang), true, `isCjkLanguage(${cjkLang}) must be true`);
   }
-  for (const latinLang of ['en', 'es', 'fr', 'de']) {
+  for (const latinLang of ['en', 'es', 'fr', 'de', 'tr']) {
     assert.equal(i18nCore.isCjkLanguage(latinLang), false, `isCjkLanguage(${latinLang}) must be false`);
   }
 
-  for (const lang of ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de']) {
+  for (const lang of ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr']) {
     const ui = i18nLocales.getUiStrings(lang);
     assert.ok(ui.setLanguageTitle);
     assert.ok(ui.setLanguageDesc);
@@ -285,6 +290,9 @@ test('normalizeLanguage, LANG_OPTIONS, and UI_TABLE support all 8 required langu
     assert.ok(ui.tabModels);
     assert.ok(ui.studioPlaceholder);
   }
+  const trUi = i18nLocales.getUiStrings('tr');
+  assert.equal(trUi.showMoreN(11), '11 tane daha göster');
+  assert.equal(trUi.swarmSplitSub(72, 28), 'Ana 72% · Swarm 28%');
 
   assert.deepEqual(i18nLocales.DICT_ROWS, []);
   const zhBundle = i18nLocales.resolveLocaleBundle('zh-CN');
@@ -405,10 +413,10 @@ test('v1.0.1 i18n keys cover all 8 languages for scene presets, 6 new config key
 });
 
 test('settings-panel schema, scene presets, strict apiKey-stripping JSON export, and allowlist-validated JSON import', () => {
-  // Verify all 39 global config keys (including darkAura, darkAuraStyle, convRipple, effortMemory, periodicModelPicker, contextMenu, sidebarNavFold, scrollBottomMotion, hostLocalization, omniModule, linkTarget, sidebarStudio, autoUpdate, updateChannel & autoArchiveOnExit) match exact contract
+  // Verify all 40 global config keys (including promptEnhancer and the existing appearance/update settings) match exact contract
   const { PRISM_SETTINGS_SCHEMA, SCENE_PRESETS, buildSanitizedConfigExport, validateImportedConfigJson, getDefaultSettingsPatch } =
     settingsPanel;
-  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 39);
+  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 40);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.homeRipple.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.homeRipple.default, true);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.convRipple.allowed, ['off', 'subtle', 'medium', 'full']);
@@ -530,7 +538,7 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   assert.equal(validateImportedConfigJson('not-json').ok, false);
   assert.equal(validateImportedConfigJson('{"unknownOnly": 1}').ok, false);
   const defaultPatch = getDefaultSettingsPatch();
-  assert.equal(Object.keys(defaultPatch).length, 39);
+  assert.equal(Object.keys(defaultPatch).length, 40);
   assert.equal(defaultPatch.homeRipple, true);
   assert.equal(defaultPatch.convRipple, 'off');
   assert.equal(defaultPatch.darkAura, 'balanced');

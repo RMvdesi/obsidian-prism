@@ -1,4 +1,4 @@
-// Obsidian Prism — Channel 7 Local Static/Dynamic Wallpaper Service (v1.0.8-beta.3 · Beta, Zero-Dependency Node ESM)
+// Obsidian Prism — Channel 7 Local Static/Dynamic Wallpaper Service (Zero-Dependency Node ESM)
 // - Persists config atomically (0o600, symlink-safe) to ~/.gemini/config/obsidian-prism-wallpaper.json
 // - Enforces strict path security (realpathSync, no UNC/device paths, no sensitive dirs, extension + magic bytes)
 // - Lazily runs an isolated 127.0.0.1:0 read-only HTTP media server with 256-bit random token & HTTP 206 Range streaming
@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveWindowsWatcherExePath } from '../../src/security/win-picker.mjs';
 
 export const WALLPAPER_CONFIG_FILENAME = 'obsidian-prism-wallpaper.json';
 export const MAX_BLOB_FALLBACK_BYTES = 8 * 1024 * 1024; // 8 MiB
@@ -116,39 +117,9 @@ const MP4_BRANDS = new Set([
 
 const AVIF_BRANDS = new Set(['avif', 'avis']);
 
-// 固定无插值 PowerShell 文件选择脚本（通过 -EncodedCommand 执行，杜绝任何 shell 拼接）
-const WIN_PICK_MEDIA_PS = [
-  '$ErrorActionPreference = "Stop"',
-  '$ProgressPreference = "SilentlyContinue"',
-  '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-  'Add-Type -AssemblyName System.Windows.Forms',
-  '$owner = New-Object System.Windows.Forms.Form',
-  '$owner.TopMost = $true',
-  '$owner.ShowInTaskbar = $false',
-  '$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen',
-  '$owner.Opacity = 0',
-  '$owner.Width = 1',
-  '$owner.Height = 1',
-  '$dlg = New-Object System.Windows.Forms.OpenFileDialog',
-  '$dlg.Title = "Select Wallpaper (Image / Video)"',
-  '$dlg.Filter = "Wallpapers (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.mp4;*.webm)|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.mp4;*.webm|Images (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif)|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif|Videos (*.mp4;*.webm)|*.mp4;*.webm"',
-  '$dlg.CheckFileExists = $true',
-  '$dlg.Multiselect = $false',
-  '$dlg.DereferenceLinks = $true',
-  '$dlg.RestoreDirectory = $true',
-  'try {',
-  '  $owner.Show()',
-  '  $res = $dlg.ShowDialog($owner)',
-  '  if ($res -eq [System.Windows.Forms.DialogResult]::OK -and $dlg.FileName) {',
-  '    [Console]::Out.Write($dlg.FileName)',
-  '  }',
-  '} finally {',
-  '  try { $dlg.Dispose() } catch {}',
-  '  try { $owner.Close(); $owner.Dispose() } catch {}',
-  '}',
-].join('\n');
-
-const WIN_PICK_MEDIA_B64 = Buffer.from(WIN_PICK_MEDIA_PS, 'utf16le').toString('base64');
+const WIN_WALLPAPER_FILE_FILTER =
+  'Wallpapers (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.mp4;*.webm)|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.mp4;*.webm|Images (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif)|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif|Videos (*.mp4;*.webm)|*.mp4;*.webm';
+const ALLOWED_EXT_ORIGIN_RE = /^(?:vscode-file|app|chrome-extension):\/\/[a-z0-9._-]+$/i;
 
 const MAC_PICK_MEDIA_SCRIPT =
   'POSIX path of (choose file with prompt "Select Wallpaper" of type {"public.jpeg", "public.png", "public.webp", "com.compuserve.gif", "public.avif", "public.mpeg-4", "org.webmproject.webm"})';
@@ -1011,37 +982,31 @@ export function createWallpaperService(opts = {}) {
       'Accept-Ranges': 'bytes',
     };
 
-    // 严格来源检查：绝不输出 Access-Control-Allow-Origin: *
+    const deny = (code, msg, extra) => {
+      res.writeHead(code, { ...baseHeaders, ...(extra || {}), 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(msg);
+    };
+    const rawHost = typeof req.headers?.host === 'string' ? req.headers.host.trim().toLowerCase() : '';
+    const expectedHost = serverPort > 0 ? `127.0.0.1:${serverPort}` : '';
+    if (!rawHost || !expectedHost || rawHost !== expectedHost) return deny(403, 'Forbidden host');
+
+    // 严格来源与 Sec-Fetch-Site 检查：绝不输出 Access-Control-Allow-Origin: *，拒绝 cross-site
     const reqOrigin = typeof req.headers?.origin === 'string' ? req.headers.origin.trim() : '';
     if (reqOrigin) {
-      if (!ALLOWED_ORIGIN_RE.test(reqOrigin)) {
-        res.writeHead(403, { ...baseHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Forbidden origin');
-        return;
-      }
+      if (!ALLOWED_ORIGIN_RE.test(reqOrigin)) return deny(403, 'Forbidden origin');
       baseHeaders['Access-Control-Allow-Origin'] = reqOrigin;
       baseHeaders['Vary'] = 'Origin';
     }
-
-    if (method !== 'GET' && method !== 'HEAD') {
-      res.writeHead(405, { ...baseHeaders, Allow: 'GET, HEAD', 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Method Not Allowed');
-      return;
+    const fetchSite = typeof req.headers?.['sec-fetch-site'] === 'string' ? req.headers['sec-fetch-site'].trim().toLowerCase() : '';
+    if (fetchSite) {
+      const allowedSite = fetchSite === 'none' || fetchSite === 'same-origin' || fetchSite === 'same-site' || (fetchSite === 'cross-site' && Boolean(reqOrigin && ALLOWED_EXT_ORIGIN_RE.test(reqOrigin)));
+      if (!allowedSite) return deny(403, 'Forbidden fetch site');
     }
-
+    if (method !== 'GET' && method !== 'HEAD') return deny(405, 'Method Not Allowed', { Allow: 'GET, HEAD' });
     const rawUrl = String(req.url || '');
-    if (rawUrl.includes('?') || rawUrl.includes('#') || rawUrl.includes('..') || rawUrl.includes('\\')) {
-      res.writeHead(404, { ...baseHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Not Found');
-      return;
-    }
-
+    if (rawUrl.includes('?') || rawUrl.includes('#') || rawUrl.includes('..') || rawUrl.includes('\\')) return deny(404, 'Not Found');
     const routeMatch = /^\/wallpaper\/([a-f0-9]{1,128})\/(\d{1,12})$/.exec(rawUrl);
-    if (!routeMatch) {
-      res.writeHead(404, { ...baseHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Not Found');
-      return;
-    }
+    if (!routeMatch) return deny(404, 'Not Found');
 
     const [, reqToken, reqRev] = routeMatch;
     if (!token || !timingSafeStrEqual(reqToken, token) || reqRev !== String(rev)) {
@@ -1419,10 +1384,24 @@ export function createWallpaperService(opts = {}) {
 
     let pickedRaw = '';
     if (platform === 'win32') {
+      const watcherExe = resolveWindowsWatcherExePath(
+        Object.prototype.hasOwnProperty.call(opts, 'watcherExePath')
+          ? { watcherExePath: opts.watcherExePath }
+          : { env: opts.env || process.env, rootDir: opts.rootDir }
+      );
+      if (!watcherExe) {
+        return {
+          ok: false,
+          manualRequired: true,
+          code: 'manual-input-required',
+          error: 'manual-input-required',
+          config: getConfigSync(),
+        };
+      }
       try {
         const { stdout } = await execFilePromise(
-          'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-STA', '-WindowStyle', 'Hidden', '-EncodedCommand', WIN_PICK_MEDIA_B64],
+          watcherExe,
+          ['--pick-file', '--title', 'Select Wallpaper (Image / Video)', '--filter', WIN_WALLPAPER_FILE_FILTER],
           { encoding: 'utf8', windowsHide: true, timeout: 120000, maxBuffer: 1024 * 1024 },
           execFileImpl,
           trackChild

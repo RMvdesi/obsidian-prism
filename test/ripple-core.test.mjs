@@ -1234,7 +1234,7 @@ test('Wave 1 Optics: HORIZON_FRAGMENT_SHADER & mountBrandHorizonGlow support War
   glow.dispose();
 });
 
-test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~30fps running cap, 1200ms idle sleep) & 3-State 0fps Semantic Afterglow Engine', () => {
+test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~60fps paced running, 1200ms idle sleep) & 3-State 0fps Semantic Afterglow Engine', () => {
   require('../conv-aura.js');
   const convAuraMod = globalThis.__agPrismConvAura;
   assert.ok(convAuraMod);
@@ -1437,7 +1437,7 @@ test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~30fps running cap, 1200ms idle s
     }
     assert.equal(gpuDraws, drawsAtIdleSleep, 'Redundant sync() must NOT wake settled 0fps idle aura');
 
-    // 2) Split-Rate 300Hz running throttle: during 1000ms steady running on a 300Hz monitor, draws <= 36 frames (~30fps instead of 300fps!)
+    // 2) Split-Rate 300Hz running throttle: 'native' (minGap 0) is VSync-paced at the same ~60fps as explicit targetFps (instead of 300fps, and no longer a jittery ~30fps setTimeout path)
     runningDomActive = true;
     ctl.sync();
     assert.equal(inst.phase, 'start');
@@ -1448,8 +1448,8 @@ test('Wave 1 ConvAura: Split-Rate 300Hz VSync (~30fps running cap, 1200ms idle s
     advanceSimulated300Hz(1000); // 300 VSync ticks on 300Hz screen!
     const runDrawsIn1s = gpuDraws - drawsBefore1sRun;
     assert.ok(
-      runDrawsIn1s >= 24 && runDrawsIn1s <= 36,
-      `Split-Rate VSync must cap steady running aura around ~30fps (24..36 draws/s on 300Hz), got ${runDrawsIn1s}`
+      runDrawsIn1s >= 54 && runDrawsIn1s <= 67,
+      `Split-Rate VSync must pace steady running aura around ~60fps (54..67 draws/s on 300Hz), got ${runDrawsIn1s}`
     );
 
     // 3) Long-task-complete (>= 15s running) while window is unfocused -> 1.2s jade chime then freezes at 0fps snapshot until user pointer returns!

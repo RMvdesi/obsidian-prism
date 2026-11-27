@@ -5,6 +5,11 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import {
+  INSTALL_MANIFEST_FILENAME,
+  buildInstallManifest,
+  shouldExcludeSyncRelPath,
+} from '../src/platform/install-manifest.cjs';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -14,8 +19,28 @@ const cdp = require(path.join(ROOT_DIR, 'cdp.js'));
 
 const VALIDATORS = { ...cdp.VALIDATORS };
 
-function getEffectiveRuntimeParts() {
-  return [...cdp.RUNTIME_PARTS];
+// 全部延迟/按需通道文件与静态预编译清单均从 cdp.CHANNEL_REGISTRY 唯一真相源自动派生（零平行硬编码清单）
+const STATIC_RUNTIME_CHANNEL_IDS = cdp.RUNTIME_TIER_CHANNEL_IDS;
+
+function getStaticRuntimeChannels() {
+  return (cdp.CHANNEL_REGISTRY || []).filter((ch) => ch && ch.staticRuntimePack);
+}
+
+function collectRegistryChannelFiles(channelId) {
+  const ch = typeof cdp.findChannel === 'function' ? cdp.findChannel(channelId) : null;
+  if (!ch || !Array.isArray(ch.files)) return [];
+  const entries = [];
+  for (const rel of ch.files) {
+    const abs = path.join(ROOT_DIR, ...rel.split('/'));
+    if (!fs.existsSync(abs)) continue;
+    try {
+      entries.push({
+        name: rel,
+        data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8'),
+      });
+    } catch {}
+  }
+  return entries;
 }
 
 function createManifest() {
@@ -27,7 +52,7 @@ function createManifest() {
     inlineDiffBinding: cdp.INLINE_DIFF_BINDING,
     wallpaperBinding: cdp.WALLPAPER_BINDING,
     suggesterBinding: cdp.SUGGESTER_BINDING,
-    parts: getEffectiveRuntimeParts(),
+    parts: [...cdp.RUNTIME_PARTS],
     defaultConfig: cdp.DEFAULT_CONFIG,
     validators: VALIDATORS,
     removeExpression: cdp.REMOVE_EXPRESSION,
@@ -140,123 +165,73 @@ function renderPrismIconPng(size) {
   return encodePngRgba(size, size, rgba);
 }
 
-function collectOptionalSidebarTopEntries() {
-  const sidebarClientRel = 'vendor/sidebar-studio/sidebar-client.js';
-  const sidebarClientAbs = path.join(ROOT_DIR, 'vendor', 'sidebar-studio', 'sidebar-client.js');
-  if (!fs.existsSync(sidebarClientAbs)) return [];
-  try {
-    return [
-      {
-        name: sidebarClientRel,
-        data: Buffer.from(cdp.minifyJs(fs.readFileSync(sidebarClientAbs, 'utf8')), 'utf8'),
-      },
-    ];
-  } catch {
-    return [];
-  }
-}
+function collectOptionalSidebarTopEntries() { return collectRegistryChannelFiles('sidebar'); }
+function collectOptionalThoughtTopEntries() { return collectRegistryChannelFiles('thought'); }
+function collectOptionalInlineDiffTopEntries() { return collectRegistryChannelFiles('inlineDiff'); }
+function collectOptionalWallpaperTopEntries() { return collectRegistryChannelFiles('wallpaper'); }
+function collectOptionalSuggesterTopEntries() { return collectRegistryChannelFiles('suggester'); }
 
-function collectOptionalThoughtTopEntries() {
+// 打包期复用 cdp.CHANNEL_REGISTRY 静态预编译 Ch13-Ch16 兜底表达式至顶层 runtime-channels/<id>.js，
+// 供无 Node 原生 Watcher 按 config.json 开关条件直接读取注入（零 C#/Swift 手拼 JS 模板）。
+function collectStaticRuntimeChannelEntries() {
+  const allEnabledCfg = {
+    ...cdp.DEFAULT_CONFIG,
+    telemetryModule: 'auto',
+    effortSliderModule: 'on',
+    workbenchEnhancer: 'on',
+    sidebarRestyle: true,
+    sidebarNavFold: true,
+    scrollBottomMotion: 'on',
+    motionLevel: 'ultra',
+    contextMenu: true,
+  };
   const entries = [];
-  for (const rel of [
-    'vendor/thought-translator/thought-client.js',
-    'vendor/thought-translator/thought-settings-ui.js',
-  ]) {
-    const abs = path.join(ROOT_DIR, ...rel.split('/'));
-    if (!fs.existsSync(abs)) continue;
-    try {
-      entries.push({
-        name: rel,
-        data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8'),
-      });
-    } catch {}
+  for (const ch of getStaticRuntimeChannels()) {
+    const id = ch.id;
+    if (typeof ch.build !== 'function') {
+      throw new Error(`Missing CHANNEL_REGISTRY builder for static runtime channel: ${id}`);
+    }
+    const expr = String(ch.build(allEnabledCfg, { noDiskCache: true }) || '');
+    if (!expr) {
+      throw new Error(`Static runtime channel "${id}" compiled to empty expression`);
+    }
+    entries.push({
+      name: `runtime-channels/${id}.js`,
+      data: Buffer.from(expr, 'utf8'),
+    });
   }
   return entries;
 }
 
-function collectOptionalInlineDiffTopEntries() {
-  const rel = 'vendor/inline-diff/inline-diff-client.js';
-  const abs = path.join(ROOT_DIR, 'vendor', 'inline-diff', 'inline-diff-client.js');
+function collectOptionalOffloadedRuntimeTopEntries() {
+  const entries = [];
+  for (const ch of getStaticRuntimeChannels()) {
+    entries.push(...collectRegistryChannelFiles(ch.id));
+  }
+  entries.push(...collectStaticRuntimeChannelEntries());
+  return entries;
+}
+
+function collectOptionalPeriodicPickerStubTopEntries() {
+  const rel = 'vendor/periodic-picker/periodic-picker-stub.js';
+  const abs = path.join(ROOT_DIR, ...rel.split('/'));
   if (!fs.existsSync(abs)) return [];
   try {
-    return [
-      {
-        name: rel,
-        data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8'),
-      },
-    ];
+    return [{ name: rel, data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8') }];
   } catch {
     return [];
   }
-}
-
-function collectOptionalWallpaperTopEntries() {
-  const entries = [];
-  for (const rel of [
-    'vendor/wallpaper/wallpaper-client.js',
-    'vendor/wallpaper/wallpaper-settings-ui.js',
-  ]) {
-    const abs = path.join(ROOT_DIR, ...rel.split('/'));
-    if (!fs.existsSync(abs)) continue;
-    try {
-      entries.push({
-        name: rel,
-        data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8'),
-      });
-    } catch {}
-  }
-  return entries;
-}
-
-function collectOptionalSuggesterTopEntries() {
-  const entries = [];
-  for (const rel of [
-    'vendor/prompt-suggester/suggester-client.js',
-    'vendor/prompt-suggester/suggester-settings-ui.js',
-  ]) {
-    const abs = path.join(ROOT_DIR, ...rel.split('/'));
-    if (!fs.existsSync(abs)) continue;
-    try {
-      entries.push({
-        name: rel,
-        data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8'),
-      });
-    } catch {}
-  }
-  return entries;
-}
-
-function collectOptionalPromptEnhancerTopEntries() {
-  const entries = [];
-  for (const rel of [
-    'vendor/prompt-enhancer/prompt-enhancer-client.js',
-    'vendor/prompt-enhancer/prompt-enhancer-settings-ui.js',
-  ]) {
-    const abs = path.join(ROOT_DIR, ...rel.split('/'));
-    if (!fs.existsSync(abs)) continue;
-    try { entries.push({ name: rel, data: Buffer.from(cdp.minifyJs(fs.readFileSync(abs, 'utf8')), 'utf8') }); } catch {}
-  }
-  return entries;
 }
 
 function collectOptionalOmniTopEntries() {
   const entries = [];
-  const omniClientRel = 'vendor/omni-viewer/omni-client.js';
-  const omniClientAbs = path.join(ROOT_DIR, 'vendor', 'omni-viewer', 'omni-client.js');
-  if (fs.existsSync(omniClientAbs)) {
-    try {
-      entries.push({
-        name: omniClientRel,
-        data: Buffer.from(cdp.minifyJs(fs.readFileSync(omniClientAbs, 'utf8')), 'utf8'),
-      });
-    } catch {}
+  for (const ch of cdp.CHANNEL_REGISTRY || []) {
+    if (ch && ch.topLevelPack && !ch.staticRuntimePack) {
+      entries.push(...collectRegistryChannelFiles(ch.id));
+    }
   }
-  entries.push(...collectOptionalSidebarTopEntries());
-  entries.push(...collectOptionalThoughtTopEntries());
-  entries.push(...collectOptionalInlineDiffTopEntries());
-  entries.push(...collectOptionalWallpaperTopEntries());
-  entries.push(...collectOptionalSuggesterTopEntries());
-  entries.push(...collectOptionalPromptEnhancerTopEntries());
+  entries.push(...collectOptionalPeriodicPickerStubTopEntries());
+  entries.push(...collectOptionalOffloadedRuntimeTopEntries());
   return entries;
 }
 
@@ -271,7 +246,7 @@ function collectNativePluginEntries(activeConfigFile) {
   };
 
   for (const rel of cdp.SYNC_ROOT_FILES || []) {
-    const abs = path.join(ROOT_DIR, rel);
+    const abs = path.join(ROOT_DIR, ...String(rel).split('/'));
     try {
       if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
         pushEntry(`native-plugin/${rel}`, fs.readFileSync(abs));
@@ -296,17 +271,10 @@ function collectNativePluginEntries(activeConfigFile) {
     }
     for (const dirent of dirents) {
       const name = dirent.name;
-      if (
-        name === '.DS_Store' ||
-        name === '__pycache__' ||
-        name === '.daemon.pid' ||
-        name.endsWith('.log') ||
-        name.endsWith('.tmp')
-      ) {
+      const nextRel = `${subRel}/${name}`;
+      if (shouldExcludeSyncRelPath(nextRel)) {
         continue;
       }
-      const nextRel = `${subRel}/${name}`;
-      if (nextRel === 'assets/screenshots') continue;
       const nextAbs = path.join(absDir, name);
       if (dirent.isDirectory()) {
         walkSubDir(nextRel);
@@ -319,9 +287,45 @@ function collectNativePluginEntries(activeConfigFile) {
   };
 
   walkSubDir('assets');
+  walkSubDir('src');
   walkSubDir('vendor');
   walkSubDir('sidecars');
   return entries;
+}
+
+function createInstallManifestPayload({
+  version = cdp.PLUGIN_VERSION,
+  installEntries = [],
+  pluginEntries = [],
+  obsoletePaths = [],
+  extraProtectedPaths = [],
+} = {}) {
+  const manifestEntries = [];
+  for (const item of installEntries) {
+    if (!item || !item.name) continue;
+    const rel = String(item.name).replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!rel || rel === INSTALL_MANIFEST_FILENAME || rel.startsWith('native-plugin/')) continue;
+    manifestEntries.push({ path: rel, scope: 'install', data: item.data, required: true });
+  }
+  for (const item of pluginEntries) {
+    if (!item || !item.name) continue;
+    const norm = String(item.name).replace(/\\/g, '/').replace(/^\/+/, '');
+    const rel = norm.startsWith('native-plugin/') ? norm.slice('native-plugin/'.length) : norm;
+    if (!rel || rel === INSTALL_MANIFEST_FILENAME) continue;
+    manifestEntries.push({ path: rel, scope: 'plugin', data: item.data, required: true });
+  }
+  const manifest = buildInstallManifest({
+    version,
+    entries: manifestEntries,
+    obsoletePaths,
+    extraProtectedPaths,
+  });
+  const json = JSON.stringify(manifest, null, 2) + '\n';
+  return {
+    manifest,
+    json,
+    buffer: Buffer.from(json, 'utf8'),
+  };
 }
 
 function buildMultiResIco(sizes = [16, 32, 48, 256]) {
@@ -459,8 +463,11 @@ export {
   collectOptionalInlineDiffTopEntries,
   collectOptionalWallpaperTopEntries,
   collectOptionalSuggesterTopEntries,
-  collectOptionalPromptEnhancerTopEntries,
+  STATIC_RUNTIME_CHANNEL_IDS,
+  collectStaticRuntimeChannelEntries,
   collectNativePluginEntries,
+  createInstallManifestPayload,
+  INSTALL_MANIFEST_FILENAME,
   renderPrismIconPng,
   buildMultiResIco,
   buildIcns,

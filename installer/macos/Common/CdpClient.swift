@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: synchronize the default-off Prompt Enhancer setting.
 import Foundation
 #if canImport(Darwin)
 import Darwin
@@ -140,7 +141,7 @@ final class PluginManifest {
         let manifestPath = (baseDir as NSString).appendingPathComponent("manifest.json")
         let text = try String(contentsOfFile: manifestPath, encoding: .utf8)
         let raw = try MiniJson.parseObject(text)
-        let version = raw["version"]?.stringValue ?? "1.0.8-beta.3"
+        let version = raw["version"]?.stringValue ?? "1.0.8-beta.4"
         let styleId = raw["styleId"]?.stringValue ?? "ag-prism-css"
         let settingBinding = raw["settingBinding"]?.stringValue ?? "__agPrismSetting"
         let removeExpression = raw["removeExpression"]?.stringValue ?? ""
@@ -152,8 +153,20 @@ final class PluginManifest {
                 }
             }
         }
-        let defaultConfig = raw["defaultConfig"]?.objectValue ?? [:]
-        let validators = raw["validators"]?.objectValue ?? [:]
+        var defaultConfig = CdpHelper.createDefaultConfig()
+        if let rawDef = raw["defaultConfig"]?.objectValue {
+            for (k, v) in rawDef {
+                if case .null = v { continue }
+                defaultConfig[k] = v
+            }
+        }
+        var validators = CdpHelper.createDefaultValidators()
+        if let rawVal = raw["validators"]?.objectValue {
+            for (k, v) in rawVal {
+                if case .null = v { continue }
+                validators[k] = v
+            }
+        }
         return PluginManifest(
             version: version,
             styleId: styleId,
@@ -570,19 +583,163 @@ enum CdpHelper {
         return String(h, radix: 36)
     }
 
+    private static let canonicalLangValues = ["auto", "zh-CN", "zh-TW", "en", "ja", "ko", "es", "fr", "de", "tr"]
+    private static let onOffValues = ["on", "off"]
+    private static let autoOnOffValues = ["auto", "on", "off"]
+    private static let strictOnBoolKeys = ["ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit"]
+    private static let notOffBoolKeys = ["smoothCaret", "contextMenu"]
+
+    // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 54 键 100% 对齐：40 枚举 + 9 非可选布尔 + 2 字符串 + 1 整数 + 2 可选受控布尔）
+    private static let enumSchemaSpecs: [(String, String, String)] = [
+        ("language", "auto", "L"), ("lang", "auto", "L"),
+        ("palette", "obsidian", "host,obsidian,warm,claude"), ("lightPreset", "crystal", "crystal,alabaster"),
+        ("darkAuraStyle", "prism", "prism,neon"), ("motionLevel", "ultra", "off,subtle,standard,ultra"),
+        ("performanceMode", "balanced", "balanced,performance,quality,auto,eco"), ("targetFps", "180", "60,120,180,native"),
+        ("telemetryModule", "auto", "A"), ("telemetryQuotaMode", "compact", "compact,both"),
+        ("effortSliderModule", "auto", "A"), ("effortMemory", "on", "O"), ("periodicModelPicker", "on", "O"),
+        ("thoughtTranslate", "off", "off,machine,ai"), ("thoughtTrigger", "preload", "preload,expand"),
+        ("homeLayout", "studio", "studio,classic,off"), ("homeMode", "studio", "studio,classic,off"),
+        ("convRipple", "off", "off,subtle,medium,full"), ("ripple", "on", "O"), ("composer", "on", "O"),
+        ("placeholderStyle", "studio", "studio,host"), ("promptStyle", "studio", "studio,host"),
+        ("mascot", "crab", "crab,minis,quad,quad-minis,dual,off"), ("logoInk", "accent", "accent,foreground"),
+        ("sidebar", "on", "O"), ("sidebarNavFold", "off", "off,on"),
+        ("scrollBottomMotion", "smooth", "smooth,instant"), ("accentTone", "follow", "follow,cobalt,iris,amber,mono"),
+        ("cornerStyle", "balanced", "sharp,balanced,soft"), ("chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom"),
+        ("codeFont", "default", "default,jetbrains,cascadia,sfmono,custom"), ("ambientIntensity", "100", "0,35,70,100"),
+        ("darkAura", "balanced", "subtle,balanced,vivid"), ("thoughtView", "immersive", "immersive,bilingual"),
+        ("omniModule", "on", "O"), ("linkTarget", "builtin", "builtin,external"),
+        ("sidebarStudio", "off", "O"), ("hostLocalization", "auto", "A"),
+        ("autoUpdate", "off", "O"), ("updateChannel", "stable", "stable,beta"),
+        ("promptEnhancer", "off", "O"),
+    ]
+    private static let boolSchemaDefaultTrueKeys = ["homeRipple", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu"]
+    private static let boolSchemaDefaultFalseKeys = ["ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit"]
+    private static let stringSchemaKeys = ["chatFontCustom", "codeFontCustom"]
+
+    private static func expandEnumSpec(_ spec: String) -> JsonValue {
+        let items: [String]
+        if spec == "L" { items = canonicalLangValues }
+        else if spec == "A" { items = autoOnOffValues }
+        else if spec == "O" { items = onOffValues }
+        else { items = spec.split(separator: ",").map(String.init) }
+        return .array(items.map { .string($0) })
+    }
+
+    static func createDefaultConfig() -> [String: JsonValue] {
+        var d: [String: JsonValue] = [:]
+        for (k, def, _) in enumSchemaSpecs { d[k] = .string(def) }
+        for k in boolSchemaDefaultTrueKeys { d[k] = .bool(true) }
+        for k in boolSchemaDefaultFalseKeys { d[k] = .bool(false) }
+        for k in stringSchemaKeys { d[k] = .string("") }
+        d["pollIntervalMs"] = .int(2500)
+        return d
+    }
+
+    static func createDefaultValidators() -> [String: JsonValue] {
+        var v: [String: JsonValue] = [:]
+        for (k, _, spec) in enumSchemaSpecs { v[k] = expandEnumSpec(spec) }
+        for k in boolSchemaDefaultTrueKeys { v[k] = .string("boolean") }
+        for k in boolSchemaDefaultFalseKeys { v[k] = .string("boolean") }
+        for k in stringSchemaKeys { v[k] = .string("string") }
+        return v
+    }
+
+    private static let builtinValidators: [String: JsonValue] = createDefaultValidators()
+
+    static func normalizeMascotConfigValue(_ raw: String?) -> String? {
+        guard let s = raw else { return nil }
+        if s == "dual" { return "crab" }
+        if s == "off" || s == "crab" || s == "minis" || s == "quad" || s == "quad-minis" { return s }
+        guard s.hasPrefix("r:"), s.count > 2 else { return nil }
+        var body = String(s.dropFirst(2))
+        let minis = body.hasSuffix("+m")
+        if minis { body = String(body.dropLast(2)) }
+        var counts = [0, 0, 0, 0]
+        var seen = [false, false, false, false]
+        var rawTotal = 0
+        var total = 0
+        if !body.isEmpty {
+            for tok in body.split(separator: ",", omittingEmptySubsequences: false) {
+                let chars = Array(tok.unicodeScalars)
+                guard chars.count == 2 else { return nil }
+                let idx: Int
+                switch chars[0] {
+                case "c": idx = 0
+                case "k": idx = 1
+                case "d": idx = 2
+                case "w": idx = 3
+                default: return nil
+                }
+                let digit = Int(chars[1].value) - 48
+                guard digit >= 0 && digit <= 4 && !seen[idx] else { return nil }
+                seen[idx] = true
+                rawTotal += digit
+                let clamped = digit > 0 ? 1 : 0
+                counts[idx] = clamped
+                total += clamped
+            }
+        }
+        if rawTotal > 6 || total > 4 { return nil }
+        if total == 0 && !minis { return "off" }
+        if counts[0] == 1 && counts[1] == 1 && counts[2] == 0 && counts[3] == 0 { return minis ? "minis" : "crab" }
+        if counts[0] == 1 && counts[1] == 1 && counts[2] == 1 && counts[3] == 1 { return minis ? "quad-minis" : "quad" }
+        let names = ["c", "k", "d", "w"]
+        var parts: [String] = []
+        for i in 0..<4 where counts[i] > 0 { parts.append("\(names[i])\(counts[i])") }
+        return "r:" + parts.joined(separator: ",") + (minis ? "+m" : "")
+    }
+
+    private static func extractSchemaInteger(_ value: JsonValue) -> Int64? {
+        switch value {
+        case .int(let n): return n
+        case .double(let d):
+            guard d.isFinite, d.rounded(.towardZero) == d,
+                  d >= -9007199254740991.0, d <= 9007199254740991.0 else { return nil }
+            return Int64(d)
+        default: return nil
+        }
+    }
+
+    private static func sanitizeCustomFont(_ value: JsonValue) -> String {
+        guard let raw = value.stringValue else { return "" }
+        var out = ""
+        var u16 = 0
+        for sc in raw.unicodeScalars {
+            if sc == "\0" || sc == "\r" || sc == "\n" { continue }
+            let cost = sc.utf16.count
+            if u16 + cost > 160 { break }
+            out.unicodeScalars.append(sc)
+            u16 += cost
+        }
+        return out
+    }
+
     private static func toBoolOnOff(_ val: JsonValue?) -> Bool {
         guard let v = val else { return true }
         if case .bool(let b) = v { return b }
-        if let s = v.stringValue?.lowercased() {
-            return s != "off" && s != "false"
-        }
+        if let s = v.stringValue?.lowercased() { return s != "off" && s != "false" }
         return true
+    }
+
+    private static func toStrictOnBool(_ val: JsonValue?) -> Bool {
+        guard let v = val else { return false }
+        if case .bool(let b) = v { return b }
+        if let s = v.stringValue?.lowercased() { return s == "on" || s == "true" }
+        return false
     }
 
     static func reconcileConfigAliases(_ raw: [String: JsonValue]) -> [String: JsonValue] {
         var out = raw
         if let lang = out["language"] { out["lang"] = lang }
         else if let lang = out["lang"] { out["language"] = lang }
+
+        if let langStr = out["language"]?.stringValue {
+            let lowLang = langStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "_", with: "-")
+            if lowLang == "yue" || lowLang.hasPrefix("yue-") || lowLang == "zh-yue" || lowLang.contains("cantonese") {
+                out["language"] = .string("zh-CN")
+                out["lang"] = .string("zh-CN")
+            }
+        }
 
         if let hl = out["homeLayout"] { out["homeMode"] = hl }
         else if let hm = out["homeMode"] { out["homeLayout"] = hm }
@@ -605,67 +762,97 @@ enum CdpHelper {
             out["sidebarRestyle"] = .bool(on)
             out["sidebar"] = .string(on ? "on" : "off")
         }
-        if out["sidebarCompact"] != nil {
-            out["sidebarCompact"] = .bool(toBoolOnOff(out["sidebarCompact"]))
-        }
-        if out["smoothCaret"] != nil {
-            out["smoothCaret"] = .bool(toBoolOnOff(out["smoothCaret"]))
-        }
-        if out["contextMenu"] != nil {
-            out["contextMenu"] = .bool(toBoolOnOff(out["contextMenu"]))
-        }
         if let cr = out["convRipple"] {
             if case .bool(let b) = cr {
                 out["convRipple"] = .string(b ? "medium" : "off")
             } else if let s = cr.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-                if s == "on" || s == "true" {
-                    out["convRipple"] = .string("medium")
-                } else if s == "off" || s == "false" {
-                    out["convRipple"] = .string("off")
-                } else if s == "subtle" || s == "medium" || s == "full" {
-                    out["convRipple"] = .string(s)
-                }
+                if s == "on" || s == "true" { out["convRipple"] = .string("medium") }
+                else if s == "off" || s == "false" { out["convRipple"] = .string("off") }
+                else if s == "subtle" || s == "medium" || s == "full" { out["convRipple"] = .string(s) }
             }
         }
-        if let cl = out["codeLigatures"] {
-            if case .bool(let b) = cl {
-                out["codeLigatures"] = .bool(b)
-            } else if let s = cl.stringValue?.lowercased() {
-                out["codeLigatures"] = .bool(s == "on" || s == "true")
+        for k in strictOnBoolKeys {
+            if let v = out[k], (v.boolValue != nil || v.stringValue != nil) {
+                out[k] = .bool(toStrictOnBool(v))
             }
         }
-        for k in ["telemetryModule", "effortSliderModule", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold"] {
-            if let v = out[k], case .bool(let b) = v {
-                out[k] = .string(b ? "on" : "off")
+        for k in notOffBoolKeys {
+            if let v = out[k], (v.boolValue != nil || v.stringValue != nil) {
+                out[k] = .bool(toBoolOnOff(v))
             }
         }
-        if out["palette"]?.stringValue == "claude" {
-            out["palette"] = .string("warm")
+        for k in ["telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "promptEnhancer", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold"] {
+            if let v = out[k], case .bool(let b) = v { out[k] = .string(b ? "on" : "off") }
+        }
+        if out["palette"]?.stringValue == "claude" { out["palette"] = .string("warm") }
+        if let pm = out["performanceMode"]?.stringValue {
+            if pm == "auto" { out["performanceMode"] = .string("balanced") }
+            else if pm == "eco" { out["performanceMode"] = .string("performance") }
         }
         if out["mascot"]?.stringValue == "dual" {
             out["mascot"] = .string("crab")
+        } else if let ms = out["mascot"]?.stringValue, let normMascot = normalizeMascotConfigValue(ms) {
+            out["mascot"] = .string(normMascot)
         }
+        if let cf = out["chatFontCustom"] { out["chatFontCustom"] = .string(sanitizeCustomFont(cf)) }
+        if let kf = out["codeFontCustom"] { out["codeFontCustom"] = .string(sanitizeCustomFont(kf)) }
+        if let pv = out["pollIntervalMs"], let iv = extractSchemaInteger(pv) { out["pollIntervalMs"] = .int(iv) }
         return out
     }
 
     static func readConfig(baseDir: String, manifest: PluginManifest) -> [String: JsonValue] {
-        var cfg = manifest.defaultConfig
+        var cfg = createDefaultConfig()
+        for (k, v) in manifest.defaultConfig {
+            if case .null = v { continue }
+            cfg[k] = v
+        }
         let cfgPath = (baseDir as NSString).appendingPathComponent("config.json")
         if let text = try? String(contentsOfFile: cfgPath, encoding: .utf8),
            let userCfg = try? MiniJson.parseObject(text) {
             let reconciled = reconcileConfigAliases(userCfg)
             for (k, v) in reconciled {
-                cfg[k] = v
+                if case .null = v { continue }
+                if k == "pollIntervalMs" {
+                    if let iv = extractSchemaInteger(v), iv >= 500 && iv <= 60000 { cfg[k] = .int(iv) }
+                    continue
+                }
+                if k == "autoPromptCdpRelaunch" || k == "autoRelaunchOnBareLaunch" {
+                    if v.boolValue != nil { cfg[k] = v }
+                    continue
+                }
+                let isKnown = builtinValidators[k] != nil || manifest.validators[k] != nil
+                if !isKnown || validateConfigEntry(manifest: manifest, key: k, value: v) {
+                    cfg[k] = v
+                }
             }
         }
         return reconcileConfigAliases(cfg)
     }
 
     static func validateConfigEntry(manifest: PluginManifest, key: String, value: JsonValue) -> Bool {
-        guard let rule = manifest.validators[key] else { return false }
-        if let ruleStr = rule.stringValue, ruleStr == "boolean" {
+        guard !key.isEmpty else { return false }
+        if key == "mascot" {
+            return normalizeMascotConfigValue(value.stringValue) != nil
+        }
+        if key == "pollIntervalMs" {
+            guard let iv = extractSchemaInteger(value) else { return false }
+            return iv >= 500 && iv <= 60000
+        }
+        if key == "autoPromptCdpRelaunch" || key == "autoRelaunchOnBareLaunch" {
             if case .bool = value { return true }
-            if let sv = value.stringValue, (sv == "on" || sv == "off") { return true }
+            return false
+        }
+        guard let rule = manifest.validators[key] ?? builtinValidators[key] else { return false }
+        if let ruleStr = rule.stringValue {
+            if ruleStr == "boolean" {
+                if case .bool = value { return true }
+                if let sv = value.stringValue, (sv == "on" || sv == "off") { return true }
+                return false
+            }
+            if ruleStr == "string" {
+                guard let sv = value.stringValue, sv.utf16.count <= 160 else { return false }
+                return !sv.unicodeScalars.contains { $0 == "\0" || $0 == "\r" || $0 == "\n" }
+            }
             return false
         } else if let allowed = rule.arrayValue {
             guard let strVal = value.stringValue else { return false }
@@ -688,15 +875,10 @@ enum CdpHelper {
         for (k, v) in reconciledPatch {
             next[k] = v
         }
+        next = reconcileConfigAliases(next)
         let cfgPath = (baseDir as NSString).appendingPathComponent("config.json")
-        let tmpPath = cfgPath + ".tmp"
-        let content = MiniJson.stringify(.object(next), pretty: true) + "\n"
         do {
-            try content.write(toFile: tmpPath, atomically: false, encoding: .utf8)
-            if rename(tmpPath, cfgPath) != 0 {
-                try content.write(toFile: cfgPath, atomically: true, encoding: .utf8)
-                try? FileManager.default.removeItem(atPath: tmpPath)
-            }
+            try atomicWriteJsonObject(next, toFile: cfgPath)
             return true
         } catch {
             return false
@@ -1223,7 +1405,7 @@ enum CdpHelper {
         return Int64(Date().timeIntervalSince1970 * 1000.0)
     }
 
-    private static func parseBsdElapsedSeconds(_ raw: String) -> Int64 {
+    static func parseBsdElapsedSeconds(_ raw: String) -> Int64 {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { return 0 }
         var days: Int64 = 0
@@ -1302,34 +1484,6 @@ enum CdpHelper {
         }
     }
 
-    private static func stateFileMatchesHost(filePath: String, hostPid: Int32, startTimeMs: Int64) -> Bool {
-        guard !filePath.isEmpty, hostPid > 0,
-              let raw = try? String(contentsOfFile: filePath, encoding: .utf8) else { return false }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return false }
-        guard let obj = try? MiniJson.parseObject(trimmed) else { return false }
-        let expectedKey = "\(hostPid):\(startTimeMs)"
-        let pidPrefix = "\(hostPid):"
-        if let hk = obj["hostKey"]?.stringValue {
-            if hk == expectedKey { return true }
-            if startTimeMs <= 0 && hk.hasPrefix(pidPrefix) { return true }
-        }
-        if let k = obj["key"]?.stringValue {
-            if k == expectedKey { return true }
-            if startTimeMs <= 0 && k.hasPrefix(pidPrefix) { return true }
-        }
-        if let savedPid = obj["hostPid"]?.intValue, Int32(savedPid) == hostPid {
-            let savedStart: Int64
-            if case .int(let s1)? = obj["hostStartMs"] { savedStart = s1 }
-            else if case .int(let s2)? = obj["startTimeMs"] { savedStart = s2 }
-            else { savedStart = 0 }
-            if savedStart <= 0 || startTimeMs <= 0 || abs(savedStart - startTimeMs) <= 15000 {
-                return true
-            }
-        }
-        return false
-    }
-
     static func hasPromptedForHost(pid: Int32, startTimeMs: Int64, installDir: String, pluginDir: String) -> Bool {
         guard pid > 0 else { return true }
         if !pluginDir.isEmpty {
@@ -1362,7 +1516,7 @@ enum CdpHelper {
         }
     }
 
-    private static func escapeAppleScriptString(_ s: String) -> String {
+    static func escapeAppleScriptString(_ s: String) -> String {
         return s
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -1564,31 +1718,34 @@ enum CdpHelper {
     }
 
     @discardableResult
-    static func relaunchAntigravityWithCdp(host: BareHostAppInfo, waitExitMs: Int = 15000, log: ((String) -> Void)? = nil) -> Bool {
+    static func relaunchAntigravityWithCdp(host: BareHostAppInfo, waitExitMs: Int = 15000, abortIfStillAlive: Bool = false, log: ((String) -> Void)? = nil) -> Bool {
         guard host.pid > 0 else { return false }
         let normalizedAppPath = normalizeAntigravityAppPath(host.appPath)
         let appBaseName = (normalizedAppPath as NSString).lastPathComponent
 
-        let quitScript: String
-        if normalizedAppPath == "/Applications/Antigravity.app" ||
-           appBaseName.caseInsensitiveCompare("Antigravity.app") == .orderedSame {
-            quitScript = "tell application \"Antigravity\" to quit"
-        } else {
-            let escapedPath = escapeAppleScriptString(normalizedAppPath)
-            quitScript = "tell application (POSIX file \"\(escapedPath)\" as text) to quit"
+        // Prefer native NSRunningApplication.terminate() to avoid macOS AppleEvents TCC prompts;
+        // fall back to AppleScript quit and SIGTERM if unavailable.
+        var quitSent = requestNativeGracefulQuit(pid: host.pid)
+        if !quitSent {
+            let quitScript: String
+            if normalizedAppPath == "/Applications/Antigravity.app" ||
+               appBaseName.caseInsensitiveCompare("Antigravity.app") == .orderedSame {
+                quitScript = "tell application \"Antigravity\" to quit"
+            } else {
+                let escapedPath = escapeAppleScriptString(normalizedAppPath)
+                quitScript = "tell application (POSIX file \"\(escapedPath)\" as text) to quit"
+            }
+            let quitProc = Process()
+            quitProc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            quitProc.arguments = ["-e", quitScript]
+            quitProc.standardOutput = FileHandle.nullDevice
+            quitProc.standardError = FileHandle.nullDevice
+            do {
+                try quitProc.run()
+                quitProc.waitUntilExit()
+                quitSent = (quitProc.terminationStatus == 0)
+            } catch {}
         }
-
-        let quitProc = Process()
-        quitProc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        quitProc.arguments = ["-e", quitScript]
-        quitProc.standardOutput = FileHandle.nullDevice
-        quitProc.standardError = FileHandle.nullDevice
-        var quitSent = false
-        do {
-            try quitProc.run()
-            quitProc.waitUntilExit()
-            quitSent = (quitProc.terminationStatus == 0)
-        } catch {}
         if !quitSent && kill(host.pid, 0) == 0 {
             _ = kill(host.pid, SIGTERM)
         }
@@ -1627,6 +1784,13 @@ enum CdpHelper {
         }
 
         if !aliveFamilyPids.isEmpty || lockHeld {
+            if abortIfStillAlive {
+                log?(InstallerI18n.tr(
+                    "等待 Antigravity 退净超时（残留进程数=\(aliveFamilyPids.count)，SingletonLock占用=\(lockHeld)），已安全中止自动重开",
+                    "Timed out waiting for Antigravity to exit (remaining=\(aliveFamilyPids.count), SingletonLockHeld=\(lockHeld)); aborting auto-relaunch safely"
+                ))
+                return false
+            }
             log?(InstallerI18n.tr(
                 "等待 Antigravity 退净超时（残留进程数=\(aliveFamilyPids.count)，SingletonLock占用=\(lockHeld)），仍将尝试以新实例拉起",
                 "Timed out waiting for Antigravity to fully exit (remaining=\(aliveFamilyPids.count), SingletonLockHeld=\(lockHeld)); proceeding with new instance launch"
@@ -1753,7 +1917,7 @@ enum CdpHelper {
         sb.append("    } else {\n")
         sb.append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n")
         sb.append("    }\n")
-        sb.append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^zh(?:$|-(?:cn|hans|sg)(?:-|$))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n")
+        sb.append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'tr' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n")
         sb.append("    if (document.documentElement) {\n")
         sb.append("      if (effectiveCfg && effectiveCfg.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n")
         sb.append("      else document.documentElement.removeAttribute('data-ag-prism-thought-view');\n")
@@ -1774,35 +1938,32 @@ enum CdpHelper {
         let hashJson = MiniJson.stringifyString(computeHash(clientSource))
         var sb = ""
         sb.reserveCapacity(clientSource.count + cfgJson.count + 1024)
-        sb.append("(() => {\n")
-        sb.append("  const href = String((typeof location !== 'undefined' && location && location.href) || '');\n")
-        sb.append("  const ttl = String((typeof document !== 'undefined' && document && document.title) || '').trim();\n")
-        sb.append("  if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(href)) return { ok: false, skipped: true };\n")
-        sb.append("  if (/^(devtools:|chrome:|chrome-extension:|edge:|about:|data:|blob:|plugin:)/i.test(href)) return { ok: false, skipped: true };\n")
-        sb.append("  if (/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?\\/(?:viewer|sandbox|stream|api)(?:[/?#]|$)/i.test(href)) return { ok: false, skipped: true };\n")
-        sb.append("  const bootCfg = ")
+        sb.append(
+            "(() => {\n" +
+            "  const href = String((typeof location !== 'undefined' && location && location.href) || '');\n" +
+            "  const ttl = String((typeof document !== 'undefined' && document && document.title) || '').trim();\n" +
+            "  if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(href)) return { ok: false, skipped: true };\n" +
+            "  if (/^(devtools:|chrome:|chrome-extension:|edge:|about:|data:|blob:|plugin:)/i.test(href)) return { ok: false, skipped: true };\n" +
+            "  if (/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?\\/(?:viewer|sandbox|stream|api)(?:[/?#]|$)/i.test(href)) return { ok: false, skipped: true };\n" +
+            "  const bootCfg = "
+        )
         sb.append(cfgJson)
-        sb.append(";\n")
-        sb.append("  const nextHash = ")
+        sb.append(";\n  const nextHash = ")
         sb.append(hashJson)
-        sb.append(";\n")
-        sb.append("  const liveCfg = (window.__agPrism && typeof window.__agPrism.getState === 'function' && window.__agPrism.getState()?.cfg) || bootCfg;\n")
-        sb.append("  const serverMeta = window.__agPrismOmniServerMeta || null;\n")
-        sb.append("  const prev = window.__agPrismOmni;\n")
-        sb.append("  const reused = Boolean(prev && prev.codeHash === nextHash && typeof prev.sync === 'function');\n")
-        sb.append("  if (!reused) {\n")
-        sb.append("    try { prev?.destroy?.(); } catch {}\n")
-        sb.append("    ")
+        sb.append(
+            ";\n  const liveCfg = (window.__agPrism && typeof window.__agPrism.getState === 'function' && window.__agPrism.getState()?.cfg) || bootCfg;\n" +
+            "  const serverMeta = window.__agPrismOmniServerMeta || null;\n" +
+            "  const prev = window.__agPrismOmni;\n" +
+            "  const reused = Boolean(prev && prev.codeHash === nextHash && typeof prev.sync === 'function');\n" +
+            "  if (!reused) {\n    try { prev?.destroy?.(); } catch {}\n    "
+        )
         sb.append(clientSource)
-        sb.append("\n")
-        sb.append("    if (window.__agPrismOmni && typeof window.__agPrismOmni === 'object') {\n")
-        sb.append("      try { window.__agPrismOmni.codeHash = nextHash; } catch {}\n")
-        sb.append("    }\n")
-        sb.append("  }\n")
-        sb.append("  try { window.__agPrismOmni?.sync?.(liveCfg, serverMeta); } catch {}\n")
-        sb.append("  if (liveCfg && liveCfg.omniModule === 'off') return { ok: true, status: 'disabled' };\n")
-        sb.append("  return { ok: true, status: reused ? 'synced' : (window.__agPrismOmni ? 'mounted' : 'ready') };\n")
-        sb.append("})()")
+        sb.append(
+            "\n    if (window.__agPrismOmni && typeof window.__agPrismOmni === 'object') { try { window.__agPrismOmni.codeHash = nextHash; } catch {} }\n" +
+            "  }\n  try { window.__agPrismOmni?.sync?.(liveCfg, serverMeta); } catch {}\n" +
+            "  if (liveCfg && liveCfg.omniModule === 'off') return { ok: true, status: 'disabled' };\n" +
+            "  return { ok: true, status: reused ? 'synced' : (window.__agPrismOmni ? 'mounted' : 'ready') };\n})()"
+        )
         return sb
     }
 
@@ -1836,7 +1997,7 @@ enum CdpHelper {
         return raw == "machine" || raw == "ai" || raw == "on" || raw == "auto"
     }
 
-    private static func resolveSafePluginFile(baseDir: String, relPath: String) -> String? {
+    static func resolveSafePluginFile(baseDir: String, relPath: String) -> String? {
         let trimmedBase = baseDir.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBase.isEmpty, !relPath.isEmpty else { return nil }
         let rootUrl = URL(fileURLWithPath: trimmedBase).resolvingSymlinksInPath().standardizedFileURL
@@ -1855,14 +2016,52 @@ enum CdpHelper {
         return buildThoughtExpression(baseDir: baseDir, cfg: config)
     }
 
+    private static let subchannelHostGuardPrefix: String =
+        "(() => {\n" +
+        "  try { if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' }; } catch { return { ok: false, status: 'skipped-subframe' }; }\n" +
+        "  const hasDomMarker = () => {\n" +
+        "    try {\n" +
+        "      if (document.body && document.body.classList && (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))) return true;\n" +
+        "      return Boolean(typeof document.querySelector === 'function' && document.querySelector('.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'));\n" +
+        "    } catch { return false; }\n" +
+        "  };\n" +
+        "  let needDomMarkerOnReady = false;\n" +
+        "  let isPlainHttpLocalhost = false;\n" +
+        "  try {\n" +
+        "    const loc = typeof window !== 'undefined' && window.location;\n" +
+        "    const href = loc && typeof loc.href === 'string' ? loc.href : '';\n" +
+        "    if (href) {\n" +
+        "      const low = href.toLowerCase();\n" +
+        "      if (low.startsWith('devtools://') || low.startsWith('data:') || low.startsWith('chrome:') || low.startsWith('chrome-extension:') || low.startsWith('edge:') || low.startsWith('blob:') || low.startsWith('plugin:')) return { ok: false, status: 'skipped-non-host' };\n" +
+        "      if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) {\n" +
+        "        const ttl = String(document.title || '').trim();\n" +
+        "        if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(low)) return { ok: false, status: 'skipped-non-host' };\n" +
+        "      }\n" +
+        "      if (low.startsWith('http:') || low.startsWith('https:')) {\n" +
+        "        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n" +
+        "        if (!m) return { ok: false, status: 'skipped-non-host' };\n" +
+        "        const pathname = (m[3] || '/').toLowerCase();\n" +
+        "        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) return { ok: false, status: 'skipped-non-host' };\n" +
+        "        if (!hasDomMarker()) {\n" +
+        "          isPlainHttpLocalhost = m[1].toLowerCase() === 'http';\n" +
+        "          const rs = String(document.readyState || '');\n" +
+        "          if (isPlainHttpLocalhost) { if (rs === 'loading') needDomMarkerOnReady = true; else return { ok: false, status: 'skipped-non-host' }; }\n" +
+        "          else if (!/\\bantigravity\\b/i.test(String(document.title || ''))) { if (rs === 'loading') needDomMarkerOnReady = true; else return { ok: false, status: 'skipped-non-host' }; }\n" +
+        "        }\n" +
+        "      }\n" +
+        "    }\n" +
+        "  } catch {}\n"
+
     static func buildThoughtExpression(baseDir: String, cfg: [String: JsonValue]?) -> String {
         guard shouldEnableThought(cfg), let rawCfg = cfg else { return "" }
         guard let clientPath = resolveSafePluginFile(baseDir: baseDir, relPath: "vendor/thought-translator/thought-client.js"),
               let settingsUiPath = resolveSafePluginFile(baseDir: baseDir, relPath: "vendor/thought-translator/thought-settings-ui.js"),
-              let clientSource = try? String(contentsOfFile: clientPath, encoding: .utf8), !clientSource.isEmpty,
+              let rawClientSource = try? String(contentsOfFile: clientPath, encoding: .utf8), !rawClientSource.isEmpty,
               let settingsUiSource = try? String(contentsOfFile: settingsUiPath, encoding: .utf8), !settingsUiSource.isEmpty else {
             return ""
         }
+        let verbsSource = resolveSafePluginFile(baseDir: baseDir, relPath: "vendor/thought-translator/tool-step-verbs.js").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? ""
+        let clientSource = verbsSource.isEmpty ? rawClientSource : (verbsSource + ";\n" + rawClientSource)
         var bootCfg = reconcileConfigAliases(rawCfg)
         let rawMode = (bootCfg["thoughtTranslate"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         bootCfg["thoughtTranslate"] = .string(rawMode == "machine" ? "machine" : "ai")
@@ -1872,162 +2071,60 @@ enum CdpHelper {
 
         var sb = ""
         sb.reserveCapacity(clientSource.count + settingsUiSource.count + bootCfgJson.count + 3072)
-        sb.append("(() => {\n")
-        sb.append("  try {\n")
-        sb.append("    if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' };\n")
-        sb.append("  } catch {\n")
-        sb.append("    return { ok: false, status: 'skipped-subframe' };\n")
-        sb.append("  }\n")
-        sb.append("  const hasDomMarker = () => {\n")
-        sb.append("    try {\n")
-        sb.append("      if (\n")
-        sb.append("        document.body &&\n")
-        sb.append("        document.body.classList &&\n")
-        sb.append("        (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))\n")
-        sb.append("      ) {\n")
-        sb.append("        return true;\n")
-        sb.append("      }\n")
-        sb.append("      return Boolean(\n")
-        sb.append("        typeof document.querySelector === 'function' &&\n")
-        sb.append("          document.querySelector(\n")
-        sb.append("            '.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'\n")
-        sb.append("          )\n")
-        sb.append("      );\n")
-        sb.append("    } catch {\n")
-        sb.append("      return false;\n")
-        sb.append("    }\n")
-        sb.append("  };\n")
-        sb.append("  let needDomMarkerOnReady = false;\n")
-        sb.append("  let isPlainHttpLocalhost = false;\n")
-        sb.append("  try {\n")
-        sb.append("    const loc = typeof window !== 'undefined' && window.location;\n")
-        sb.append("    const href = loc && typeof loc.href === 'string' ? loc.href : '';\n")
-        sb.append("    if (href) {\n")
-        sb.append("      const low = href.toLowerCase();\n")
-        sb.append("      if (low.startsWith('devtools://') || low.startsWith('data:') || low.startsWith('chrome:') || low.startsWith('chrome-extension:') || low.startsWith('edge:') || low.startsWith('blob:') || low.startsWith('plugin:')) {\n")
-        sb.append("        return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("      }\n")
-        sb.append("      if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) {\n")
-        sb.append("        const ttl = String(document.title || '').trim();\n")
-        sb.append("        if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(low)) {\n")
-        sb.append("          return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("        }\n")
-        sb.append("      }\n")
-        sb.append("      if (low.startsWith('http:') || low.startsWith('https:')) {\n")
-        sb.append("        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n")
-        sb.append("        if (!m) return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("        const pathname = (m[3] || '/').toLowerCase();\n")
-        sb.append("        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) {\n")
-        sb.append("          return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("        }\n")
-        sb.append("        if (!hasDomMarker()) {\n")
-        sb.append("          isPlainHttpLocalhost = m[1].toLowerCase() === 'http';\n")
-        sb.append("          const rs = String(document.readyState || '');\n")
-        sb.append("          if (isPlainHttpLocalhost) {\n")
-        sb.append("            if (rs === 'loading') needDomMarkerOnReady = true;\n")
-        sb.append("            else return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("          } else if (!/\\bantigravity\\b/i.test(String(document.title || ''))) {\n")
-        sb.append("            if (rs === 'loading') needDomMarkerOnReady = true;\n")
-        sb.append("            else return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("          }\n")
-        sb.append("        }\n")
-        sb.append("      }\n")
-        sb.append("    }\n")
-        sb.append("  } catch {}\n")
-        sb.append("  const getSettingsSec = () => {\n")
-        sb.append("    try {\n")
-        sb.append("      return document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec') || null;\n")
-        sb.append("    } catch {\n")
-        sb.append("      return null;\n")
-        sb.append("    }\n")
-        sb.append("  };\n")
-        sb.append("  const cleanupThought = () => {\n")
-        sb.append("    try { window.__agPrismThought?.destroy?.(); } catch {}\n")
-        sb.append("    try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n")
-        sb.append("    try { delete window.__agPrismThought; } catch {}\n")
-        sb.append("    try { delete globalThis.__agPrismThought; } catch {}\n")
-        sb.append("    try { delete window.__agPrismThoughtSettingsUi; } catch {}\n")
-        sb.append("    try { delete globalThis.__agPrismThoughtSettingsUi; } catch {}\n")
-        sb.append("    try {\n")
-        sb.append("      const sec = getSettingsSec();\n")
-        sb.append("      if (sec) {\n")
-        sb.append("        sec.__prismThoughtUiHandle = null;\n")
-        sb.append("        sec.__prismMountThoughtUi?.();\n")
-        sb.append("      }\n")
-        sb.append("    } catch {}\n")
-        sb.append("  };\n")
-        sb.append("  const getLiveCfg = () => {\n")
-        sb.append("    try {\n")
-        sb.append("      const st = window.__agPrism?.getState?.();\n")
-        sb.append("      return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null;\n")
-        sb.append("    } catch {\n")
-        sb.append("      return null;\n")
-        sb.append("    }\n")
-        sb.append("  };\n")
-        sb.append("  const bootCfg = ")
+        sb.append(subchannelHostGuardPrefix)
+        sb.append(
+            "  const getSettingsSec = () => { try { return document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec') || null; } catch { return null; } };\n" +
+            "  const cleanupThought = () => {\n" +
+            "    try { window.__agPrismThought?.destroy?.(); } catch {}\n" +
+            "    try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n" +
+            "    try { delete window.__agPrismThought; delete globalThis.__agPrismThought; delete window.__agPrismThoughtSettingsUi; delete globalThis.__agPrismThoughtSettingsUi; } catch {}\n" +
+            "    try { const sec = getSettingsSec(); if (sec) { sec.__prismThoughtUiHandle = null; sec.__prismMountThoughtUi?.(); } } catch {}\n" +
+            "  };\n" +
+            "  const getLiveCfg = () => { try { const st = window.__agPrism?.getState?.(); return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null; } catch { return null; } };\n" +
+            "  const bootCfg = "
+        )
         sb.append(bootCfgJson)
-        sb.append(";\n")
-        sb.append("  const initialLiveCfg = getLiveCfg();\n")
-        sb.append("  if (initialLiveCfg && initialLiveCfg.thoughtTranslate === 'off') {\n")
-        sb.append("    cleanupThought();\n")
-        sb.append("    return { ok: true, status: 'off', skippedByLiveCfg: true };\n")
-        sb.append("  }\n")
-        sb.append("  const targetHash = ")
+        sb.append(
+            ";\n  const initialLiveCfg = getLiveCfg();\n" +
+            "  if (initialLiveCfg && initialLiveCfg.thoughtTranslate === 'off') { cleanupThought(); return { ok: true, status: 'off', skippedByLiveCfg: true }; }\n" +
+            "  const targetHash = "
+        )
         sb.append(hashJson)
-        sb.append(";\n")
-        sb.append("  const mountOrReuse = () => {\n")
-        sb.append("    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {\n")
-        sb.append("      return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("    }\n")
-        sb.append("    const liveCfg = getLiveCfg();\n")
-        sb.append("    if (liveCfg && liveCfg.thoughtTranslate === 'off') {\n")
-        sb.append("      cleanupThought();\n")
-        sb.append("      return { ok: true, status: 'off', skippedByLiveCfg: true };\n")
-        sb.append("    }\n")
-        sb.append("    const effectiveCfg = liveCfg || bootCfg;\n")
-        sb.append("    const existingThought = window.__agPrismThought;\n")
-        sb.append("    const existingUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n")
-        sb.append("    if (\n")
-        sb.append("      existingThought &&\n")
-        sb.append("      existingThought.__prismCodeHash === targetHash &&\n")
-        sb.append("      existingUi &&\n")
-        sb.append("      existingUi.__prismCodeHash === targetHash\n")
-        sb.append("    ) {\n")
-        sb.append("      try { existingThought.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("      try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n")
-        sb.append("      try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n")
-        sb.append("      return { ok: true, reused: true, codeHash: targetHash };\n")
-        sb.append("    }\n")
-        sb.append("    cleanupThought();\n")
-        sb.append("    ;")
+        sb.append(
+            ";\n  const mountOrReuse = () => {\n" +
+            "    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) return { ok: false, status: 'skipped-non-host' };\n" +
+            "    const liveCfg = getLiveCfg();\n" +
+            "    if (liveCfg && liveCfg.thoughtTranslate === 'off') { cleanupThought(); return { ok: true, status: 'off', skippedByLiveCfg: true }; }\n" +
+            "    const effectiveCfg = liveCfg || bootCfg;\n" +
+            "    const existingThought = window.__agPrismThought;\n" +
+            "    const existingUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n" +
+            "    if (existingThought && existingThought.__prismCodeHash === targetHash && existingUi && existingUi.__prismCodeHash === targetHash) {\n" +
+            "      try { existingThought.sync?.(effectiveCfg); } catch {}\n" +
+            "      try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n" +
+            "      try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n" +
+            "      return { ok: true, reused: true, codeHash: targetHash };\n" +
+            "    }\n" +
+            "    cleanupThought();\n    ;"
+        )
         sb.append(clientSource)
-        sb.append(";\n")
-        sb.append("    ;")
+        sb.append(";\n    ;")
         sb.append(settingsUiSource)
-        sb.append(";\n")
-        sb.append("    const mountedThought = window.__agPrismThought || globalThis.__agPrismThought;\n")
-        sb.append("    const mountedUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n")
-        sb.append("    if (mountedThought && typeof mountedThought === 'object') {\n")
-        sb.append("      mountedThought.__prismCodeHash = targetHash;\n")
-        sb.append("      try { window.__agPrismThought = mountedThought; } catch {}\n")
-        sb.append("      try { globalThis.__agPrismThought = mountedThought; } catch {}\n")
-        sb.append("    }\n")
-        sb.append("    if (mountedUi && typeof mountedUi === 'object') {\n")
-        sb.append("      mountedUi.__prismCodeHash = targetHash;\n")
-        sb.append("      try { window.__agPrismThoughtSettingsUi = mountedUi; } catch {}\n")
-        sb.append("      try { globalThis.__agPrismThoughtSettingsUi = mountedUi; } catch {}\n")
-        sb.append("    }\n")
-        sb.append("    try { mountedThought?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("    try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n")
-        sb.append("    try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n")
-        sb.append("    return { ok: true, status: 'mounted', codeHash: targetHash };\n")
-        sb.append("  };\n")
-        sb.append("  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n")
-        sb.append("    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n")
-        sb.append("    return { ok: true, status: 'deferred', codeHash: targetHash };\n")
-        sb.append("  }\n")
-        sb.append("  return mountOrReuse();\n")
-        sb.append("})()")
+        sb.append(
+            ";\n    const mountedThought = window.__agPrismThought || globalThis.__agPrismThought;\n" +
+            "    const mountedUi = window.__agPrismThoughtSettingsUi || globalThis.__agPrismThoughtSettingsUi;\n" +
+            "    if (mountedThought && typeof mountedThought === 'object') { mountedThought.__prismCodeHash = targetHash; try { window.__agPrismThought = mountedThought; } catch {} try { globalThis.__agPrismThought = mountedThought; } catch {} }\n" +
+            "    if (mountedUi && typeof mountedUi === 'object') { mountedUi.__prismCodeHash = targetHash; try { window.__agPrismThoughtSettingsUi = mountedUi; } catch {} try { globalThis.__agPrismThoughtSettingsUi = mountedUi; } catch {} }\n" +
+            "    try { mountedThought?.sync?.(effectiveCfg); } catch {}\n" +
+            "    try { window.__agPrism?.syncAbsorbed?.(); } catch {}\n" +
+            "    try { getSettingsSec()?.__prismMountThoughtUi?.(); } catch {}\n" +
+            "    return { ok: true, status: 'mounted', codeHash: targetHash };\n" +
+            "  };\n" +
+            "  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n" +
+            "    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n" +
+            "    return { ok: true, status: 'deferred', codeHash: targetHash };\n" +
+            "  }\n" +
+            "  return mountOrReuse();\n})()"
+        )
         return sb
     }
 
@@ -2062,129 +2159,47 @@ enum CdpHelper {
 
         var sb = ""
         sb.reserveCapacity(clientSource.count + bootCfgJson.count + 2560)
-        sb.append("(() => {\n")
-        sb.append("  try {\n")
-        sb.append("    if (window.self !== window.top) return { ok: false, status: 'skipped-subframe' };\n")
-        sb.append("  } catch {\n")
-        sb.append("    return { ok: false, status: 'skipped-subframe' };\n")
-        sb.append("  }\n")
-        sb.append("  const hasDomMarker = () => {\n")
-        sb.append("    try {\n")
-        sb.append("      if (\n")
-        sb.append("        document.body &&\n")
-        sb.append("        document.body.classList &&\n")
-        sb.append("        (document.body.classList.contains('theme-standalone') || document.body.classList.contains('monaco-workbench'))\n")
-        sb.append("      ) {\n")
-        sb.append("        return true;\n")
-        sb.append("      }\n")
-        sb.append("      return Boolean(\n")
-        sb.append("        typeof document.querySelector === 'function' &&\n")
-        sb.append("          document.querySelector(\n")
-        sb.append("            '.agy-shell, .agy-home, [data-testid=\"aux-pane-split\"], [data-testid=\"conversation-view\"], [data-testid=\"agent-input-box\"], [data-testid=\"model-selector-trigger\"], .monaco-workbench'\n")
-        sb.append("          )\n")
-        sb.append("      );\n")
-        sb.append("    } catch {\n")
-        sb.append("      return false;\n")
-        sb.append("    }\n")
-        sb.append("  };\n")
-        sb.append("  let needDomMarkerOnReady = false;\n")
-        sb.append("  let isPlainHttpLocalhost = false;\n")
-        sb.append("  try {\n")
-        sb.append("    const loc = typeof window !== 'undefined' && window.location;\n")
-        sb.append("    const href = loc && typeof loc.href === 'string' ? loc.href : '';\n")
-        sb.append("    if (href) {\n")
-        sb.append("      const low = href.toLowerCase();\n")
-        sb.append("      if (low.startsWith('devtools://') || low.startsWith('data:') || low.startsWith('chrome:') || low.startsWith('chrome-extension:') || low.startsWith('edge:') || low.startsWith('blob:') || low.startsWith('plugin:')) {\n")
-        sb.append("        return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("      }\n")
-        sb.append("      if (low.startsWith('vscode-file://') || low.startsWith('app://') || low.startsWith('about:')) {\n")
-        sb.append("        const ttl = String(document.title || '').trim();\n")
-        sb.append("        if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(low)) {\n")
-        sb.append("          return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("        }\n")
-        sb.append("      }\n")
-        sb.append("      if (low.startsWith('http:') || low.startsWith('https:')) {\n")
-        sb.append("        const m = /^(https?):\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(\\/[^?#]*)?(?:[?#]|$)/i.exec(href);\n")
-        sb.append("        if (!m) return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("        const pathname = (m[3] || '/').toLowerCase();\n")
-        sb.append("        if (/^\\/(?:viewer(?:\\/|$)|sandbox(?:\\/|$)|stream(?:\\/|$)|api(?:\\/|$))/.test(pathname)) {\n")
-        sb.append("          return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("        }\n")
-        sb.append("        if (!hasDomMarker()) {\n")
-        sb.append("          isPlainHttpLocalhost = m[1].toLowerCase() === 'http';\n")
-        sb.append("          const rs = String(document.readyState || '');\n")
-        sb.append("          if (isPlainHttpLocalhost) {\n")
-        sb.append("            if (rs === 'loading') needDomMarkerOnReady = true;\n")
-        sb.append("            else return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("          } else if (!/\\bantigravity\\b/i.test(String(document.title || ''))) {\n")
-        sb.append("            if (rs === 'loading') needDomMarkerOnReady = true;\n")
-        sb.append("            else return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("          }\n")
-        sb.append("        }\n")
-        sb.append("      }\n")
-        sb.append("    }\n")
-        sb.append("  } catch {}\n")
-        sb.append("  const cleanupInlineDiff = () => {\n")
-        sb.append("    try { (window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff)?.destroy?.(); } catch {}\n")
-        sb.append("    try { document.getElementById?.('ag-prism-inline-diff-css')?.remove?.(); } catch {}\n")
-        sb.append("    try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n")
-        sb.append("    try { delete window.__agPrismInlineDiff; } catch {}\n")
-        sb.append("    try { delete globalThis.__agPrismInlineDiff; } catch {}\n")
-        sb.append("    try { delete window.__agPrismInlineDiffFactory; } catch {}\n")
-        sb.append("    try { delete globalThis.__agPrismInlineDiffFactory; } catch {}\n")
-        sb.append("    try { delete window.__agPrismInlineDiffResolve; } catch {}\n")
-        sb.append("  };\n")
-        sb.append("  const getLiveCfg = () => {\n")
-        sb.append("    try {\n")
-        sb.append("      const st = window.__agPrism?.getState?.();\n")
-        sb.append("      return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null;\n")
-        sb.append("    } catch {\n")
-        sb.append("      return null;\n")
-        sb.append("    }\n")
-        sb.append("  };\n")
-        sb.append("  const bootCfg = ")
+        sb.append(subchannelHostGuardPrefix)
+        sb.append(
+            "  const cleanupInlineDiff = () => {\n" +
+            "    try { (window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff)?.destroy?.(); } catch {}\n" +
+            "    try { document.getElementById?.('ag-prism-inline-diff-css')?.remove?.(); } catch {}\n" +
+            "    try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n" +
+            "    try { delete window.__agPrismInlineDiff; delete globalThis.__agPrismInlineDiff; delete window.__agPrismInlineDiffFactory; delete globalThis.__agPrismInlineDiffFactory; delete window.__agPrismInlineDiffResolve; } catch {}\n" +
+            "  };\n" +
+            "  const getLiveCfg = () => { try { const st = window.__agPrism?.getState?.(); return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null; } catch { return null; } };\n" +
+            "  const bootCfg = "
+        )
         sb.append(bootCfgJson)
-        sb.append(";\n")
-        sb.append("  const targetHash = ")
+        sb.append(";\n  const targetHash = ")
         sb.append(hashJson)
-        sb.append(";\n")
-        sb.append("  const mountOrReuse = () => {\n")
-        sb.append("    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {\n")
-        sb.append("      return { ok: false, status: 'skipped-non-host' };\n")
-        sb.append("    }\n")
-        sb.append("    const effectiveCfg = getLiveCfg() || bootCfg;\n")
-        sb.append("    const existing = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n")
-        sb.append("    if (existing && !existing.getDebugState?.()?.destroyed && existing.__prismCodeHash === targetHash && typeof existing.sync === 'function') {\n")
-        sb.append("      try { existing.sync(effectiveCfg); } catch {}\n")
-        sb.append("      return { ok: true, reused: true, codeHash: targetHash };\n")
-        sb.append("    }\n")
-        sb.append("    cleanupInlineDiff();\n")
-        sb.append("    ;")
+        sb.append(
+            ";\n  const mountOrReuse = () => {\n" +
+            "    if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) return { ok: false, status: 'skipped-non-host' };\n" +
+            "    const effectiveCfg = getLiveCfg() || bootCfg;\n" +
+            "    const existing = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n" +
+            "    if (existing && !existing.getDebugState?.()?.destroyed && existing.__prismCodeHash === targetHash && typeof existing.sync === 'function') {\n" +
+            "      try { existing.sync(effectiveCfg); } catch {}\n" +
+            "      return { ok: true, reused: true, codeHash: targetHash };\n" +
+            "    }\n" +
+            "    cleanupInlineDiff();\n    ;"
+        )
         sb.append(clientSource)
-        sb.append(";\n")
-        sb.append("    let mounted = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n")
-        sb.append("    const factory = window.__agPrismInlineDiffFactory || globalThis.__agPrismInlineDiffFactory;\n")
-        sb.append("    if (!mounted && typeof factory === 'function') {\n")
-        sb.append("      try { mounted = factory({ window, document }); } catch {}\n")
-        sb.append("    }\n")
-        sb.append("    if (mounted && typeof mounted === 'object') {\n")
-        sb.append("      mounted.__prismCodeHash = targetHash;\n")
-        sb.append("      try { window.__agPrismInlineDiff = mounted; } catch {}\n")
-        sb.append("      try { globalThis.__agPrismInlineDiff = mounted; } catch {}\n")
-        sb.append("    }\n")
-        sb.append("    if (typeof factory === 'function') {\n")
-        sb.append("      try { window.__agPrismInlineDiffFactory = factory; } catch {}\n")
-        sb.append("      try { globalThis.__agPrismInlineDiffFactory = factory; } catch {}\n")
-        sb.append("    }\n")
-        sb.append("    try { mounted?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("    return { ok: true, status: 'mounted', codeHash: targetHash };\n")
-        sb.append("  };\n")
-        sb.append("  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n")
-        sb.append("    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n")
-        sb.append("    return { ok: true, status: 'deferred', codeHash: targetHash };\n")
-        sb.append("  }\n")
-        sb.append("  return mountOrReuse();\n")
-        sb.append("})()")
+        sb.append(
+            ";\n    let mounted = window.__agPrismInlineDiff || globalThis.__agPrismInlineDiff;\n" +
+            "    const factory = window.__agPrismInlineDiffFactory || globalThis.__agPrismInlineDiffFactory;\n" +
+            "    if (!mounted && typeof factory === 'function') { try { mounted = factory({ window, document }); } catch {} }\n" +
+            "    if (mounted && typeof mounted === 'object') { mounted.__prismCodeHash = targetHash; try { window.__agPrismInlineDiff = mounted; } catch {} try { globalThis.__agPrismInlineDiff = mounted; } catch {} }\n" +
+            "    if (typeof factory === 'function') { try { window.__agPrismInlineDiffFactory = factory; } catch {} try { globalThis.__agPrismInlineDiffFactory = factory; } catch {} }\n" +
+            "    try { mounted?.sync?.(effectiveCfg); } catch {}\n" +
+            "    return { ok: true, status: 'mounted', codeHash: targetHash };\n" +
+            "  };\n" +
+            "  if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {\n" +
+            "    document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });\n" +
+            "    return { ok: true, status: 'deferred', codeHash: targetHash };\n" +
+            "  }\n" +
+            "  return mountOrReuse();\n})()"
+        )
         return sb
     }
 
@@ -2245,102 +2260,62 @@ enum CdpHelper {
         sb.append("      try { if (document.documentElement) document.documentElement.removeAttribute('data-ag-prism'); } catch {}\n")
         sb.append("      try { delete window.__agPrismThought; delete globalThis.__agPrismThought; delete window.__agPrismThoughtSettingsUi; delete globalThis.__agPrismThoughtSettingsUi; delete window.__agPrismInlineDiff; delete globalThis.__agPrismInlineDiff; delete window.__agPrismInlineDiffFactory; delete globalThis.__agPrismInlineDiffFactory; delete window.__agPrismInlineDiffResolve; delete window.__agPrismOmni; delete window.__agPrismContextMenu; delete globalThis.__agPrismContextMenu; delete window.__agPrism; delete window.__agClaudeStyle; } catch {}\n")
         sb.append("    };\n")
-        sb.append("    const hasDomWorkbenchMarkers = () => {\n")
-        sb.append("      try {\n")
-        sb.append("        if (!document || !document.documentElement) return false;\n")
-        sb.append("        if (document.querySelector('.agy-shell, .monaco-workbench, .antigravity-agent-side-panel, [data-testid=\"conversation-view\"], [data-testid=\"agent-view\"]')) return true;\n")
-        sb.append("        return Boolean(window.__agPrismSetting || window.__agPrismMetricsCall || window.__agPrismThoughtCall || window.__agPrismUsageCall);\n")
-        sb.append("      } catch { return false; }\n")
-        sb.append("    };\n")
-        sb.append("    const checkHostIdentity = () => {\n")
-        sb.append("      try {\n")
-        sb.append("        const href = String((typeof location !== 'undefined' && location && location.href) || '');\n")
-        sb.append("        const lowUrl = href.toLowerCase();\n")
-        sb.append("        if (!lowUrl) return 'defer';\n")
-        sb.append("        if (/^(devtools:|data:|about:|chrome:|chrome-extension:|edge:|blob:|plugin:)/.test(lowUrl)) return 'reject';\n")
-        sb.append("        const title = String((document && document.title) || '').trim();\n")
-        sb.append("        if (/^(?:untitled|launchpad)$/i.test(title) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(lowUrl)) return 'reject';\n")
-        sb.append("        if (lowUrl.startsWith('vscode-file://') || lowUrl.startsWith('app://')) return 'allow';\n")
-        sb.append("        if (lowUrl.startsWith('file://')) {\n")
-        sb.append("          return (lowUrl.includes('workbench') || lowUrl.includes('antigravity') || title.toLowerCase().includes('antigravity') || hasDomWorkbenchMarkers()) ? 'allow' : 'reject';\n")
-        sb.append("        }\n")
-        sb.append("        if (/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?\\/(?:viewer|sandbox|stream|api)(?:[/?#]|$)/i.test(lowUrl)) return 'reject';\n")
-        sb.append("        if (!/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(?:[/?#]|$)/i.test(lowUrl)) return 'reject';\n")
-        sb.append("        if (title.toLowerCase().includes('antigravity') || hasDomWorkbenchMarkers()) return 'allow';\n")
-        sb.append("        if (lowUrl.startsWith('https://') && (!title || title.toLowerCase().startsWith('127.0.0.1'))) return 'allow';\n")
-        sb.append("        if (document.readyState !== 'complete') return 'defer';\n")
-        sb.append("        return 'reject';\n")
-        sb.append("      } catch { return 'reject'; }\n")
-        sb.append("    };\n")
-        sb.append("    const applyStyle = () => {\n")
-        sb.append("      const targetParent = document.head || document.documentElement;\n")
-        sb.append("      if (!targetParent) return;\n")
-        sb.append("      cleanupLegacyResidue();\n")
-        sb.append("      let style = document.getElementById(")
+        sb.append(
+            "    const hasDomWorkbenchMarkers = () => {\n      try {\n" +
+            "        if (!document || !document.documentElement) return false;\n" +
+            "        if (document.querySelector('.agy-shell, .monaco-workbench, .antigravity-agent-side-panel, [data-testid=\"conversation-view\"], [data-testid=\"agent-view\"]')) return true;\n" +
+            "        return Boolean(window.__agPrismSetting || window.__agPrismMetricsCall || window.__agPrismThoughtCall || window.__agPrismUsageCall);\n" +
+            "      } catch { return false; }\n    };\n    const checkHostIdentity = () => {\n      try {\n" +
+            "        const href = String((typeof location !== 'undefined' && location && location.href) || '');\n" +
+            "        const lowUrl = href.toLowerCase();\n        if (!lowUrl) return 'defer';\n" +
+            "        if (/^(devtools:|data:|about:|chrome:|chrome-extension:|edge:|blob:|plugin:)/.test(lowUrl)) return 'reject';\n" +
+            "        const title = String((document && document.title) || '').trim();\n" +
+            "        if (/^(?:untitled|launchpad)$/i.test(title) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(lowUrl)) return 'reject';\n" +
+            "        if (lowUrl.startsWith('vscode-file://') || lowUrl.startsWith('app://')) return 'allow';\n" +
+            "        if (lowUrl.startsWith('file://')) return (lowUrl.includes('workbench') || lowUrl.includes('antigravity') || title.toLowerCase().includes('antigravity') || hasDomWorkbenchMarkers()) ? 'allow' : 'reject';\n" +
+            "        if (/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?\\/(?:viewer|sandbox|stream|api)(?:[/?#]|$)/i.test(lowUrl)) return 'reject';\n" +
+            "        if (!/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?(?:[/?#]|$)/i.test(lowUrl)) return 'reject';\n" +
+            "        if (title.toLowerCase().includes('antigravity') || hasDomWorkbenchMarkers()) return 'allow';\n" +
+            "        if (lowUrl.startsWith('https://') && (!title || title.toLowerCase().startsWith('127.0.0.1'))) return 'allow';\n" +
+            "        if (document.readyState !== 'complete') return 'defer';\n        return 'reject';\n" +
+            "      } catch { return 'reject'; }\n    };\n    const applyStyle = () => {\n" +
+            "      const targetParent = document.head || document.documentElement;\n      if (!targetParent) return;\n" +
+            "      cleanupLegacyResidue();\n      let style = document.getElementById("
+        )
         sb.append(styleIdJson)
-        sb.append(");\n")
-        sb.append("      if (!style) {\n")
-        sb.append("        style = document.createElement('style');\n")
-        sb.append("        style.id = ")
+        sb.append(");\n      if (!style) { style = document.createElement('style'); style.id = ")
         sb.append(styleIdJson)
-        sb.append(";\n")
-        sb.append("      }\n")
-        sb.append("      if (style.textContent !== css) style.textContent = css;\n")
-        sb.append("      if (style.parentNode !== targetParent || targetParent.lastElementChild !== style) {\n")
-        sb.append("        targetParent.appendChild(style);\n")
-        sb.append("      }\n")
-        sb.append("    };\n\n")
-        sb.append("    let status = 'ok';\n")
-        sb.append("    let mounted = false;\n")
-        sb.append("    let hostGateTimer = null;\n")
-        sb.append("    let hostGateAttempts = 0;\n")
-        sb.append("    const mount = () => {\n")
-        sb.append("      if (mounted || !document.documentElement) return;\n")
-        sb.append("      const verdict = checkHostIdentity();\n")
-        sb.append("      if (verdict === 'reject') {\n")
-        sb.append("        status = 'skipped-non-host';\n")
-        sb.append("        stripForeignMount();\n")
-        sb.append("        return;\n")
-        sb.append("      }\n")
-        sb.append("      if (verdict === 'defer') {\n")
-        sb.append("        status = 'deferred-host-check';\n")
-        sb.append("        if (!hostGateTimer && hostGateAttempts < 20) {\n")
-        sb.append("          hostGateAttempts += 1;\n")
-        sb.append("          hostGateTimer = setTimeout(() => { hostGateTimer = null; mount(); }, 150);\n")
-        sb.append("        } else if (hostGateAttempts >= 20) {\n")
-        sb.append("          status = 'skipped-non-host';\n")
-        sb.append("          stripForeignMount();\n")
-        sb.append("        }\n")
-        sb.append("        return;\n")
-        sb.append("      }\n")
-        sb.append("      mounted = true;\n")
-        sb.append("      status = 'ok';\n")
-        sb.append("      try {\n")
-        sb.append("        cleanupLegacyResidue();\n")
-        sb.append("        if (!window.__agPrismRepoBridge) {\n")
-        sb.append("          const fn = (a) => Promise.resolve({ ok: false, offline: true, action: typeof a === 'string' ? a : (a && a.action) || 'status', noRemote: true, hasRemote: false, branch: 'local', commit: ")
+        sb.append(
+            "; }\n      if (style.textContent !== css) style.textContent = css;\n" +
+            "      if (style.parentNode !== targetParent || targetParent.lastElementChild !== style) targetParent.appendChild(style);\n" +
+            "    };\n\n    let status = 'ok';\n    let mounted = false;\n    let hostGateTimer = null;\n    let hostGateAttempts = 0;\n" +
+            "    const mount = () => {\n      if (mounted || !document.documentElement) return;\n" +
+            "      const verdict = checkHostIdentity();\n" +
+            "      if (verdict === 'reject') { status = 'skipped-non-host'; stripForeignMount(); return; }\n" +
+            "      if (verdict === 'defer') {\n        status = 'deferred-host-check';\n" +
+            "        if (!hostGateTimer && hostGateAttempts < 20) { hostGateAttempts += 1; hostGateTimer = setTimeout(() => { hostGateTimer = null; mount(); }, 150); }\n" +
+            "        else if (hostGateAttempts >= 20) { status = 'skipped-non-host'; stripForeignMount(); }\n        return;\n      }\n" +
+            "      mounted = true;\n      status = 'ok';\n      try {\n        cleanupLegacyResidue();\n" +
+            "        if (!window.__agPrismRepoBridge) {\n" +
+            "          const fn = (a) => Promise.resolve({ ok: false, offline: true, action: typeof a === 'string' ? a : (a && a.action) || 'status', noRemote: true, hasRemote: false, branch: 'local', commit: "
+        )
         sb.append(verJson)
         sb.append(", shortHash: ")
         sb.append(verJson)
-        sb.append(" });\n")
-        sb.append("          fn.call = fn; fn.request = fn; fn.status = () => fn('status'); fn.pull = () => fn('pull'); fn.sync = () => fn('pull'); fn.resolve = () => {};\n")
-        sb.append("          window.__agPrismRepoBridge = fn;\n")
-        sb.append("        }\n")
-        sb.append("        if (document.head) applyStyle();\n")
-        sb.append("        else document.addEventListener('DOMContentLoaded', applyStyle, { once: true });\n")
-        sb.append("        const bootCfg = ")
+        sb.append(
+            " });\n          fn.call = fn; fn.request = fn; fn.status = () => fn('status'); fn.pull = () => fn('pull'); fn.sync = () => fn('pull'); fn.resolve = () => {};\n" +
+            "          window.__agPrismRepoBridge = fn;\n        }\n" +
+            "        if (document.head) applyStyle();\n        else document.addEventListener('DOMContentLoaded', applyStyle, { once: true });\n        const bootCfg = "
+        )
         sb.append(MiniJson.stringify(.object(initCfg), pretty: false))
-        sb.append(";\n")
-        sb.append("        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n")
+        sb.append(";\n        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n")
         sb.append("        const bundleUnchanged = Boolean(\n")
         sb.append("          existingPrism &&\n")
         sb.append("          existingPrism.version === ")
         sb.append(verJson)
         sb.append(" &&\n")
         sb.append("          existingPrism.codeHash === bootCfg.codeHash &&\n")
-        sb.append("          typeof existingPrism.refreshConfig === 'function' &&\n")
-        sb.append("          window.__agPrismTelemetry &&\n")
-        sb.append("          window.__agPrismEffortSlider\n")
+        sb.append("          typeof existingPrism.refreshConfig === 'function'\n")
         sb.append("        );\n")
         sb.append("        if (bundleUnchanged) {\n")
         sb.append("          existingPrism.refreshConfig(bootCfg);\n")
@@ -2359,51 +2334,29 @@ enum CdpHelper {
         sb.append("            globalThis.__agCsUiMain(bootCfg);\n")
         sb.append("          }\n")
         sb.append("        }\n")
-        sb.append("        migrateLegacyStorage();\n")
-        sb.append("        if (window.__agClaudeStyle && !window.__agPrism) window.__agPrism = window.__agClaudeStyle;\n")
-        sb.append("        else if (window.__agPrism) window.__agClaudeStyle = window.__agPrism;\n")
-        sb.append("        const liveState = window.__agPrism && typeof window.__agPrism.getState === 'function' ? window.__agPrism.getState() : null;\n")
-        sb.append("        const effectiveCfg = (liveState && liveState.cfg) || bootCfg;\n")
-        sb.append("        try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("        try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("        try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("        try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n")
-        sb.append("        if (document.documentElement && !document.documentElement.hasAttribute('data-ag-prism')) {\n")
-        sb.append("          document.documentElement.setAttribute('data-ag-prism', ")
+        sb.append(
+            "        migrateLegacyStorage();\n" +
+            "        if (window.__agClaudeStyle && !window.__agPrism) window.__agPrism = window.__agClaudeStyle;\n" +
+            "        else if (window.__agPrism) window.__agClaudeStyle = window.__agPrism;\n" +
+            "        const liveState = window.__agPrism && typeof window.__agPrism.getState === 'function' ? window.__agPrism.getState() : null;\n" +
+            "        const effectiveCfg = (liveState && liveState.cfg) || bootCfg;\n" +
+            "        try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n" +
+            "        try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n" +
+            "        try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n" +
+            "        try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n" +
+            "        if (document.documentElement && !document.documentElement.hasAttribute('data-ag-prism')) document.documentElement.setAttribute('data-ag-prism', "
+        )
         sb.append(verJson)
-        sb.append(");\n")
-        sb.append("        }\n")
-        sb.append("      } catch (e) {\n")
-        sb.append("        status = 'error: ' + (e && e.message ? e.message : String(e));\n")
-        sb.append("        if (typeof console !== 'undefined' && console.error) {\n")
-        sb.append("          console.error('[obsidian-prism] init error:', e);\n")
-        sb.append("        }\n")
-        sb.append("      }\n")
-        sb.append("    };\n\n")
-        sb.append("    if (document.documentElement) {\n")
-        sb.append("      mount();\n")
-        sb.append("    } else {\n")
-        sb.append("      status = 'deferred';\n")
-        sb.append("      const onReady = () => {\n")
-        sb.append("        if (document.documentElement) {\n")
-        sb.append("          document.removeEventListener('readystatechange', onReady);\n")
-        sb.append("          document.removeEventListener('DOMContentLoaded', onReady);\n")
-        sb.append("          mount();\n")
-        sb.append("        }\n")
-        sb.append("      };\n")
-        sb.append("      document.addEventListener('readystatechange', onReady);\n")
-        sb.append("      document.addEventListener('DOMContentLoaded', onReady);\n")
-        sb.append("    }\n")
-        sb.append("    const api = window.__agPrism || window.__agClaudeStyle;\n")
-        sb.append("    const st = api && typeof api.getState === 'function' ? api.getState() : null;\n")
-        sb.append("    return {\n")
-        sb.append("      version: ")
+        sb.append(
+            ");\n      } catch (e) {\n        status = 'error: ' + (e && e.message ? e.message : String(e));\n" +
+            "        if (typeof console !== 'undefined' && console.error) console.error('[obsidian-prism] init error:', e);\n" +
+            "      }\n    };\n\n    if (document.documentElement) mount();\n    else {\n      status = 'deferred';\n" +
+            "      const onReady = () => { if (document.documentElement) { document.removeEventListener('readystatechange', onReady); document.removeEventListener('DOMContentLoaded', onReady); mount(); } };\n" +
+            "      document.addEventListener('readystatechange', onReady);\n      document.addEventListener('DOMContentLoaded', onReady);\n    }\n" +
+            "    const api = window.__agPrism || window.__agClaudeStyle;\n    const st = api && typeof api.getState === 'function' ? api.getState() : null;\n    return { version: "
+        )
         sb.append(verJson)
-        sb.append(",\n")
-        sb.append("      status,\n")
-        sb.append("      state: st,\n")
-        sb.append("    };\n")
-        sb.append("  })()")
+        sb.append(", status, state: st };\n  })()")
         return sb
     }
 

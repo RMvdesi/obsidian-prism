@@ -1,10 +1,6 @@
-// Inject Obsidian Prism (obsidian-prism) into every open Antigravity window over CDP.
-//
-//   node inject.js           one-shot: inject now and exit
-//   node inject.js --watch   daemon mode: auto-inject into new/reloaded windows
-//                            and hot-reload style.css / *.js / config.json
-const fs = require('fs');
-const path = require('path');
+// Inject Obsidian Prism into Antigravity windows over CDP (--watch for daemon hot-reload).
+const fs = require('fs'), path = require('path');
+const cdpMod = require('./cdp');
 const {
   PORT_FILE,
   PID_FILE,
@@ -45,7 +41,7 @@ const {
   shouldEnableMascot,
   buildMascotChannelExpression,
   MASCOT_REMOVE_EXPRESSION,
-} = require('./cdp');
+} = cdpMod;
 
 const FALLBACK_THOUGHT_REMOVE_EXPRESSION =
   "(() => { try { window.__agPrismThought?.destroy?.(); } catch {} try { document.querySelectorAll('[data-testid=\"prism-thought-ai-config\"],[data-testid=\"prism-thought-general-config\"]').forEach((n) => n.remove()); } catch {} try { delete window.__agPrismThought; } catch {} try { delete globalThis.__agPrismThought; } catch {} try { delete window.__agPrismThoughtSettingsUi; } catch {} try { delete globalThis.__agPrismThoughtSettingsUi; } catch {} return { ok: true, status: 'off' }; })()";
@@ -54,53 +50,92 @@ const FALLBACK_INLINE_DIFF_REMOVE_EXPRESSION =
 const INLINE_DIFF_MAX_PAYLOAD_BYTES = 16384;
 const INLINE_DIFF_MAX_URI_LENGTH = 2048;
 
-function isThoughtEnabledForConfig(cfg, checker = shouldEnableThought) {
-  try {
-    if (typeof checker === 'function') return Boolean(checker(cfg));
-    const mode = typeof cfg?.thoughtTranslate === 'string' ? cfg.thoughtTranslate.trim().toLowerCase() : 'off';
-    return Boolean(mode && mode !== 'off');
-  } catch {
-    return false;
+// 全部运行期下沉通道（Ch13~Ch16）与清理句柄均直接从 cdp.CHANNEL_REGISTRY 唯一真相源派生
+function getRuntimeRegistryChannels(mod) {
+  return Array.isArray(mod?.CHANNEL_REGISTRY) ? mod.CHANNEL_REGISTRY.filter((ch) => ch && ch.tier === 'runtime') : [];
+}
+function buildRuntimeChannelBundleMap(mod, cfg, cacheOpts = null) {
+  return getRuntimeRegistryChannels(mod).map((ch) => {
+    const f = ch.fields || {};
+    const enabled = typeof ch.shouldEnable === 'function' ? Boolean(ch.shouldEnable(cfg)) : false;
+    const expr = enabled && typeof ch.build === 'function' ? (cacheOpts ? ch.build(cfg, cacheOpts) : ch.build(cfg)) : '';
+    return { id: ch.id, scriptKey: f.scriptField, mountedKey: f.mountedField, enabled, expr: expr || '', removeExpr: ch.teardown || '' };
+  });
+}
+async function applyRuntimeChannelsOnce(session, mod, cfg, cacheOpts = null) {
+  for (const item of buildRuntimeChannelBundleMap(mod, cfg, cacheOpts)) {
+    if (item.expr) await session.evaluate(item.expr).catch(() => {});
+    else if (!item.enabled && item.removeExpr) await session.evaluate(item.removeExpr).catch(() => {});
+  }
+}
+async function evalRuntimeChannelsOnEntry(entry, items) {
+  for (const item of items) {
+    if (item.expr && item.enabled) {
+      const res = await entry.session.evaluate(item.expr).catch(() => null);
+      if (res && res.ok) entry[item.mountedKey] = !res.skippedByLiveCfg;
+    } else if (!item.enabled && (entry[item.scriptKey] || entry[item.mountedKey])) {
+      if (item.removeExpr) await entry.session.evaluate(item.removeExpr).catch(() => {});
+      entry[item.mountedKey] = false;
+    }
+  }
+}
+async function syncEntryNewDocScript(entry, prop, source) {
+  if (entry[prop]) {
+    await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry[prop] }).catch(() => {});
+    entry[prop] = null;
+  }
+  if (!source) return null;
+  const add = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source }).catch(() => null);
+  entry[prop] = add && add.identifier ? add.identifier : null;
+  return entry[prop];
+}
+async function syncRuntimeChannelScriptsOnEntry(entry, items) {
+  for (const item of items) {
+    await syncEntryNewDocScript(entry, item.scriptKey, item.expr && item.enabled ? item.expr : '');
+  }
+}
+async function clearAllEntryScripts(entry, mod = cdpMod) {
+  const regKeys = Array.isArray(mod?.CHANNEL_REGISTRY)
+    ? mod.CHANNEL_REGISTRY.map((c) => c?.fields?.scriptField).filter(Boolean)
+    : ['omniScriptId', 'sidebarScriptId', 'hostI18nScriptId', 'thoughtScriptId', 'inlineDiffScriptId', 'periodicPickerScriptId', 'mascotScriptId'];
+  for (const key of ['scriptId', ...regKeys]) {
+    if (entry[key]) {
+      await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry[key] }).catch(() => {});
+      entry[key] = null;
+    }
+  }
+  for (const ch of getRuntimeRegistryChannels(mod)) {
+    if (ch.fields?.mountedField) entry[ch.fields.mountedField] = false;
   }
 }
 
-const WATCH = process.argv.includes('--watch');
-const LOG_FILE = path.join(__dirname, 'watch.log');
-const BUNDLE_CACHE_PATH = path.join(__dirname, '.bundle-cache.json');
-const PERIODIC_PICKER_CACHE_OPTS = Object.freeze({ cachePath: BUNDLE_CACHE_PATH });
+function isThoughtEnabledForConfig(cfg, checker = shouldEnableThought) {
+  try {
+    if (typeof checker === 'function') return Boolean(checker(cfg));
+    const m = typeof cfg?.thoughtTranslate === 'string' ? cfg.thoughtTranslate.trim().toLowerCase() : 'off';
+    return Boolean(m && m !== 'off');
+  } catch { return false; }
+}
+const WATCH = process.argv.includes('--watch'), LOG_FILE = path.join(__dirname, 'watch.log'), BUNDLE_CACHE_PATH = path.join(__dirname, '.bundle-cache.json'), PERIODIC_PICKER_CACHE_OPTS = Object.freeze({ cachePath: BUNDLE_CACHE_PATH });
 
 const SECRET_TOKEN_RE =
   /(sk-[A-Za-z0-9_\-]{6,}|AIza[A-Za-z0-9_\-]{12,}|xai-[A-Za-z0-9_\-]{8,}|ghp_[A-Za-z0-9]{12,}|github_pat_[A-Za-z0-9_]{12,}|Bearer\s+[A-Za-z0-9._\-]{8,})/gi;
 const URL_SECRET_QUERY_RE = /([?&](?:token|auth|signature|key|secret)=)[^&\s#"']+/gi;
 
-function sanitizeSecretText(text) {
-  return String(text || '')
-    .replace(/https?:\/\/[^/\s:@]+:[^/\s@]+@/gi, 'https://***@')
-    .replace(URL_SECRET_QUERY_RE, '$1<REDACTED>')
-    .replace(SECRET_TOKEN_RE, '***REDACTED***');
+function sanitizeSecretText(t) {
+  let o = String(t || '').replace(/https?:\/\/[^/\s:@]+:[^/\s@]+@/gi, 'https://***@').replace(URL_SECRET_QUERY_RE, '$1<REDACTED>').replace(SECRET_TOKEN_RE, '***REDACTED***');
+  const h = String(process.env?.USERPROFILE || process.env?.HOME || '').replace(/[\\/]+$/, '');
+  if (h.length > 3) o = o.replace(new RegExp([...new Set([h.replace(/\//g, '\\'), h.replace(/\\/g, '/')])].map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), process.platform === 'win32' ? 'gi' : 'g'), '<USER_HOME>');
+  return o;
+}
+function log(...a) {
+  const l = sanitizeSecretText(a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '));
+  console.log(l);
+  if (WATCH) try { fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${l}\n`, { encoding: 'utf8', mode: 0o600 }); } catch {}
 }
 
-function log(...args) {
-  const line = sanitizeSecretText(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
-  console.log(line);
-  if (WATCH) {
-    try {
-      fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${line}\n`);
-    } catch {}
-  }
-}
-
-function shortTitle(page) {
-  const t = sanitizeSecretText(page.title || page.url || '');
-  return t.length > 60 ? t.slice(0, 57) + '...' : t;
-}
-
-function serializeJsonForEval(val) {
-  const raw = JSON.stringify(val === undefined ? null : val);
-  return String(raw).replace(/[<>/\u2028\u2029]/g, (ch) =>
-    `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`
-  );
-}
+const shortTitle = (p) => { const t = sanitizeSecretText(p.title || p.url || ''); return t.length > 60 ? t.slice(0, 57) + '...' : t; };
+const serializeJsonForEval = (v) => String(JSON.stringify(v === undefined ? null : v)).replace(/[<>/\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 
 function updateConfigBatch(entriesObj) {
   if (!entriesObj || typeof entriesObj !== 'object' || Array.isArray(entriesObj)) return false;
@@ -180,9 +215,11 @@ function createFastConfigRefreshBroadcaster({
   getSidebarServiceReady = () => false,
   sidebarBinding = SIDEBAR_BINDING,
   ensureSidebarBinding = async () => false,
+  getRuntimeChannelCdp = undefined,
   onExpressionsUpdated = null,
 } = {}) {
   const useDefaultMascot = buildInj === buildInjectExpression && shouldMascot === undefined && buildMascot === undefined;
+  const resolveRuntimeCdp = typeof getRuntimeChannelCdp === 'function' ? getRuntimeChannelCdp : (buildInj === buildInjectExpression ? () => cdpMod : null);
   const resolveShouldMascot =
     typeof shouldMascot === 'function'
       ? shouldMascot
@@ -245,6 +282,8 @@ function createFastConfigRefreshBroadcaster({
       mascotEnabled && typeof resolveBuildMascot === 'function'
         ? resolveBuildMascot(cfgNow)
         : '';
+    const rtCdp = typeof resolveRuntimeCdp === 'function' ? resolveRuntimeCdp() : null;
+    const runtimeChannelItems = rtCdp ? buildRuntimeChannelBundleMap(rtCdp, cfgNow, PERIODIC_PICKER_CACHE_OPTS) : [];
     if (typeof onExpressionsUpdated === 'function') {
       onExpressionsUpdated({ expr, omniExpr, sidebarExpr, hostI18nExpr, thoughtExpr, inlineDiffExpr, periodicPickerExpr, mascotExpr });
     }
@@ -320,6 +359,7 @@ function createFastConfigRefreshBroadcaster({
                 if (mascotRemoveExpression) await entry.session.evaluate(mascotRemoveExpression).catch(() => {});
                 entry.mascotMounted = false;
               }
+              if (runtimeChannelItems.length) await evalRuntimeChannelsOnEntry(entry, runtimeChannelItems);
             }
           } else {
             const reRes = await entry.session.evaluate(expr).catch(() => null);
@@ -384,70 +424,20 @@ function createFastConfigRefreshBroadcaster({
               if (mascotRemoveExpression) await entry.session.evaluate(mascotRemoveExpression).catch(() => {});
               entry.mascotMounted = false;
             }
+            if (runtimeChannelItems.length) await evalRuntimeChannelsOnEntry(entry, runtimeChannelItems);
           }
         }
-        if (entry.scriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.scriptId }).catch(() => {});
+        await syncEntryNewDocScript(entry, 'scriptId', expr);
+        await syncEntryNewDocScript(entry, 'omniScriptId', omniEnabled && omniExpr ? omniExpr : '');
+        await syncEntryNewDocScript(entry, 'sidebarScriptId', sidebarEnabled && sidebarExpr ? sidebarExpr : '');
+        await syncEntryNewDocScript(entry, 'hostI18nScriptId', hostI18nExpr && hostI18nEnabled ? hostI18nExpr : '');
+        await syncEntryNewDocScript(entry, 'thoughtScriptId', thoughtExpr && thoughtEnabled ? thoughtExpr : '');
+        if (await syncEntryNewDocScript(entry, 'inlineDiffScriptId', inlineDiffExpr || '')) {
+          entry.lastInlineDiffHash = inlineDiffHash;
         }
-        const addRes = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: expr }).catch(() => null);
-        entry.scriptId = addRes && addRes.identifier ? addRes.identifier : null;
-        if (entry.omniScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.omniScriptId }).catch(() => {});
-          entry.omniScriptId = null;
-        }
-        if (omniEnabled && omniExpr) {
-          const omniAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: omniExpr }).catch(() => null);
-          entry.omniScriptId = omniAdd && omniAdd.identifier ? omniAdd.identifier : null;
-        }
-        if (entry.sidebarScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.sidebarScriptId }).catch(() => {});
-          entry.sidebarScriptId = null;
-        }
-        if (sidebarEnabled && sidebarExpr) {
-          const sbAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: sidebarExpr }).catch(() => null);
-          entry.sidebarScriptId = sbAdd && sbAdd.identifier ? sbAdd.identifier : null;
-        }
-        if (entry.hostI18nScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.hostI18nScriptId }).catch(() => {});
-          entry.hostI18nScriptId = null;
-        }
-        if (hostI18nExpr && hostI18nEnabled) {
-          const hiAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: hostI18nExpr }).catch(() => null);
-          entry.hostI18nScriptId = hiAdd && hiAdd.identifier ? hiAdd.identifier : null;
-        }
-        if (entry.thoughtScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.thoughtScriptId }).catch(() => {});
-          entry.thoughtScriptId = null;
-        }
-        if (thoughtExpr && thoughtEnabled) {
-          const thAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: thoughtExpr }).catch(() => null);
-          entry.thoughtScriptId = thAdd && thAdd.identifier ? thAdd.identifier : null;
-        }
-        if (entry.inlineDiffScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.inlineDiffScriptId }).catch(() => {});
-          entry.inlineDiffScriptId = null;
-        }
-        if (inlineDiffExpr) {
-          const idAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: inlineDiffExpr }).catch(() => null);
-          entry.inlineDiffScriptId = idAdd && idAdd.identifier ? idAdd.identifier : null;
-          if (entry.inlineDiffScriptId) entry.lastInlineDiffHash = inlineDiffHash;
-        }
-        if (entry.periodicPickerScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.periodicPickerScriptId }).catch(() => {});
-          entry.periodicPickerScriptId = null;
-        }
-        if (periodicPickerExpr && periodicPickerEnabled) {
-          const ppAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: periodicPickerExpr }).catch(() => null);
-          entry.periodicPickerScriptId = ppAdd && ppAdd.identifier ? ppAdd.identifier : null;
-        }
-        if (entry.mascotScriptId) {
-          await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.mascotScriptId }).catch(() => {});
-          entry.mascotScriptId = null;
-        }
-        if (mascotExpr && mascotEnabled) {
-          const mAdd = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source: mascotExpr }).catch(() => null);
-          entry.mascotScriptId = mAdd && mAdd.identifier ? mAdd.identifier : null;
-        }
+        await syncEntryNewDocScript(entry, 'periodicPickerScriptId', periodicPickerExpr && periodicPickerEnabled ? periodicPickerExpr : '');
+        await syncEntryNewDocScript(entry, 'mascotScriptId', mascotExpr && mascotEnabled ? mascotExpr : '');
+        if (runtimeChannelItems.length) await syncRuntimeChannelScriptsOnEntry(entry, runtimeChannelItems);
       } catch {}
     }
   };
@@ -510,6 +500,7 @@ async function injectOnce() {
     try {
       session = await CdpSession.connect(page.webSocketDebuggerUrl);
       const res = await session.evaluate(expr);
+      await applyRuntimeChannelsOnce(session, cdpMod, cfgNow, PERIODIC_PICKER_CACHE_OPTS);
       if (settingsExpr) {
         await session.evaluate(settingsExpr).catch(() => {});
       }
@@ -646,6 +637,7 @@ async function watch() {
   }
 
   const initCfg = readConfig();
+  let activeRuntimeCdp = cdpMod;
   let expr = buildInjectExpression();
   let omniExpr =
     initCfg?.omniModule !== 'off' && typeof buildOmniClientExpression === 'function'
@@ -752,6 +744,7 @@ async function watch() {
     getSidebarServiceReady: () => Boolean(sidebarService),
     sidebarBinding: SIDEBAR_BINDING,
     ensureSidebarBinding,
+    getRuntimeChannelCdp: () => activeRuntimeCdp,
     onExpressionsUpdated: (next) => {
       expr = next.expr;
       omniExpr = next.omniExpr;
@@ -777,14 +770,7 @@ async function watch() {
     const res = await entry.session.evaluate(expr);
     entry.sidebarHostVerified = Boolean(res && res.status === 'ok');
     if (res && res.status === 'skipped-non-host') {
-      for (const key of ['scriptId', 'omniScriptId', 'sidebarScriptId', 'hostI18nScriptId', 'thoughtScriptId', 'inlineDiffScriptId', 'periodicPickerScriptId', 'mascotScriptId']) {
-        if (entry[key]) {
-          await entry.session
-            .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry[key] })
-            .catch(() => {});
-          entry[key] = null;
-        }
-      }
+      await clearAllEntryScripts(entry);
       if (entry.sidebarBindingAdded && SIDEBAR_BINDING) {
         await entry.session.send('Runtime.removeBinding', { name: SIDEBAR_BINDING }).catch(() => {});
         entry.sidebarBindingAdded = false;
@@ -803,92 +789,37 @@ async function watch() {
     const cfgNow = readConfig();
     const omniEnabled = cfgNow?.omniModule !== 'off';
     const sidebarEnabled = cfgNow?.sidebarStudio === 'on';
-    if (entry.omniScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.omniScriptId })
-        .catch(() => {});
-      entry.omniScriptId = null;
-    }
-    if (omniEnabled && omniExpr) {
-      const omniAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: omniExpr })
-        .catch(() => null);
-      if (omniAdd && omniAdd.identifier) entry.omniScriptId = omniAdd.identifier;
-      await entry.session.evaluate(omniExpr).catch(() => {});
-    }
+    await syncEntryNewDocScript(entry, 'omniScriptId', omniEnabled && omniExpr ? omniExpr : '');
+    if (omniEnabled && omniExpr) await entry.session.evaluate(omniExpr).catch(() => {});
 
-    if (entry.sidebarScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.sidebarScriptId })
-        .catch(() => {});
-      entry.sidebarScriptId = null;
-    }
     await ensureSidebarBinding(entry.session, entry, cfgNow);
-    if (sidebarEnabled && sidebarExpr) {
-      const sbAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: sidebarExpr })
-        .catch(() => null);
-      if (sbAdd && sbAdd.identifier) entry.sidebarScriptId = sbAdd.identifier;
-      await entry.session.evaluate(sidebarExpr).catch(() => {});
-    }
-    if (entry.hostI18nScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.hostI18nScriptId })
-        .catch(() => {});
-      entry.hostI18nScriptId = null;
-    }
-    if (cfgNow?.hostLocalization === 'off') {
-      await syncIsolatedHostI18nOnEntry(entry, true);
-    }
-    if (hostI18nExpr) {
-      const hiAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: hostI18nExpr })
-        .catch(() => null);
-      if (hiAdd && hiAdd.identifier) entry.hostI18nScriptId = hiAdd.identifier;
-      await entry.session.evaluate(hostI18nExpr).catch(() => {});
-    } else if (HOST_I18N_REMOVE_EXPRESSION) {
-      await entry.session.evaluate(HOST_I18N_REMOVE_EXPRESSION).catch(() => {});
-    }
-    if (cfgNow?.hostLocalization !== 'off' && entry.isolatedHostI18nPaused) {
-      await syncIsolatedHostI18nOnEntry(entry, false);
-    }
+    await syncEntryNewDocScript(entry, 'sidebarScriptId', sidebarEnabled && sidebarExpr ? sidebarExpr : '');
+    if (sidebarEnabled && sidebarExpr) await entry.session.evaluate(sidebarExpr).catch(() => {});
+
+    if (cfgNow?.hostLocalization === 'off') await syncIsolatedHostI18nOnEntry(entry, true);
+    await syncEntryNewDocScript(entry, 'hostI18nScriptId', hostI18nExpr || '');
+    if (hostI18nExpr) await entry.session.evaluate(hostI18nExpr).catch(() => {});
+    else if (HOST_I18N_REMOVE_EXPRESSION) await entry.session.evaluate(HOST_I18N_REMOVE_EXPRESSION).catch(() => {});
+    if (cfgNow?.hostLocalization !== 'off' && entry.isolatedHostI18nPaused) await syncIsolatedHostI18nOnEntry(entry, false);
+
     const hadThought = Boolean(entry.thoughtScriptId || entry.thoughtMounted);
-    if (entry.thoughtScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.thoughtScriptId })
-        .catch(() => {});
-      entry.thoughtScriptId = null;
-    }
     const thoughtEnabledNow = isThoughtEnabledForConfig(readConfig(), activeShouldEnableThought);
+    await syncEntryNewDocScript(entry, 'thoughtScriptId', thoughtExpr && thoughtEnabledNow ? thoughtExpr : '');
     if (thoughtExpr && thoughtEnabledNow) {
-      const thAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: thoughtExpr })
-        .catch(() => null);
-      if (thAdd && thAdd.identifier) entry.thoughtScriptId = thAdd.identifier;
       const thRes = await entry.session.evaluate(thoughtExpr).catch(() => null);
       entry.thoughtMounted = Boolean(thRes && thRes.ok);
     } else {
-      if (hadThought && activeThoughtRemoveExpression) {
-        await entry.session.evaluate(activeThoughtRemoveExpression).catch(() => {});
-      }
+      if (hadThought && activeThoughtRemoveExpression) await entry.session.evaluate(activeThoughtRemoveExpression).catch(() => {});
       entry.thoughtMounted = false;
     }
+
     const hadInlineDiff = Boolean(entry.inlineDiffScriptId || entry.inlineDiffMounted);
-    if (entry.inlineDiffScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.inlineDiffScriptId })
-        .catch(() => {});
-      entry.inlineDiffScriptId = null;
-    }
+    await syncEntryNewDocScript(entry, 'inlineDiffScriptId', inlineDiffExpr || '');
     if (inlineDiffExpr) {
       if (INLINE_DIFF_BINDING) {
         await entry.session.send('Runtime.addBinding', { name: INLINE_DIFF_BINDING }).catch(() => {});
         entry.inlineDiffBindingAdded = true;
       }
-      const idAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: inlineDiffExpr })
-        .catch(() => null);
-      if (idAdd && idAdd.identifier) entry.inlineDiffScriptId = idAdd.identifier;
       const idRes = await entry.session.evaluate(inlineDiffExpr).catch(() => null);
       const idHashMatch = /const targetHash = "([^"]+)"/.exec(inlineDiffExpr);
       const idSkipped = Boolean(idRes && typeof idRes.status === 'string' && idRes.status.startsWith('skipped-'));
@@ -910,25 +841,15 @@ async function watch() {
         entry.lastInlineDiffHash = '';
       }
     } else {
-      if (hadInlineDiff && activeInlineDiffRemoveExpression) {
-        await entry.session.evaluate(activeInlineDiffRemoveExpression).catch(() => {});
-      }
+      if (hadInlineDiff && activeInlineDiffRemoveExpression) await entry.session.evaluate(activeInlineDiffRemoveExpression).catch(() => {});
       entry.inlineDiffMounted = false;
       entry.inlineDiffSkipped = false;
       entry.lastInlineDiffHash = '';
     }
+
     const hadPeriodicPicker = Boolean(entry.periodicPickerScriptId || entry.periodicPickerMounted);
-    if (entry.periodicPickerScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.periodicPickerScriptId })
-        .catch(() => {});
-      entry.periodicPickerScriptId = null;
-    }
+    await syncEntryNewDocScript(entry, 'periodicPickerScriptId', periodicPickerExpr || '');
     if (periodicPickerExpr) {
-      const ppAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: periodicPickerExpr })
-        .catch(() => null);
-      if (ppAdd && ppAdd.identifier) entry.periodicPickerScriptId = ppAdd.identifier;
       const ppEvalRes = await entry.session.evaluate(periodicPickerExpr).catch(() => null);
       if (ppEvalRes && ppEvalRes.ok) entry.periodicPickerMounted = true;
     } else if (
@@ -941,29 +862,24 @@ async function watch() {
     } else if (!periodicPickerExpr) {
       entry.periodicPickerMounted = false;
     }
+
     const hadMascot = Boolean(entry.mascotScriptId || entry.mascotMounted);
     const mascotEnabledNow = typeof shouldEnableMascot === 'function' ? shouldEnableMascot(cfgNow) : cfgNow?.mascot !== 'off';
     const mascotExprNow =
       mascotEnabledNow && typeof buildMascotChannelExpression === 'function'
         ? buildMascotChannelExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS)
         : '';
-    if (entry.mascotScriptId) {
-      await entry.session
-        .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.mascotScriptId })
-        .catch(() => {});
-      entry.mascotScriptId = null;
-    }
+    await syncEntryNewDocScript(entry, 'mascotScriptId', mascotExprNow || '');
     if (mascotExprNow) {
-      const mAdd = await entry.session
-        .send('Page.addScriptToEvaluateOnNewDocument', { source: mascotExprNow })
-        .catch(() => null);
-      if (mAdd && mAdd.identifier) entry.mascotScriptId = mAdd.identifier;
       const mEval = await entry.session.evaluate(mascotExprNow).catch(() => null);
       if (mEval && mEval.ok) entry.mascotMounted = true;
     } else if (!mascotEnabledNow && hadMascot && MASCOT_REMOVE_EXPRESSION) {
       await entry.session.evaluate(MASCOT_REMOVE_EXPRESSION).catch(() => {});
       entry.mascotMounted = false;
     }
+    const rtItems = buildRuntimeChannelBundleMap(activeRuntimeCdp, cfgNow, PERIODIC_PICKER_CACHE_OPTS);
+    await syncRuntimeChannelScriptsOnEntry(entry, rtItems);
+    await evalRuntimeChannelsOnEntry(entry, rtItems);
     return res;
   }
 
@@ -1230,16 +1146,7 @@ async function watch() {
     } catch (err) {
       const entry = attached.get(page.id);
       if (entry) {
-        try {
-          if (entry.scriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.scriptId });
-          if (entry.omniScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.omniScriptId });
-          if (entry.sidebarScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.sidebarScriptId });
-          if (entry.hostI18nScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.hostI18nScriptId });
-          if (entry.thoughtScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.thoughtScriptId });
-          if (entry.inlineDiffScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.inlineDiffScriptId });
-          if (entry.periodicPickerScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.periodicPickerScriptId });
-          if (entry.mascotScriptId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry.mascotScriptId });
-        } catch {}
+        try { await clearAllEntryScripts(entry); } catch {}
         entry.session.close();
       }
       attached.delete(page.id);
@@ -1282,6 +1189,7 @@ async function watch() {
       try {
         delete require.cache[require.resolve('./cdp')];
         const freshCdp = require('./cdp');
+        activeRuntimeCdp = freshCdp;
         const freshCfg = typeof freshCdp.readConfig === 'function' ? freshCdp.readConfig() : readConfig();
         expr = freshCdp.buildInjectExpression();
         omniExpr =

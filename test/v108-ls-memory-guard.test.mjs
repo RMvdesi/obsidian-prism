@@ -1160,8 +1160,8 @@ test('Settings panel 8-locale Memory/DB Guard + GOMEMLIMIT controls and engineer
   ];
   for (const k of newKeys) {
     const row = i18nLocales.UI_TABLE[k];
-    assert.ok(Array.isArray(row) && row.length === 8, `Missing 8-locale row for ${k}`);
-    for (const idx of [2, 5, 6, 7]) {
+    assert.ok(Array.isArray(row) && row.length === 9, `Missing 9-locale row for ${k}`);
+    for (const idx of [2, 5, 6, 7, 8]) {
       assert.equal(CJK_RE.test(row[idx]), false, `CJK leak in ${k}[${idx}]: ${row[idx]}`);
     }
   }
@@ -1860,10 +1860,20 @@ test('Follow-up 1: language="auto" resolves live target page data-ag-cs-lang (an
 });
 
 test('Follow-up 2: main.mjs statically imports conversation-archive.mjs, stop() synchronously flushes index & spawns detached archiver, and Win/macOS Watchers enforce autoArchiveOnExit fallback contracts', async () => {
-  // 1) Static import contract (zero dynamic await import('./conversation-archive.mjs') race)
+  // 1) Static import contract (zero dynamic await import('./conversation-archive.mjs') race across daemon entry & modules)
+  const loopSrc = fs.readFileSync(path.join(ROOT, 'src/daemon/daemon-loop.mjs'), 'utf8');
   const mainSrc = fs.readFileSync(path.join(ROOT, 'sidecars/daemon/main.mjs'), 'utf8');
-  assert.match(mainSrc, /^import \* as conversationArchive from '\.\/conversation-archive\.mjs';/m, 'main.mjs must statically import conversation-archive.mjs at top level');
-  assert.equal(/await\s+import\([^)]*conversation-archive\.mjs/.test(mainSrc), false, 'main.mjs must have 0 dynamic await import() calls to conversation-archive.mjs');
+  const storageActionsSrc = fs.readFileSync(path.join(ROOT, 'src/daemon/storage-guard-actions.mjs'), 'utf8');
+  const storageCoordSrc = fs.readFileSync(path.join(ROOT, 'src/daemon/storage-guard-coordinator.mjs'), 'utf8');
+  assert.match(loopSrc, /^import \* as conversationArchive from '\.\.\/\.\.\/sidecars\/daemon\/conversation-archive\.mjs';/m, 'daemon-loop.mjs must statically import conversation-archive.mjs at top level');
+  for (const [label, src] of [
+    ['sidecars/daemon/main.mjs', mainSrc],
+    ['src/daemon/daemon-loop.mjs', loopSrc],
+    ['src/daemon/storage-guard-actions.mjs', storageActionsSrc],
+    ['src/daemon/storage-guard-coordinator.mjs', storageCoordSrc],
+  ]) {
+    assert.equal(/await\s+import\([^)]*conversation-archive\.mjs/.test(src), false, `${label} must have 0 dynamic await import() calls to conversation-archive.mjs`);
+  }
 
   // 2) Synchronous stop() flush & detached archive spawn BEFORE any microtask/await completes
   const tmpRoot = mkTmp('prism-sync-stop-');
@@ -2392,7 +2402,9 @@ test('Adversarial follow-up fixes: langProbe auto/html[lang] precedence, collaps
             `/out:${watcherDll}`,
             path.join(ROOT, 'installer/common/MiniJson.cs'),
             path.join(ROOT, 'installer/common/CdpClient.cs'),
+            path.join(ROOT, 'installer/common/RuntimeChannels.cs'),
             path.join(ROOT, 'installer/watcher/Program.cs'),
+            path.join(ROOT, 'installer/watcher/FilePicker.cs'),
           ],
           { windowsHide: true, stdio: 'pipe' }
         );
@@ -2879,6 +2891,412 @@ test('PR #66 Track 4: createLoopRunningChecker (500ms throttle + clock-rollback 
     }
     assert.equal(JSON.parse(lines[lines.length - 1]).event, 'AFTER_TRUNCATE');
   } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Wave 5 P0: Watcher handoff (.archive-task-pending.json) escapes Job Object, Watcher suppresses Daemon respawn & claims task, and ownDaemonPid yields via SIGTERM only after language_server exits', async () => {
+  const tmpRoot = mkTmp('prism-w5-archive-handoff-');
+  let dummyWatcherProc = null;
+  try {
+    const convDir = path.join(tmpRoot, 'conversations');
+    const archiveDir = path.join(tmpRoot, 'conversations_archive');
+    const fakePluginDir = path.join(tmpRoot, 'plugin');
+    fs.mkdirSync(convDir, { recursive: true });
+    fs.mkdirSync(archiveDir, { recursive: true });
+    fs.mkdirSync(fakePluginDir, { recursive: true });
+
+    const now = Date.now();
+    const oldTime = new Date(now - 5 * 3600000);
+    const mainId = makeGuid(980);
+    const subId = makeGuid(981);
+    for (const ext of ['.db', '.db-wal', '.db-shm']) {
+      const fp = path.join(convDir, `${subId}${ext}`);
+      fs.writeFileSync(fp, `w5-${ext}`);
+      fs.utimesSync(fp, oldTime, oldTime);
+    }
+    fs.writeFileSync(path.join(convDir, `${mainId}.db`), 'w5-main');
+    arch.saveCatalogIndex(archiveDir, {
+      [mainId]: { summary: 'Main Chat', status: 'CASCADE_RUN_STATUS_1', lastModifiedTime: oldTime.toISOString() },
+      [subId]: { summary: 'Sub Worker', status: 'CASCADE_RUN_STATUS_1', parentConversationId: mainId, lastModifiedTime: oldTime.toISOString() },
+    });
+
+    // 1) writePendingArchiveTask / readPendingArchiveTask / clearPendingArchiveTask atomic round-trip & expectedId guard
+    const written = arch.writePendingArchiveTask(archiveDir, {
+      action: 'archive-and-restart',
+      convDir,
+      archiveDir,
+      hostPid: 7777,
+      ownDaemonPid: 8888,
+      cdpPort: 9222,
+      cdpBrowserWsPath: '/devtools/browser/abc-123',
+      exePath: 'C:\\Antigravity\\Antigravity.exe',
+      gracefulQuit: true,
+      relaunch: true,
+      mode: 'subagents',
+      subagentMaxAgeHours: 2,
+      settleMs: 4000,
+      waitExitTimeoutMs: 45000,
+    });
+    const pendingPath = path.join(archiveDir, '.archive-task-pending.json');
+    assert.equal(written.filePath, pendingPath);
+    const readBack = arch.readPendingArchiveTask(archiveDir);
+    assert.equal(readBack?.schema, 1);
+    assert.equal(readBack?.ownDaemonPid, 8888);
+    assert.equal(readBack?.cdpPort, 9222);
+    assert.equal(readBack?.cdpBrowserWsPath, '/devtools/browser/abc-123');
+    assert.equal(typeof readBack?.requestedAt, 'string');
+    assert.equal(arch.clearPendingArchiveTask(archiveDir, 'wrong-id'), false, 'clearPendingArchiveTask must honor expectedId');
+    assert.equal(arch.clearPendingArchiveTask(archiveDir, readBack.id), true);
+    assert.equal(fs.existsSync(pendingPath), false);
+
+    // 2) Daemon archive-and-restart & restore-archive: watcherAlive=true -> watcher-handoff (NEVER spawns inside host Job Object!)
+    const daemon = new PrismDaemon({
+      rootDir: ROOT,
+      enableStorageGuardTimer: false,
+      enableAutoUpdateTimer: false,
+      silent: true,
+    });
+    daemon.ensureLsClient = async () => ({ call: async () => ({ trajectorySummaries: {} }) });
+
+    let spawnHookCalls = 0;
+    const handoffArchRes = await daemon.executeRepoAction({
+      action: 'archive-and-restart',
+      confirm: true,
+      _testOverrides: {
+        convDir,
+        archiveDir,
+        skipUsageSnapshot: true,
+        watcherAlive: true,
+        cdpPort: 9333,
+        cdpBrowserWsPath: '/devtools/browser/w5-test',
+        checkIdle: async () => ({ idle: true }),
+        detectHost: async () => ({ pid: 7777, exePath: 'C:\\Antigravity\\Antigravity.exe' }),
+        spawnHook: () => { spawnHookCalls += 1; return { spawned: true, method: 'unexpected-spawn' }; },
+      },
+    });
+    assert.equal(handoffArchRes.ok, true);
+    assert.equal(handoffArchRes.scheduled, true);
+    assert.equal(handoffArchRes.method, 'watcher-handoff');
+    assert.equal(spawnHookCalls, 0, 'When Watcher is alive, daemon must NEVER spawn detached task inside host Job Object');
+    const pendingAfterArch = arch.readPendingArchiveTask(archiveDir);
+    assert.equal(pendingAfterArch?.action, 'archive-and-restart');
+    assert.equal(pendingAfterArch?.ownDaemonPid, process.pid);
+    assert.equal(pendingAfterArch?.hostPid, 7777);
+    assert.equal(pendingAfterArch?.cdpPort, 9333);
+    assert.equal(pendingAfterArch?.cdpBrowserWsPath, '/devtools/browser/w5-test');
+    const activeAfterHandoff = JSON.parse(fs.readFileSync(path.join(archiveDir, '.archive-task-active.json'), 'utf8'));
+    assert.equal(activeAfterHandoff.handoff, true);
+    assert.equal(activeAfterHandoff.pid, 0);
+    arch.clearPendingArchiveTask(archiveDir);
+    arch.clearActiveArchiveTask(archiveDir);
+
+    // Real .watch.pid probe (alive child PID -> watcher-handoff; dead PID -> fallback detached-spawn)
+    const fakeWatchPidFile = path.join(tmpRoot, '.watch.pid');
+    const { spawn: spawnChild } = await import('node:child_process');
+    dummyWatcherProc = spawnChild(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
+    fs.writeFileSync(fakeWatchPidFile, `${dummyWatcherProc.pid}\n`, 'utf8');
+    const pidAliveRes = await daemon.executeRepoAction({
+      action: 'archive-and-restart',
+      confirm: true,
+      _testOverrides: {
+        convDir,
+        archiveDir,
+        skipUsageSnapshot: true,
+        watcherPidFile: fakeWatchPidFile,
+        checkIdle: async () => ({ idle: true }),
+        detectHost: async () => ({ pid: 7777, exePath: 'C:\\Antigravity\\Antigravity.exe' }),
+      },
+    });
+    assert.equal(pidAliveRes.ok, true);
+    assert.equal(pidAliveRes.method, 'watcher-handoff', 'Live .watch.pid must activate watcher-handoff');
+    arch.clearPendingArchiveTask(archiveDir);
+    arch.clearActiveArchiveTask(archiveDir);
+
+    // watcherAlive=false -> fallback detached-spawn with ownDaemonPid propagated
+    let fallbackArg = null;
+    const fallbackRes = await daemon.executeRepoAction({
+      action: 'archive-and-restart',
+      confirm: true,
+      _testOverrides: {
+        convDir,
+        archiveDir,
+        skipUsageSnapshot: true,
+        watcherAlive: false,
+        checkIdle: async () => ({ idle: true }),
+        detectHost: async () => ({ pid: 7777, exePath: 'C:\\Antigravity\\Antigravity.exe' }),
+        spawnHook: (arg) => { fallbackArg = arg; return { spawned: true, method: 'detached-spawn' }; },
+      },
+    });
+    assert.equal(fallbackRes.ok, true);
+    assert.equal(fallbackRes.method, 'detached-spawn');
+    assert.equal(fallbackArg?.payload?.ownDaemonPid, process.pid, 'Fallback detached-spawn must propagate ownDaemonPid');
+    assert.equal(fs.existsSync(pendingPath), false);
+
+    // Seed an archive batch and verify restore-archive also uses watcher-handoff when watcherAlive=true
+    const seededBatch = arch.archiveConversations({ convDir, archiveDir, mode: 'subagents', subagentMaxAgeHours: 2, now, checkRunning: () => false });
+    assert.equal(seededBatch.ok, true);
+    assert.equal(seededBatch.movedCount, 1);
+
+    let restoreSpawnCalls = 0;
+    const handoffRestoreRes = await daemon.executeRepoAction({
+      action: 'restore-archive',
+      confirm: true,
+      _testOverrides: {
+        convDir,
+        archiveDir,
+        watcherAlive: true,
+        cdpPort: 9444,
+        checkIdle: async () => ({ idle: true }),
+        detectHost: async () => ({ pid: 7777, exePath: 'C:\\Antigravity\\Antigravity.exe' }),
+        spawnHook: () => { restoreSpawnCalls += 1; return { spawned: true, method: 'unexpected' }; },
+      },
+    });
+    assert.equal(handoffRestoreRes.ok, true);
+    assert.equal(handoffRestoreRes.method, 'watcher-handoff');
+    assert.equal(restoreSpawnCalls, 0);
+    const pendingRestore = arch.readPendingArchiveTask(archiveDir);
+    assert.equal(pendingRestore?.action, 'restore-and-restart');
+    assert.equal(pendingRestore?.ownDaemonPid, process.pid);
+    assert.equal(pendingRestore?.batchName, seededBatch.batchName);
+    arch.clearPendingArchiveTask(archiveDir);
+    arch.clearActiveArchiveTask(archiveDir);
+
+    // Restore files back so we can run executeArchiveTaskSequence ownDaemonPid SIGTERM tests
+    const restoredBack = arch.restoreArchiveBatch({ convDir, archiveDir, batchName: seededBatch.batchName, checkRunning: () => false });
+    assert.equal(restoredBack.ok, true);
+
+    // 3) executeArchiveTaskSequence ownDaemonPid graceful SIGTERM yield:
+    //    - NEVER signals while language_server or real host Antigravity is still running
+    //    - Signals SIGTERM once when ONLY ownDaemonPid (or pluginDir/.daemon.pid) remains
+    //    - NEVER signals hostPid even if ownDaemonPid mistakenly equals hostPid
+    const signals1 = [];
+    let pollStep = 0;
+    const states1 = [
+      { running: true, blockers: [{ imageName: 'language_server_windows_x64.exe', pid: 3001 }, { imageName: 'Antigravity.exe', pid: 4001 }] },
+      { running: true, blockers: [{ imageName: 'Antigravity.exe', pid: 7777 }, { imageName: 'Antigravity.exe', pid: 4001 }] },
+      { running: true, blockers: [{ imageName: 'Antigravity.exe', pid: 4001 }] },
+      { running: false, blockers: [] },
+    ];
+    const yieldRes1 = await arch.executeArchiveTaskSequence(
+      {
+        action: 'archive-and-restart',
+        convDir,
+        archiveDir,
+        hostPid: 7777,
+        ownDaemonPid: 4001,
+        gracefulQuit: true,
+        relaunch: true,
+        waitExitTimeoutMs: 5000,
+        pollMs: 50,
+        settleMs: 0,
+        recheckGapMs: 0,
+        relaunchDelayMs: 0,
+      },
+      {
+        sleep: async () => {},
+        requestGracefulQuit: async () => true,
+        inspectProcesses: () => {
+          const idx = Math.min(pollStep, states1.length - 1);
+          const cur = states1[idx];
+          if (idx === 0 || idx === 1 || (idx === 2 && signals1.length > 0)) pollStep += 1;
+          return cur;
+        },
+        killFn: (pid, sig) => {
+          signals1.push({ pid, sig });
+          pollStep = 3; // simulate daemon exiting cleanly after SIGTERM
+        },
+        launchHost: async () => true,
+      }
+    );
+    assert.equal(yieldRes1.ok, true);
+    assert.equal(yieldRes1.movedCount, 1);
+    assert.deepEqual(signals1, [{ pid: 4001, sig: 'SIGTERM' }], 'Must send SIGTERM only once to ownDaemonPid after language_server & real host exit');
+    const traceLines = fs.readFileSync(path.join(archiveDir, 'archive-trace.log'), 'utf8');
+    assert.ok(traceLines.includes('OWN_DAEMON_YIELD_SIGTERM'), 'Trace must record OWN_DAEMON_YIELD_SIGTERM');
+
+    // Restore again and verify pluginDir/.daemon.pid discovery + hostPid protection
+    assert.equal(arch.restoreArchiveBatch({ convDir, archiveDir, batchName: yieldRes1.batchName, checkRunning: () => false }).ok, true);
+    fs.writeFileSync(path.join(fakePluginDir, '.daemon.pid'), JSON.stringify({ pid: 4002, token: 'tok-4002', startedAt: now }), 'utf8');
+    const signals2 = [];
+    let daemon4002Alive = true;
+    const yieldRes2 = await arch.executeArchiveTaskSequence(
+      {
+        action: 'archive-and-restart',
+        convDir,
+        archiveDir,
+        hostPid: 7777,
+        ownDaemonPid: 7777, // intentionally equal to hostPid -> must NEVER kill 7777, only .daemon.pid (4002)
+        pluginDir: fakePluginDir,
+        gracefulQuit: false,
+        relaunch: false,
+        waitExitTimeoutMs: 2000,
+        pollMs: 50,
+        settleMs: 0,
+        recheckGapMs: 0,
+      },
+      {
+        sleep: async () => {},
+        inspectProcesses: () =>
+          daemon4002Alive ? { running: true, blockers: [{ imageName: 'Antigravity.exe', pid: 4002 }] } : { running: false, blockers: [] },
+        killFn: (pid, sig) => {
+          signals2.push({ pid, sig });
+          if (pid === 4002) daemon4002Alive = false;
+        },
+      }
+    );
+    assert.equal(yieldRes2.ok, true);
+    assert.deepEqual(signals2, [{ pid: 4002, sig: 'SIGTERM' }], 'Must yield daemon PID read from pluginDir/.daemon.pid via SIGTERM');
+
+    // 4) Real Windows C# Program.cs compilation (/warnaserror) + reflection verification of HasPendingArchiveTask & ShouldSuppressNativeDaemonRespawn
+    const macWatcherSrc = fs.readFileSync(path.join(ROOT, 'installer/macos/Watcher/main.swift'), 'utf8');
+    for (const needle of [
+      'hasPendingArchiveTask',
+      'shouldSuppressNativeDaemonRespawn',
+      'tryClaimPendingArchiveTask',
+      'runClaimedArchiveTask',
+      '.archive-task-pending.json',
+      '--run-task=',
+    ]) {
+      assert.ok(macWatcherSrc.includes(needle), `macOS Watcher main.swift must include ${needle}`);
+    }
+
+    if (process.platform === 'win32') {
+      const cscPath = path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
+      if (fs.existsSync(cscPath)) {
+        const csDir = path.join(tmpRoot, 'cs-w5-watcher');
+        fs.mkdirSync(csDir, { recursive: true });
+        const watcherDll = path.join(csDir, 'WatcherW5.dll');
+        const harnessCs = path.join(csDir, 'HarnessW5.cs');
+        const harnessExe = path.join(csDir, 'HarnessW5.exe');
+        execFileSync(
+          cscPath,
+          [
+            '/nologo',
+            '/warnaserror',
+            '/target:library',
+            '/r:System.dll',
+            '/r:System.Core.dll',
+            '/r:System.Net.Http.dll',
+            '/r:System.Windows.Forms.dll',
+            '/r:System.Drawing.dll',
+            `/out:${watcherDll}`,
+            path.join(ROOT, 'installer/common/MiniJson.cs'),
+            path.join(ROOT, 'installer/common/CdpClient.cs'),
+            path.join(ROOT, 'installer/common/RuntimeChannels.cs'),
+            path.join(ROOT, 'installer/watcher/Program.cs'),
+            path.join(ROOT, 'installer/watcher/FilePicker.cs'),
+          ],
+          { windowsHide: true, stdio: 'pipe' }
+        );
+        fs.writeFileSync(
+          harnessCs,
+          [
+            'using System;',
+            'using System.Reflection;',
+            'using System.Threading;',
+            'public static class HarnessW5 {',
+            '  public static int Main(string[] args) {',
+            '    Assembly asm = Assembly.LoadFrom(args[0]);',
+            '    Type t = asm.GetType("AgyClaudeStyle.Watcher.Program");',
+            '    BindingFlags bf = BindingFlags.NonPublic | BindingFlags.Static;',
+            '    if (args[1] == "has-pending") {',
+            '      Console.WriteLine((bool)t.GetMethod("HasPendingArchiveTask", bf).Invoke(null, null) ? "TRUE" : "FALSE");',
+            '    } else if (args[1] == "suppress") {',
+            '      int inFlight = args.Length > 2 ? int.Parse(args[2]) : 0;',
+            '      t.GetField("_manualArchiveInFlight", bf).SetValue(null, inFlight);',
+            '      Console.WriteLine((bool)t.GetMethod("ShouldSuppressNativeDaemonRespawn", bf).Invoke(null, null) ? "TRUE" : "FALSE");',
+            '    } else if (args[1] == "claim") {',
+            '      t.GetField("_pluginDir", bf).SetValue(null, args[2]);',
+            '      t.GetField("_baseDir", bf).SetValue(null, args[2]);',
+            '      t.GetField("_manualArchiveInFlight", bf).SetValue(null, 0);',
+            '      using (ManualResetEventSlim ev = new ManualResetEventSlim(false)) {',
+            '        t.GetMethod("TryClaimAndStartPendingArchiveTask", bf).Invoke(null, new object[] { ev });',
+            '        DateTime dl = DateTime.UtcNow.AddSeconds(15);',
+            '        while (DateTime.UtcNow < dl) {',
+            '          int cur = (int)t.GetField("_manualArchiveInFlight", bf).GetValue(null);',
+            '          if (cur == 0) break;',
+            '          Thread.Sleep(50);',
+            '        }',
+            '        int finalState = (int)t.GetField("_manualArchiveInFlight", bf).GetValue(null);',
+            '        Console.WriteLine("INFLIGHT=" + finalState);',
+            '      }',
+            '    }',
+            '    return 0;',
+            '  }',
+            '}',
+          ].join('\n'),
+          'utf8'
+        );
+        execFileSync(cscPath, ['/nologo', '/warnaserror', '/target:exe', `/out:${harnessExe}`, harnessCs], {
+          windowsHide: true,
+          stdio: 'pipe',
+        });
+
+        const fakeHome = path.join(csDir, 'home');
+        const fakeArch = path.join(fakeHome, '.gemini', 'antigravity', 'conversations_archive');
+        fs.mkdirSync(fakeArch, { recursive: true });
+        const runProbe = (cmd, extra = []) =>
+          execFileSync(harnessExe, [watcherDll, cmd, ...extra], {
+            encoding: 'utf8',
+            windowsHide: true,
+            env: { ...process.env, USERPROFILE: fakeHome },
+          }).trim();
+
+        // 1) Empty -> FALSE / FALSE
+        assert.equal(runProbe('has-pending'), 'FALSE');
+        assert.equal(runProbe('suppress', ['0']), 'FALSE');
+
+        // 2) _manualArchiveInFlight == 1 -> suppress TRUE even without pending file
+        assert.equal(runProbe('suppress', ['1']), 'TRUE', 'In-flight manual archive must suppress EnsureNativeDaemonRunning');
+
+        // 3) Fresh .archive-task-pending.json -> has-pending TRUE & suppress TRUE
+        arch.writePendingArchiveTask(fakeArch, { action: 'archive-and-restart', convDir, archiveDir: fakeArch });
+        assert.equal(runProbe('has-pending'), 'TRUE', 'Fresh .archive-task-pending.json must be detected');
+        assert.equal(runProbe('suppress', ['0']), 'TRUE', 'Pending archive handoff must suppress EnsureNativeDaemonRunning');
+
+        // 4) Stale (>120s) .archive-task-pending.json -> has-pending FALSE, suppress FALSE, and claim auto-cleans stale file
+        const staleIso = new Date(Date.now() - 180000).toISOString();
+        const fakePendingPath = path.join(fakeArch, '.archive-task-pending.json');
+        fs.writeFileSync(fakePendingPath, JSON.stringify({ schema: 1, id: 'stale-1', requestedAt: staleIso }), 'utf8');
+        assert.equal(runProbe('has-pending'), 'FALSE', 'Stale (>120s) pending handoff must expire');
+        assert.equal(runProbe('suppress', ['0']), 'FALSE');
+        assert.equal(runProbe('claim', [ROOT]), 'INFLIGHT=0');
+        assert.equal(fs.existsSync(fakePendingPath), false, 'Watcher claim path must clean stale >120s pending file');
+
+        // 5) Fresh handoff .archive-task-active.json (pid=0, handoff=true, <30s) -> suppress TRUE
+        arch.writeActiveArchiveTask(fakeArch, { action: 'archive-and-restart', pid: 0, handoff: true });
+        assert.equal(runProbe('suppress', ['0']), 'TRUE', 'Active handoff lock (<30s) must suppress EnsureNativeDaemonRunning');
+        fs.unlinkSync(path.join(fakeArch, '.archive-task-active.json'));
+
+        // 6) Real end-to-end Watcher claim -> rename .archive-task-claimed-*.json -> Process.Start conversation-archive.mjs --run-task= -> trace written & lock released
+        const isoConv = path.join(csDir, 'empty-conv');
+        fs.mkdirSync(isoConv, { recursive: true });
+        arch.writePendingArchiveTask(fakeArch, {
+          action: 'archive-and-restart',
+          convDir: isoConv,
+          archiveDir: fakeArch,
+          gracefulQuit: false,
+          relaunch: false,
+          waitExitTimeoutMs: 500,
+          pollMs: 50,
+          settleMs: 0,
+        });
+        assert.equal(runProbe('claim', [ROOT]), 'INFLIGHT=0', 'Watcher must claim, execute conversation-archive.mjs --run-task=, and release _manualArchiveInFlight');
+        assert.equal(fs.existsSync(fakePendingPath), false, 'Claimed pending file must be moved/consumed');
+        const leftoverClaimed = fs.readdirSync(fakeArch).filter((f) => f.startsWith('.archive-task-claimed-'));
+        assert.deepEqual(leftoverClaimed, [], 'No leftover .archive-task-claimed-*.json files may remain');
+        const csTracePath = path.join(fakeArch, 'archive-trace.log');
+        assert.equal(fs.existsSync(csTracePath), true, 'Watcher-spawned conversation-archive.mjs --run-task= must execute and emit archive-trace.log');
+        assert.ok(fs.readFileSync(csTracePath, 'utf8').includes('TASK_START'), 'archive-trace.log must confirm real TASK_START execution');
+      }
+    }
+
+    await daemon.stop(false, { skipAutoArchive: true });
+  } finally {
+    if (dummyWatcherProc && !dummyWatcherProc.killed) {
+      try { dummyWatcherProc.kill(); } catch {}
+    }
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });

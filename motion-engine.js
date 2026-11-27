@@ -10,9 +10,10 @@ micro:{stiffness:440,damping:24,mass:.85},indicator:{stiffness:430,damping:32,ma
 const TIERS=new Set(['off','subtle','standard','ultra']);
 const CACHE=new Map(),ANIMS=new WeakMap(),ROOTS=new WeakMap(),CDS=new WeakMap(),TIMERS=new WeakMap(),EXCL_CACHE=new WeakMap();
 const HOST_SEL='button, a, [role="button"], summary, [data-icon-host]';
+const ICON_HOST_SEL='[data-anim-icon], '+HOST_SEL;
 const THOUGHT_CLS_RE=/\b(ag-prism-thought-raw-toggle|ag-prism-thought-overlay)\b/;
 const BEZ='cubic-bezier(0.22, 1.25, 0.36, 1)',clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
-let exclEpoch=1;
+let exclEpoch=1,rmFn=null,rmMql=null,linCssObj=null,linCssVal=true;
 
 function invalidateExclusionCache(){exclEpoch=(exclEpoch+1)|0;}
 
@@ -47,7 +48,13 @@ return res;
 
 function prefersReducedMotion(ov){
 if(typeof ov==='boolean')return ov;
-try{return Boolean(globalThis.matchMedia&&globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches);}catch(_){return false;}
+try{
+if(typeof globalThis.__agPrismReducedMotion==='function')return Boolean(globalThis.__agPrismReducedMotion());
+const de=typeof document!=='undefined'&&document.documentElement;
+if(de&&de.getAttribute&&de.getAttribute('data-ag-cs-motion')==='off')return true;
+if(de&&de.getAttribute&&de.getAttribute('data-ag-cs-ignore-rm')==='1')return false;
+const mm=globalThis.matchMedia;if(typeof mm!=='function')return false;if(mm!==rmFn){rmFn=mm;rmMql=mm('(prefers-reduced-motion: reduce)');}return Boolean(rmMql&&rmMql.matches);
+}catch(_){return false;}
 }
 
 function getMotionTier(ov){
@@ -66,7 +73,7 @@ return getMotionTier(o&&o.motionTier);
 }
 
 function hasLinearCss(){
-try{if(typeof CSS!=='undefined'&&CSS.supports)return CSS.supports('animation-timing-function','linear(0, 1)');}catch(_){}
+try{const c=globalThis.CSS;if(c&&c.supports){if(c!==linCssObj){linCssObj=c;linCssVal=Boolean(c.supports('animation-timing-function','linear(0, 1)'));}return linCssVal;}}catch(_){}
 return true;
 }
 
@@ -209,12 +216,14 @@ fill:'forwards',commitOnFinish:true,reducedMotion:opts.reducedMotion,motionTier:
 }));
 }
 
-function findTarget(el){
+function findTarget(el,fromEv){
 if(!el||isThoughtExcluded(el))return null;
 let ic=el.getAttribute&&el.getAttribute('data-anim-icon')?el:null,host=ic?(el.closest&&el.closest(HOST_SEL))||el:null;
-if(!ic&&el.closest){ic=el.closest('[data-anim-icon]');if(ic)host=ic.closest(HOST_SEL)||ic;}
-if(!ic&&el.querySelector){ic=el.querySelector('[data-anim-icon]');if(ic)host=el;}
-if(!ic&&el.closest){const b=el.closest(HOST_SEL);if(b&&b.querySelector){ic=b.querySelector('[data-anim-icon]');if(ic)host=b;}}
+if(!ic&&el.closest){
+const hit=el.closest(ICON_HOST_SEL);
+if(hit){if(hit.getAttribute&&hit.getAttribute('data-anim-icon')){ic=hit;host=(hit.closest&&hit.closest(HOST_SEL))||hit;}else if(hit.querySelector){ic=hit.querySelector('[data-anim-icon]');if(ic)host=hit;}}
+}
+if(!ic&&!fromEv&&el.querySelector){ic=el.querySelector('[data-anim-icon]');if(ic)host=el;}
 if(!ic||isThoughtExcluded(host||ic))return null;
 const svg=ic.tagName&&ic.tagName.toLowerCase()==='svg'?ic:(ic.querySelector&&ic.querySelector('svg'))||ic;
 return {iconEl:ic,svgEl:svg,hostEl:host||ic,iconName:ic.getAttribute('data-anim-icon')||''};
@@ -302,7 +311,7 @@ const onOver=e=>{
 if(!e)return;
 const tier=resolveTier(opts);if(tier==='off'||tier==='subtle')return;
 if(isThoughtExcluded(e.target))return;
-const t=findTarget(e.target);
+const t=findTarget(e.target,true);
 if(!t||isDis(t.hostEl)||(e.relatedTarget&&t.hostEl.contains&&t.hostEl.contains(e.relatedTarget)))return;
 if(gate(t.hostEl))triggerIcon(t.hostEl,'hover',opts);
 };
@@ -311,12 +320,12 @@ if(!e)return;
 const tier=resolveTier(opts);if(tier==='off'||tier==='subtle')return;
 if(isThoughtExcluded(e.target))return;
 try{if(e.target.matches&&!e.target.matches(':focus-visible'))return;}catch(_){}
-const t=findTarget(e.target);if(t&&!isDis(t.hostEl)&&gate(t.hostEl))triggerIcon(t.hostEl,'hover',opts);
+const t=findTarget(e.target,true);if(t&&!isDis(t.hostEl)&&gate(t.hostEl))triggerIcon(t.hostEl,'hover',opts);
 };
 const onDown=e=>{
 if(!e||(typeof e.button==='number'&&e.button!==0)||isThoughtExcluded(e.target))return;
 const tier=resolveTier(opts);if(tier!=='standard'&&tier!=='ultra')return;
-const t=findTarget(e.target);
+const t=findTarget(e.target,true);
 if(t&&!isDis(t.hostEl)){
 spring(t.svgEl,[{transform:'scale(1)'},{transform:'scale(0.9)'},{transform:'scale(1)'}],{
 stiffness:520,damping:28,mass:.7,transformBox:'view-box',transformOrigin:'12px 12px',

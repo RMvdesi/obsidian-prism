@@ -22,7 +22,17 @@
     "login data",
     "login data-journal",
     "local state",
-    "web data"
+    "web data",
+    "oauth_creds.json",
+    "google_accounts.json",
+    "obsidian-prism-suggester.json",
+    "obsidian-prism-wallpaper.json",
+    "obsidian-prism-sidebar.json",
+    "obsidian-prism-storage-guard.json",
+    "obsidian-prism-usage-rollup.json",
+    "obsidian-prism-usage-rollup-cache.json",
+    "config.backup.json",
+    "daemon.log"
   ],
   "extensions": [
     ".env",

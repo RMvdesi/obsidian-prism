@@ -873,6 +873,11 @@ test('Channel 4 isolation: main bundle < 690 KiB without dict, shouldEnableHostI
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'off', language: 'en' }), true);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'on', language: 'en' }), true);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'zh-CN' }), true);
+  assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'tr' }), true);
+  assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }, 'tr-TR'), true);
+  assert.equal(path.basename(cdp.getHostI18nDictionaryPath({ language: 'tr' })), 'tr.json');
+  assert.equal(path.basename(cdp.getHostI18nDictionaryPath({ language: 'zh-CN' })), 'zh-CN.json');
+  assert.equal(path.basename(cdp.getHostI18nDictionaryPath({ language: 'auto' }, 'tr-TR')), 'tr.json');
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'en' }), false);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'zh-TW' }), false);
   assert.equal(cdp.shouldEnableHostI18n({ hostLocalization: 'auto', language: 'auto' }, 'zh-CN'), true);
@@ -913,6 +918,34 @@ test('Channel 4 isolation: main bundle < 690 KiB without dict, shouldEnableHostI
   // Remove expression restores DOM cleanly
   vm.runInNewContext(cdp.HOST_I18N_REMOVE_EXPRESSION, sandbox);
   assert.equal(btn.textContent, 'Settings');
+
+  // Turkish Channel 4 expression compiles under budget, translates DOM in isolated VM, sets html lang="tr", and restores cleanly
+  const trExpr = cdp.buildHostI18nExpression({ hostLocalization: 'auto', language: 'tr' }, { noDiskCache: true });
+  assert.ok(Buffer.byteLength(trExpr, 'utf8') > 100000 && Buffer.byteLength(trExpr, 'utf8') <= 573440);
+  assert.ok(trExpr.includes('locale: "tr"'));
+  assert.doesNotThrow(() => new vm.Script(trExpr));
+  const trEnv = createTestEnv();
+  trEnv.doc.documentElement.setAttribute('lang', 'en');
+  const trBtn = trEnv.makeEl('button', { text: 'Settings' });
+  trEnv.doc.body.append(trBtn);
+  const trSandbox = {
+    window: trEnv.win,
+    globalThis: trEnv.win,
+    document: trEnv.doc,
+    MutationObserver: trEnv.win.MutationObserver,
+    setTimeout: trEnv.setTimeoutFn,
+    clearTimeout: trEnv.clearTimeoutFn,
+  };
+  trEnv.win.window = trEnv.win;
+  trEnv.win.globalThis = trEnv.win;
+  const trRes = vm.runInNewContext(trExpr, trSandbox);
+  assert.equal(trRes.ok, true);
+  assert.equal(trRes.status, 'active');
+  assert.equal(trBtn.textContent, 'Ayarlar');
+  assert.equal(trEnv.doc.documentElement.getAttribute('lang'), 'tr');
+  vm.runInNewContext(cdp.HOST_I18N_REMOVE_EXPRESSION, trSandbox);
+  assert.equal(trBtn.textContent, 'Settings');
+  assert.equal(trEnv.doc.documentElement.getAttribute('lang'), 'en');
 });
 
 test('settings-panel renders hostLocalization 3-state control and displays yielded hint when data-ag-prism-host-i18n="yielded"', () => {
@@ -1173,7 +1206,7 @@ test('[PR #50] Windows UI Display Language overrides Intl regional format, prese
               href: 'vscode-file://vscode-app/workbench.html',
             };
           }
-          if (expr.includes('skippedByLiveCfg')) {
+          if (expr === daemon.hostI18nExpr) {
             hostI18nEvalCount += 1;
             return { ok: true, status: 'off', skippedByLiveCfg: true };
           }
@@ -1642,9 +1675,12 @@ test('[P1-1 & P2-1] settings-panel shows yield hint only when mode=auto, and dae
   const descOff = env.doc.querySelector('[data-ag-cs-row="hostLocalization"] [data-k="d"]').textContent;
   assert.equal(descOff.includes('自动礼让'), false, 'Yield hint must NOT appear when hostLocalization=off');
 
-  const daemonSrc = fs.readFileSync(path.join(ROOT, 'sidecars', 'daemon', 'main.mjs'), 'utf8');
-  assert.ok(daemonSrc.includes('!probe.hasHostI18n || !entry.hostI18nScriptId'));
-  assert.ok(daemonSrc.includes('if (evalRes && evalRes.ok)'));
+  const daemonHealSrc =
+    fs.readFileSync(path.join(ROOT, 'src', 'daemon', 'session-heal.mjs'), 'utf8') +
+    '\n' +
+    fs.readFileSync(path.join(ROOT, 'src', 'daemon', 'session-heal-channels.mjs'), 'utf8');
+  assert.ok(daemonHealSrc.includes('!probe.hasHostI18n || !entry.hostI18nScriptId'));
+  assert.ok(daemonHealSrc.includes('if (evalRes && evalRes.ok)'));
 });
 
 test('[P2-2 & P2-4] ReDoS patterns complete in linear time, English sentences are uncorrupted, and __proto__ text is safe', () => {
@@ -2767,4 +2803,91 @@ test('Issue #80: host-i18n exempts orchestrator-picker-row/effort and data-ag-cs
   assert.equal(cesItem.textContent, 'Save');
 
   inst.destroy();
+});
+
+test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collapsible, changed-files-card-header/review) translates while data-markdown-root, bare prose & thinking-collapsible-trigger stay strictly protected', () => {
+  const env = createTestEnv();
+  const dict = {
+    exact: { Review: '审查', Settings: '设置', Save: '保存' },
+    patterns: [
+      { regex: '^Worked\\s+for\\s+(\\d+(?:\\.\\d+)?)\\s*s$', replacement: '已运行 $1 秒' },
+      { regex: '^Worked\\s+for\\s+(\\d+)\\s*m$', replacement: '已运行 $1 分钟' },
+      { regex: '^(\\d+) files? changed$', replacement: '$1 个文件已修改' },
+    ],
+  };
+
+  const conv = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const agentResp = env.makeEl('div', { attrs: { 'data-testid': 'agent-response' } });
+
+  // 1) Interactive turn chrome inside agent-response -> MUST translate
+  const stepList = env.makeEl('div', { attrs: { 'data-step-list': 'true' } });
+  const workedBtn = env.makeEl('button', { attrs: { 'data-testid': 'worked-for-collapsible', 'aria-expanded': 'false' } });
+  const workedSpan = env.makeEl('span', { text: 'Worked for 54s' });
+  workedBtn.append(workedSpan);
+
+  // Thinking collapsible trigger MUST remain protected (owned by thought-translator)
+  const thinkBtn = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Save' });
+
+  // Bare prose directly inside agent-response (legacy layout without data-markdown-root) -> MUST stay untouched
+  const bareProse = env.makeEl('p', { text: 'Settings' });
+
+  // Actual v2.35 AI markdown prose (data-markdown-root) -> MUST stay hard-blocked, even buttons inside it
+  const mdRoot = env.makeEl('div', { attrs: { 'data-markdown-root': '' } });
+  const mdPara = env.makeEl('p', { text: 'Review' });
+  const mdBtn = env.makeEl('button', { text: 'Save' });
+  mdRoot.append(mdPara, mdBtn);
+
+  stepList.append(workedBtn, thinkBtn, bareProse, mdRoot);
+
+  // 2) Changed files card header + review button -> MUST translate, while file list row outside header stays untouched
+  const turnCards = env.makeEl('div', { attrs: { 'data-testid': 'turn-cards-container' } });
+  const cfCard = env.makeEl('div', { attrs: { 'data-testid': 'changed-files-card' } });
+  const cfHeader = env.makeEl('div', { attrs: { 'data-testid': 'changed-files-card-header' } });
+  const cfCount = env.makeEl('span', { text: '3 files changed' });
+  const cfReviewBtn = env.makeEl('button', { attrs: { 'data-testid': 'changed-files-card-review' } });
+  const cfReviewSpan = env.makeEl('span', { text: 'Review' });
+  cfReviewBtn.append(cfReviewSpan);
+  cfHeader.append(cfCount, cfReviewBtn);
+  const cfFileRow = env.makeEl('div', { text: 'Settings' });
+  cfCard.append(cfHeader, cfFileRow);
+  turnCards.append(cfCard);
+
+  agentResp.append(stepList, turnCards);
+  conv.append(agentResp);
+  env.doc.body.append(conv);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // Turn chrome translated cleanly
+  assert.equal(workedSpan.textContent, '已运行 54 秒');
+  assert.equal(cfCount.textContent, '3 个文件已修改');
+  assert.equal(cfReviewSpan.textContent, '审查');
+
+  // Prose, bare text, file rows & thinking trigger remain 100% protected
+  assert.equal(thinkBtn.textContent, 'Save');
+  assert.equal(bareProse.textContent, 'Settings');
+  assert.equal(mdPara.textContent, 'Review');
+  assert.equal(mdBtn.textContent, 'Save');
+  assert.equal(cfFileRow.textContent, 'Settings');
+
+  // Dynamic mutation on worked-for timer tick translates cleanly
+  workedSpan.firstChild.nodeValue = 'Worked for 2m';
+  env.advanceTime(100);
+  assert.equal(workedSpan.textContent, '已运行 2 分钟');
+
+  // Lossless destroy() restores all turn chrome cleanly
+  inst.destroy();
+  assert.equal(workedSpan.textContent, 'Worked for 2m');
+  assert.equal(cfCount.textContent, '3 files changed');
+  assert.equal(cfReviewSpan.textContent, 'Review');
 });

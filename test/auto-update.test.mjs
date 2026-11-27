@@ -567,6 +567,9 @@ test('PrismDaemon honors autoUpdate=off/on, exposes update-status/check-update/a
     if (fs.existsSync(path.join(ROOT, 'assets'))) {
       fs.cpSync(path.join(ROOT, 'assets'), path.join(pluginDir, 'assets'), { recursive: true });
     }
+    if (fs.existsSync(path.join(ROOT, 'src'))) {
+      fs.cpSync(path.join(ROOT, 'src'), path.join(pluginDir, 'src'), { recursive: true });
+    }
     if (fs.existsSync(path.join(ROOT, 'vendor'))) {
       fs.cpSync(path.join(ROOT, 'vendor'), path.join(pluginDir, 'vendor'), { recursive: true });
     }

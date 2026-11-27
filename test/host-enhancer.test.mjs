@@ -853,7 +853,7 @@ test('style.css covers all 6 Wave-2 config hooks, eliminates double borders & en
     '[data-ag-cs-accent="mono"]>body',
     '[data-ag-cs-palette="host"]>body',
     '[data-ag-cs-telemetry="off"] :is(#ag-pulse-status-bar,[data-ag-pulse-bar="true"]){display:none !important;}',
-    '[data-ag-cs-composer="on"]:not([data-ag-cs-telemetry="off"]) .agy-composer-footer>#ag-pulse-status-bar',
+    '[data-ag-cs-composer="on"]:not([data-ag-cs-telemetry="off"]) .agy-composer-footer>:is(#ag-pulse-status-bar,',
     ':is(.agy-composer-footer,[data-testid="input-box-bottom-toolbar"]){position:relative !important;z-index:32 !important;}',
     ':is(#ag-prism-pulse-bar,[data-ag-prism-pulse-bar],#ag-pulse-status-bar):not([data-layout="blocked"]){z-index:36 !important;}',
     '[data-ag-cs-composer="off"] .surface-composer-card>.ag-cs-prism-rim-cv{display:none !important;',
@@ -1076,6 +1076,7 @@ test('Host enhancer supports 8 languages + yue->zh-CN migration + live switch, a
     ['es', 'Contraer (52L)', 'Contraer pasos'],
     ['fr', 'Replier (52L)', 'Replier étapes'],
     ['de', 'Einklappen (52Z)', 'Schritte einklappen'],
+    ['tr', 'Katla (52 satır)', 'Adımları katla'],
     ['en', 'Fold (52L)', 'Fold Steps'],
   ]) {
     curLang = nextLang;
@@ -1692,10 +1693,14 @@ test('D13: inline diff escapes narrow 255px inner block to full-width 754px step
     const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
     assert.equal(css.includes('grid-template-rows:1fr'), false, 'Diff box must NOT use layout-thrashing grid-template-rows transition');
     assert.ok(css.includes('ag-cs-diff-unfold') && css.includes('ag-cs-diff-fold'), 'Diff box must use GPU compositor unfold/fold keyframes');
+    const bqBaseRule = css.split('\n').find((l) => l.includes(':is(blockquote,.markdown-alert){')) || '';
     const bqRule = css.split('\n').find((l) => l.includes('& blockquote{')) || '';
-    assert.ok(bqRule.includes('border:none !important') && bqRule.includes('transparent 98%') && bqRule.includes('box-shadow:0 0 4px'), 'Blockquote must use calm flat wash with gentle right fade (98%) and subtle left glow');
+    assert.ok(
+      /border:(?:none|0)\s*!important/.test(bqBaseRule + bqRule) && bqRule.includes('transparent 98%') && bqRule.includes('box-shadow:0 0 4px'),
+      'Blockquote must use calm flat wash with gentle right fade (98%) and subtle left glow'
+    );
     assert.equal(bqRule.includes('radial-gradient'), false, 'Blockquote must not have harsh radial spotlight on multi-line expanded blocks');
-    assert.ok(css.includes('& [data-ag-cs-overview-shell="1"]{height:auto !important;bottom:auto !important;'), 'Overview shell must auto-fit content height');
+    assert.match(css, /& \[data-ag-cs-overview-shell="1"\]\{height:auto\s*!important;bottom:auto\s*!important;/, 'Overview shell must auto-fit content height');
     const ovRule = css.split('\n').find((l) => l.includes('& [data-ag-cs-overview-shell="1"]{')) || '';
     assert.ok(ovRule.includes('opacity') && ovRule.includes('transform') && ovRule.includes('[data-ending-style]'), 'Overview shell must preserve smooth open/close opacity+transform transition');
     assert.ok(css.includes('[data-ag-ov-sec-anim="open"]') && css.includes('[data-ag-ov-sec-anim="closing"]'), 'Overview inner sections must have unfold/fold GPU animations');
@@ -1763,21 +1768,17 @@ test('Wave D18.5 / D19: [data-sash-handle] stays transparent at rest, nested scr
   assert.match(sashLine, /:is\(:hover,:active\)\s*\.bg-border\{/, '[data-sash-handle] inner .bg-border must only illuminate on :hover/:active');
 
   // 2) Staggered nested collapsible scroll containers (margin-right offset + overscroll-behavior-y:auto without stripping host max-height)
-  const tier1Rule = css.split('\n').find((l) => l.includes('[data-testid="autoscroll-viewport"] .bleed-contain.overflow-y-auto{')) || '';
-  assert.ok(
-    tier1Rule.includes('margin-right:10px !important') &&
-      tier1Rule.includes('padding-right:8px !important') &&
-      tier1Rule.includes('overscroll-behavior-y:auto !important'),
+  const bleedScrollLine = css.split('\n').find((l) => l.includes('[data-testid="autoscroll-viewport"] .bleed-contain')) || '';
+  assert.match(
+    bleedScrollLine,
+    /(?:\.bleed-contain\.overflow-y-auto|&\.overflow-y-auto)\{margin-right:10px\s*!important;padding-right:8px\s*!important;overscroll-behavior-y:auto\s*!important/,
     'Tier-1 outer collapsible scroll container must indent margin-right:10px + padding-right:8px and chain overscroll-behavior-y:auto'
   );
-  assert.equal(tier1Rule.includes('max-height:none'), false, 'Nested scroll rules must preserve host native max-height caps');
+  assert.equal(bleedScrollLine.includes('max-height:none'), false, 'Nested scroll rules must preserve host native max-height caps');
 
-  const tier2Rule =
-    css.split('\n').find((l) => l.includes('[data-testid="autoscroll-viewport"] .bleed-contain .overflow-y-auto{')) || '';
-  assert.ok(
-    tier2Rule.includes('margin-right:14px !important') &&
-      tier2Rule.includes('padding-right:8px !important') &&
-      tier2Rule.includes('overscroll-behavior-y:auto !important'),
+  assert.match(
+    bleedScrollLine,
+    /(?:\.bleed-contain\s+\.overflow-y-auto|&\s+\.overflow-y-auto)\{margin-right:14px\s*!important;padding-right:8px\s*!important;overscroll-behavior-y:auto\s*!important/,
     'Tier-2 inner step scroll container must stagger margin-right:14px + padding-right:8px and chain overscroll-behavior-y:auto'
   );
   assert.ok(
@@ -1785,12 +1786,9 @@ test('Wave D18.5 / D19: [data-sash-handle] stays transparent at rest, nested scr
     'Channel 6 inline-diff-body must retain Tier-2 margin-right:14px + padding-right:8px + overscroll-behavior-y:auto'
   );
 
-  const tier3Rule =
-    css
-      .split('\n')
-      .find((l) => l.includes('[data-testid="autoscroll-viewport"] .bleed-contain .overflow-y-auto :is(.overflow-y-auto,pre){')) || '';
-  assert.ok(
-    tier3Rule.includes('margin-right:12px !important') && tier3Rule.includes('overscroll-behavior-y:auto !important'),
+  assert.match(
+    bleedScrollLine,
+    /:is\(\.overflow-y-auto,pre\)\{margin-right:12px\s*!important;overscroll-behavior-y:auto\s*!important/,
     'Tier-3 deeply nested scroll container must stagger margin-right:12px and chain overscroll-behavior-y:auto'
   );
   assert.ok(
@@ -1801,13 +1799,15 @@ test('Wave D18.5 / D19: [data-sash-handle] stays transparent at rest, nested scr
   // 3) Floating overlay sub-scrollbar narrow hitbox (9px) + resting filament (3.5px/.38) -> hover/active (4.5px/.95)
   const fixedScrollRule =
     css.split('\n').find((l) => l.includes('[data-testid="overlay-scrollbar"].fixed[data-orientation="vertical"]{')) || '';
-  assert.ok(fixedScrollRule.includes('width:9px !important;'), 'Floating vertical sub-scrollbar hitbox must narrow from 12px to 9px');
-  assert.ok(
-    fixedScrollRule.includes(':not(:hover):not([data-hovered="true"]):not([data-dragging="true"]):not([data-expanded="true"]) [data-testid="overlay-scrollbar-thumb"]{width:3.5px !important;opacity:.38 !important;}'),
+  assert.match(fixedScrollRule, /width:9px\s*!important;/, 'Floating vertical sub-scrollbar hitbox must narrow from 12px to 9px');
+  assert.match(
+    fixedScrollRule,
+    /:not\(:hover\):not\(\[data-hovered="true"\]\):not\(\[data-dragging="true"\]\):not\(\[data-expanded="true"\]\) \[data-testid="overlay-scrollbar-thumb"\]\{width:3\.5px\s*!important;opacity:\.38\s*!important;?\}/,
     'Floating sub-scrollbar thumb must shrink to 3.5px / 0.38 filament when pointer is not interacting with track'
   );
-  assert.ok(
-    fixedScrollRule.includes(':is(:hover,[data-hovered="true"],[data-dragging="true"],[data-expanded="true"]) [data-testid="overlay-scrollbar-thumb"]{width:4.5px !important;opacity:.95 !important;'),
+  assert.match(
+    fixedScrollRule,
+    /:is\(:hover,\[data-hovered="true"\],\[data-dragging="true"\],\[data-expanded="true"\]\) \[data-testid="overlay-scrollbar-thumb"\]\{width:4\.5px\s*!important;opacity:\.95\s*!important;/,
     'Floating sub-scrollbar thumb must expand cleanly to 4.5px / 0.95 on hover/drag/expand'
   );
   assert.ok(
@@ -1966,7 +1966,7 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
     flushRaf();
 
     assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-box'), '1', 'Takeover card popup must mount data-ag-cs-prism-box="1"');
-    assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-reflect'), 'bottom', 'Takeover card popup must mount data-ag-cs-prism-reflect="bottom"');
+    assert.equal(takeoverCard.hasAttribute('data-ag-cs-prism-reflect'), false, 'Takeover card popup must use full-perimeter prism rim without bottom-only reflect');
     assert.equal(subTakeover.hasAttribute('data-ag-cs-prism-box'), false, 'Subagent takeover card must still be excluded');
 
     // Switching to chat mode (data-ag-prism-mode="chat") symmetrically strips prism-box/reflect and cleans --ag-px/--ag-py
@@ -1980,11 +1980,12 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
     assert.equal(takeoverCard.style.getPropertyValue('--ag-px'), '', 'Chat mode teardown must clear --ag-px');
     assert.equal(takeoverCard.style.getPropertyValue('--ag-py'), '', 'Chat mode teardown must clear --ag-py');
 
-    // Returning to code mode restores bottom prism reflection; disabling composerRestyle cleans it up again
+    // Returning to code mode restores full-perimeter prism rim; disabling composerRestyle cleans it up again
     env.html.setAttribute('data-ag-prism-mode', 'code');
     mainMo.cb([{ type: 'attributes', target: env.html, attributeName: 'data-ag-prism-mode' }]);
     flushRaf();
-    assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-reflect'), 'bottom', 'Code mode must restore data-ag-cs-prism-reflect="bottom"');
+    assert.equal(takeoverCard.getAttribute('data-ag-cs-prism-box'), '1', 'Code mode must restore data-ag-cs-prism-box="1"');
+    assert.equal(takeoverCard.hasAttribute('data-ag-cs-prism-reflect'), false, 'Code mode must keep takeover card on full-perimeter rim');
 
     takeoverCard.style.setProperty('--ag-px', '64px');
     takeoverCard.style.setProperty('--ag-py', '8px');
@@ -2002,18 +2003,18 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
   const artifactFacetLine =
     css.split('\n').find((l) => l.includes(':is([data-testid="artifact-card"],[data-testid="bubble-artifact-card"],.artifact-card')) || '';
   assert.ok(
-    artifactFacetLine.includes('background-color:var(--_k0) !important') &&
-      artifactFacetLine.includes('border:1px solid var(--_kb) !important') &&
-      artifactFacetLine.includes('box-shadow:var(--_ks2) !important'),
+    /background-color:var\(--_k0\)\s*!important/.test(artifactFacetLine) &&
+      /border:1px solid var\(--_kb\)\s*!important/.test(artifactFacetLine) &&
+      /box-shadow:var\(--_ks2\)\s*!important/.test(artifactFacetLine),
     'Artifact cards must adopt smoked-obsidian facet tokens (--_k0 / --_kb / --_ks2)'
   );
   const artifactHdrFirstLine =
     css.split('\n').find((l) => l.includes('[data-testid="artifact-card-header"]>:first-child')) || '';
   assert.ok(
     artifactHdrFirstLine.includes(':first-child :is(a,button,span,div)') &&
-      artifactHdrFirstLine.includes('background:transparent !important') &&
-      artifactHdrFirstLine.includes('border-color:transparent !important') &&
-      artifactHdrFirstLine.includes('padding-inline:0 !important'),
+      /background:(?:transparent|0 0)\s*!important/.test(artifactHdrFirstLine) &&
+      /border-color:transparent\s*!important/.test(artifactHdrFirstLine) &&
+      /padding-inline:0\s*!important/.test(artifactHdrFirstLine),
     'Artifact card header first-child must strip nested grey pill chrome cleanly'
   );
   const artifactFooterDividerLine =
@@ -2027,7 +2028,7 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
   // 3) .proceed-button raised graphite keycap (--_k2, zero plastic primary-16% tint) & ghost secondary buttons
   const proceedLine = css.split('\n').find((l) => l.startsWith('& .proceed-button{')) || '';
   assert.ok(
-    proceedLine.includes('background-color:var(--_k2) !important') && proceedLine.includes('border-radius:8px !important'),
+    /background-color:var\(--_k2\)\s*!important/.test(proceedLine) && /border-radius:8px\s*!important/.test(proceedLine),
     '.proceed-button must use raised graphite keycap token var(--_k2)'
   );
   assert.equal(
@@ -2038,9 +2039,9 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
   const ghostArtifactBtnLine =
     css.split('\n').find((l) => l.includes(':is([data-testid="artifact-card"],[data-testid="bubble-artifact-card"]) button:not(.proceed-button){')) || '';
   assert.ok(
-    ghostArtifactBtnLine.includes('background:transparent !important') &&
-      ghostArtifactBtnLine.includes('border-color:transparent !important') &&
-      ghostArtifactBtnLine.includes('box-shadow:none !important'),
+    /background:(?:transparent|0 0)\s*!important/.test(ghostArtifactBtnLine) &&
+      /border-color:transparent\s*!important/.test(ghostArtifactBtnLine) &&
+      /box-shadow:none\s*!important/.test(ghostArtifactBtnLine),
     'Secondary Open / split buttons inside artifact cards must be borderless ghost buttons'
   );
 
@@ -2048,16 +2049,16 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
   const takeoverShellLine =
     css.split('\n').find((l) => l.includes(':is([data-testid="queued-messages-card"],[data-testid="interaction-takeover-card"],.agy-takeover-frame){')) || '';
   assert.ok(
-    takeoverShellLine.includes('background-color:var(--_k0) !important') &&
-      takeoverShellLine.includes('border:1px solid var(--_kb) !important') &&
+    /background-color:var\(--_k0\)\s*!important/.test(takeoverShellLine) &&
+      /border:1px solid var\(--_kb\)\s*!important/.test(takeoverShellLine) &&
       takeoverShellLine.includes('animation:ag-cs-queued-in'),
     'interaction-takeover-card outer shell must align with queued-messages-card smoked-obsidian facet'
   );
   const takeoverLinerLine = css.split('\n').find((l) => l.startsWith('& .agy-takeover-card{')) || '';
   assert.ok(
-    takeoverLinerLine.includes('background:transparent !important') &&
-      takeoverLinerLine.includes('border:0 !important') &&
-      takeoverLinerLine.includes('box-shadow:none !important'),
+    /background:(?:transparent|0 0)\s*!important/.test(takeoverLinerLine) &&
+      /border:0\s*!important/.test(takeoverLinerLine) &&
+      /box-shadow:none\s*!important/.test(takeoverLinerLine),
     '.agy-takeover-card inner liner must be transparent and borderless'
   );
   assert.equal(
@@ -2076,12 +2077,13 @@ test('Wave D20: ui-runtime mounts bottom prism-reflect on interaction-takeover-c
   );
 
   // 5) Stacking context unseal (.surface-composer-card z-index:auto) & #ag-prism-pulse-bar z-index (36) > interaction-takeover-card (12)
-  assert.ok(
-    css.includes('& .surface-composer-card{z-index:auto !important;}'),
+  assert.match(
+    css,
+    /& \.surface-composer-card\{z-index:auto\s*!important;?\}/,
     '.surface-composer-card must set z-index:auto !important to unseal Tailwind z-[1] stacking context'
   );
-  const pulseZMatch = css.match(/:is\(#ag-prism-pulse-bar,\[data-ag-prism-pulse-bar\],#ag-pulse-status-bar\):not\(\[data-layout="blocked"\]\)\{z-index:(\d+)\s*!important;\}/);
-  const takeoverZMatch = css.match(/\[data-testid="interaction-takeover-card"[^\n{]*\{[^}]*z-index:(\d+)\s*!important;/);
+  const pulseZMatch = css.match(/:is\(#ag-prism-pulse-bar,\[data-ag-prism-pulse-bar\],#ag-pulse-status-bar\):not\(\[data-layout="blocked"\]\)\{z-index:(\d+)\s*!important;?\}/);
+  const takeoverZMatch = css.match(/\[data-testid="interaction-takeover-card"[^\n{]*\{[^}]*z-index:(\d+)\s*!important;?/);
   assert.ok(pulseZMatch && takeoverZMatch, 'Both #ag-prism-pulse-bar and interaction-takeover-card z-index rules must exist');
   const pulseZ = Number(pulseZMatch[1]);
   const takeoverZ = Number(takeoverZMatch[1]);
@@ -2200,5 +2202,217 @@ test('Navigator outline mounts dedicated trigger, yields to Base UI turn tooltip
   } finally {
     ctl.destroy();
     assert.equal(rail.querySelector('.ag-cs-nav-outline-trigger'), null, 'destroy() must remove .ag-cs-nav-outline-trigger');
+  }
+});
+
+test('Dual-pane .agy-scroll-bottom strict local viewport isolation (subagent/side-question never scrolls main conversation) & local passive scroll scope', () => {
+  const env = createMockEnv();
+  const split = env.createElement('div', { 'data-testid': 'aux-pane-split' });
+
+  // Left pane: main conversation view with its own autoscroll-viewport & scroll-bottom button
+  const mainPane = env.createElement('div', { 'data-main-content-body': 'true' });
+  const mainConv = env.createElement('div', { 'data-testid': 'conversation-view' });
+  const mainVp = env.createElement('div', { 'data-testid': 'autoscroll-viewport' });
+  mainVp.scrollHeight = 2400;
+  mainVp.clientHeight = 600;
+  mainVp.scrollTop = 120;
+  const mainBtn = env.createElement('button', { class: 'agy-scroll-bottom' });
+  mainConv.appendChild(mainVp);
+  mainConv.appendChild(mainBtn);
+  mainPane.appendChild(mainConv);
+
+  // Right pane A: subagent sidebar with its own local autoscroll-viewport (no conversation-view ancestor)
+  const sideBody = env.createElement('div', { 'data-side-panel-body': 'true' });
+  const subTab = env.createElement('div', { 'data-testid': 'subagent-tab-conversation' });
+  const subVp = env.createElement('div', { 'data-testid': 'autoscroll-viewport' });
+  subVp.scrollHeight = 1600;
+  subVp.clientHeight = 400;
+  subVp.scrollTop = 40;
+  const subBtn = env.createElement('button', { class: 'agy-scroll-bottom' });
+  subTab.appendChild(subVp);
+  subTab.appendChild(subBtn);
+
+  // Right pane B: side-question panel WITHOUT autoscroll-viewport (uses plain local scroll container)
+  const sideQ = env.createElement('div', { 'data-testid': 'side-question-panel' });
+  const sidePlainScroll = env.createElement('div', { class: 'overflow-y-auto' });
+  sidePlainScroll.scrollHeight = 1200;
+  sidePlainScroll.clientHeight = 320;
+  sidePlainScroll.scrollTop = 50;
+  const sideQBtn = env.createElement('button', { class: 'agy-scroll-bottom' });
+  sideQ.appendChild(sidePlainScroll);
+  sideQ.appendChild(sideQBtn);
+
+  // Right pane C: bare sidebar pane directly under aux-pane-split without S_VP
+  const barePane = env.createElement('div', { class: 'aux-custom-pane' });
+  const bareBtn = env.createElement('button', { class: 'agy-scroll-bottom' });
+  barePane.appendChild(bareBtn);
+
+  sideBody.appendChild(subTab);
+  sideBody.appendChild(sideQ);
+  split.appendChild(mainPane);
+  split.appendChild(sideBody);
+  split.appendChild(barePane);
+  env.body.appendChild(split);
+
+  const rafQueue = [];
+  let nowMs = 0;
+  env.win.performance = { now: () => nowMs };
+  env.win.requestAnimationFrame = (cb) => { rafQueue.push(cb); return rafQueue.length; };
+  env.win.cancelAnimationFrame = () => {};
+
+  const ctl = enhancerMod.createHostEnhancerController({
+    doc: env.doc,
+    win: env.win,
+    getLang: () => 'zh-CN',
+    getConfig: () => ({ scrollBottomMotion: 'smooth', motionLevel: 'standard' }),
+  });
+
+  try {
+    // 1) Clicking side-question .agy-scroll-bottom (no local S_VP) MUST NOT fall back to main conversation or swallow native click
+    assert.equal(ctl.runFastScrollToBottom(sideQBtn), false, 'side-question panel without local S_VP must return false');
+    let sideQPrevented = false;
+    let sideQStopped = false;
+    env.win.dispatchEvent({
+      type: 'click',
+      target: sideQBtn,
+      preventDefault() { sideQPrevented = true; },
+      stopPropagation() { sideQStopped = true; },
+    });
+    assert.equal(sideQPrevented, false, 'Must NOT preventDefault when no local viewport exists');
+    assert.equal(sideQStopped, false, 'Must NOT stopPropagation when no local viewport exists');
+    assert.equal(mainVp.scrollTop, 120, 'Main conversation scrollTop must remain completely untouched');
+
+    // Bare sidebar pane under aux-pane-split must stop at aux-pane-split and never cross into main pane
+    assert.equal(ctl.runFastScrollToBottom(bareBtn), false, 'Must stop at aux-pane-split boundary and never cross panes');
+    assert.equal(mainVp.scrollTop, 120);
+
+    // 2) Clicking subagent .agy-scroll-bottom scrolls ONLY subagent local viewport, never main conversation
+    let subPrevented = false;
+    let subStopped = false;
+    env.win.dispatchEvent({
+      type: 'click',
+      target: subBtn,
+      preventDefault() { subPrevented = true; },
+      stopPropagation() { subStopped = true; },
+    });
+    assert.equal(subPrevented, true, 'Local subagent viewport scroll-bottom click should be handled smoothly');
+    assert.equal(subStopped, true);
+    nowMs = 800;
+    while (rafQueue.length) rafQueue.shift()();
+    assert.equal(subVp.scrollTop, 1200, 'Subagent viewport must glide to its own bottom');
+    assert.equal(mainVp.scrollTop, 120, 'Scrolling subagent pane must NEVER move main conversation viewport');
+
+    // 3) Clicking main conversation .agy-scroll-bottom scrolls ONLY main conversation viewport
+    subVp.scrollTop = 40;
+    nowMs = 1000;
+    assert.equal(ctl.runFastScrollToBottom(mainBtn), true);
+    nowMs = 1800;
+    while (rafQueue.length) rafQueue.shift()();
+    assert.equal(mainVp.scrollTop, 1800, 'Main viewport must glide to its own bottom');
+    assert.equal(subVp.scrollTop, 40, 'Scrolling main pane must NEVER move subagent viewport');
+
+    // 4) onWinScrollPassive supports local scrollable containers beyond S_CV without cross-pane bleed
+    env.win.dispatchEvent({ type: 'scroll', target: subVp });
+    assert.equal(subTab.getAttribute('data-ag-scrolling'), '1', 'Subagent viewport scroll must mark local subagent container');
+    assert.equal(mainConv.hasAttribute('data-ag-scrolling'), false, 'Subagent scroll must not mark main conversation');
+
+    env.win.dispatchEvent({ type: 'scroll', target: sidePlainScroll });
+    assert.equal(sideQ.getAttribute('data-ag-scrolling'), '1', 'Plain local scrollable container in side-question-panel must mark its local scope');
+    assert.equal(subTab.hasAttribute('data-ag-scrolling'), false, 'Switching active scroll scope must clear previous scope marker');
+    assert.equal(mainConv.hasAttribute('data-ag-scrolling'), false);
+  } finally {
+    ctl.destroy();
+    assert.equal(sideQ.hasAttribute('data-ag-scrolling'), false);
+    assert.equal(subTab.hasAttribute('data-ag-scrolling'), false);
+    assert.equal(mainConv.hasAttribute('data-ag-scrolling'), false);
+  }
+});
+
+test('侧栏出现时 .agy-scroll-bottom 层级/过渡/分屏宽度防裁切与 side-question-tab-conversation 独立滚动隔离', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+
+  // 1) style.css 静态契约：移除压低英文按钮的 z-index:9、设定 .agy-scroll-bottom z-index:24（高于底部渐隐层 10 与桌宠 22，低于输入层 25 不穿透悬浮详卡）、保留宿主过渡与分屏内层宽约束
+  assert.equal(
+    css.includes('button[aria-label="Scroll to Bottom"]{z-index:9!important}'),
+    false,
+    '不得再把英文 Scroll to Bottom 按钮压低至 z-index:9'
+  );
+  const scrollRule = css.split('\n').find((l) => l.includes('& .agy-scroll-bottom{')) || '';
+  assert.ok(scrollRule.includes('z-index:24!important;'), '.agy-scroll-bottom 必须位于 z-index:24（高于底部渐隐层 10 与桌宠 22，低于输入层 25 不穿透悬浮详卡）');
+  assert.equal(scrollRule.includes('position:relative'), false, '.agy-scroll-bottom 严禁覆盖宿主 position:absolute');
+  assert.ok(
+    scrollRule.includes('opacity .3s var(--ease-expo-out),transform .3s var(--ease-expo-out),margin-left .5s var(--ease-expo-out)'),
+    '.agy-scroll-bottom 必须保留宿主 opacity / transform / margin-left 侧栏联动过渡'
+  );
+  const auxRule = css.split('\n').find((l) => l.includes('[data-testid="aux-pane-split"][data-ag-cs-aux-dual="1"]{')) || '';
+  assert.ok(
+    auxRule.includes('&>div:last-child>[data-split-sized]{max-width:100%!important}'),
+    'aux-pane-split 双栏夹紧右侧栏宽度时，内层绝对定位 [data-split-sized] 必须限制 max-width:100% 防止按钮右偏裁切'
+  );
+  assert.ok(
+    css.includes(':is([data-testid="conversation-view"],[data-side-panel-body]) div.pointer-events-none[class*="bottom-0"]'),
+    '侧栏底部 pointer-events-none 渐隐遮罩必须透明化避免压暗按钮'
+  );
+
+  // 2) 运行时隔离：主对话 + subagent-tab-conversation + side-question-tab-conversation 共存，均包在 data-autoscroll-overlay-host 中，点击各滚各的视口
+  const env = createMockEnv();
+  const split = env.createElement('div', { 'data-testid': 'aux-pane-split' });
+  const mainPane = env.createElement('div', { 'data-main-content-body': 'true' });
+  const mainConv = env.createElement('div', { 'data-testid': 'conversation-view' });
+  const mainHost = env.createElement('div', { 'data-autoscroll-overlay-host': 'true' });
+  const mainVp = env.createElement('div', { 'data-testid': 'autoscroll-viewport' });
+  mainVp.scrollHeight = 2000; mainVp.clientHeight = 500; mainVp.scrollTop = 100;
+  const mainBtn = env.createElement('button', { class: 'agy-scroll-bottom', 'aria-label': 'Scroll to Bottom' });
+  mainHost.appendChild(mainVp);
+  mainHost.appendChild(mainBtn);
+  mainConv.appendChild(mainHost);
+  mainPane.appendChild(mainConv);
+
+  const sideBody = env.createElement('div', { 'data-side-panel-body': 'true' });
+  const sqTab = env.createElement('div', { 'data-testid': 'side-question-tab-conversation' });
+  const sqHost = env.createElement('div', { 'data-autoscroll-overlay-host': 'true' });
+  const sqVp = env.createElement('div', { 'data-testid': 'autoscroll-viewport' });
+  sqVp.scrollHeight = 1400; sqVp.clientHeight = 400; sqVp.scrollTop = 30;
+  const sqBtn = env.createElement('button', { class: 'agy-scroll-bottom', 'aria-label': 'Scroll to Bottom' });
+  sqHost.appendChild(sqVp);
+  sqHost.appendChild(sqBtn);
+  sqTab.appendChild(sqHost);
+  sideBody.appendChild(sqTab);
+
+  split.appendChild(mainPane);
+  split.appendChild(sideBody);
+  env.body.appendChild(split);
+
+  const rafQueue = [];
+  let nowMs = 0;
+  env.win.performance = { now: () => nowMs };
+  env.win.requestAnimationFrame = (cb) => { rafQueue.push(cb); return rafQueue.length; };
+  env.win.cancelAnimationFrame = () => {};
+
+  const ctl = enhancerMod.createHostEnhancerController({
+    doc: env.doc,
+    win: env.win,
+    getLang: () => 'en',
+    getConfig: () => ({ scrollBottomMotion: 'smooth', motionLevel: 'standard' }),
+  });
+
+  try {
+    // 点右侧 side-question-tab-conversation 的按钮：只滚右侧视口，主对话不动
+    assert.equal(ctl.runFastScrollToBottom(sqBtn), true);
+    nowMs = 700;
+    while (rafQueue.length) rafQueue.shift()();
+    assert.equal(sqVp.scrollTop, 1000, 'side-question-tab-conversation 按钮应只滚自己视口到底部');
+    assert.equal(mainVp.scrollTop, 100, '右侧栏滚到底部不得影响主对话视口');
+
+    // 点主对话按钮：只滚主对话视口，右侧栏不动
+    sqVp.scrollTop = 60;
+    nowMs = 900;
+    assert.equal(ctl.runFastScrollToBottom(mainBtn), true);
+    nowMs = 1600;
+    while (rafQueue.length) rafQueue.shift()();
+    assert.equal(mainVp.scrollTop, 1500, '主对话按钮应只滚主对话视口到底部');
+    assert.equal(sqVp.scrollTop, 60, '主对话滚到底部不得影响右侧栏视口');
+  } finally {
+    ctl.destroy();
   }
 });

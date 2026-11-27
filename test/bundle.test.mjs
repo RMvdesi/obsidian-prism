@@ -353,10 +353,14 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
   try {
     const res = vm.runInNewContext(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), sandbox);
     assert.equal(res.status, 'ok');
-    // Load Channel 10 Mascot, Channel 12 Home Studio (split out of Channel 1) & Channel 9 Settings on demand
+    // Load Channel 10 Mascot, Channel 12 Home Studio, Channel 9 Settings & Phase 3B offloaded Channels 13~16 on demand
     vm.runInNewContext(cdp.buildMascotChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     vm.runInNewContext(cdp.buildHomeStudioChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     vm.runInNewContext(cdp.buildSettingsChannelExpression(), sandbox);
+    vm.runInNewContext(cdp.buildTelemetryChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildEffortSliderChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildWorkbenchEnhancerChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildContextMenuChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     assert.equal(html.getAttribute('data-ag-cs-style'), '1');
     assert.equal(html.getAttribute('data-ag-cs-palette'), 'obsidian');
     assert.equal(html.getAttribute('data-ag-cs-home'), 'studio');
@@ -397,8 +401,8 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
     assert.ok(sandbox.window.__agPrism, 'Expected window.__agPrism exposed');
     assert.equal(sandbox.window.__agClaudeStyle, sandbox.window.__agPrism, 'Expected legacy alias pointing to __agPrism');
     const st = sandbox.window.__agPrism.getState();
-    assert.equal(st.version, '1.0.8-beta.3');
-    assert.equal(html.getAttribute('data-ag-prism'), '1.0.8-beta.3');
+    assert.equal(st.version, cdp.PLUGIN_VERSION);
+    assert.equal(html.getAttribute('data-ag-prism'), cdp.PLUGIN_VERSION);
     assert.equal(html.getAttribute('data-ag-cs-light-preset'), 'crystal');
     assert.equal(html.getAttribute('data-ag-cs-telemetry'), 'auto');
     assert.equal(html.getAttribute('data-ag-cs-effort-slider'), 'auto');
@@ -446,10 +450,12 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
     const settingsSec = appearancePanel.querySelector('#ag-cs-settings-sec');
     assert.ok(settingsSec);
     assert.equal(settingsSec.querySelector('h3')?.textContent, 'Obsidian Prism · 黑曜棱镜');
-    assert.equal(settingsSec.querySelector('.ag-cs-settings-ver')?.textContent, 'v1.0.8-beta.3');
-    const brandMarkHtml = settingsSec.querySelector('.ag-cs-settings-brand-mark')?.innerHTML || '';
+    assert.equal(settingsSec.querySelector('.ag-cs-settings-ver')?.textContent, `v${cdp.PLUGIN_VERSION}`);
+    const brandMarkEl = settingsSec.querySelector('.ag-cs-settings-brand-mark');
+    const brandSvgEl = brandMarkEl?.querySelector?.('svg') || brandMarkEl?.children?.[0];
+    const brandMarkCls = String(brandSvgEl?.className || brandSvgEl?.getAttribute?.('class') || '');
     assert.ok(
-      brandMarkHtml.includes('ag-cs-brand-logo-svg') || brandMarkHtml.includes('ag-cs-settings-brand-svg'),
+      brandSvgEl && (brandMarkCls.includes('ag-cs-brand-logo-svg') || brandMarkCls.includes('ag-cs-settings-brand-svg')),
       'Expected vector Obsidian Prism brand mark in collapsible header'
     );
 
@@ -591,8 +597,8 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
       assert.equal(placeholder.getAttribute('data-ag-cs-placeholder'), expectedPlaceholder);
     };
 
-    // Verify all 8 language buttons switch dashboard, greeting, placeholder & settings copy + emit CDP binding (no yue)
-    assert.equal(getLangBtns().length, 8, 'Expected exactly 8 language buttons');
+    // Verify all 9 language buttons switch dashboard, greeting, placeholder & settings copy + emit CDP binding (no yue)
+    assert.equal(getLangBtns().length, 9, 'Expected exactly 9 language buttons');
     assert.equal(getLangBtns().some((b) => b.getAttribute('data-ag-cs-val') === '"yue"'), false, 'yue button must be removed');
     checkLangSwitch('zh-TW', '外觀', '介面語言', '概覽', '接下來做什麼？', '描述任務或提出問題');
     checkLangSwitch('ko', 'Appearance', 'UI 언어', '개요', '다음은 무엇을 할까요?', '작업 설명이나 질문을 입력하세요');
@@ -602,6 +608,8 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
     checkLangSwitch('fr', 'Appearance', 'Langue de l’interface', 'Aperçu', 'Que faisons-nous ensuite ?', 'Décrivez une tâche ou posez une question');
     assert.equal(html.hasAttribute('data-ag-cs-cjk'), false);
     checkLangSwitch('de', 'Appearance', 'UI-Sprache', 'Übersicht', 'Was steht als Nächstes an?', 'Aufgabe beschreiben oder Frage stellen');
+    assert.equal(html.hasAttribute('data-ag-cs-cjk'), false);
+    checkLangSwitch('tr', 'Appearance', 'Arayüz dili', 'Genel bakış', 'Sırada ne var?', 'Bir görev açıklayın veya soru sor...');
     assert.equal(html.hasAttribute('data-ag-cs-cjk'), false);
     checkLangSwitch('en', 'Appearance', 'UI Language', 'Overview', "What's up next?", 'How can I help you today?');
     assert.equal(html.hasAttribute('data-ag-cs-cjk'), false);
@@ -617,6 +625,7 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
         ['language', 'es'],
         ['language', 'fr'],
         ['language', 'de'],
+        ['language', 'tr'],
         ['language', 'en'],
         ['language', 'ja'],
         ['language', 'zh-CN'],
@@ -1088,10 +1097,14 @@ test('Q&A takeover card, side-question panel, and running tasks clear Clawd masc
   try {
     const res = vm.runInNewContext(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), sandbox);
     assert.equal(res.status, 'ok');
-    // Load Channel 10 Mascot, Channel 12 Home Studio (split out of Channel 1) & Channel 9 Settings on demand
+    // Load Channel 10 Mascot, Channel 12 Home Studio, Channel 9 Settings & Phase 3B offloaded Channels 13~16 on demand
     vm.runInNewContext(cdp.buildMascotChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     vm.runInNewContext(cdp.buildHomeStudioChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     vm.runInNewContext(cdp.buildSettingsChannelExpression(), sandbox);
+    vm.runInNewContext(cdp.buildTelemetryChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildEffortSliderChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildWorkbenchEnhancerChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildContextMenuChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
 
     // 1. Q&A takeover card alone: wrapper raised by 46px with data-ag-cs-takeover="1"
     assert.equal(takeoverWrap.getAttribute('data-ag-cs-takeover'), '1');
@@ -1487,10 +1500,14 @@ test('v3.5.1 mounts dual mascot stage, brand optical glyphs, Orchestrator crysta
   try {
     const res = vm.runInNewContext(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), sandbox);
     assert.equal(res.status, 'ok');
-    // Load Channel 10 Mascot, Channel 12 Home Studio (split out of Channel 1) & Channel 9 Settings on demand
+    // Load Channel 10 Mascot, Channel 12 Home Studio, Channel 9 Settings & Phase 3B offloaded Channels 13~16 on demand
     vm.runInNewContext(cdp.buildMascotChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     vm.runInNewContext(cdp.buildHomeStudioChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
     vm.runInNewContext(cdp.buildSettingsChannelExpression(), sandbox);
+    vm.runInNewContext(cdp.buildTelemetryChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildEffortSliderChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildWorkbenchEnhancerChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    vm.runInNewContext(cdp.buildContextMenuChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
 
     // 1. Dual mascot stage mounts 2 real actor canvases (Clawd & Cat, 96x84)
     const stageEl = card.querySelector('.ag-cs-crab');
@@ -1506,7 +1523,8 @@ test('v3.5.1 mounts dual mascot stage, brand optical glyphs, Orchestrator crysta
     assert.ok(glyph);
     assert.equal(glyph.getAttribute('data-brand'), 'antigravity');
     assert.equal(glyph.getAttribute('data-tier'), 'auto');
-    assert.ok(glyph.innerHTML.includes('ag-spark-orbit-svg'));
+    const glyphSvg = glyph.querySelector('svg') || glyph.children?.[0];
+    assert.ok(String(glyphSvg?.className || glyphSvg?.getAttribute?.('class') || '').includes('ag-spark-orbit-svg'));
 
     // 3. Orchestrator effort bar stays locked & model-selector-panel rows mount optical brand glyphs
     const orchBar = modelPanel.querySelector('[data-testid="orchestrator-effort-bar"]');
@@ -1546,7 +1564,8 @@ test('v3.5.1 mounts dual mascot stage, brand optical glyphs, Orchestrator crysta
     assert.equal(claudeRowGlyph.getAttribute('data-selected'), 'true');
     assert.equal(claudeRowGlyph.style.getPropertyValue('opacity'), '1');
     assert.ok(claudeRowGlyph.style.getPropertyValue('filter').includes('drop-shadow'));
-    assert.ok(claudeRowGlyph.innerHTML.includes('var(--glyph-color-hi)'));
+    const claudePath = claudeRowGlyph.querySelector('path') || claudeRowGlyph.children?.[0]?.children?.[0];
+    assert.ok(String(claudePath?.getAttribute?.('style') || '').includes('var(--glyph-color-hi)'));
     claudeMenuItem.setAttribute('data-ces-model-selected', 'false');
     claudeMenuItem.className = 'agy-overlay-item text-secondary-foreground hover:text-foreground';
 
@@ -3239,16 +3258,17 @@ test('v1.0.1 compiler safety fixes, unified shared string pool (< 690 KiB CI bud
   assert.ok(expr2.includes('"palette":"warm"'));
   assert.ok(expr2.includes('"accentTone":"iris"'));
 
-  // 6. Extracted/Wave2 microkernel domain modules registered in RUNTIME_PARTS (or DEFERRED_ROOT_MODULES for Channel 12) & SYNC_ROOT_FILES
-  assert.equal(cdp.RUNTIME_PARTS.includes('home-studio-panel.js'), false, 'home-studio-panel.js must be split out of Channel 1 RUNTIME_PARTS into Channel 12');
-  assert.ok(cdp.DEFERRED_ROOT_MODULES.includes('home-studio-panel.js'), 'Missing home-studio-panel.js in DEFERRED_ROOT_MODULES');
-  assert.ok(cdp.SYNC_ROOT_FILES.includes('home-studio-panel.js'), 'Missing home-studio-panel.js in SYNC_ROOT_FILES');
+  // 6. Extracted/Wave2/Phase3B microkernel domain modules registered in RUNTIME_PARTS or DEFERRED_ROOT_MODULES & SYNC_ROOT_FILES
+  for (const offMod of ['home-studio-panel.js', 'vial-core.js', 'pulse-vial-bridge.js', 'host-workbench-enhancer.js', 'context-menu-btw.js']) {
+    assert.equal(cdp.RUNTIME_PARTS.includes(offMod), false, `${offMod} must be split out of Channel 1 RUNTIME_PARTS into a declarative channel`);
+    assert.ok(cdp.DEFERRED_ROOT_MODULES.includes(offMod), `Missing ${offMod} in DEFERRED_ROOT_MODULES`);
+    assert.ok(cdp.SYNC_ROOT_FILES.includes(offMod), `Missing ${offMod} in SYNC_ROOT_FILES`);
+  }
   for (const modName of [
     'home-ripple-host.js',
     'model-glyph-crystal.js',
     'stream-choreography.js',
     'prism-rim-canvas.js',
-    'host-workbench-enhancer.js',
   ]) {
     assert.ok(cdp.RUNTIME_PARTS.includes(modName), `Missing ${modName} in RUNTIME_PARTS`);
     assert.ok(cdp.SYNC_ROOT_FILES.includes(modName), `Missing ${modName} in SYNC_ROOT_FILES`);
@@ -4049,4 +4069,161 @@ test('Channel 1 budget (< 684,500 B), periodicModelPicker default on, style.css 
     .split('\n')
     .filter((line) => !/^\s*(?:&|@|\/\*)/.test(line) && /:has\(/.test(line));
   assert.equal(topLevelHas.length, 0, 'style.css must contain 0 top-level :has() rules');
+});
+
+test('PR #114: home toolbarPlacement="top" gets 46px mascot clearance and z-index:12 without forcing peek mode, and cleans up on off/remove', () => {
+  const timers = new Set();
+  function makeEl(tag, opts = {}) {
+    const attrs = new Map(Object.entries(opts.attrs || {}));
+    const styles = new Map();
+    const node = {
+      nodeType: 1,
+      tagName: tag.toUpperCase(),
+      id: opts.id || '',
+      className: opts.className || '',
+      hidden: false,
+      children: [],
+      parentElement: null,
+      parentNode: null,
+      textContent: opts.text || '',
+      style: {
+        setProperty(k, v) { styles.set(k, String(v)); },
+        getPropertyValue(k) { return styles.get(k) || ''; },
+        removeProperty(k) { styles.delete(k); },
+      },
+      classList: {
+        contains: (c) => String(node.className).split(/\s+/).includes(c),
+        add: (...cs) => { node.className = Array.from(new Set([...String(node.className).split(/\s+/).filter(Boolean), ...cs])).join(' '); },
+        remove: (...cs) => { node.className = String(node.className).split(/\s+/).filter((c) => !cs.includes(c)).join(' '); },
+      },
+      setAttribute(k, v) { attrs.set(k, String(v)); if (k === 'id') node.id = String(v); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      hasAttribute(k) { return attrs.has(k); },
+      removeAttribute(k) { attrs.delete(k); if (k === 'id') node.id = ''; },
+      appendChild(c) { c.parentElement = node; c.parentNode = node; node.children.push(c); return c; },
+      removeChild(c) { node.children = node.children.filter((x) => x !== c); c.parentElement = null; c.parentNode = null; return c; },
+      remove() { if (node.parentElement) node.parentElement.removeChild(node); },
+      contains(target) { let cur = target; while (cur) { if (cur === node) return true; cur = cur.parentElement; } return false; },
+      getBoundingClientRect() { return { top: 0, left: 0, right: 640, bottom: 80, width: 640, height: 80 }; },
+      matches(sel) {
+        const matchOne = (el, part) => {
+          if (part.startsWith('#')) return el.id === part.slice(1).replace(/\\\./g, '.');
+          if (part.startsWith('.')) return el.classList.contains(part.slice(1));
+          const am = part.match(/^\[([^=\]]+)(?:="([^"]*)")?\]$/);
+          if (am) return am[2] !== undefined ? el.getAttribute(am[1]) === am[2] : el.hasAttribute(am[1]);
+          return false;
+        };
+        return sel.split(',').some((raw) => {
+          const parts = raw.trim().split(/\s+/).filter(Boolean);
+          if (!parts.length || !matchOne(node, parts[parts.length - 1])) return false;
+          let cur = node.parentElement;
+          for (let i = parts.length - 2; i >= 0; i--) {
+            while (cur && !matchOne(cur, parts[i])) cur = cur.parentElement;
+            if (!cur) return false;
+            cur = cur.parentElement;
+          }
+          return true;
+        });
+      },
+      closest(sel) { let c = node; while (c) { if (c.matches(sel)) return c; c = c.parentElement; } return null; },
+      querySelector(sel) { return node.querySelectorAll(sel)[0] || null; },
+      querySelectorAll(sel) {
+        const out = [];
+        const visit = (cur) => { for (const c of cur.children) { if (c.matches(sel)) out.push(c); visit(c); } };
+        visit(node);
+        return out;
+      },
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    return node;
+  }
+
+  const html = makeEl('html');
+  const head = makeEl('head');
+  const body = makeEl('body', { className: 'theme-dark' });
+  html.appendChild(head);
+  html.appendChild(body);
+
+  const home = makeEl('div', { className: 'agy-home' });
+  const inputBox = makeEl('div', { attrs: { 'data-testid': 'agent-input-box' } });
+  const composerShell = makeEl('div', { id: 'antigravity.agentSidePanelInputBox', className: 'surface-composer' });
+  const topToolbarWrap = makeEl('div', { className: 'relative z-[1]' });
+  const topToolbar = makeEl('div', { attrs: { 'data-testid': 'input-box-bottom-toolbar' }, text: 'Local checkout' });
+  topToolbarWrap.appendChild(topToolbar);
+  const card = makeEl('div', { className: 'surface-composer-card' });
+  card.appendChild(makeEl('div', { className: 'agy-composer-footer' }));
+  composerShell.appendChild(topToolbarWrap);
+  composerShell.appendChild(card);
+  inputBox.appendChild(composerShell);
+  home.appendChild(inputBox);
+  body.appendChild(home);
+
+  const doc = {
+    documentElement: html,
+    head,
+    body,
+    hidden: false,
+    readyState: 'complete',
+    createElement: (t) => makeEl(t),
+    getElementById: (id) => {
+      const find = (n) => (n.id === id ? n : n.children.map(find).find(Boolean) || null);
+      return find(html);
+    },
+    querySelector: (s) => html.querySelector(s),
+    querySelectorAll: (s) => html.querySelectorAll(s),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  const sandbox = {
+    window: null,
+    globalThis: null,
+    document: doc,
+    navigator: { language: 'zh-CN' },
+    location: { pathname: '/' },
+    localStorage: { _m: {}, getItem(k) { return this._m[k] || null; }, setItem(k, v) { this._m[k] = String(v); } },
+    getComputedStyle: () => ({ display: 'flex', visibility: 'visible', position: 'relative', getPropertyValue: () => '' }),
+    matchMedia: () => ({ matches: false }),
+    MutationObserver: class { observe() {} disconnect() {} },
+    ResizeObserver: class { observe() {} disconnect() {} },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+    setTimeout: (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; },
+    clearTimeout: (id) => { timers.delete(id); clearTimeout(id); },
+    setInterval: () => 1,
+    clearInterval: () => {},
+    performance: { now: () => Date.now() },
+    Node: { ELEMENT_NODE: 1 },
+    HTMLElement: function () {},
+    Math, Date, JSON, Map, Set, Array, Object, String, Number, Boolean, Promise, Uint8Array, Float32Array, Intl,
+  };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+
+  try {
+    const res = vm.runInNewContext(cdp.buildInjectExpression(cdp.DEFAULT_CONFIG), sandbox);
+    assert.equal(res.status, 'ok');
+    vm.runInNewContext(cdp.buildMascotChannelExpression(cdp.DEFAULT_CONFIG), sandbox);
+    assert.equal(topToolbarWrap.getAttribute('data-ag-cs-top-toolbar'), '1', 'home top toolbar wrapper must get data-ag-cs-top-toolbar');
+    assert.equal(topToolbarWrap.style.getPropertyValue('margin-bottom'), '46px', 'home top toolbar wrapper must reserve 46px for mascot');
+    const crabStage = card.querySelector('.ag-cs-crab');
+    assert.ok(crabStage, 'mascot stage must mount on home composer card');
+    assert.equal(crabStage.getAttribute('data-ag-mascot-peek'), null, 'home top toolbar must NOT force mascot into peek mode');
+
+    const cssSrc = fs.readFileSync(path.join(path.dirname(require.resolve('../cdp.js')), 'style.css'), 'utf8');
+    assert.ok(cssSrc.includes('[data-ag-cs-top-toolbar="1"]{margin-bottom:46px !important;position:relative !important;z-index:12 !important;}'), 'style.css must lower top toolbar z-index to 12 below mascot stage 22');
+
+    sandbox.window.__agClaudeStyle.refreshConfig({ ...cdp.DEFAULT_CONFIG, mascot: 'off' });
+    assert.equal(topToolbarWrap.hasAttribute('data-ag-cs-top-toolbar'), false, 'mascot=off must clear data-ag-cs-top-toolbar');
+    assert.equal(topToolbarWrap.style.getPropertyValue('margin-bottom'), '', 'mascot=off must clear margin-bottom');
+
+    sandbox.window.__agClaudeStyle.refreshConfig(cdp.DEFAULT_CONFIG);
+    assert.equal(topToolbarWrap.getAttribute('data-ag-cs-top-toolbar'), '1');
+    vm.runInNewContext(cdp.REMOVE_EXPRESSION, sandbox);
+    assert.equal(topToolbarWrap.hasAttribute('data-ag-cs-top-toolbar'), false, 'REMOVE_EXPRESSION must strip data-ag-cs-top-toolbar');
+    assert.equal(topToolbarWrap.style.getPropertyValue('margin-bottom'), '', 'REMOVE_EXPRESSION must clear margin-bottom');
+  } finally {
+    for (const id of timers) clearTimeout(id);
+  }
 });

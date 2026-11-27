@@ -1021,8 +1021,8 @@ test('#257: Velvet stream feathering — Layer A block reveal, Layer B 5-bucket 
   for (let i = 0; i < 5; i++) {
     assert.ok(cssSrc.includes(`::highlight(ag-stream-f${i})`), `Missing ::highlight(ag-stream-f${i}) in style.css`);
   }
-  assert.ok(cssSrc.includes('.ag-prism-thought-chunk{animation:ag-prism-thought-chunk-in 320ms cubic-bezier(.22,1,.36,1) both;}'));
-  assert.ok(cssSrc.includes('@keyframes ag-prism-thought-chunk-in{0%{opacity:.08;}68%{opacity:.94;}100%{opacity:1;}}'));
+  assert.match(cssSrc, /\.ag-prism-thought-chunk\{animation:ag-prism-thought-chunk-in (?:\.32s|320ms) cubic-bezier\(\.22,1,\.36,1\) both;?\}/);
+  assert.match(cssSrc, /@keyframes ag-prism-thought-chunk-in\{0%\{opacity:\.08;?\}68%\{opacity:\.94;?\}100%\{opacity:1;?\}\}/);
 
   const prevDoc = globalThis.document;
   const prevCss = globalThis.CSS;

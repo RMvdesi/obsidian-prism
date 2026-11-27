@@ -508,9 +508,9 @@ test('Channel 1 stays strictly < 550,000 B and Channel 11 suggester sources obey
   assert.equal(/[^\x00-\x7F]/.test(cssBlockMatch[1]), false, 'SUGGESTER_CSS must be pure ASCII');
 
   // 确认 daemon SUGGESTER_ALLOWED_ACTIONS 与 ALLOWED_SUGGESTER_ACTIONS 1:1 对齐
-  const daemonSrc = fs.readFileSync(path.join(ROOT_DIR, 'sidecars', 'daemon', 'main.mjs'), 'utf8');
+  const daemonSrc = fs.readFileSync(path.join(ROOT_DIR, 'src', 'daemon', 'constants.mjs'), 'utf8');
   const allowMatch = daemonSrc.match(/const SUGGESTER_ALLOWED_ACTIONS = new Set\(\[([\s\S]*?)\]\);/);
-  assert.ok(allowMatch, 'Expected SUGGESTER_ALLOWED_ACTIONS in daemon main.mjs');
+  assert.ok(allowMatch, 'Expected SUGGESTER_ALLOWED_ACTIONS in src/daemon/constants.mjs');
   const daemonActions = Array.from(allowMatch[1].matchAll(/'([^']+)'/g), (m) => m[1]).sort();
   assert.deepEqual(daemonActions, Array.from(ALLOWED_SUGGESTER_ACTIONS).sort());
 

@@ -245,14 +245,14 @@ function createLightweightDom() {
 test('Obsidian Prism brand compliance, GPL-3.0 LICENSE, NOTICE, CITATION.cff, THIRD_PARTY_NOTICES.md, plugin.json, and sidecar.json contract', () => {
   const pkgJson = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
   assert.equal(pkgJson.name, 'obsidian-prism');
-  assert.equal(pkgJson.version, '1.0.8-beta.3');
+  assert.equal(pkgJson.version, cdp.PLUGIN_VERSION);
   assert.equal(pkgJson.license, 'GPL-3.0-only');
 
   const pluginJson = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'plugin.json'), 'utf8'));
   assert.deepEqual(Object.keys(pluginJson).sort(), ['description', 'displayName', 'logo', 'name', 'version']);
   assert.equal(pluginJson.name, 'obsidian-prism');
   assert.equal(pluginJson.displayName, 'Obsidian Prism');
-  assert.equal(pluginJson.version, '1.0.8-beta.3');
+  assert.equal(pluginJson.version, pkgJson.version);
   assert.equal(pluginJson.logo, 'assets/logo.svg');
   assert.ok(fs.existsSync(path.join(ROOT_DIR, 'assets', 'logo.svg')));
 
@@ -331,23 +331,30 @@ test('Obsidian Prism brand compliance, GPL-3.0 LICENSE, NOTICE, CITATION.cff, TH
     assert.ok(contributorsTxt.includes(contributor), `CONTRIBUTORS.md must credit v1.0.8 contributor ${contributor}`);
   }
 
-  // Verify absorbed upstream sources exist in vendor/
+  // Verify active absorbed upstream sources exist in vendor/, and pruned orphan dead files stay absent
   const requiredVendorFiles = [
-    'vendor/pulse-dashboard/compat/runtime-ui.mjs',
-    'vendor/pulse-dashboard/compat/inline-widget.cjs',
     'vendor/pulse-dashboard/sidecars/panel/store.mjs',
     'vendor/pulse-dashboard/sidecars/panel/usage.mjs',
     'vendor/pulse-dashboard/sidecars/panel/metrics.mjs',
     'vendor/pulse-dashboard/sidecars/panel/discovery.mjs',
     'vendor/pulse-dashboard/sidecars/panel/context.mjs',
     'vendor/pulse-dashboard/sidecars/panel/rate-quality.mjs',
-    'vendor/pulse-dashboard/sidecars/panel/format.mjs',
     'vendor/pulse-dashboard/inline-fallback.js',
     'vendor/effort-slider/upstream-client.js',
     'vendor/effort-slider/slider-coexist.js',
   ];
   for (const rel of requiredVendorFiles) {
     assert.ok(fs.existsSync(path.join(ROOT_DIR, rel)), `Missing absorbed vendor file: ${rel}`);
+  }
+  const prunedDeadVendorFiles = [
+    'vendor/pulse-dashboard/sidecars/panel/sdk.mjs',
+    'vendor/pulse-dashboard/sidecars/panel/format.mjs',
+    'vendor/pulse-dashboard/compat/inline-widget.cjs',
+    'vendor/pulse-dashboard/compat/usage-ui.cjs',
+    'vendor/pulse-dashboard/compat/runtime-ui.mjs',
+  ];
+  for (const rel of prunedDeadVendorFiles) {
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, rel)), false, `Pruned dead vendor file must stay absent: ${rel}`);
   }
 });
 
@@ -963,9 +970,9 @@ test('PrismDaemon & install-plugin.cjs: obsidian-prism target, legacy antigravit
                       ready: true,
                       hasPrism: true,
                       hasRepoBridge: true,
-                      prismAttr: '1.0.8-beta.3',
+                      prismAttr: cdp.PLUGIN_VERSION,
                       hasStyle: true,
-                      version: '1.0.8-beta.3',
+                      version: cdp.PLUGIN_VERSION,
                       status: 'ok',
                     },
                   },
@@ -1507,8 +1514,8 @@ test('PrismDaemon HS-1 & SEC-2: 68 rapid-fire setting updates, multi-window cros
     assert.equal(stB.vmWin.__agPrism.getState().cfg.palette, 'warm', 'Window B must receive Window A cross-window sync');
     assert.equal(stB.vmWin.__agPrism.getState().cfg.accentTone, 'cobalt');
     assert.ok(
-      totalAddScriptCalls <= 22,
-      `HS-1: Single-flight coalescing should collapse 68 rapid clicks across 2 windows × 9 dynamic channels (got ${totalAddScriptCalls})`
+      totalAddScriptCalls <= 32,
+      `HS-1: Single-flight coalescing should collapse 68 rapid clicks across 2 windows × 13 dynamic channels (got ${totalAddScriptCalls})`
     );
 
     // Phase B (Cross-window epoch isolation): Window B (localWriteEpoch 1..12 << Window A's 68!) rapid-fires 12 updates
@@ -1578,8 +1585,8 @@ test('PrismDaemon HS-1 & SEC-2: 68 rapid-fire setting updates, multi-window cros
     assert.equal(stB.vmWin.__agPrism.getState().cfg.palette, 'obsidian', 'Window B must sync with reloaded Window A');
     assert.equal(stB.vmWin.__agPrism.getState().cfg.accentTone, 'iris');
     assert.ok(
-      activeScripts.size <= 18,
-      `HS-1: Active NewDocument script handles across 2 windows × 9 dynamic channels (main + Omni + Sidebar Studio + Inline Diff + Wallpaper + Periodic Picker + Mascot + Suggester + Home Studio) must never leak (got ${activeScripts.size})`
+      activeScripts.size <= 26,
+      `HS-1: Active NewDocument script handles across 2 windows × 13 dynamic channels (main + Omni + Sidebar Studio + Inline Diff + Wallpaper + Periodic Picker + Mascot + Suggester + Home Studio + Telemetry + Effort Slider + Workbench Enhancer + Context Menu) must never leak (got ${activeScripts.size})`
     );
 
     await daemon.stop(false);
@@ -2768,7 +2775,7 @@ test('Smoked Obsidian Wave 1: style.css hygiene (0 :has, ASCII, LF, no BOM, home
   const homeLine = css.split('\n').find((l) => l.startsWith('.ag-cs-home-panel{')) || '';
   assert.ok(homeLine.includes('backdrop-filter:none') && !homeLine.includes('blur('));
   assert.ok(css.includes('.ag-cs-home-chart-svg{') && css.includes('.ag-cs-home-chart-peak{'));
-  assert.ok(css.includes('--ag-cs-menu-bg:rgba(13,14,18,.94);') && css.includes('--ag-cs-menu-bg-l:rgba(252,253,254,.96);'));
+  assert.ok(css.includes('--ag-cs-menu-bg:rgba(13,14,18,.94);') && /--ag-cs-menu-bg-l:rgba\(252,253,25[45],\.9(?:6|75)\);/.test(css));
 
   for (const lang of ['auto', 'zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de']) {
     const expr = cdp.buildInjectExpression({ ...cdp.DEFAULT_CONFIG, language: lang }, { bundleCachePath: '' });

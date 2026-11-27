@@ -498,8 +498,9 @@ test('v2.35.0: locked model trigger during running turn locks effort slider, blo
 test('v2.35.0: style.css handles locked model/permissions triggers with zero :has() and within 549,500 B Ch1 budget, and host-enhancer ignores locked permissions click', () => {
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
   assert.equal(/:has\(/.test(css), false, 'style.css must maintain 0 :has()');
-  assert.ok(
-    css.includes('& :is([data-testid="model-selector-trigger"],[data-testid="permissions-selector-trigger"]):is(:disabled,[aria-disabled="true"],[data-disabled]:not([data-disabled="false"])){opacity:.58 !important;cursor:not-allowed !important;transform:none !important;}'),
+  assert.match(
+    css,
+    /& :is\(\[data-testid="model-selector-trigger"\],\[data-testid="permissions-selector-trigger"\]\):is\(:disabled,\[aria-disabled="true"\],\[data-disabled\]:not\(\[data-disabled="false"\]\)\)\{opacity:\.58\s*!important;cursor:not-allowed\s*!important;transform:none\s*!important;?\}/,
     'style.css must style locked model/permissions triggers with shared merged rule (opacity, not-allowed cursor, transform:none)'
   );
   assert.ok(

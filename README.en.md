@@ -1,3 +1,4 @@
+<!-- Modified by Yaniuan on 2026-11-28: document the downstream Prompt Enhancer, upstream attribution and citation. -->
 <div align="center">
 
 <img src="assets/logo.svg" width="96" height="96" alt="Obsidian Prism Logo" />
@@ -8,11 +9,11 @@
 
 Four dark & daylight themes · A living 512K context vial · Reasoning effort slider · Pixel companions · Custom Static / Video Wallpaper (Beta) · Chat Mode (Beta)
 
-[**简体中文**](./README.md) · [**English**](./README.en.md) · [**Changelog**](./CHANGELOG.md) · [**Releases**](https://github.com/RMvdesi/obsidian-prism/releases) · [**Issues**](https://github.com/RMvdesi/obsidian-prism/issues)
+[**简体中文**](./README.md) · [**English**](./README.en.md) · [**Upstream Changelog**](./CHANGELOG.md) · [**Upstream Releases**](https://github.com/RMvdesi/obsidian-prism/releases) · [**Upstream Issues**](https://github.com/RMvdesi/obsidian-prism/issues)
 
 <p>
   <a href="https://github.com/RMvdesi/obsidian-prism/releases"><img src="https://img.shields.io/github/v/release/RMvdesi/obsidian-prism?style=flat-square&color=3186ff&label=Release" alt="Latest Release" /></a>
-  <img src="https://img.shields.io/badge/Version-1.0.8--beta.3-0f172a?style=flat-square" alt="Version 1.0.8-beta.3" />
+  <img src="https://img.shields.io/badge/Version-1.0.8--beta.4-0f172a?style=flat-square" alt="Version 1.0.8-beta.4" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20Universal-1e293b?style=flat-square" alt="Platform" />
   <a href="https://github.com/RMvdesi/obsidian-prism/actions"><img src="https://img.shields.io/github/actions/workflow/status/RMvdesi/obsidian-prism/ci.yml?branch=main&style=flat-square&label=CI" alt="CI Status" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-2563eb?style=flat-square" alt="License: GPL-3.0" /></a>
@@ -22,7 +23,7 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/hero-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/hero-light.webp" />
-  <img src="assets/screenshots/hero-dark.webp" width="100%" alt="Obsidian Prism v1.0.8-beta.3 showcase" />
+  <img src="assets/screenshots/hero-dark.webp" width="100%" alt="Obsidian Prism v1.0.8-beta.4 showcase" />
 </picture>
 
 <sub>Footage is rendered frame by frame by an offline stage that runs this repository's front-end source directly. All workspaces and conversations shown are fictional.</sub>
@@ -32,7 +33,12 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 > **Non-Affiliation & Trademark Disclaimer**
 >
 > **Obsidian Prism is an independent open-source project and is not affiliated with or endorsed by Google LLC.**
+>
 > References to “Antigravity” and “Google” are strictly for compatibility and descriptive purposes.
+>
+> **Maintained branch**: This is [Yaniuan's unofficial fork](https://github.com/Yaniuan/obsidian-prism). Prompt Enhancer is a downstream feature submitted for review in [upstream PR #118](https://github.com/RMvdesi/obsidian-prism/pull/118). The upstream release links lead to official builds.
+
+> Built upon [Obsidian Prism](https://github.com/RMvdesi/obsidian-prism) by [@RMvdesi](https://github.com/RMvdesi), licensed under [GPL-3.0-only](./LICENSE). Upstream notices are preserved in [NOTICE](./NOTICE) and [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -42,7 +48,7 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 - **Context you can see**: A tiny vial next to the composer shows live 512K context usage; click it for a usage breakdown and quota forecasts.
 - **Reasoning effort at your fingertips**: A starfield slider lives in the model menu; pick Orchestrator and it turns into a light-refracting cut-crystal bar.
 - **Thinking & titles you can read**: Translate the model's thinking in real time (Immersive or Stacked Bilingual) with 1-Click Diagnose, manual HTTP/SOCKS5 proxy, and optional tool-summary & session-title translation.
-- **Prompt Enhancer (Beta · Off by Default)**: Turn a short request into an actionable agent instruction from beside the composer. It reuses an existing API profile, runs in the background after an explicit click, and automatically fills the composer when the result is ready without sending it.
+- **Prompt Enhancer (maintained-branch addition · off by default)**: Turn a short request into an actionable agent instruction beside the composer. It reuses an existing API profile, runs in the background after an explicit click, and fills the draft when ready without opening a review window or sending it.
 - **Custom Static / Live Video Wallpaper (Beta)**: Located under Settings → **Beta**, off by default with zero overhead; loads local images and MP4/WebM videos read-only (experimental feature that may evolve across versions).
 - **Pixel companions**: Clawd, a little purple cat and three mini crabs stack into a tower above the composer — with a hidden rainbow easter egg.
 - **A friendlier workbench**: Built-in side-pane browser and large-file viewer, right-click actions, long code-block folding and conversation outline jumps.
@@ -92,9 +98,9 @@ Off by default — enable it under **Settings → Appearance → Beta**. A switc
 
 ### 5. More Capabilities
 
-- **Appearance Control Center**: Lives in **Settings → Appearance** — redesigned two-column modal, **8 UI languages** (zh-CN/zh-TW/en/ja/ko/es/fr/de), **36** end-to-end validated settings (including `sidebarNavFold`, `scrollBottomMotion`, and Stable / Beta update channels), three scene presets (Full Visuals / Deep Focus / Silent Eco), backup/restore and one-click updates.
+- **Appearance Control Center**: Lives in **Settings → Appearance** — redesigned two-column modal, **9 UI languages** (zh-CN/zh-TW/en/ja/ko/es/fr/de/tr), **40** end-to-end validated panel settings (**55** schema config keys overall, including `sidebarNavFold`, `scrollBottomMotion`, and Stable / Beta update channels), three scene presets (Full Visuals / Deep Focus / Silent Eco), backup/restore and one-click updates.
 - **Thought & Title Translator**: On-demand module that injects `0 B` by default when disabled with hot-plug support; zero-config machine translation or streaming local/compatible endpoints, OS proxy auto-detection + manual HTTP/SOCKS5 proxy, optional tool-summary & conversation-title translation, 1-Click Diagnose bar, and clickable source paths/line numbers.
-- **Prompt Enhancer (Channel 13 · Beta)**: Enable it under **Settings → Appearance → Beta** to add an enhancement button beside the composer. Reuses Thought Translator / Prompt Suggester provider profiles and credentials, with independent profile and model selection and no separately stored API key. Only an explicit click sends the original prompt and up to 4 relevant recent turns; the request runs in the background and automatically replaces the current draft when it succeeds. If the draft changes, the editor disappears, or the result is empty, the current content is preserved. Replacing the draft never sends it.
+- **Prompt Enhancer (Channel 17 · maintained-branch addition)**: Enable it under **Settings → Appearance → Beta** to add an enhancement button beside the composer. It reuses Thought Translator / Prompt Suggester provider profiles and credentials, with independent profile and model selection and no separately stored API key. Only an explicit click sends the original prompt and up to 4 relevant recent turns; a successful result replaces the current draft, which the user may then send manually. If the draft changes, the editor disappears, or the result is empty, current content is preserved.
 - **Custom Static / Live Video Wallpaper (Beta)**: Experimental on-demand module, off by default (zero overhead); 100% local read-only streaming for images (JPG/PNG/WebP/GIF/AVIF) and videos (MP4/WebM) with opacity/blur/dim controls, Browser Hole avoidance, and automatic `0fps` pause on blur/hide.
 - **Omni Browser, File Viewer & Inline Diff Preview**: Open bare links and local paths in the side pane, preview inline file diffs directly in conversation turns, stream huge videos/audio/PDFs/tables/fonts, and right-click to copy paths, reveal files or insert references.
 - **Smoked Obsidian Surfaces & Workbench Enhancements**: Unified faceted message bubbles, file-change strips, Artifact cards and graphite keycaps; sticky code-block headers, manual folding for long code blocks, dedicated outline trigger and hover outlines on the conversation rail, `Alt+↑` / `Alt+↓` turn navigation, and conversation right-click `/btw` + native `/compact`, `/plan`, `/learn`, `/grill-me` slash commands.
@@ -102,7 +108,7 @@ Off by default — enable it under **Settings → Appearance → Beta**. A switc
 <details>
 <summary><strong>Technical details: performance, security, telemetry & configuration (click to expand)</strong></summary>
 
-**Obsidian Prism (`v1.0.8-beta.3`)** provides Smoked Obsidian dark/daylight themes, host workbench & inline diff enhancements, a built-in side-pane browser and streaming multi-format file viewer, live quota telemetry, chain-of-thought translation, and experimental static/video wallpapers (Beta) for the Antigravity desktop client through a modular on-demand local plugin architecture — without altering host business logic or conflicting with external plugins:
+**Obsidian Prism (`v1.0.8-beta.4`)** provides Smoked Obsidian dark/daylight themes, host workbench & inline diff enhancements, a built-in side-pane browser and streaming multi-format file viewer, live quota telemetry, chain-of-thought translation, and experimental static/video wallpapers (Beta) for the Antigravity desktop client through a modular on-demand local plugin architecture — without altering host business logic or conflicting with external plugins:
 
 - **Four Dark/Daylight Themes & Fine-Grained Controls**: Includes two dark palettes (**Obsidian Dark** & **Warm Charcoal**) and two daylight presets (**Daylight Crystal** & **Warm Alabaster**) with automatic host light/dark tracking, unified Smoked Obsidian faceted surfaces (message bubbles, file-change strips, Artifact cards, graphite keycaps, and single-frame inline file chips), plus 5 accent tones (Follow Model, Cobalt, Iris, Amber, and Graphite Monochrome `mono`), 3 corner radius scales, 4 code monospace font stacks with ligature toggle, and ambient glow intensity controls.
 - **300Hz Split-Rate Pipeline, 5-Step Ink Streaming & `0fps` Semantic Afterglow**: Removes persistent multi-layer `backdrop-filter` blur passes and reclaims Canvas VRAM (`0x0`) during sleep; renders streaming responses with a `CSS.highlights`-based **5-step ink fade-in** (zero wrapper nodes, zero forced layout reflow, maintaining smooth high-refresh frame pacing even in `34k+`-node long sessions); caps steady-state background aurora rendering to `~30fps` on 300Hz displays and enters `0fps` idle sleep `1.2s` after activity ends. Provides non-intrusive three-state semantic edge cues (awaiting user decision, error halted, and background long-task completion) that freeze into `0fps` static snapshots.
@@ -111,9 +117,9 @@ Off by default — enable it under **Settings → Appearance → Beta**. A switc
 - **Defense-in-Depth Security & Local Isolation**: Enforces top-level main-frame verification on all privileged `__agPrism*` CDP bindings (rejecting sub-`<iframe>` RPC calls); hardens the loopback streaming gateway and background daemon with fail-closed `Host` and cross-site request checks, UNC/NT device-path blocking, `realpath` blocking of sensitive credential files and Google/Antigravity core credential directories, and in-memory pre-write SHA-256 verification on updates; enforces Git repo boundaries, fail-closed `.git` gitfile/UNC checks, `--literal-pathspecs`, `--no-optional-locks`, and safe `[filter]` downgrade on Inline Diff RPC; isolates local HTML previews with per-directory `HMAC-SHA256` read-only sub-tokens and restricted `sandbox` attributes (without `allow-same-origin`), while preventing cross-origin `apiKey` reuse, disabling upstream redirects, and blocking cloud-metadata/unsafe ports in thought translation requests.
 - **Dual-Window Quota Telemetry & 512K Context Vial**: Aligns `vendor/pulse-dashboard/` with upstream [`ATtacK030130/antigrative-dashboard`](https://github.com/ATtacK030130/antigrative-dashboard) `v0.9.1` (MIT), supporting **5-hour and weekly quota pool tracking with linear depletion forecasts**, **main session vs. Swarm/subagent token attribution**, **cache hit rate** metrics, and CDP process-lineage multi-instance discovery. Exposes Overview, Trends, and Quotas views with workspace filtering on the Studio home dashboard, stores telemetry in an isolated local data directory, and yields automatically when standalone external plugins are active.
 - **Dual-Mode Thought Translator**: Isolated into an on-demand module (`0 B` injected when off) supporting zero-config **Machine Translation** and **OpenAI-Compatible Streaming Translation**, with zero-dependency async Windows/macOS OS system proxy auto-detection and keyless local endpoints (`localhost` / LAN Ollama, LM Studio, vLLM without requiring an API key); safely restores `file://` source paths and `#L` line-number jump pills under a strict `file://`-only protocol allowlist; adds a concurrency-limited (`max = 3`) viewport-priority queue, per-block retry/re-translate controls, **Immersive vs. Stacked Bilingual** view modes, and cache management. API keys and custom prompts are stored locally in `~/.gemini/config/` (`0600` permissions).
-- **Prompt Enhancer privacy boundary**: Model calls happen only after an explicit click; context is limited to relevant recent turns, and network failures leave the original prompt intact. A successful result fills the current draft automatically, while changed or missing targets are left untouched; the enhancer never submits a prompt or starts an agent task. Credentials remain in the shared provider profile and are not copied to enhancer settings.
+- **Prompt Enhancer privacy boundary**: Model calls happen only after an explicit click; context is limited to relevant recent turns, and network failures leave the original prompt intact. A successful result fills the current draft without submitting it or starting an agent task; changed or missing targets are left untouched. Credentials remain in the shared provider profile and are not copied to enhancer settings.
 - **Chat Mode (Beta · Off by Default)**: Off by default and toggleable anytime in **Settings → Appearance → Beta** (`sidebarStudio: "on" | "off"`). When enabled, adds a top-sidebar switcher between the Code workspace and a dedicated Chat space for everyday conversations and document organization, complete with folder/project grouping, clean multi-turn reading views, Artifacts preview, and project-scoped permission isolation that preserves global Code settings.
-- **Modular On-Demand Microkernel, Zero-`eval` LZSS & Sub-10ms Config Sync**: Splits the runtime into a lean `ui-runtime.js` microkernel and 6 focused controller modules compiled with zero-`eval` synchronous UTF-16 LZSS compression (Omni viewer, Chat sidebar, Host i18n, Thought Translator, Inline Diff, and Wallpaper Beta load on-demand as separate modules) and a unified disk cache (`.bundle-cache.json`) achieving `~26 ms` cold-start builds. Covers **36** validated configuration keys (including Stable / Beta update channels) with `< 10 ms` single-flight incremental `refreshConfig` broadcast, three scene presets, categorized sub-tabs, and API-key-sanitized JSON export/import.
+- **Modular On-Demand Microkernel, Zero-`eval` LZSS & Sub-10ms Config Sync**: Splits the runtime into a lean `ui-runtime.js` microkernel and 6 focused controller modules compiled with zero-`eval` synchronous UTF-16 LZSS compression (Omni viewer, Chat sidebar, Host i18n, Thought Translator, Inline Diff, and Wallpaper Beta load on-demand as separate modules) and a unified disk cache (`.bundle-cache.json`) achieving `~26 ms` cold-start builds. Covers **40** validated panel settings (**55** schema config keys in `src/config/schema.cjs`, including Stable / Beta update channels) with `< 10 ms` single-flight incremental `refreshConfig` broadcast, three scene presets, categorized sub-tabs, and API-key-sanitized JSON export/import.
 
 </details>
 
@@ -177,7 +183,6 @@ node tools/install-plugin.cjs --status
 ```bash
 npm run inject                 # One-shot live injection into running Antigravity windows
 npm run remove                 # Cleanly remove all styles/widgets and restore stock UI
-npm run clean:legacy           # Strip legacy blocks from historical app.asar archives
 npm run archive:conversations  # Inspect conversation DB bloat & safely archive old subagent sessions offline (reversible)
 npm test                       # Run cross-module security, bundle & regression tests
 npm run build:installer        # Build standalone Windows installer (.exe)
@@ -187,19 +192,19 @@ npm run build:macos            # Build standalone macOS Universal bundle (.dmg)
 #### Core Repository Layout
 ```text
 obsidian-prism/
-├── plugin.json                         # Antigravity native plugin manifest (obsidian-prism@1.0.8-beta.3)
+├── plugin.json                         # Antigravity native plugin manifest (obsidian-prism@1.0.8-beta.4)
 ├── LICENSE / NOTICE / CITATION.cff     # GPL-3.0 license, attribution terms & citation metadata
 ├── THIRD_PARTY_NOTICES.md              # Preserved copyright & license notices for MIT upstreams
 ├── assets/                             # Vector plugin icon & documentation screenshots
 ├── cdp.js / inject.js / remove.js      # Zero-eval LZSS compiler, on-demand disk cache & attach/removal
 ├── style.css                           # Four themes, Smoked Obsidian surfaces & workbench styles
-├── i18n-locales.js / i18n-core.js      # 8-language localization tables (zh-CN/zh-TW/en/ja/ko/es/fr/de)
+├── i18n-locales.js / i18n-core.js      # 9-language localization tables (zh-CN/zh-TW/en/ja/ko/es/fr/de/tr)
 ├── motion-engine.js / animated-icons.js# 4-tier damped spring physics & animated UI icons
 ├── ripple-core.js / conv-aura.js       # 300Hz split-rate WebGL2 horizon shader & 0fps semantic cues
 ├── smooth-caret.js / dual-mascot-rig.js# Read/write-separated caret tracking & pixel mascot rig
 ├── usage-core.js / vial-core.js        # Quota forecast functions & 512K shallow-water vial renderer
 ├── pulse-vial-bridge.js                # Context slice breakdown & 5h/weekly quota popover bridge
-├── settings-panel.js                   # Settings UI (36 keys, scene presets, sanitized JSON backup)
+├── settings-panel.js                   # Settings UI (40 panel settings, scene presets, sanitized JSON backup)
 ├── home-studio-panel.js                # Controller 1: Studio home dashboard (Overview/Trends/Quotas)
 ├── home-ripple-host.js                 # Controller 2: Home glyph ripple matrix host controller
 ├── model-glyph-crystal.js              # Controller 3: Model glyph & WebGL2 prism bar controller
@@ -230,13 +235,17 @@ Any fork, modification, port, or redistribution must comply with all three requi
 > Built upon [Obsidian Prism](https://github.com/RMvdesi/obsidian-prism) by [@RMvdesi](https://github.com/RMvdesi), licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html). Upstream component notices are preserved in `NOTICE` and `THIRD_PARTY_NOTICES.md`.
 ```
 
-#### Citation (`CITATION.cff` / BibTeX)
+On 2026-11-28, Yaniuan added the default-off `promptEnhancer` setting to `config.example.json`. The example uses strict JSON, so its change notice appears here.
+
+[Meowv/prompt](https://github.com/Meowv/prompt) served as a reference for Prompt Enhancer interactions. The implementation uses Prism's own channels and runtime.
+
+#### Citation ([CITATION.cff](./CITATION.cff) / BibTeX)
 ```bibtex
 @software{rmvdesi_obsidian_prism_2026,
   author       = {RMvdesi},
   title        = {{Obsidian Prism: Modular Optical UI, Workbench Enhancements, Omni File Viewer, Quota Telemetry & Thought Translator for Antigravity}},
   year         = {2026},
-  version      = {1.0.8-beta.3},
+  version      = {1.0.8-beta.4},
   license      = {GPL-3.0-only},
   url          = {https://github.com/RMvdesi/obsidian-prism}
 }

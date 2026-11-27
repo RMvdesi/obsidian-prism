@@ -106,6 +106,13 @@ function makeDomNode(tag, attrs = {}, rect = { left: 0, top: 0, width: 200, heig
         _text = '';
       }
     },
+    replaceChildren(...nodes) {
+      this._innerHtmlSets += 1;
+      this.children = [];
+      this.childNodes = [];
+      _text = '';
+      for (const n of nodes) if (n) this.appendChild(n);
+    },
     get firstChild() { return this.childNodes[0] || null; },
     get firstElementChild() { return this.children[0] || null; },
     get lastElementChild() { return this.children[this.children.length - 1] || null; },

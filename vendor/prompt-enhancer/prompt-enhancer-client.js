@@ -1,19 +1,23 @@
-// Obsidian Prism - Channel 13 Prompt Enhancer client runtime.
+// Modified by Yaniuan on 2026-11-28: add the downstream Prompt Enhancer module.
+// Obsidian Prism - Channel 17 Prompt Enhancer client runtime.
 // The module is inert until the user enables it in Beta settings.
 (function (root) {
   'use strict';
   const G = root || (typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null);
   if (!G) return;
 
-  const BINDING_NAME = '__agPrismSuggestCall';
+  const BINDING_NAME = '__agPrismPromptEnhancerCall';
   const STYLE_ID = 'ag-prism-prompt-enhancer-css';
   const BUTTON_TESTID = 'prism-prompt-enhancer-trigger';
+  const BUTTON_HOST_TESTID = 'prism-prompt-enhancer-host';
   const PANEL_TESTID = 'prism-prompt-enhancer-panel';
   const DEFAULT_TIMEOUT = 30000;
   const MAX_REQUEST_CHARS = 10000;
 
   const CSS = [
-    '.ag-prism-prompt-enhancer-btn{position:fixed;z-index:2147482500;display:inline-flex;align-items:center;gap:6px;min-height:30px;margin:0;padding:0 10px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.3));border-radius:7px;background:var(--secondary,rgba(128,128,145,.1));color:var(--foreground,inherit);font:inherit;font-size:12px;cursor:pointer;transition:background-color .14s ease,border-color .14s ease,opacity .14s ease;white-space:nowrap;}',
+    '.ag-prism-prompt-enhancer-host{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0;max-width:100%;flex:0 0 auto;pointer-events:auto;}',
+    '.ag-prism-prompt-enhancer-host[data-fallback="1"]{position:absolute;right:8px;bottom:8px;z-index:3;}',
+    '.ag-prism-prompt-enhancer-btn{position:static;z-index:auto;display:inline-flex;align-items:center;gap:6px;min-height:30px;max-width:100%;margin:0;padding:0 10px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.3));border-radius:7px;background:var(--secondary,rgba(128,128,145,.1));color:var(--foreground,inherit);font:inherit;font-size:12px;cursor:pointer;transition:background-color .14s ease,border-color .14s ease,opacity .14s ease;white-space:nowrap;}',
     '.ag-prism-prompt-enhancer-btn:hover{background:var(--ag-cs-pill-bg,rgba(128,128,145,.2));border-color:var(--ag-cs-border-2,rgba(128,128,145,.5));}',
     '.ag-prism-prompt-enhancer-btn:disabled{opacity:.56;cursor:wait;}',
     '.ag-prism-prompt-enhancer-icon{width:15px;height:15px;flex:none;}',
@@ -27,39 +31,25 @@
     '.ag-prism-prompt-enhancer-body{min-height:150px;max-height:410px;overflow:auto;padding:11px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.24));border-radius:6px;background:var(--background,rgba(0,0,0,.12));white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.55;}',
     '.ag-prism-prompt-enhancer-editor{width:100%;min-height:180px;resize:vertical;box-sizing:border-box;padding:10px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.3));border-radius:6px;background:var(--background,rgba(0,0,0,.12));color:inherit;font:inherit;font-size:13px;line-height:1.55;}',
     '.ag-prism-prompt-enhancer-status{min-height:18px;color:var(--muted-foreground,rgba(128,128,145,.9));font-size:12px;}',
+    '@media(max-width:700px){.ag-prism-prompt-enhancer-btn{min-height:28px;padding:0 8px;font-size:11px;}.ag-prism-prompt-enhancer-host[data-fallback="1"]{right:6px;bottom:6px;}}',
   ].join('\n');
 
-  const TEXT = {
-    'zh-CN': { button: '增强提示词', title: '提示词增强', close: '关闭', original: '原文', result: '增强结果', copy: '复制', edit: '编辑结果', retry: '重新增强', replace: '替换输入框', cancel: '取消请求', working: '正在增强提示词…', done: '增强完成，请检查后再替换', copied: '已复制', copyFailed: '复制失败', editHint: '可直接编辑增强结果', replaced: '已自动回填输入框', replaceFailed: '替换失败，请手动复制', replaceConflict: '输入框内容已变化，已保留当前草稿；请重新增强或手动复制结果', emptyResult: '增强结果为空，未替换输入框', emptyInput: '请输入要增强的内容', targetMissing: '找不到原输入框，未替换内容', cancelled: '请求已取消，原文仍保留', failed: '增强失败，原文仍保留，可重试：', tooLong: '输入超过 10000 字符限制' },
-    'zh-TW': { button: '增強提示詞', title: '提示詞增強', close: '關閉', original: '原文', result: '增強結果', copy: '複製', edit: '編輯結果', retry: '重新增強', replace: '替換輸入框', cancel: '取消請求', working: '正在增強提示詞…', done: '增強完成，請檢查後再替換', copied: '已複製', copyFailed: '複製失敗', editHint: '可直接編輯增強結果', replaced: '已替換輸入框，是否傳送由你決定', replaceFailed: '替換失敗，請手動複製', cancelled: '請求已取消，原文仍保留', failed: '增強失敗，原文仍保留，可重試：', tooLong: '輸入超過 10000 字元限制' },
+  const FALLBACK_TEXT = {
     en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', working: 'Enhancing prompt…', done: 'Review the result before replacing your input', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt directly', replaced: 'Prompt replaced automatically', replaceFailed: 'Could not replace input; copy it manually', replaceConflict: 'The input changed, so the current draft was preserved. Enhance again or copy the result manually.', emptyResult: 'The enhanced result is empty. Nothing was replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is no longer available. Nothing was replaced.', cancelled: 'Request cancelled. Original text is preserved.', failed: 'Enhancement failed. Original text is preserved. Retry: ', tooLong: 'Input exceeds the 10,000 character limit' },
-    ja: { button: 'プロンプトを強化', title: 'プロンプト強化', close: '閉じる', original: '原文', result: '強化結果', copy: 'コピー', edit: '結果を編集', retry: '再度強化', replace: '入力欄を置換', cancel: 'リクエストをキャンセル', working: '強化中…', done: '置換前に結果を確認してください', copied: 'コピーしました', copyFailed: 'コピーに失敗しました', editHint: '強化結果を編集できます', replaced: '入力欄を置換しました。送信はご自身で判断してください。', replaceFailed: '置換できません。手動でコピーしてください', cancelled: 'キャンセルしました。原文は保持されています。', failed: '失敗しました。原文は保持されています。再試行: ', tooLong: '入力が10,000文字を超えています' },
-    ko: { button: '프롬프트 강화', title: '프롬프트 강화', close: '닫기', original: '원문', result: '강화 결과', copy: '복사', edit: '결과 편집', retry: '다시 강화', replace: '입력란 바꾸기', cancel: '요청 취소', working: '강화 중…', done: '바꾸기 전에 결과를 확인하세요', copied: '복사됨', copyFailed: '복사 실패', editHint: '강화된 프롬프트를 편집할 수 있습니다', replaced: '입력란을 바꿨습니다. 전송 여부는 직접 결정하세요.', replaceFailed: '바꾸지 못했습니다. 직접 복사하세요', cancelled: '취소됨. 원문은 보존됩니다.', failed: '실패했습니다. 원문은 보존됩니다. 다시 시도: ', tooLong: '입력이 10,000자를 초과합니다' },
-    es: { button: 'Mejorar prompt', title: 'Mejorador de prompts', close: 'Cerrar', original: 'Original', result: 'Mejorado', copy: 'Copiar', edit: 'Editar resultado', retry: 'Mejorar de nuevo', replace: 'Reemplazar entrada', cancel: 'Cancelar solicitud', working: 'Mejorando…', done: 'Revisa el resultado antes de reemplazar la entrada', copied: 'Copiado', copyFailed: 'Error al copiar', editHint: 'Edita el prompt mejorado', replaced: 'Entrada reemplazada. Tú decides si enviarla.', replaceFailed: 'No se pudo reemplazar; copia el texto manualmente', cancelled: 'Solicitud cancelada. Se conserva el original.', failed: 'Error. Se conserva el original. Reintentar: ', tooLong: 'La entrada supera los 10 000 caracteres' },
-    fr: { button: 'Améliorer le prompt', title: 'Améliorateur de prompt', close: 'Fermer', original: 'Original', result: 'Amélioré', copy: 'Copier', edit: 'Modifier le résultat', retry: 'Améliorer à nouveau', replace: 'Remplacer la saisie', cancel: 'Annuler la requête', working: 'Amélioration…', done: 'Vérifiez le résultat avant de remplacer la saisie', copied: 'Copié', copyFailed: 'Échec de la copie', editHint: 'Modifiez le prompt amélioré', replaced: 'Saisie remplacée. Vous décidez de l’envoyer.', replaceFailed: 'Remplacement impossible ; copiez le texte manuellement', cancelled: 'Requête annulée. L’original est conservé.', failed: 'Échec. L’original est conservé. Réessayer : ', tooLong: 'La saisie dépasse 10 000 caractères' },
-    de: { button: 'Prompt verbessern', title: 'Prompt-Verbesserer', close: 'Schließen', original: 'Original', result: 'Verbessert', copy: 'Kopieren', edit: 'Ergebnis bearbeiten', retry: 'Erneut verbessern', replace: 'Eingabe ersetzen', cancel: 'Anfrage abbrechen', working: 'Prompt wird verbessert…', done: 'Prüfe das Ergebnis vor dem Ersetzen der Eingabe', copied: 'Kopiert', copyFailed: 'Kopieren fehlgeschlagen', editHint: 'Verbesserten Prompt bearbeiten', replaced: 'Eingabe ersetzt. Du entscheidest, ob du sie sendest.', replaceFailed: 'Ersetzen fehlgeschlagen; bitte manuell kopieren', cancelled: 'Anfrage abgebrochen. Original bleibt erhalten.', failed: 'Fehler. Original bleibt erhalten. Erneut versuchen: ', tooLong: 'Eingabe überschreitet 10.000 Zeichen' },
-  };
-
-  const REPLACEMENT_TEXT = {
-    'zh-TW': { replaceConflict: '輸入框內容已變更，已保留目前草稿；請重新增強或手動複製結果', emptyResult: '增強結果為空，未替換輸入框', targetMissing: '找不到原輸入框，未替換內容' },
-    ja: { replaceConflict: '入力欄が変更されたため、現在の下書きを保持しました。再度強化するか手動でコピーしてください。', emptyResult: '強化結果が空のため、入力欄は置換されませんでした。', targetMissing: '元の入力欄が見つからないため、置換されませんでした。' },
-    ko: { replaceConflict: '입력란이 변경되어 현재 초안을 보존했습니다. 다시 강화하거나 결과를 직접 복사하세요.', emptyResult: '강화 결과가 비어 있어 입력란을 바꾸지 않았습니다.', targetMissing: '원래 입력란을 찾을 수 없어 바꾸지 않았습니다.' },
-    es: { replaceConflict: 'La entrada cambió; se conservó el borrador actual. Mejora de nuevo o copia el resultado manualmente.', emptyResult: 'El resultado mejorado está vacío. No se reemplazó la entrada.', targetMissing: 'La entrada original ya no está disponible. No se reemplazó nada.' },
-    fr: { replaceConflict: 'La saisie a changé ; le brouillon actuel a été conservé. Améliorez à nouveau ou copiez le résultat manuellement.', emptyResult: 'Le résultat amélioré est vide. La saisie n’a pas été remplacée.', targetMissing: 'La saisie d’origine est indisponible. Aucun remplacement effectué.' },
-    de: { replaceConflict: 'Die Eingabe hat sich geändert; der aktuelle Entwurf wurde beibehalten. Verbessere erneut oder kopiere das Ergebnis manuell.', emptyResult: 'Das verbesserte Ergebnis ist leer. Die Eingabe wurde nicht ersetzt.', targetMissing: 'Die ursprüngliche Eingabe ist nicht mehr verfügbar. Es wurde nichts ersetzt.' },
   };
 
   function strings(doc) {
-    const lang = String(doc?.documentElement?.lang || '').toLowerCase();
-    const locale = lang.startsWith('zh-tw') || lang.startsWith('zh-hk') ? 'zh-TW' : lang.startsWith('zh') ? 'zh-CN' : lang.slice(0, 2);
-    return { ...TEXT.en, ...(TEXT[locale] || {}), ...(REPLACEMENT_TEXT[locale] || {}) };
+    const i18n = G.__agPrismPromptEnhancerI18n;
+    const lang = String(doc?.documentElement?.getAttribute?.('data-ag-cs-lang') || doc?.documentElement?.lang || 'en');
+    if (typeof i18n?.getClientText === 'function') return i18n.getClientText(lang);
+    return FALLBACK_TEXT.en;
   }
 
   function createBridge(win) {
     let sequence = 0;
     const pending = new Map();
     let disposed = false;
-    const resolve = (id, value) => {
+    const settle = (id, value) => {
       const entry = pending.get(Number(id));
       if (!entry) return false;
       pending.delete(Number(id));
@@ -67,12 +57,12 @@
       entry.resolve(value);
       return true;
     };
-    const call = (action, payload = {}, timeoutMs = DEFAULT_TIMEOUT) => {
-      if (disposed) return Promise.resolve({ ok: false, reason: 'bridge-disposed' });
+    const callCancelable = (action, payload = {}, timeoutMs = DEFAULT_TIMEOUT) => {
+      if (disposed) return { id: 0, promise: Promise.resolve({ ok: false, reason: 'bridge-disposed' }), cancel: () => false };
       const binding = win?.[BINDING_NAME] || G[BINDING_NAME];
-      if (typeof binding !== 'function') return Promise.resolve({ ok: false, reason: 'bridge-offline' });
+      if (typeof binding !== 'function') return { id: 0, promise: Promise.resolve({ ok: false, reason: 'bridge-offline' }), cancel: () => false };
       const id = ++sequence;
-      return new Promise((resolvePromise) => {
+      const promise = new Promise((resolvePromise) => {
         const timer = setTimeout(() => {
           pending.delete(id);
           resolvePromise({ ok: false, reason: 'rpc-timeout' });
@@ -86,9 +76,21 @@
           resolvePromise({ ok: false, reason: 'rpc-throw', error: String(error?.message || error) });
         }
       });
+      return {
+        id,
+        promise,
+        cancel(value = { ok: false, cancelled: true, reason: 'cancelled' }) {
+          return settle(id, value);
+        },
+      };
+    };
+    const call = (action, payload = {}, timeoutMs = DEFAULT_TIMEOUT) => callCancelable(action, payload, timeoutMs).promise;
+    const resolve = (id, value) => {
+      return settle(id, value);
     };
     return {
       call,
+      callCancelable,
       resolve,
       dispose() {
         disposed = true;
@@ -105,25 +107,117 @@
     return String(node?.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
-  function getActiveComposer(doc) {
-    if (!doc) return { view: null, root: null, editor: null, cascadeId: '' };
+  const EXCLUDED_PANE_SEL = [
+    '[data-side-panel-focus-scope="true"]',
+    '[data-testid="side-question-panel"]',
+    '[data-testid="subagent-tab-conversation"]',
+  ].join(', ');
+
+  const BLOCKING_UI_SEL = [
+    '[data-testid="interaction-takeover-card"]',
+    '[data-testid="slash-command-menu"]',
+    '[id^="typeahead-item-"][role="option"]',
+    'html[data-ag-pp-open="1"]',
+    '#ag-prism-periodic-picker-root',
+    'html[data-ag-cs-model-menu]',
+    '[data-testid="model-selector-panel"]',
+    '.ag-omni-menu',
+    '.ag-cs-ctx-menu',
+    '.ag-prism-sidebar-modal',
+    '[role="dialog"]',
+    '#ag-cs-settings-sec',
+  ].join(', ');
+
+  const BLOCKING_CONTAINER_SEL = [
+    '#ag-prism-periodic-picker-root',
+    '[data-testid="model-selector-panel"]',
+    '.ag-omni-menu',
+    '.ag-cs-ctx-menu',
+    '.ag-prism-sidebar-modal',
+    '[role="dialog"]',
+    '#ag-cs-settings-sec',
+    '[data-testid="slash-command-menu"]',
+    '[data-testid="interaction-takeover-card"]',
+  ].join(', ');
+
+  function isVisibleNode(node) {
+    if (!node || node.hidden === true || node.isConnected === false) return false;
+    const style = node.ownerDocument?.defaultView?.getComputedStyle?.(node);
+    if (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) return false;
+    if (typeof node.closest === 'function' && node.closest('[hidden], .hidden, [inert]')) return false;
+    if (typeof node.checkVisibility === 'function') {
+      try { if (!node.checkVisibility()) return false; } catch {}
+    }
+    return true;
+  }
+
+  function isExcludedPaneNode(node) {
+    return Boolean(node && typeof node.closest === 'function' && node.closest(EXCLUDED_PANE_SEL));
+  }
+
+  function isBlockingNode(node) {
+    return Boolean(node && typeof node.closest === 'function' && node.closest(BLOCKING_CONTAINER_SEL));
+  }
+
+  function hasVisibleBlockingUi(doc) {
+    const nodes = Array.from(doc?.querySelectorAll?.(BLOCKING_UI_SEL) || []);
+    return nodes.some(isVisibleNode);
+  }
+
+  const COMPOSER_EDITOR_SEL = '.surface-composer [data-lexical-editor="true"], .surface-composer [contenteditable="true"], .surface-composer-card [data-lexical-editor="true"], .surface-composer-card [contenteditable="true"], [data-testid="agent-input-box"] [contenteditable="true"], .surface-composer textarea, .surface-composer-card textarea';
+
+  function getComposerCandidates(doc) {
+    if (!doc || hasVisibleBlockingUi(doc)) return [];
     const views = Array.from(doc.querySelectorAll?.('[data-testid="conversation-view"]') || []);
-    const visible = (node) => {
-      if (!node) return false;
-      const style = node.ownerDocument?.defaultView?.getComputedStyle?.(node);
-      return node.isConnected !== false && node.hidden !== true && style?.display !== 'none' && style?.visibility !== 'hidden';
-    };
-    const view = views.find(visible) || null;
-    const scope = view || doc.body || doc.documentElement;
-    const editor = Array.from(scope.querySelectorAll?.('.surface-composer [data-lexical-editor="true"], .surface-composer [contenteditable="true"], [data-testid="agent-input-box"] [contenteditable="true"], .surface-composer textarea') || []).find(visible) || null;
-    const root = editor?.closest?.('.surface-composer, [data-testid="agent-input-box"]') || null;
-    const owner = view?.closest?.('[data-cascade-id]') || editor?.closest?.('[data-cascade-id]');
-    return { view, root, editor, cascadeId: String(owner?.getAttribute?.('data-cascade-id') || 'default-main') };
+    const scopes = views.length > 0
+      ? views.filter((node) => isVisibleNode(node) && !isExcludedPaneNode(node) && !isBlockingNode(node))
+      : [doc.body || doc.documentElement];
+    const seen = new Set();
+    const candidates = [];
+    for (const view of scopes) {
+      const editors = Array.from(view?.querySelectorAll?.(COMPOSER_EDITOR_SEL) || [])
+        .filter((node) => isVisibleNode(node) && !isExcludedPaneNode(node) && !isBlockingNode(node));
+      for (const editor of editors) {
+        const root = editor?.closest?.('.surface-composer, .surface-composer-card, [data-testid="agent-input-box"]') || null;
+        if (!root || seen.has(root) || isExcludedPaneNode(root) || isBlockingNode(root)) continue;
+        seen.add(root);
+        const owner = view?.closest?.('[data-cascade-id]') || editor?.closest?.('[data-cascade-id]');
+        candidates.push({ view, root, editor, cascadeId: String(owner?.getAttribute?.('data-cascade-id') || 'default-main') });
+      }
+    }
+    return candidates;
+  }
+
+  function getActiveComposer(doc) {
+    return getComposerCandidates(doc)[0] || { view: null, root: null, editor: null, cascadeId: '' };
+  }
+
+  function findComposerFooter(root, editor) {
+    if (!root || typeof root.querySelector !== 'function') return null;
+    const selectors = [
+      '.agy-composer-footer',
+      '[data-testid="input-box-bottom-toolbar"]',
+      '.composer-footer',
+      '[data-testid="composer-footer"]',
+      '[data-composer-footer]',
+      '[data-testid="agent-input-box-footer"]',
+    ];
+    const footer = selectors.map((selector) => root.querySelector(selector)).find(Boolean) ||
+      Array.from(root.children || []).find((node) => {
+        const className = String(node?.className || '');
+        const testId = String(node?.getAttribute?.('data-testid') || '');
+        return /(?:^|\s)agy-composer-footer(?:\s|$)|(?:^|\s)composer-footer(?:\s|$)/.test(className) ||
+          testId === 'input-box-bottom-toolbar' || testId === 'composer-footer' ||
+          testId === 'agent-input-box-footer' || node?.hasAttribute?.('data-composer-footer');
+      }) || null;
+    if (!footer || footer === editor || !isVisibleNode(footer) || footer.closest?.('[hidden], [inert]')) return null;
+    return footer;
   }
 
   function readEditor(editor) {
     if (!editor) return '';
     if (typeof editor.value === 'string') return editor.value;
+    if (typeof editor.innerText === 'string') return editor.innerText.replace(/\u00a0/g, ' ');
     return String(editor.textContent || '').replace(/\u00a0/g, '');
   }
 
@@ -136,7 +230,20 @@
   }
 
   function sanitizeEnhancedText(value) {
-    return String(value ?? '').replace(/\*/g, '');
+    const protectedParts = [];
+    let text = String(value ?? '')
+      .replace(/\*{1,2}\/[^\s]+/g, (match) => {
+        protectedParts.push(match);
+        return `\u0000${protectedParts.length - 1}\u0000`;
+      })
+      .replace(/```[\s\S]*?```|`[^`\n]*`/g, (match) => {
+        protectedParts.push(match);
+        return `\u0000${protectedParts.length - 1}\u0000`;
+      });
+    text = text
+      .replace(/(^|[^\w*])\*\*(\S(?:[^*\n]*?\S)?)\*\*(?=$|[^\w*])/g, '$1$2')
+      .replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?=$|[^\w*])/g, '$1$2');
+    return text.replace(/\u0000(\d+)\u0000/g, (_, index) => protectedParts[Number(index)] || '');
   }
 
   function dispatchEditorEvent(doc, editor, type, init = {}) {
@@ -397,21 +504,28 @@
     let panelState = null;
     let panelView = null;
     let activeRequestId = '';
+    let activeRequestCancel = null;
+    let activeRequestButton = null;
     let buttonMessageTimer = null;
+    const mountedEntries = new Map();
     const labels = strings(doc);
-    const updateButton = (busy) => {
-      const button = doc.querySelector?.(`[data-testid="${BUTTON_TESTID}"]`);
-      if (!button) return;
-      button.disabled = Boolean(busy);
-      button.setAttribute('aria-busy', busy ? 'true' : 'false');
-      button.setAttribute('aria-label', busy ? labels.working : labels.button);
-      if (busy) button.removeAttribute?.('title');
-      if (button.__agPrismPromptEnhancerLabel) button.__agPrismPromptEnhancerLabel.textContent = busy ? labels.working : labels.button;
+    const updateButton = (busy, activeButton = null) => {
+      for (const entry of mountedEntries.values()) {
+        const button = entry.button;
+        if (!button) continue;
+        const isActive = Boolean(busy && activeButton && button === activeButton);
+        button.disabled = Boolean(busy && !isActive);
+        button.setAttribute('aria-busy', isActive ? 'true' : 'false');
+        button.setAttribute('aria-label', isActive ? labels.cancel : labels.button);
+        if (isActive) button.setAttribute('title', labels.cancel);
+        else button.removeAttribute?.('title');
+        if (button.__agPrismPromptEnhancerLabel) button.__agPrismPromptEnhancerLabel.textContent = isActive ? labels.cancel : labels.button;
+      }
     };
-    const showButtonMessage = (message) => {
+    const showButtonMessage = (message, target = null) => {
       clearTimeout(buttonMessageTimer);
       updateButton(false);
-      const button = doc.querySelector?.(`[data-testid="${BUTTON_TESTID}"]`);
+      const button = target?.button || mountedEntries.get(target?.root)?.button || doc.querySelector?.(`[data-testid="${BUTTON_TESTID}"]`);
       if (!button) return;
       button.setAttribute('aria-label', message);
       button.setAttribute('title', message);
@@ -427,54 +541,107 @@
     };
     const cancelActiveRequest = (removePanel = false) => {
       const requestId = activeRequestId;
-      if (!requestId) return;
+      const cancelRpc = activeRequestCancel;
       activeRequestId = '';
+      activeRequestCancel = null;
+      activeRequestButton = null;
       loading = false;
+      clearTimeout(buttonMessageTimer);
+      buttonMessageTimer = null;
       updateButton(false);
       if (panelView) {
         panelView.cancel.hidden = true;
         panelView.status.textContent = labels.cancelled;
         panelState?.setTab?.('original');
-        if (removePanel) panelView.panel.remove();
+        if (removePanel) {
+          panelView.panel.remove();
+          panelView = null;
+        }
       }
-      void bridge.call('enhancer-cancel', { requestId }, 5000);
+      panelState = null;
+      cancelRpc?.({ ok: false, cancelled: true, reason: 'cancelled' });
+      if (requestId) void bridge.call('cancel', { requestId }, 5000);
+    };
+    const removeMountedEntry = (entry) => {
+      if (!entry) return;
+      entry.host?.remove?.();
+      if (entry.root && entry.rootPosition !== null && entry.root.style) entry.root.style.position = entry.rootPosition;
+      if (entry.root) mountedEntries.delete(entry.root);
+    };
+    const removeMountedButton = () => {
+      for (const entry of mountedEntries.values()) removeMountedEntry(entry);
+      doc.querySelectorAll?.(`[data-testid="${BUTTON_TESTID}"]`)?.forEach?.((node) => {
+        if (!node.closest?.(`[data-testid="${BUTTON_HOST_TESTID}"]`)) node.remove?.();
+      });
     };
     const mount = () => {
       if (destroyed || !config.enabled) return;
-      const snap = getActiveComposer(doc);
-      let button = doc.querySelector?.(`[data-testid="${BUTTON_TESTID}"]`);
-      if (!snap.root || !snap.editor) {
-        if (button) button.hidden = true;
+      const candidates = getComposerCandidates(doc);
+      if (candidates.length === 0) {
+        removeMountedButton();
         return;
       }
-      if (!button) {
-        injectStyle(doc);
-        button = createButton(doc, labels);
-        button.addEventListener('click', () => triggerEnhancement());
-        doc.body?.appendChild(button);
+      injectStyle(doc);
+      const activeRoots = new Set(candidates.map((candidate) => candidate.root));
+      for (const [root, entry] of mountedEntries.entries()) {
+        if (!activeRoots.has(root)) removeMountedEntry(entry);
       }
-      button.hidden = false;
-      const rect = snap.root.getBoundingClientRect?.();
-      if (rect) {
-        const viewportWidth = Number(win.innerWidth) || doc.documentElement?.clientWidth || 1024;
-        const buttonWidth = Math.max(120, Number(button.offsetWidth) || 180);
-        const left = Math.max(8, Math.min(viewportWidth - buttonWidth - 8, Number(rect.right) - buttonWidth));
-        button.style.left = `${left}px`;
-        button.style.top = `${Math.max(8, Number(rect.top) - 36)}px`;
+      for (const candidate of candidates) {
+        const footer = findComposerFooter(candidate.root, candidate.editor);
+        const parent = footer || candidate.root;
+        let entry = mountedEntries.get(candidate.root);
+        if (!entry || entry.host?.parentNode !== parent) {
+          if (entry) removeMountedEntry(entry);
+          let rootPosition = null;
+          if (!footer && candidate.root.style) {
+            rootPosition = candidate.root.style.position || '';
+            const computedPosition = doc.defaultView?.getComputedStyle?.(candidate.root)?.position;
+            if (!computedPosition || computedPosition === 'static') candidate.root.style.position = 'relative';
+          }
+          const host = doc.createElement('div');
+          host.className = 'ag-prism-prompt-enhancer-host';
+          host.setAttribute('data-testid', BUTTON_HOST_TESTID);
+          if (!footer) host.setAttribute('data-fallback', '1');
+          const button = createButton(doc, labels);
+          entry = { ...candidate, footer, parent, host, button, rootPosition };
+          button.addEventListener('click', () => triggerEnhancement(entry));
+          host.appendChild(button);
+          parent.appendChild(host);
+          mountedEntries.set(candidate.root, entry);
+        } else {
+          entry.view = candidate.view;
+          entry.editor = candidate.editor;
+          entry.cascadeId = candidate.cascadeId;
+          entry.footer = footer;
+          entry.parent = parent;
+          if (footer) entry.host.removeAttribute?.('data-fallback');
+        }
+        entry.button.hidden = false;
+        if (footer && entry.host.parentNode !== footer) footer.prepend?.(entry.host);
       }
+      /*
+       * Each eligible composer owns its own trigger. This keeps split-view
+       * requests and replacements bound to the pane where the user clicked.
+       */
     };
-    const triggerEnhancement = async () => {
-      if (destroyed || !config.enabled || loading) return;
-      const snap = getActiveComposer(doc);
+    const triggerEnhancement = async (target = null) => {
+      if (destroyed || !config.enabled) return;
+      if (loading) {
+        if (target?.button && target.button === activeRequestButton) cancelActiveRequest(true);
+        return;
+      }
+      const snap = target?.root && target?.editor?.isConnected !== false ? target : getActiveComposer(doc);
       if (!snap.editor) return;
       const editorSnapshot = readEditor(snap.editor);
       const original = editorSnapshot.trim();
       if (!original) {
-        showButtonMessage(labels.emptyInput);
+        showButtonMessage(labels.emptyInput, snap);
         return;
       }
       loading = true;
-      updateButton(true);
+      const requestButton = target?.button || mountedEntries.get(snap.root)?.button || null;
+      activeRequestButton = requestButton;
+      updateButton(true, requestButton);
       const requestId = `pe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
       activeRequestId = requestId;
       const context = extractContext(snap.view);
@@ -485,12 +652,13 @@
         editor: snap.editor,
         root: snap.root,
         cascadeId: snap.cascadeId,
+        button: target?.button || mountedEntries.get(snap.root)?.button || null,
       };
       const replacementState = panelState;
       panelState.replace = (value) => {
-        const current = getActiveComposer(doc);
+        const current = replacementState;
         if (!current.editor || current.editor.isConnected === false) return { status: 'blocked', reason: 'target-missing' };
-        if (current.editor !== replacementState.editor || current.root !== replacementState.root || current.cascadeId !== replacementState.cascadeId) {
+        if (current.root !== replacementState.root || current.cascadeId !== replacementState.cascadeId) {
           return { status: 'blocked', reason: 'target-changed' };
         }
         if (!sameEditorText(readEditor(current.editor), replacementState.editorSnapshot)) {
@@ -501,13 +669,17 @@
       if (original.length > MAX_REQUEST_CHARS) {
         loading = false;
         activeRequestId = '';
-        showButtonMessage(labels.tooLong);
+        activeRequestButton = null;
+        updateButton(false);
+        showButtonMessage(labels.tooLong, snap);
         return;
       }
       const stateAtRequest = panelState;
       let completionMessage = '';
       try {
-        const result = await bridge.call('enhance', { original, context, profileId: config.profileId, model: config.model, requestId }, DEFAULT_TIMEOUT);
+        const request = bridge.callCancelable('enhance', { original, context, profileId: config.profileId, model: config.model, requestId }, DEFAULT_TIMEOUT);
+        activeRequestCancel = request.cancel;
+        const result = await request.promise;
         if (destroyed || !config.enabled || activeRequestId !== requestId || panelState !== stateAtRequest) return;
         const enhanced = sanitizeEnhancedText(result?.enhanced).trim();
         if (result?.ok && enhanced.trim()) {
@@ -529,8 +701,10 @@
       } finally {
         if (activeRequestId === requestId) {
           activeRequestId = '';
+          activeRequestCancel = null;
+          activeRequestButton = null;
           loading = false;
-          if (completionMessage) showButtonMessage(completionMessage);
+          if (completionMessage) showButtonMessage(completionMessage, stateAtRequest);
           else updateButton(false);
         }
       }
@@ -555,16 +729,20 @@
       win.removeEventListener?.('scroll', mount, true);
       cancelActiveRequest(true);
       doc.querySelectorAll?.(`[data-testid="${BUTTON_TESTID}"], [data-testid="${PANEL_TESTID}"]`)?.forEach?.((node) => node.remove());
+      removeMountedButton();
       panelView = null;
       panelState = null;
       doc.getElementById?.(STYLE_ID)?.remove?.();
     };
     const applyConfig = (next = {}) => {
-      config = { enabled: Boolean(next.enabled), profileId: String(next.profileId || ''), model: String(next.model || '') };
+      const enabled = next && Object.prototype.hasOwnProperty.call(next, 'enabled')
+        ? Boolean(next.enabled)
+        : next?.promptEnhancer === 'on';
+      config = { enabled, profileId: String(next.profileId || ''), model: String(next.model || '') };
       if (config.enabled) activate(); else deactivate();
     };
     const refresh = async () => {
-      const result = await bridge.call('enhancer-get-config', {}, 8000);
+      const result = await bridge.call('get-config', {}, 8000);
       if (result?.ok) applyConfig(result.config);
       return result;
     };

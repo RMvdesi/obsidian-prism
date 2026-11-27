@@ -1,24 +1,10 @@
-// Obsidian Prism — Channel 7 Local Static/Dynamic Wallpaper Settings Card UI (v1.0.8-beta.3 · Beta, Five-Locale, 0 innerHTML)
-// Exposes globalThis.__prismMountWallpaperUi(slotEl, ctx) and window.__prismMountWallpaperUi(slotEl, ctx)
-
+// Obsidian Prism - Channel 7 Wallpaper Settings UI (9-Locale, 0 innerHTML)
 (function (root) {
   'use strict';
   const G = root || (typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null);
   if (!G) return;
-
-  const NO_TR_ATTRS = [
-    ['translate', 'no'],
-    ['data-no-translate', 'true'],
-    ['data-ag-localization-skip', 'true'],
-    ['data-agy-no-translate', 'true'],
-    ['data-antigravity-zh-skip', '1'],
-    ['data-ag-no-i18n', ''],
-  ];
-
-  const I18N_KEYS =
-    'title|desc|enableLabel|on|off|pickBtn|applyBtn|clearBtn|pathPh|opacityLabel|blurLabel|dimLabel|fitLabel|fitCover|fitContain|pauseBlurLabel|pauseBlurDesc|stIdle|stOffline|stActiveImg|stActiveVid|stBlobFallback|stVideoBlocked|stManualLinux|stCanceled|stPicking|stSaving|stCleared|errUnsupportedExt|errSensitivePath|errSymlink|errUncDevice|errNotFound|errInvalidMagic|errTooLarge|errBlobTooLarge|errGeneric'.split(
-      '|'
-    );
+  const NO_TR_ATTRS = [['translate', 'no'], ['data-no-translate', 'true'], ['data-ag-localization-skip', 'true'], ['data-agy-no-translate', 'true'], ['data-antigravity-zh-skip', '1'], ['data-ag-no-i18n', '']];
+  const I18N_KEYS = 'title|desc|enableLabel|on|off|pickBtn|applyBtn|clearBtn|pathPh|opacityLabel|blurLabel|dimLabel|fitLabel|fitCover|fitContain|pauseBlurLabel|pauseBlurDesc|stIdle|stOffline|stActiveImg|stActiveVid|stBlobFallback|stVideoBlocked|stManualLinux|stCanceled|stPicking|stSaving|stCleared|errUnsupportedExt|errSensitivePath|errSymlink|errUncDevice|errNotFound|errInvalidMagic|errTooLarge|errBlobTooLarge|errGeneric'.split('|');
 
   const I18N_ROWS = {
     'zh-CN':
@@ -37,6 +23,8 @@
       'Fond d’écran statique / animé (Beta)|Fonction Beta expérimentale (désactivée par défaut, susceptible d’évoluer) : images et MP4/WebM 100 % locaux, zéro requête réseau externe, mise en veille 0fps hors focus.|Activer le fond (Beta)|Activé|Désactivé|Choisir image / vidéo|Appliquer|Effacer|Chemin absolu vers une image locale ou vidéo MP4/WebM…|Opacité|Flou gaussien|Assombrissement|Ajustement|Couvrir|Contenir|Mettre la vidéo en pause hors focus|Met automatiquement la vidéo en pause quand la fenêtre perd le focus ou est réduite.|Fond désactivé (Beta · 0 ressource).|Le démon Prism est hors ligne ; service indisponible.|Fond image statique actif (Beta · flux local en lecture seule).|Fond vidéo actif (Beta · veille 0fps auto hors focus).|Restreint par la politique de sécurité hôte ; bascule vers un repli image sécurisé <= 8 Mo.|Flux vidéo restreint par la politique de sécurité hôte ou illisible. Essayez une image <= 8 Mo.|Sous Linux, collez le chemin absolu ci-dessus et cliquez sur Appliquer.|Sélection annulée.|Ouverture du sélecteur de fichiers…|Validation et enregistrement du fond…|Fond effacé et port local libéré.|Format non pris en charge : JPG/PNG/WebP/GIF/AVIF/MP4/WebM uniquement.|Bloqué par sécurité : dossiers système et d’identifiants interdits.|Bloqué par sécurité : les liens symboliques sont interdits.|Bloqué par sécurité : chemins réseau UNC et périphériques interdits.|Fichier introuvable ou illisible. Vérifiez le chemin.|Échec du contrôle d’en-tête : le contenu ne correspond pas à l’extension.|La taille du fichier dépasse la limite autorisée.|L’image dépasse la limite sécurisée de 8 Mo. Compressez l’image.|Échec de l’opération. Vérifiez le chemin et les droits.',
     de:
       'Eigenes statisches / Live-Hintergrundbild (Beta)|Experimentelle Beta-Funktion (standardmäßig aus, kann sich zwischen Versionen ändern): 100 % lokale Bilder & MP4/WebM, keine externen Anfragen, automatischer 0fps-Ruhezustand bei Fokusverlust.|Hintergrund aktivieren (Beta)|Ein|Aus|Bild / Video wählen|Anwenden|Leeren|Absoluten Pfad zu lokalem Bild oder MP4/WebM-Video eingeben…|Deckkraft|Gaußscher Weichzeichner|Abdunklung|Anpassung|Füllen|Einpassen|Video bei Fokusverlust pausieren|Pausiert Live-Videos automatisch bei Fokusverlust oder Minimieren, um GPU zu sparen.|Hintergrund deaktiviert (Beta · 0 Ressourcen).|Prism-Daemon ist offline; Hintergrunddienst nicht verfügbar.|Statisches Hintergrundbild aktiv (Beta · lokaler Nur-Lese-Stream).|Live-Videohintergrund aktiv (Beta · auto 0fps bei Fokusverlust).|Durch Host-Sicherheitsrichtlinie eingeschränkt; sicher auf <= 8 MB Bild-Fallback gewechselt.|Videostream durch Host-Sicherheitsrichtlinie eingeschränkt oder nicht dekodierbar. Bitte Bild <= 8 MB nutzen.|Unter Linux absoluten Dateipfad oben einfügen und auf Anwenden klicken.|Dateiauswahl abgebrochen.|Öffne System-Dateiauswahl…|Prüfe und speichere Hintergrundeinstellungen…|Hintergrund geleert und lokalen Port freigegeben.|Nicht unterstütztes Format: nur JPG/PNG/WebP/GIF/AVIF/MP4/WebM erlaubt.|Aus Sicherheitsgründen blockiert: System- und Anmeldeverzeichnisse verboten.|Aus Sicherheitsgründen blockiert: Symlinks sind nicht erlaubt.|Aus Sicherheitsgründen blockiert: UNC-Netzwerk- und Gerätepfade verboten.|Datei nicht gefunden oder nicht lesbar. Pfad prüfen.|Magic-Byte-Prüfung fehlgeschlagen: Inhalt passt nicht zur Erweiterung.|Dateigröße überschreitet das zulässige Limit.|Bild überschreitet 8 MB Sicherheits-Limit. Bitte Bild komprimieren.|Aktion fehlgeschlagen. Dateipfad und Berechtigungen prüfen.',
+    tr:
+      'Özel Statik / Canlı Duvar Kağıdı (Beta)|Deneysel Beta özelliği (varsayılan kapalı, sürümler arasında değişebilir): %100 yerel görsel ve MP4/WebM, sıfır dış ağ isteği, odak kaybında veya sohbette otomatik 0fps uyku.|Duvar Kağıdını Etkinleştir (Beta)|Açık|Kapalı|Görsel / Video Seç|Uygula|Temizle|Yerel görsel veya MP4/WebM video için tam yol girin…|Opaklık|Gauss Bulanıklığı|Göz Koruma Karartması|Sığdırma Modu|Kapla|Sığdır|Odak Kaybında Videoyu Duraklat|Pencere odağı kaybettiğinde veya küçültüldüğünde video duvar kağıdını otomatik duraklatır.|Duvar kağıdı kapalı (Beta · 0 kaynak kullanımı).|Prism arka plan servisi çevrimdışı; duvar kağıdı servisi kullanılamıyor.|Statik görsel duvar kağıdı etkin (Beta · yerel salt okunur akış).|Canlı video duvar kağıdı etkin (Beta · odak kaybında/gizlendiğinde otomatik 0fps uyku).|Ana makine güvenlik ilkesiyle kısıtlandı; otomatik olarak <= 8 MB güvenli görsel yedeğine geçildi.|Video akışı güvenlik ilkesiyle kısıtlandı veya çözülemedi. Bunun yerine <= 8 MB statik bir görsel deneyin.|Linux’ta yerel medya dosyasının tam yolunu yukarı yapıştırıp Uygula’ya tıklayın.|Dosya seçimi iptal edildi.|Sistem dosya seçicisi açılıyor…|Duvar kağıdı ayarları doğrulanıyor ve kaydediliyor…|Duvar kağıdı temizlendi ve yerel port serbest bırakıldı.|Desteklenmeyen biçim: yalnızca JPG/PNG/WebP/GIF/AVIF/MP4/WebM izin verilir (SVG/HTML/betik yok).|Güvenlik nedeniyle engellendi: sistem ve kimlik bilgisi dizinleri (.ssh/.aws/.gemini/Windows) yasaktır.|Güvenlik nedeniyle engellendi: sembolik bağlantılar duvar kağıdı olarak kullanılamaz.|Güvenlik nedeniyle engellendi: UNC ağ yolları ve NT aygıt yolları yasaktır.|Dosya bulunamadı veya okunamıyor. Yolu kontrol edip tekrar deneyin.|Dosya başlığı doğrulaması başarısız: dosya içeriği uzantısıyla eşleşmiyor.|Dosya boyutu izin verilen üst sınırı aşıyor.|Görsel 8 MB güvenli yedek sınırını aşıyor. Görseli sıkıştırın veya yerel akışa izin verin.|İşlem başarısız. Dosya yolunu ve izinleri kontrol edin.',
   };
 
   const WALLPAPER_I18N = Object.fromEntries(
@@ -59,6 +47,7 @@
     if (/^es\b/.test(s) || s === 'spanish') return 'es';
     if (/^fr\b/.test(s) || s === 'french') return 'fr';
     if (/^de\b/.test(s) || s === 'german') return 'de';
+    if (/^tr\b/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
     if (/^en\b/.test(s) || s === 'english') return 'en';
     return '';
   }
@@ -97,215 +86,86 @@
     return el;
   }
 
-  function mapErrorCode(code, pack) {
-    switch (code) {
-      case 'unsupported-extension':
-        return pack.errUnsupportedExt;
-      case 'blocked-sensitive-path':
-        return pack.errSensitivePath;
-      case 'symlink-not-allowed':
-        return pack.errSymlink;
-      case 'blocked-unc-or-device':
-      case 'invalid-scheme':
-        return pack.errUncDevice;
-      case 'file-not-found':
-      case 'not-a-regular-file':
-      case 'file-unreadable':
-      case 'empty-file':
-        return pack.errNotFound;
-      case 'invalid-magic-bytes':
-        return pack.errInvalidMagic;
-      case 'file-too-large':
-        return pack.errTooLarge;
-      case 'blob-size-limit-exceeded':
-        return pack.errBlobTooLarge;
-      case 'blob-image-only':
-      case 'video-stream-blocked':
-        return pack.stVideoBlocked;
-      case 'manual-input-required':
-        return pack.stManualLinux;
-      case 'bridge-offline':
-      case 'bridge-disposed':
-        return pack.stOffline;
-      default:
-        return pack.errGeneric;
-    }
-  }
+  const ERR_KEY_MAP = {
+    'unsupported-extension': 'errUnsupportedExt', 'blocked-sensitive-path': 'errSensitivePath', 'symlink-not-allowed': 'errSymlink',
+    'blocked-unc-or-device': 'errUncDevice', 'invalid-scheme': 'errUncDevice', 'file-not-found': 'errNotFound', 'not-a-regular-file': 'errNotFound',
+    'file-unreadable': 'errNotFound', 'empty-file': 'errNotFound', 'invalid-magic-bytes': 'errInvalidMagic', 'file-too-large': 'errTooLarge',
+    'blob-size-limit-exceeded': 'errBlobTooLarge', 'blob-image-only': 'stVideoBlocked', 'video-stream-blocked': 'stVideoBlocked',
+    'manual-input-required': 'stManualLinux', 'bridge-offline': 'stOffline', 'bridge-disposed': 'stOffline',
+  };
+  const mapErrorCode = (code, pack) => pack[ERR_KEY_MAP[code]] || pack.errGeneric;
 
   function mountWallpaperUi(slotEl, ctx = {}) {
     if (!slotEl) return null;
     const win = (ctx && ctx.window) || (typeof window !== 'undefined' ? window : G);
     const doc = (ctx && ctx.document) || slotEl.ownerDocument || (win && win.document) || (typeof document !== 'undefined' ? document : null);
     if (!doc) return null;
-
     const guard = typeof ctx.runGuardedMut === 'function' ? ctx.runGuardedMut : (fn) => fn();
     const resolveClient = () => (win && win.__agPrismWallpaper) || G.__agPrismWallpaper || null;
-    const resolveBridge = () =>
-      (win && win.__agPrismWallpaperBridge) ||
-      G.__agPrismWallpaperBridge ||
-      resolveClient()?.bridge ||
-      null;
-
-    // 幂等复用：已挂载实例仅刷新语言与状态，不重建 DOM 避免打断输入/滑块拖动
+    const resolveBridge = () => (win && win.__agPrismWallpaperBridge) || G.__agPrismWallpaperBridge || resolveClient()?.bridge || null;
     const existingHandle = slotEl.__agPrismWpUiHandle;
     if (existingHandle && existingHandle.root && existingHandle.root.parentElement === slotEl) {
-      const nextLang = resolveLang(doc, ctx);
-      existingHandle.updateLang(nextLang);
+      existingHandle.updateLang(resolveLang(doc, ctx));
       const client = resolveClient();
-      if (client && typeof client.getState === 'function') {
-        existingHandle.syncState(client.getState());
-      }
+      if (client && typeof client.getState === 'function') existingHandle.syncState(client.getState());
       return existingHandle;
     }
-
-    const mk = (tag, cls, txt) => {
-      const el = doc.createElement(tag);
-      if (cls) el.className = cls;
-      if (txt !== undefined) el.textContent = String(txt);
-      return el;
-    };
-    const mkBtn = (cls, txt, testId) => {
-      const b = mk('button', cls, txt);
-      b.type = 'button';
-      if (testId) b.setAttribute('data-testid', testId);
-      return b;
-    };
-
+    const mk = (tag, cls, txt) => { const el = doc.createElement(tag); if (cls) el.className = cls; if (txt !== undefined) el.textContent = String(txt); return el; };
+    const mkBtn = (cls, txt, testId) => { const b = mk('button', cls, txt); b.type = 'button'; if (testId) b.setAttribute('data-testid', testId); return b; };
     const segBtnCls = (ctx && ctx.btnClass) || 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
     let curLang = resolveLang(doc, ctx);
     let pack = WALLPAPER_I18N[curLang] || WALLPAPER_I18N.en;
     let busy = false;
-    let customStatus = null; // { tone, text } | null
-    let lastState = {
-      enabled: false,
-      mediaPath: '',
-      mediaType: '',
-      opacity: 0.28,
-      blurPx: 4,
-      dimOverlay: 0.45,
-      fit: 'cover',
-      pauseOnBlur: true,
-      renderMode: 'idle',
-      lastError: '',
-      bridgeOnline: Boolean(resolveBridge()?.isOnline?.()),
-    };
+    let customStatus = null;
+    let lastState = { enabled: false, mediaPath: '', mediaType: '', opacity: 0.28, blurPx: 4, dimOverlay: 0.45, fit: 'cover', pauseOnBlur: true, renderMode: 'idle', lastError: '', bridgeOnline: Boolean(resolveBridge()?.isOnline?.()) };
 
     const card = mk('div', 'ag-prism-wp-card');
-    card.setAttribute('data-testid', 'prism-wallpaper-card');
-    card.setAttribute('data-ag-cs-lang', curLang);
-    markNoTrOwned(card);
+    card.setAttribute('data-testid', 'prism-wallpaper-card'); card.setAttribute('data-ag-cs-lang', curLang); markNoTrOwned(card);
 
-    // 1) Header + Enable switch
-    const headRow = mk('div', 'ag-prism-wp-row');
-    const headMeta = mk('div', 'ag-prism-wp-meta');
-    const titleEl = mk('span', 'ag-prism-wp-title', pack.title);
-    const descEl = mk('span', 'ag-prism-wp-desc', pack.desc);
-    headMeta.appendChild(titleEl);
-    headMeta.appendChild(descEl);
+    const headRow = mk('div', 'ag-prism-wp-row'), headMeta = mk('div', 'ag-prism-wp-meta');
+    const titleEl = mk('span', 'ag-prism-wp-title', pack.title), descEl = mk('span', 'ag-prism-wp-desc', pack.desc);
+    headMeta.appendChild(titleEl); headMeta.appendChild(descEl);
+    const enableGrp = mk('div', 'ag-cs-seg-group'); enableGrp.setAttribute('role', 'group'); enableGrp.setAttribute('data-ui-kind', 'switch'); enableGrp.setAttribute('data-switch-on', '0');
+    const enableThumb = mk('span', 'ag-cs-switch-thumb'); enableThumb.setAttribute('aria-hidden', 'true');
+    const enableOnBtn = mkBtn(segBtnCls, pack.on, 'prism-wp-enable-on'), enableOffBtn = mkBtn(segBtnCls, pack.off, 'prism-wp-enable-off');
+    enableGrp.appendChild(enableThumb); enableGrp.appendChild(enableOnBtn); enableGrp.appendChild(enableOffBtn);
+    headRow.appendChild(headMeta); headRow.appendChild(enableGrp);
 
-    const enableGrp = mk('div', 'ag-cs-seg-group');
-    enableGrp.setAttribute('role', 'group');
-    enableGrp.setAttribute('data-ui-kind', 'switch');
-    enableGrp.setAttribute('data-switch-on', '0');
-    const enableThumb = mk('span', 'ag-cs-switch-thumb');
-    enableThumb.setAttribute('aria-hidden', 'true');
-    const enableOnBtn = mkBtn(segBtnCls, pack.on, 'prism-wp-enable-on');
-    const enableOffBtn = mkBtn(segBtnCls, pack.off, 'prism-wp-enable-off');
-    enableGrp.appendChild(enableThumb);
-    enableGrp.appendChild(enableOnBtn);
-    enableGrp.appendChild(enableOffBtn);
-    headRow.appendChild(headMeta);
-    headRow.appendChild(enableGrp);
+    const pathRow = mk('div', 'ag-prism-wp-path-row'), pathInput = mk('input', 'ag-prism-wp-path-input');
+    pathInput.type = 'text'; pathInput.setAttribute('data-testid', 'prism-wp-path-input'); pathInput.setAttribute('placeholder', pack.pathPh); pathInput.setAttribute('autocomplete', 'off'); pathInput.setAttribute('spellcheck', 'false');
+    const pickBtn = mkBtn('ag-cs-thought-btn', pack.pickBtn, 'prism-wp-pick-btn'), applyBtn = mkBtn('ag-cs-thought-btn', pack.applyBtn, 'prism-wp-apply-btn'), clearBtn = mkBtn('ag-cs-thought-btn', pack.clearBtn, 'prism-wp-clear-btn');
+    pathRow.appendChild(pathInput); pathRow.appendChild(pickBtn); pathRow.appendChild(applyBtn); pathRow.appendChild(clearBtn);
 
-    // 2) Path input + Pick / Apply / Clear buttons
-    const pathRow = mk('div', 'ag-prism-wp-path-row');
-    const pathInput = mk('input', 'ag-prism-wp-path-input');
-    pathInput.type = 'text';
-    pathInput.setAttribute('data-testid', 'prism-wp-path-input');
-    pathInput.setAttribute('placeholder', pack.pathPh);
-    pathInput.setAttribute('autocomplete', 'off');
-    pathInput.setAttribute('spellcheck', 'false');
-
-    const pickBtn = mkBtn('ag-cs-thought-btn', pack.pickBtn, 'prism-wp-pick-btn');
-    const applyBtn = mkBtn('ag-cs-thought-btn', pack.applyBtn, 'prism-wp-apply-btn');
-    const clearBtn = mkBtn('ag-cs-thought-btn', pack.clearBtn, 'prism-wp-clear-btn');
-    pathRow.appendChild(pathInput);
-    pathRow.appendChild(pickBtn);
-    pathRow.appendChild(applyBtn);
-    pathRow.appendChild(clearBtn);
-
-    // 3) Sliders: Opacity / Blur / Dim Overlay
     const slidersGrid = mk('div', 'ag-prism-wp-sliders');
     const mkSlider = (testId, labelText, min, max, step, valText) => {
-      const wrap = mk('div', 'ag-prism-wp-slider-item');
-      const head = mk('div', 'ag-prism-wp-slider-head');
-      const lbl = mk('span', '', labelText);
-      const val = mk('span', 'ag-prism-wp-slider-val', valText);
-      head.appendChild(lbl);
-      head.appendChild(val);
-      const inp = mk('input', 'ag-prism-wp-range');
-      inp.type = 'range';
-      inp.min = String(min);
-      inp.max = String(max);
-      inp.step = String(step);
-      inp.setAttribute('data-testid', testId);
-      wrap.appendChild(head);
-      wrap.appendChild(inp);
-      slidersGrid.appendChild(wrap);
+      const wrap = mk('div', 'ag-prism-wp-slider-item'), head = mk('div', 'ag-prism-wp-slider-head'), lbl = mk('span', '', labelText), val = mk('span', 'ag-prism-wp-slider-val', valText);
+      head.appendChild(lbl); head.appendChild(val);
+      const inp = mk('input', 'ag-prism-wp-range'); inp.type = 'range'; inp.min = String(min); inp.max = String(max); inp.step = String(step); inp.setAttribute('data-testid', testId);
+      wrap.appendChild(head); wrap.appendChild(inp); slidersGrid.appendChild(wrap);
       return { lbl, val, inp };
     };
-
     const opacityCtrl = mkSlider('prism-wp-opacity', pack.opacityLabel, 0.05, 0.85, 0.01, '28%');
     const blurCtrl = mkSlider('prism-wp-blur', pack.blurLabel, 0, 24, 1, '4 px');
     const dimCtrl = mkSlider('prism-wp-dim', pack.dimLabel, 0, 0.85, 0.01, '45%');
 
-    // 4) Fit Mode (cover / contain)
-    const fitRow = mk('div', 'ag-prism-wp-row');
-    const fitMeta = mk('div', 'ag-prism-wp-meta');
-    const fitLbl = mk('span', 'ag-prism-wp-title', pack.fitLabel);
+    const fitRow = mk('div', 'ag-prism-wp-row'), fitMeta = mk('div', 'ag-prism-wp-meta'), fitLbl = mk('span', 'ag-prism-wp-title', pack.fitLabel);
     fitMeta.appendChild(fitLbl);
-    const fitGrp = mk('div', 'ag-cs-seg-group');
-    fitGrp.setAttribute('role', 'group');
-    const fitCoverBtn = mkBtn(segBtnCls, pack.fitCover, 'prism-wp-fit-cover');
-    const fitContainBtn = mkBtn(segBtnCls, pack.fitContain, 'prism-wp-fit-contain');
-    fitGrp.appendChild(fitCoverBtn);
-    fitGrp.appendChild(fitContainBtn);
-    fitRow.appendChild(fitMeta);
-    fitRow.appendChild(fitGrp);
+    const fitGrp = mk('div', 'ag-cs-seg-group'); fitGrp.setAttribute('role', 'group');
+    const fitCoverBtn = mkBtn(segBtnCls, pack.fitCover, 'prism-wp-fit-cover'), fitContainBtn = mkBtn(segBtnCls, pack.fitContain, 'prism-wp-fit-contain');
+    fitGrp.appendChild(fitCoverBtn); fitGrp.appendChild(fitContainBtn); fitRow.appendChild(fitMeta); fitRow.appendChild(fitGrp);
 
-    // 5) Pause Video on Blur switch
-    const pauseRow = mk('div', 'ag-prism-wp-row');
-    const pauseMeta = mk('div', 'ag-prism-wp-meta');
-    const pauseLbl = mk('span', 'ag-prism-wp-title', pack.pauseBlurLabel);
-    const pauseDesc = mk('span', 'ag-prism-wp-desc', pack.pauseBlurDesc);
-    pauseMeta.appendChild(pauseLbl);
-    pauseMeta.appendChild(pauseDesc);
-    const pauseGrp = mk('div', 'ag-cs-seg-group');
-    pauseGrp.setAttribute('role', 'group');
-    pauseGrp.setAttribute('data-ui-kind', 'switch');
-    pauseGrp.setAttribute('data-switch-on', '1');
-    const pauseThumb = mk('span', 'ag-cs-switch-thumb');
-    pauseThumb.setAttribute('aria-hidden', 'true');
-    const pauseOnBtn = mkBtn(segBtnCls, pack.on, 'prism-wp-pause-blur-on');
-    const pauseOffBtn = mkBtn(segBtnCls, pack.off, 'prism-wp-pause-blur-off');
-    pauseGrp.appendChild(pauseThumb);
-    pauseGrp.appendChild(pauseOnBtn);
-    pauseGrp.appendChild(pauseOffBtn);
-    pauseRow.appendChild(pauseMeta);
-    pauseRow.appendChild(pauseGrp);
+    const pauseRow = mk('div', 'ag-prism-wp-row'), pauseMeta = mk('div', 'ag-prism-wp-meta');
+    const pauseLbl = mk('span', 'ag-prism-wp-title', pack.pauseBlurLabel), pauseDesc = mk('span', 'ag-prism-wp-desc', pack.pauseBlurDesc);
+    pauseMeta.appendChild(pauseLbl); pauseMeta.appendChild(pauseDesc);
+    const pauseGrp = mk('div', 'ag-cs-seg-group'); pauseGrp.setAttribute('role', 'group'); pauseGrp.setAttribute('data-ui-kind', 'switch'); pauseGrp.setAttribute('data-switch-on', '1');
+    const pauseThumb = mk('span', 'ag-cs-switch-thumb'); pauseThumb.setAttribute('aria-hidden', 'true');
+    const pauseOnBtn = mkBtn(segBtnCls, pack.on, 'prism-wp-pause-blur-on'), pauseOffBtn = mkBtn(segBtnCls, pack.off, 'prism-wp-pause-blur-off');
+    pauseGrp.appendChild(pauseThumb); pauseGrp.appendChild(pauseOnBtn); pauseGrp.appendChild(pauseOffBtn);
+    pauseRow.appendChild(pauseMeta); pauseRow.appendChild(pauseGrp);
 
-    // 6) Status banner
     const statusEl = mk('div', 'ag-prism-wp-status', pack.stIdle);
-    statusEl.setAttribute('data-testid', 'prism-wp-status');
-    statusEl.setAttribute('role', 'status');
-    statusEl.setAttribute('data-tone', 'idle');
-
-    card.appendChild(headRow);
-    card.appendChild(pathRow);
-    card.appendChild(slidersGrid);
-    card.appendChild(fitRow);
-    card.appendChild(pauseRow);
-    card.appendChild(statusEl);
+    statusEl.setAttribute('data-testid', 'prism-wp-status'); statusEl.setAttribute('role', 'status'); statusEl.setAttribute('data-tone', 'idle');
+    card.appendChild(headRow); card.appendChild(pathRow); card.appendChild(slidersGrid); card.appendChild(fitRow); card.appendChild(pauseRow); card.appendChild(statusEl);
 
     function setBtnPressed(btn, on) {
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -460,51 +320,20 @@
         renderUiFromState();
         return;
       }
-      busy = true;
-      customStatus = { tone: 'idle', text: pack.stPicking };
-      renderUiFromState();
+      busy = true; customStatus = { tone: 'idle', text: pack.stPicking }; renderUiFromState();
       try {
         const res = await bridge.pickMedia({ autoEnable: true });
-        if (res && res.canceled) {
-          customStatus = { tone: 'idle', text: pack.stCanceled };
-        } else if (res && res.manualRequired) {
-          customStatus = { tone: 'warn', text: pack.stManualLinux };
-          try {
-            pathInput.focus?.();
-          } catch {}
-        } else if (res && res.ok && res.config) {
-          customStatus = null;
-          pathInput.value = res.config.mediaPath || '';
+        if (res && res.canceled) customStatus = { tone: 'idle', text: pack.stCanceled };
+        else if (res && res.manualRequired) { customStatus = { tone: 'warn', text: pack.stManualLinux }; try { pathInput.focus?.(); } catch {} }
+        else if (res && res.ok && res.config) {
+          customStatus = null; pathInput.value = res.config.mediaPath || '';
           const client = resolveClient();
-          if (client && typeof client.applyConfig === 'function') {
-            lastState = client.applyConfig(res.config);
-          } else {
-            lastState = { ...lastState, ...res.config, lastError: '' };
-          }
-        } else {
-          customStatus = { tone: 'error', text: mapErrorCode(res && res.code, pack) };
-        }
-      } finally {
-        busy = false;
-        renderUiFromState();
-      }
+          lastState = client && typeof client.applyConfig === 'function' ? client.applyConfig(res.config) : { ...lastState, ...res.config, lastError: '' };
+        } else customStatus = { tone: 'error', text: mapErrorCode(res && res.code, pack) };
+      } finally { busy = false; renderUiFromState(); }
     });
-
-    applyBtn.addEventListener('click', () => {
-      const typed = String(pathInput.value || '').trim();
-      if (!typed) {
-        void saveConfigPatch({ mediaPath: '', enabled: false });
-        return;
-      }
-      void saveConfigPatch({ mediaPath: typed, enabled: true });
-    });
-
-    pathInput.addEventListener('keydown', (ev) => {
-      if (ev && ev.key === 'Enter') {
-        ev.preventDefault?.();
-        applyBtn.click?.();
-      }
-    });
+    applyBtn.addEventListener('click', () => { const typed = String(pathInput.value || '').trim(); void saveConfigPatch(typed ? { mediaPath: typed, enabled: true } : { mediaPath: '', enabled: false }); });
+    pathInput.addEventListener('keydown', (ev) => { if (ev && ev.key === 'Enter') { ev.preventDefault?.(); applyBtn.click?.(); } });
 
     clearBtn.addEventListener('click', async () => {
       if (busy) return;

@@ -18,7 +18,7 @@ const hostI18nRuntime = require(path.join(ROOT, 'vendor/host-i18n/host-i18n-runt
 const reversePatterns = require(path.join(ROOT, 'vendor/host-i18n/reverse-patterns.js'));
 const zhDict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor/host-i18n/zh-CN.json'), 'utf8'));
 
-const SUPPORTED_8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
+const SUPPORTED_8 = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
 const CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/;
 
 function createMiniDom(htmlLang = 'en') {
@@ -350,20 +350,20 @@ test('Battle 2: 8-language contract, zero yue in UI/VALIDATORS, and smooth legac
   }
 });
 
-test('Battle 2 CI Guard: 100% 8-locale parity in i18n-locales.js and 0 CJK leakage in en/es/fr/de', () => {
+test('Battle 2 CI Guard: 100% 9-locale parity in i18n-locales.js and 0 CJK leakage in Latin locales', () => {
   assert.deepEqual(i18nLocales.LANG_IDS, SUPPORTED_8);
   const keys = Object.keys(i18nLocales.UI_TABLE);
   assert.ok(keys.length >= 270, `Expected >=270 UI_TABLE keys, got ${keys.length}`);
 
   for (const key of keys) {
     const row = i18nLocales.UI_TABLE[key];
-    assert.ok(Array.isArray(row) && row.length === 8, `UI_TABLE.${key} must have exactly 8 locales`);
-    for (let i = 0; i < 8; i++) {
+    assert.ok(Array.isArray(row) && row.length === 9, `UI_TABLE.${key} must have exactly 9 locales`);
+    for (let i = 0; i < 9; i++) {
       assert.equal(typeof row[i], 'string', `UI_TABLE.${key}[${i}] must be string`);
       assert.ok(row[i].trim().length > 0, `UI_TABLE.${key}[${i}] must be non-empty`);
     }
-    // Pure EN / ES / FR / DE must never leak CJK characters
-    for (const [idx, code] of [[2, 'en'], [5, 'es'], [6, 'fr'], [7, 'de']]) {
+    // Pure EN / ES / FR / DE / TR must never leak CJK characters
+    for (const [idx, code] of [[2, 'en'], [5, 'es'], [6, 'fr'], [7, 'de'], [8, 'tr']]) {
       assert.equal(
         CJK_RE.test(row[idx]),
         false,
@@ -372,7 +372,7 @@ test('Battle 2 CI Guard: 100% 8-locale parity in i18n-locales.js and 0 CJK leaka
     }
   }
 
-  for (const lang of ['en', 'es', 'fr', 'de']) {
+  for (const lang of ['en', 'es', 'fr', 'de', 'tr']) {
     const ui = i18nLocales.getUiStrings(lang);
     assert.equal(CJK_RE.test(ui.swarmSplitSub(68, 32)), false, `swarmSplitSub leaked CJK in ${lang}`);
     assert.equal(CJK_RE.test(ui.showMoreN(4)), false, `showMoreN leaked CJK in ${lang}`);
@@ -614,7 +614,7 @@ test('Battle 2 Settings Panel: displays off-enforced chip and off-blocked amber 
       `EN settings panel leaked CJK: ${stripAllowedProperNouns(secEnforced.textContent)}`
     );
     const langBtns = secEnforced.querySelectorAll('button[data-ag-cs-key="language"]');
-    assert.equal(langBtns.length, 8, 'Must render exactly 8 language buttons (no yue)');
+    assert.equal(langBtns.length, 9, 'Must render exactly 9 language buttons (no yue)');
     assert.ok(
       secEnforced.textContent.includes(i18nLocales.getUiStrings('en').hostLocStatusEnforced),
       'Must show off-enforced status text'

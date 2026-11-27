@@ -1,23 +1,6 @@
 /**
- * Obsidian Prism — V14 Google DeepMind Official Spectrum · Full-Bleed Dark & Light Key Art Display (1600x480)
- *
- * V14 核心光学架构（对标 Google 官方模型发布视觉 · 静态主视觉优先 · 克制微动效辅助）：
- *   1. 1600x480 满幅贯通式 Google DeepMind 官方海报横幅（0 简陋代码多面体、0 中间劈半竖线）：
- *      - 左至中区（~42%）：满幅高精烘焙折光光学玻璃雕塑（1H 天青球环 / 6C 官方皇家钴蓝虹彩水晶簇 /
- *        10Ne 珊瑚红橙→暖金莫比乌斯玻璃环 / 18Ar 电光靛紫同心光学透镜 / Claude 陶土暖珀拱门 /
- *        Flash 电光青双棱羽翼 / GPT 银青冰晶六角结 / Orch 星云紫金陀螺双环）+ 半透明大号元素符号水印，
- *        无缝向右流淌过渡至纯净社论排版留白区。
- *   2. 真·暗夜（Dark）与白昼（Light）双套独立海报底图适配：
- *      - 暗色主题（obsidian-dark / warm-dark）：深邃星云天鹅绒夜底 + 自发光折光玻璃雕塑 + 纯白锐字 + 烟熏毛玻璃胶囊；
- *      - 浅色主题（crystal-light / alabaster-light）：明亮白昼瓷白冰雾渐变底 + 日光通透彩色玻璃雕塑 + 深炭墨高对比锐字 + 白冰毛玻璃胶囊（彻底消灭浅色黑砖屏！）。
- *   3. 静态艺术为主，微动效仅作克制点睛（严格 0fps 静止休眠）：
- *      - 静止态 100% 零耗电（isAnimating() === false）；
- *      - 仅在切模型/切深浅主题（200ms 柔滑叠化 + 微妙水平视差滑移）、切档位（220ms 毛玻璃胶囊阻尼滑移 + ~8% 柔光微涌）、
- *        以及指针掠过/旋转视角（斜向清透玻璃镜面掠光）时响应，随后立即回归 0fps。
- *
- * Contract:
- *   globalThis.__agPrismOledScreen = { createOledScreenPainter }
- *   module.exports = { createOledScreenPainter }
+ * Obsidian Prism — V14 Full-Bleed Dark & Light Key Art Display (1600x480, 0fps idle)
+ * Contract: globalThis.__agPrismOledScreen / module.exports = { createOledScreenPainter }
  */
 (function (root, factory) {
   var api = factory(root);
@@ -46,7 +29,7 @@
     var ANIM_STALE_GUARD_MS = 650;
     var MAX_WALLPAPER_CACHE = 24;
 
-    /* 满幅海报构图视觉锚点：左移玻璃雕塑视口 (-46px / 浅色10Ne -64px) + 雕塑右翼纯净分离大水印 (~x:500..664) + 右侧社论排版区 (x:682..1548) */
+    /* 满幅海报构图锚点 */
     var SCULPT_SHIFT_X = -46;
     var SCULPT_SHIFT_LIGHT_NEON = -64;
     var SCULPT_AURA_CX = 236;
@@ -61,7 +44,7 @@
     var RIGHT_ZONE_END = 1548;
     var RIGHT_ZONE_W = RIGHT_ZONE_END - RIGHT_ZONE_X; /* 866 */
 
-    /* 思考档位毛玻璃胶囊严格锁定在 [682, 1504] x [296, 388]，100% 保持 getEffortUvRects() 零死区热区几何契约 */
+    /* 思考档位胶囊热区 */
     var WELL_X = 682;
     var WELL_RIGHT = 1504;
     var WELL_W = WELL_RIGHT - WELL_X; /* 822 */
@@ -280,7 +263,7 @@
       },
     };
 
-    /* V14.1 114 颗未解锁盲键与预留槽专属「未雕琢哑光原石晶坯」中性石板光谱（零盗用 6C 蓝晶！） */
+    /* V14.1 盲键中性光谱 */
     var STANDBY_OPTIC_THEME = {
       sculptKey: 'standby',
       watermark: 'Au',
@@ -344,9 +327,9 @@
       ko: { nonPlanner: 'NON-PLANNER · 오케스트레이션 잠금', standbyAux: 'STANDBY · 예약된 매크로 슬롯', synced: '동기화됨' },
       es: { nonPlanner: 'NON-PLANNER · BLOQUEADO EN ORCH', standbyAux: 'STANDBY · RANURA RESERVADA', synced: 'SINCRONIZADO' },
       fr: { nonPlanner: 'NON-PLANNER · VERROUILLÉ ORCH', standbyAux: 'STANDBY · EMPLACEMENT RÉSERVÉ', synced: 'SYNCHRONISÉ' },
-      de: { nonPlanner: 'NON-PLANNER · IN ORCH GESPERRT', standbyAux: 'STANDBY · RESERVIERTER SLOT', synced: 'SYNCHRONISIERT' },
+      de:{nonPlanner:'NON-PLANNER · IN ORCH GESPERRT',standbyAux:'STANDBY · RESERVIERTER SLOT',synced:'SYNCHRONISIERT'},
+      tr:{nonPlanner:'NON-PLANNER · ORCH KİLİTLİ',standbyAux:'STANDBY · AYRILMIŞ YUVA',synced:'EŞİTLENDİ'},
     };
-
     function normalizeOledLang(raw) {
       var s = String(raw || '').trim().toLowerCase().replace(/_/g, '-');
       if (!s || s === 'auto') return '';
@@ -358,6 +341,7 @@
       if (/^es(?:$|-)/.test(s) || s === 'spanish') return 'es';
       if (/^fr(?:$|-)/.test(s) || s === 'french') return 'fr';
       if (/^de(?:$|-)/.test(s) || s === 'german') return 'de';
+      if (/^tr(?:$|-)/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
       if (/^en(?:$|-)/.test(s) || s === 'english') return 'en';
       return '';
     }
@@ -387,23 +371,18 @@
     var _oledRmMqlCache = typeof WeakMap === 'function' ? new WeakMap() : null;
     function checkOledPrefersReducedMotion(rt) {
       try {
-        var host = (rt && typeof rt.matchMedia === 'function')
-          ? rt
-          : (typeof window !== 'undefined' && window && typeof window.matchMedia === 'function' ? window : null);
-        if (!host) return false;
-        var mm = host.matchMedia;
-        if (_oledRmMqlCache) {
-          var cached = _oledRmMqlCache.get(host);
-          if (cached && cached.fn === mm && cached.mq) {
-            return Boolean(cached.mq.matches);
-          }
-          var mq = mm.call(host, '(prefers-reduced-motion: reduce)');
-          _oledRmMqlCache.set(host, { fn: mm, mq: mq });
-          return Boolean(mq && mq.matches);
-        }
-        var mq2 = mm.call(host, '(prefers-reduced-motion: reduce)');
-        if (mq2 && mq2.matches) return true;
-      } catch (_mmErr) {}
+        var host = (rt && typeof rt === 'object') ? rt : (typeof window !== 'undefined' && window ? window : null);
+        if (host && typeof host.__agPrismReducedMotion === 'function') return Boolean(host.__agPrismReducedMotion(host.document, host));
+        var d = (host && host.document) || (typeof document !== 'undefined' ? document : null), de = d && d.documentElement;
+        if (de && de.getAttribute && de.getAttribute('data-ag-cs-motion') === 'off') return true;
+        if (de && de.getAttribute && de.getAttribute('data-ag-cs-ignore-rm') === '1') return false;
+        if (!host || typeof host.matchMedia !== 'function') return false;
+        var mm = host.matchMedia, c = _oledRmMqlCache && _oledRmMqlCache.get(host);
+        if (c && c.fn === mm && c.mq) return Boolean(c.mq.matches);
+        var mq = mm.call(host, '(prefers-reduced-motion: reduce)');
+        if (_oledRmMqlCache) _oledRmMqlCache.set(host, { fn: mm, mq: mq });
+        return Boolean(mq && mq.matches);
+      } catch (_e) {}
       return false;
     }
 
@@ -868,125 +847,49 @@
     }
 
     function drawRoundRectPath(ctx, x, y, w, h, r) {
-      var rw = Math.max(0, w);
-      var rh = Math.max(0, h);
-      var rr = Math.max(0, Math.min(r, rw * 0.5, rh * 0.5));
-      ctx.beginPath();
-      ctx.moveTo(x + rr, y);
-      ctx.arcTo(x + rw, y, x + rw, y + rh, rr);
-      ctx.arcTo(x + rw, y + rh, x, y + rh, rr);
-      ctx.arcTo(x, y + rh, x, y, rr);
-      ctx.arcTo(x, y, x + rw, y, rr);
-      ctx.closePath();
+      var rw = Math.max(0, w), rh = Math.max(0, h), rr = Math.max(0, Math.min(r, rw * 0.5, rh * 0.5));
+      ctx.beginPath(); ctx.moveTo(x + rr, y); ctx.arcTo(x + rw, y, x + rw, y + rh, rr); ctx.arcTo(x + rw, y + rh, x, y + rh, rr); ctx.arcTo(x, y + rh, x, y, rr); ctx.arcTo(x, y, x + rw, y, rr); ctx.closePath();
     }
-
     function drawEllipseArcSafe(ctx, cx, cy, rx, ry, rot, a0, a1, ccw) {
-      var safeRx = Math.max(0.5, rx);
-      var safeRy = Math.max(0.5, ry);
-      if (typeof ctx.ellipse === 'function') {
-        ctx.ellipse(cx, cy, safeRx, safeRy, rot || 0, a0, a1, Boolean(ccw));
-        return;
-      }
-      ctx.save();
-      ctx.translate(cx, cy);
-      if (rot) ctx.rotate(rot);
-      ctx.scale(safeRx, safeRy);
-      ctx.arc(0, 0, 1, a0, a1, Boolean(ccw));
-      ctx.restore();
+      var sx = Math.max(0.5, rx), sy = Math.max(0.5, ry);
+      if (typeof ctx.ellipse === 'function') { ctx.ellipse(cx, cy, sx, sy, rot || 0, a0, a1, Boolean(ccw)); return; }
+      ctx.save(); ctx.translate(cx, cy); if (rot) ctx.rotate(rot); ctx.scale(sx, sy); ctx.arc(0, 0, 1, a0, a1, Boolean(ccw)); ctx.restore();
     }
-
-    function setCompositeSafe(ctx, mode) {
-      if (!ctx) return;
-      try {
-        ctx.globalCompositeOperation = mode;
-      } catch (_e) {}
-    }
-
-    function measureTextSafe(ctx, str) {
-      var text = String(str || '');
-      if (!ctx || typeof ctx.measureText !== 'function') {
-        return text.length * 14;
-      }
-      var m = ctx.measureText(text);
-      return m && typeof m.width === 'number' ? m.width : text.length * 14;
-    }
-
+    function setCompositeSafe(ctx, mode) { if (ctx) try { ctx.globalCompositeOperation = mode; } catch (_e) {} }
+    var _tc = new Map(), _tf = null;
+    function _tg(c, k) { var f = c && c.measureText; if (f !== _tf) { _tc.clear(); _tf = f; return; } if (!_tc.has(k)) return; var v = _tc.get(k); _tc.delete(k); _tc.set(k, v); return v; }
+    function _ts(k, v) { if (_tc.size >= 16) _tc.delete(_tc.keys().next().value); _tc.set(k, v); return v; }
+    function measureTextSafe(ctx, str) { var t = String(str || ''); if (!ctx || typeof ctx.measureText !== 'function') return t.length * 14; var m = ctx.measureText(t); return m && typeof m.width === 'number' ? m.width : t.length * 14; }
     function truncateText(ctx, text, maxW) {
-      var str = String(text || '');
-      if (!str || maxW <= 0) return '';
-      if (measureTextSafe(ctx, str) <= maxW) return str;
-      var lo = 0;
-      var hi = str.length;
-      while (lo < hi) {
-        var mid = Math.ceil((lo + hi) * 0.5);
-        if (measureTextSafe(ctx, str.slice(0, mid) + '…') <= maxW) {
-          lo = mid;
-        } else {
-          hi = mid - 1;
-        }
-      }
-      return str.slice(0, Math.max(1, lo)) + '…';
+      var s = String(text || ''); if (!s || maxW <= 0) return '';
+      var k = 'T|' + (ctx && ctx.font || '') + '|' + Math.round(maxW) + '|' + s, h = _tg(ctx, k);
+      if (h !== undefined) return h;
+      if (measureTextSafe(ctx, s) <= maxW) return _ts(k, s);
+      var lo = 0, hi = s.length;
+      while (lo < hi) { var mid = Math.ceil((lo + hi) * 0.5); if (measureTextSafe(ctx, s.slice(0, mid) + '…') <= maxW) lo = mid; else hi = mid - 1; }
+      return _ts(k, s.slice(0, Math.max(1, lo)) + '…');
     }
-
     function fitSingleLineFontSize(ctx, text, weight, family, maxPx, minPx, maxWidth) {
-      var px = maxPx;
-      var step = 2;
-      while (px > minPx) {
-        ctx.font = weight + ' ' + px + 'px ' + family;
-        if (measureTextSafe(ctx, text) <= maxWidth) {
-          return px;
-        }
-        px = Math.max(minPx, px - step);
-      }
-      ctx.font = weight + ' ' + minPx + 'px ' + family;
-      return minPx;
+      var k = 'F|' + weight + '|' + family + '|' + maxPx + '|' + minPx + '|' + Math.round(maxWidth) + '|' + text, h = _tg(ctx, k);
+      if (h !== undefined) { ctx.font = weight + ' ' + h + 'px ' + family; return h; }
+      for (var px = maxPx; px > minPx; px = Math.max(minPx, px - 2)) { ctx.font = weight + ' ' + px + 'px ' + family; if (measureTextSafe(ctx, text) <= maxWidth) return _ts(k, px); }
+      ctx.font = weight + ' ' + minPx + 'px ' + family; return _ts(k, minPx);
     }
-
-    function makeLinearGrad(ctx, x0, y0, x1, y1, stops, fallbackCss) {
-      if (!ctx || typeof ctx.createLinearGradient !== 'function') {
-        return fallbackCss || '#000000';
-      }
-      var g = ctx.createLinearGradient(x0, y0, x1, y1);
-      if (!g || typeof g.addColorStop !== 'function') return fallbackCss || '#000000';
-      for (var i = 0; i < stops.length; i++) {
-        g.addColorStop(clamp(stops[i][0], 0, 1), stops[i][1]);
-      }
+    function makeLinearGrad(ctx, x0, y0, x1, y1, stops, fb) {
+      if (!ctx || typeof ctx.createLinearGradient !== 'function') return fb || '#000000';
+      var g = ctx.createLinearGradient(x0, y0, x1, y1); if (!g || typeof g.addColorStop !== 'function') return fb || '#000000';
+      for (var i = 0; i < stops.length; i++) g.addColorStop(clamp(stops[i][0], 0, 1), stops[i][1]);
       return g;
     }
-
-    function makeRadialGrad(ctx, x0, y0, r0, x1, y1, r1, stops, fallbackCss) {
-      if (!ctx || typeof ctx.createRadialGradient !== 'function') {
-        return fallbackCss || 'rgba(0,0,0,0)';
-      }
-      var g = ctx.createRadialGradient(x0, y0, Math.max(0, r0), x1, y1, Math.max(0.1, r1));
-      if (!g || typeof g.addColorStop !== 'function') return fallbackCss || 'rgba(0,0,0,0)';
-      for (var i = 0; i < stops.length; i++) {
-        g.addColorStop(clamp(stops[i][0], 0, 1), stops[i][1]);
-      }
+    function makeRadialGrad(ctx, x0, y0, r0, x1, y1, r1, stops, fb) {
+      if (!ctx || typeof ctx.createRadialGradient !== 'function') return fb || 'rgba(0,0,0,0)';
+      var g = ctx.createRadialGradient(x0, y0, Math.max(0, r0), x1, y1, Math.max(0.1, r1)); if (!g || typeof g.addColorStop !== 'function') return fb || 'rgba(0,0,0,0)';
+      for (var i = 0; i < stops.length; i++) g.addColorStop(clamp(stops[i][0], 0, 1), stops[i][1]);
       return g;
     }
-
-    function setShadow(ctx, color, blur, ox, oy) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur = blur || 0;
-      ctx.shadowOffsetX = ox || 0;
-      ctx.shadowOffsetY = oy || 0;
-    }
-
-    function clearShadow(ctx) {
-      ctx.shadowColor = 'rgba(0,0,0,0)';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-    }
-
-    function setLetterSpacingSafe(ctx, spacingCss) {
-      if (ctx && 'letterSpacing' in ctx) {
-        try {
-          ctx.letterSpacing = spacingCss;
-        } catch (_e) {}
-      }
-    }
+    function setShadow(ctx, col, blur, ox, oy) { ctx.shadowColor = col; ctx.shadowBlur = blur || 0; ctx.shadowOffsetX = ox || 0; ctx.shadowOffsetY = oy || 0; }
+    function clearShadow(ctx) { ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+    function setLetterSpacingSafe(ctx, sp) { if (ctx && 'letterSpacing' in ctx) try { ctx.letterSpacing = sp; } catch (_e) {} }
 
     function resolveGrainAssetsPackage(runtimeRoot) {
       return (

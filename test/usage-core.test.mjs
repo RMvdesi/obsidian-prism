@@ -697,24 +697,24 @@ test('UX-4 & UX-9 Effort Slider off-mode trigger tint cleanup and 5-language tit
   ctl.destroy();
 });
 
-test('#209 Windows zero-WMI discoverProcesses fast-path & multi-instance cdpPort lineage disambiguation', async () => {
-  const { discoverProcesses } = await import('../vendor/pulse-dashboard/sidecars/panel/discovery.mjs');
+test('#209 Windows zero-PowerShell/zero-WMI discoverProcesses via native tasklist + netstat + loopback probe recovery', async () => {
+  const { discoverProcesses, discoverWindowsPorts, parseTasklistCsv } = await import('../vendor/pulse-dashboard/sidecars/panel/discovery.mjs');
 
-  // 1. Single instance with cdpPort=3014: must run ONLY 1 PowerShell fast scan + 1 netstat (zero full-tree second PS call!)
+  const csvRows = parseTasklistCsv('"language_server_windows_x64.exe","113040","Console","1","120,000 K"\r\n"notepad.exe","999","Console","1","10,000 K"\r\n');
+  assert.equal(csvRows.length, 2);
+  assert.equal(csvRows[0].ProcessId, 113040);
+  assert.equal(csvRows[0].Name, 'language_server_windows_x64.exe');
+
+  // 1. Single instance with cdpPort=3014: runs ONLY native tasklist.exe + netstat.exe (strictly 0 PowerShell / 0 WMI!)
   const singleCalls = [];
   const singleRes = await discoverProcesses({
     platform: 'win32',
     cdpPort: 3014,
     run: async (bin, args) => {
       singleCalls.push({ bin, args });
-      if (/powershell/i.test(bin)) {
+      if (/tasklist/i.test(bin)) {
         return {
-          stdout: JSON.stringify({
-            ProcessId: 113040,
-            ParentProcessId: 58892,
-            Name: 'language_server.exe',
-            CommandLine: 'language_server.exe --standalone --csrf_token tok123',
-          }),
+          stdout: '"language_server_windows_x64.exe","113040","Console","1","120,000 K"\r\n',
         };
       }
       if (/netstat/i.test(bin)) {
@@ -728,45 +728,27 @@ test('#209 Windows zero-WMI discoverProcesses fast-path & multi-instance cdpPort
   assert.equal(singleRes.length, 1);
   assert.equal(singleRes[0].ProcessId, 113040);
   assert.deepEqual(singleRes[0].Ports, [5506]);
-  assert.equal(singleCalls.filter((c) => /powershell/i.test(c.bin)).length, 1, 'Single candidate must skip full process tree scan');
-  assert.ok(singleCalls[0].args.join(' ').includes('AgFastProc'), 'Must use zero-WMI AgFastProc kernel fast-path');
+  assert.equal(singleCalls.some((c) => /powershell|pwsh/i.test(c.bin)), false, 'Must NEVER invoke PowerShell');
+  assert.ok(singleCalls.some((c) => /tasklist/i.test(c.bin)), 'Must use native tasklist.exe');
+  assert.ok(singleCalls.some((c) => /netstat/i.test(c.bin)), 'Must use native netstat.exe');
 
-  // 2. Multi-instance disambiguation: picks the language_server descended from the Antigravity PID owning cdpPort=3018
-  let psCount = 0;
-  const multiRes = await discoverProcesses({
-    platform: 'win32',
-    cdpPort: 3018,
-    run: async (bin) => {
-      if (/powershell/i.test(bin)) {
-        psCount += 1;
-        if (psCount === 1) {
-          return {
-            stdout: JSON.stringify([
-              { ProcessId: 2001, ParentProcessId: 1000, Name: 'language_server.exe', CommandLine: 'language_server.exe --standalone --csrf_token a' },
-              { ProcessId: 3001, ParentProcessId: 2000, Name: 'language_server.exe', CommandLine: 'language_server.exe --standalone --csrf_token b' },
-            ]),
-          };
-        }
-        return {
-          stdout: JSON.stringify([
-            { ProcessId: 1000, ParentProcessId: 4, Name: 'Antigravity.exe' },
-            { ProcessId: 2000, ParentProcessId: 4, Name: 'Antigravity.exe' },
-          ]),
-        };
-      }
-      return {
-        stdout: [
-          '  TCP    127.0.0.1:3014         0.0.0.0:0              LISTENING       1000',
-          '  TCP    127.0.0.1:3018         0.0.0.0:0              LISTENING       2000',
-          '  TCP    127.0.0.1:6101         0.0.0.0:0              LISTENING       2001',
-          '  TCP    127.0.0.1:6202         0.0.0.0:0              LISTENING       3001',
-        ].join('\r\n'),
-      };
+  // 2. TUN / State-0 fallback: discoverWindowsPorts recovers expected port via bounded loopback probe (0 PowerShell / 0 Get-NetTCPConnection)
+  const probedPorts = [];
+  const portCalls = [];
+  const recovered = await discoverWindowsPorts([2001], {
+    expectedPorts: new Map([[2001, [6123]]]),
+    run: async (bin, args) => {
+      portCalls.push({ bin, args });
+      return { stdout: '' };
+    },
+    probe: async (port) => {
+      probedPorts.push(port);
+      return port === 6123;
     },
   });
-  assert.equal(multiRes.length, 1);
-  assert.equal(multiRes[0].ProcessId, 3001);
-  assert.deepEqual(multiRes[0].Ports, [6202]);
+  assert.deepEqual(probedPorts, [6123]);
+  assert.deepEqual(recovered.get(2001), [6123]);
+  assert.equal(portCalls.some((c) => /powershell|pwsh/i.test(c.bin)), false, 'discoverWindowsPorts must NEVER invoke PowerShell');
 });
 
 test('#209 inline-fallback.js: telemetryModule="on" overrides external Pulse & "auto" rescues blocked/parked external bar immediately', async () => {
@@ -1160,9 +1142,9 @@ test('PR #19: isMainEntry handles Windows Junction / symlinked CLI entrypoints i
     });
     assert.deepEqual(JSON.parse(cliOut), [], 'CLI invoked via junction/symlink must enter CLI main branch and output JSON batches');
 
-    // Security redline preserved in daemon/main.mjs
-    const mainSrc = fs.readFileSync(mainFile, 'utf8');
-    assert.ok(mainSrc.includes('assertNotSymlinkSync'), 'assertNotSymlinkSync security boundary must remain intact in sidecars/daemon/main.mjs');
+    // Security redline preserved in src/daemon/fs-atomic.mjs
+    const fsAtomicSrc = fs.readFileSync(path.resolve(daemonDir, '..', '..', 'src', 'daemon', 'fs-atomic.mjs'), 'utf8');
+    assert.ok(fsAtomicSrc.includes('assertNotSymlinkSync'), 'assertNotSymlinkSync security boundary must remain intact in src/daemon/fs-atomic.mjs');
   } finally {
     fs.rmSync(tmpBase, { recursive: true, force: true });
   }
@@ -1253,8 +1235,8 @@ test('PR #22: usage rollup disk cache uses ~/.gemini/config, enforces non-symlin
     if (process.platform !== 'win32') {
       assert.equal(st.mode & 0o777, 0o600, 'POSIX cache file mode must be 0o600');
     }
-    const mainSrc = fs.readFileSync(new URL('../sidecars/daemon/main.mjs', import.meta.url), 'utf8');
-    assert.match(mainSrc, /writeFileAtomicSync\(cacheFile,\s*serialized,\s*\{\s*mode:\s*0o600\s*\}\)/, 'Must write cache via writeFileAtomicSync with mode 0o600');
+    const cacheSrc = fs.readFileSync(new URL('../src/daemon/telemetry-cache.mjs', import.meta.url), 'utf8');
+    assert.match(cacheSrc, /writeFileAtomicSync\(cacheFile,\s*serialized,\s*\{\s*mode:\s*0o600\s*\}\)/, 'Must write cache via writeFileAtomicSync with mode 0o600');
 
     // 3. Cold restart: Daemon #2 serves list-summaries & fetch-batch with 0 trajectory RPCs
     const daemon2 = new PrismDaemon({ rootDir: repoRoot, usageCachePath: explicitPath, silent: true });

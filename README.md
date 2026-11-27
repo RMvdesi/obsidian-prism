@@ -1,3 +1,4 @@
+<!-- Yaniuan，2026-11-28：记录维护分支的提示词增强器、上游归属与引用。 -->
 <div align="center">
 
 <img src="assets/logo.svg" width="96" height="96" alt="Obsidian Prism Logo" />
@@ -8,11 +9,11 @@
 
 四套深浅配色 · 会呼吸的 512K 上下文试管 · 推理等级滑块 · 像素伙伴 · 自定义动静态壁纸（Beta）· Chat 对话模式（Beta）
 
-[**简体中文**](./README.md) · [**English**](./README.en.md) · [**更新日志 (CHANGELOG)**](./CHANGELOG.md) · [**下载安装包 (Releases)**](https://github.com/RMvdesi/obsidian-prism/releases) · [**问题反馈 (Issues)**](https://github.com/RMvdesi/obsidian-prism/issues)
+[**简体中文**](./README.md) · [**English**](./README.en.md) · [**上游更新日志**](./CHANGELOG.md) · [**上游发布**](https://github.com/RMvdesi/obsidian-prism/releases) · [**上游问题反馈**](https://github.com/RMvdesi/obsidian-prism/issues)
 
 <p>
   <a href="https://github.com/RMvdesi/obsidian-prism/releases"><img src="https://img.shields.io/github/v/release/RMvdesi/obsidian-prism?style=flat-square&color=3186ff&label=Release" alt="Latest Release" /></a>
-  <img src="https://img.shields.io/badge/Version-1.0.8--beta.3-0f172a?style=flat-square" alt="Version 1.0.8-beta.3" />
+  <img src="https://img.shields.io/badge/Version-1.0.8--beta.4-0f172a?style=flat-square" alt="Version 1.0.8-beta.4" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20Universal-1e293b?style=flat-square" alt="Platform" />
   <a href="https://github.com/RMvdesi/obsidian-prism/actions"><img src="https://img.shields.io/github/actions/workflow/status/RMvdesi/obsidian-prism/ci.yml?branch=main&style=flat-square&label=CI" alt="CI Status" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-2563eb?style=flat-square" alt="License: GPL-3.0" /></a>
@@ -22,7 +23,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/hero-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/hero-light.webp" />
-  <img src="assets/screenshots/hero-dark.webp" width="100%" alt="Obsidian Prism v1.0.8-beta.3 界面演示" />
+  <img src="assets/screenshots/hero-dark.webp" width="100%" alt="Obsidian Prism v1.0.8-beta.4 界面演示" />
 </picture>
 
 <sub>以上画面由离线渲染舞台直接运行本仓库前端源码逐帧录制，示例工作区与对话内容均为虚构。</sub>
@@ -33,6 +34,10 @@
 >
 > **Obsidian Prism is an independent open-source project and is not affiliated with or endorsed by Google LLC.**
 > 本项目为独立的开源社区工程，与 Google LLC 无任何隶属、赞助或官方背书关系；文中提及的 “Antigravity” 与 “Google” 仅作兼容性说明用途。
+>
+> **维护分支说明**：这是 [Yaniuan 的非官方维护版本](https://github.com/Yaniuan/obsidian-prism)。提示词增强器是维护分支功能，提交至 [上游 PR #118](https://github.com/RMvdesi/obsidian-prism/pull/118) 审阅。上游发布链接指向官方版本。
+
+> Built upon [Obsidian Prism](https://github.com/RMvdesi/obsidian-prism) by [@RMvdesi](https://github.com/RMvdesi), licensed under [GPL-3.0-only](./LICENSE). Upstream notices are preserved in [NOTICE](./NOTICE) and [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -42,7 +47,7 @@
 - **看得见的上下文**：输入框旁的小试管实时显示 512K 上下文用量，点开就能看到用量拆分和配额剩余预测。
 - **推理等级，一拨就换**：模型菜单里内置星空滑块；选中 Orchestrator 时，滑块会变成一条会折射光线的切工水晶。
 - **读得懂的思考过程与标题**：模型的思考内容支持实时转译成中文（沉浸 / 双语对照）与一键诊断，支持手动 HTTP/SOCKS5 代理、可选工具摘要与会话标题自动翻译。
-- **提示词增强器（Beta · 默认关闭）**：在输入框旁将简短需求转成可执行的 Agent 指令；复用现有 API Profile 与密钥。点击后在后台处理，成功时自动回填输入框，不弹出审阅窗口，也不会自动发送。
+- **提示词增强器（维护分支增量 · 默认关闭）**：在输入框旁将简短需求转成可执行的 Agent 指令；复用现有 API Profile。主动点击后后台处理并自动回填草稿，不弹审阅窗口，也不会自动发送。
 - **自定义动静态背景壁纸（Beta）**：位于设置「Beta 内容」分类，默认关闭零占用，支持纯本机只读加载自定义图片与 MP4/WebM 动态视频背景（实验性功能，交互与表现可能随版本持续调整）。
 - **桌面上的像素伙伴**：Clawd、小紫猫和三只迷你蟹会在输入框上方玩叠叠乐，还藏着一个彩虹彩蛋。
 - **更顺手的工作台**：内置浏览器和大文件检视台、右键快捷菜单、长代码块折叠、会话大纲快速跳转。
@@ -92,9 +97,9 @@
 
 ### 5. 更多能力
 
-- **外观设置中心**：集成在 **设置 → 外观**，双栏光学布局、**8 种界面语言**（简中/繁中/英/日/韩/西/法/德）、**36 项**端到端可校验配置（含侧栏导航折叠 `sidebarNavFold`、滚底动效 `scrollBottomMotion` 与「正式版 / Beta 尝鲜版」双更新通道）、三档场景预设（完整光效 / 专注编码 / 静默省电）、配置备份恢复与面板内一键更新。
+- **外观设置中心**：集成在 **设置 → 外观**，双栏光学布局、**9 种界面语言**（简中/繁中/英/日/韩/西/法/德/土耳其语）、**40 项**端到端可校验面板设置（底层配置契约共 **55 项**键，含侧栏导航折叠 `sidebarNavFold`、滚底动效 `scrollBottomMotion` 与「正式版 / Beta 尝鲜版」双更新通道）、三档场景预设（完整光效 / 专注编码 / 静默省电）、配置备份恢复与面板内一键更新。
 - **思考转译与标题翻译**：按需加载模块，关闭态默认零注入并支持热插拔；内置免配置机器翻译与本地/兼容模型流式转译，支持 OS 系统代理自动检测与手动 HTTP/SOCKS5 代理、可选工具摘要与会话标题自动翻译、卡片顶部「一键诊断」及源码路径/行号跳转。
-- **提示词增强器（Channel 13 · Beta）**：在 **设置 → 外观 → Beta 内容** 启用后，可从输入框旁增强提示词；复用 Thought Translator / Prompt Suggester 的 Provider Profile，自选 Profile 和 Model ID，不另存 API Key。仅在主动点击时发送原文及最多 4 条相关对话；请求在后台运行，成功后自动替换当前输入框内容，替换后仍由用户决定是否发送。增强期间若草稿被修改、输入框消失或结果为空，会保留当前内容。
+- **提示词增强器（Channel 17 · 维护分支增量）**：在 **设置 → 外观 → Beta 内容** 启用后，可从输入框旁增强提示词；复用 Thought Translator / Prompt Suggester 的 Provider Profile，自选 Profile 和 Model ID，不另存 API Key。仅主动点击时发送原文及最多 4 条相关对话；成功后自动替换当前草稿，用户仍自行决定是否发送。增强期间若草稿被修改、输入框消失或结果为空，会保留当前内容。
 - **自定义静态 / 动态视频壁纸（Beta）**：实验性按需加载模块，默认关闭零占用；纯本机只读加载图片（JPG/PNG/WebP/GIF/AVIF）与动态视频（MP4/WebM），支持透明度/模糊/护眼遮罩调节、Browser Hole 自动避让及失焦/隐藏自动 `0fps` 暂停。
 - **Omni 检视台与行内 Diff 预览**：裸链接、本地路径一键在侧栏打开，文件变更支持行内 Diff 预览；超大视频、音频、PDF、表格、字体流式预览，右键菜单复制路径、定位文件、插入引用。
 - **Smoked Obsidian 切面与工作台增强**：统一烟熏黑曜消息气泡、变更条、Artifact 卡片与石墨键帽；代码块顶栏吸顶、长代码块手动折叠、左侧会话导轨独立大纲入口与悬停大纲、`Alt+↑` / `Alt+↓` 上下轮跳转，以及会话区右键 `/btw` 侧边提问与 `/compact`、`/plan`、`/learn`、`/grill-me` 原生斜杠快捷指令。
@@ -102,7 +107,7 @@
 <details>
 <summary><strong>技术细节：性能、安全边界、遥测与配置（点击展开）</strong></summary>
 
-**Obsidian Prism (`v1.0.8-beta.3`)** 在不改动宿主业务逻辑、不触碰外部插件锁文件的前提下，通过模块化按需加载插件架构为 Antigravity 桌面端提供 Smoked Obsidian 视觉界面、工作台交互与行内 Diff 增强、侧边栏内置浏览器与多格式流式检视台、模型配额遥测、思考过程转译及实验性动静态壁纸（Beta）：
+**Obsidian Prism (`v1.0.8-beta.4`)** 在不改动宿主业务逻辑、不触碰外部插件锁文件的前提下，通过模块化按需加载插件架构为 Antigravity 桌面端提供 Smoked Obsidian 视觉界面、工作台交互与行内 Diff 增强、侧边栏内置浏览器与多格式流式检视台、模型配额遥测、思考过程转译及实验性动静态壁纸（Beta）：
 
 - **四套深浅配色与细节微调**：内置深色（`obsidian` 深空黑曜、`warm` 暖炭玄岩）与浅色（`crystal` 白昼冷晶、`alabaster` 暖白画册）共四套主题，支持跟随系统/宿主亮暗切换；统一 Smoked Obsidian 烟熏黑曜切面（用户消息气泡、文件变更条、Artifact 卡片、石墨键帽与单层行内文件芯片）；提供 5 档工业强调色（跟随模型 / 钴蓝 `cobalt` / 鸢尾紫 `iris` / 琥珀金 `amber` / 纯银钛单色 `mono`）、3 档全局圆角、4 档代码等宽字体与连字开关、环境光浓度调节。
 - **300Hz 高刷分频、五级水墨流式淡入与 `0fps` 语义余晖**：移除常驻大面积 `backdrop-filter` 模糊开销，休眠时 Canvas VRAM 主动回收至 `0x0`；对话流式吐字采用基于 `CSS.highlights` 的**五级水墨流式淡入**（零 DOM 节点包裹、零强制同步回流），在超长会话（`34k+` DOM 节点）与高刷屏下保持流畅零卡顿；推理稳态期背景极光自动限频至 `~30fps` 降低 GPU 占用，空闲 `1.2s` 后进入 `0fps` 休眠；支持「待用户决策 / 异常中止 / 长任务后台完成」三态无弹窗边缘余晖提示，静态定格后维持 `0fps` 零重绘。
@@ -111,9 +116,9 @@
 - **纵深安全边界与本地隔离**：CDP 特权绑定（`__agPrism*`）强制校验顶层主 Frame 上下文，拒绝任何子 `<iframe>` 越权调用；本地流式网关与后台守护服务实施 Fail-Closed `Host` 与跨站请求校验、UNC / NT 设备路径拦截、`realpath` 敏感凭据与 Google/Antigravity 核心凭据目录保护，下载更新实施预写内存 SHA-256 校验；行内 Diff RPC 强制校验 Git 仓边界、`.git` gitfile/UNC Fail-Closed、`--literal-pathspecs`、`--no-optional-locks` 与安全 `[filter]` 降级；本地 HTML 预览采用 `HMAC-SHA256` 单目录作用域只读子令牌与受限 `sandbox` 隔离，思考转译防跨源 `apiKey` 复用、禁用重定向并阻断云元数据与高危内网端口。
 - **双窗口配额遥测与 512K 上下文指示**：遥测引擎对齐上游 [`ATtacK030130/antigrative-dashboard`](https://github.com/ATtacK030130/antigrative-dashboard) `v0.9.1`，支持全模型池 **5 小时 + 周度（Weekly）双窗口配额监控与线性耗尽预测**、**主会话与 Swarm/子代理 Token 消耗拆分**、**Cache 命中率**统计，以及基于 CDP 进程族谱的多实例归属识别；Studio 首页看板提供概览、趋势与模型配额三视图及按工作区筛选；遥测目录独立隔离，检测到外部独立插件时自动礼貌避让（Auto-Yield）。
 - **双模思考转译工作台**：独立按需加载模块（关闭态默认零注入），同时支持免配置**机器翻译**与 **OpenAI 兼容接口流式转译**，新增零依赖异步 OS 系统代理自动检测（Windows/macOS），放行本地免密端点（`localhost` / 局域网 Ollama、LM Studio、vLLM 等无需填写 API Key）；基于 `file://` 协议白名单还原思考内容中的源码路径与 `#L` 行号点击跳转；内置服务端并发限流（上限 `3`）与视口优先调度队列、单块失败重试与强制重译，支持「沉浸纯译文 / 双语上下对照」切换及双端缓存清理；API Key 与提示词以 `0600` 权限仅保存在本机配置目录。
-- **提示词增强安全边界**：增强模型调用只由用户主动点击触发；上下文截取当前会话最近相关内容并限制长度，原始提示词不会因网络失败而丢失。结果会在成功后自动回填当前草稿，但不会自动提交或触发 Agent；请求期间若输入发生变化则拒绝覆盖。API 凭据始终由共享 Provider Profile 提供，不写入增强器独立配置。
+- **提示词增强隐私边界**：模型调用仅由用户主动点击触发；上下文限制为相关的近期对话，网络失败时保留原始提示词。成功结果只回填当前草稿，不提交提示词或启动 Agent；输入目标发生变化或消失时拒绝覆盖。凭据只从共享 Provider Profile 读取，不复制到增强器配置。
 - **Chat 对话模式 (Beta · 默认关闭)**：默认保持关闭，可在 **设置 → 外观 → Beta 内容** 中随时开启或关闭（`sidebarStudio: "on" | "off"`）。开启后可在侧栏顶部切换工程模式与专注日常交流、文档整理的 Chat 空间，提供独立文件夹/项目组织、多轮阅读视图与 Artifacts 侧边栏预览，并实行项目级权限隔离，避免改动全局工程设置。
-- **按需模块化微内核、零-`eval` LZSS 与毫秒级热刷新**：前端拆解为 `ui-runtime.js` 微内核与 6 个高内聚控制器模块，结合零-`eval` 同步 UTF-16 LZSS 压缩严格控制静态主包体积（Omni 检视台、Chat 侧栏、宿主汉化、思考转译、行内 Diff 与动静态壁纸 Beta 均按独立模块按需加载），配合统一磁盘缓存（`.bundle-cache.json`）跨进程冷启动仅 `~26 ms`；设置中心覆盖 **36 项**可校验配置键（支持「正式版 / Beta 尝鲜版」双更新通道），内置三档场景预设、分类子标签页与自动剥离私钥凭据的脱敏 JSON 导入/导出备份，配置变更通过单飞增量广播在 `< 10 ms` 内热刷新生效。
+- **按需模块化微内核、零-`eval` LZSS 与毫秒级热刷新**：前端拆解为 `ui-runtime.js` 微内核与 6 个高内聚控制器模块，结合零-`eval` 同步 UTF-16 LZSS 压缩严格控制静态主包体积（Omni 检视台、Chat 侧栏、宿主汉化、思考转译、行内 Diff 与动静态壁纸 Beta 均按独立模块按需加载），配合统一磁盘缓存（`.bundle-cache.json`）跨进程冷启动仅 `~26 ms`；设置中心覆盖 **40 项**面板可校验设置（底层 `src/config/schema.cjs` 共 **55 项**配置键，支持「正式版 / Beta 尝鲜版」双更新通道），内置三档场景预设、分类子标签页与自动剥离私钥凭据的脱敏 JSON 导入/导出备份，配置变更通过单飞增量广播在 `< 10 ms` 内热刷新生效。
 
 </details>
 
@@ -177,7 +182,6 @@ node tools/install-plugin.cjs --status
 ```bash
 npm run inject                 # 单次实时注入当前已打开的 Antigravity 窗口
 npm run remove                 # 移除全部注入样式与组件，立即恢复宿主原生界面
-npm run clean:legacy           # 清理历史旧版 app.asar 遗留块（保留汉化与外部插件）
 npm run archive:conversations  # 检查本地对话库体积并离线安全归档历史子代理会话（支持无损还原）
 npm test                       # 运行跨模块安全、性能与回归测试套件
 npm run build:installer        # 编译 Windows 独立安装器 (.exe)
@@ -187,19 +191,19 @@ npm run build:macos            # 编译 macOS Universal 安装包 (.dmg)
 #### 仓库核心目录结构
 ```text
 obsidian-prism/
-├── plugin.json                         # Antigravity 原生插件清单 (obsidian-prism@1.0.8-beta.3)
+├── plugin.json                         # Antigravity 原生插件清单 (obsidian-prism@1.0.8-beta.4)
 ├── LICENSE / NOTICE / CITATION.cff     # GPL-3.0 许可证、附加署名声明与仓库引用元数据
 ├── THIRD_PARTY_NOTICES.md              # 吸收整合的上游 MIT 项目完整版权与许可声明
 ├── assets/                             # 插件矢量图标与说明文档截图资源
 ├── cdp.js / inject.js / remove.js      # 零-eval LZSS 打包器、按需分块磁盘缓存与注入卸载协议
 ├── style.css                           # 四套深浅主题、Smoked Obsidian 切面与宿主表面样式表
-├── i18n-locales.js / i18n-core.js      # 8 语种多语言词条模块（简中/繁中/英/日/韩/西/法/德）
+├── i18n-locales.js / i18n-core.js      # 9 语种多语言词条模块（简中/繁中/英/日/韩/西/法/德/土）
 ├── motion-engine.js / animated-icons.js# 4 档二阶阻尼弹簧动画与微动态图标模块
 ├── ripple-core.js / conv-aura.js       # 300Hz 分频 WebGL2 地平线着色器与三态 0fps 语义余晖
 ├── smooth-caret.js / dual-mascot-rig.js# 读写分离编辑器光标跟随与桌面像素双宠模块
 ├── usage-core.js / vial-core.js        # 用量统计/双窗口配额预测纯函数与 512K 浅水波胶囊
 ├── pulse-vial-bridge.js                # 上下文切片拆分与 5h/周配额浮窗桥接器
-├── settings-panel.js                   # 外观设置中心（36 项配置、场景预设、脱敏 JSON 备份）
+├── settings-panel.js                   # 外观设置中心（40 项面板设置、场景预设、脱敏 JSON 备份）
 ├── home-studio-panel.js                # 控制器 1：Studio 新建会话看板（概览/趋势/配额三视图）
 ├── home-ripple-host.js                 # 控制器 2：首页字符波纹矩阵宿主控制器
 ├── model-glyph-crystal.js              # 控制器 3：模型星标与 WebGL2 棱镜状态栏控制器
@@ -208,7 +212,7 @@ obsidian-prism/
 ├── host-workbench-enhancer.js          # 控制器 6：扩展面板主题同步桥、代码折叠与导轨大纲控制器
 ├── ui-runtime.js                       # 前端微内核：配置热同步、DOM 观察器与生命周期编排
 ├── sidecars/daemon/                    # 本地常驻守护服务 (设置/遥测/用量/Git/归档/思考/Omni/行内Diff/壁纸Beta)
-├── vendor/                             # 遥测 (v0.9.1)、滑块、思考转译、行内Diff、壁纸Beta、omni-viewer、sidebar-studio 与 host-i18n
+├── vendor/                             # 遥测 (v0.9.1)、滑块、思考转译、提示词增强器、行内Diff、壁纸Beta、omni-viewer、sidebar-studio 与 host-i18n
 └── installer/ & tools/                 # Windows (C#) / macOS (Swift) 原生插件安装器与工具链
 ```
 </details>
@@ -230,13 +234,17 @@ obsidian-prism/
 > Built upon [Obsidian Prism](https://github.com/RMvdesi/obsidian-prism) by [@RMvdesi](https://github.com/RMvdesi), licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html). Upstream component notices are preserved in `NOTICE` and `THIRD_PARTY_NOTICES.md`.
 ```
 
-#### 引用格式 (`CITATION.cff` / BibTeX)
+2026-11-28，Yaniuan 在 `config.example.json` 中添加了默认关闭的 `promptEnhancer` 配置项。此文件使用严格 JSON，修改说明记于此处。
+
+提示词增强器的交互参考了 [Meowv/prompt](https://github.com/Meowv/prompt)，代码使用 Prism 自有通道和运行时实现。
+
+#### 引用格式 ([CITATION.cff](./CITATION.cff) / BibTeX)
 ```bibtex
 @software{rmvdesi_obsidian_prism_2026,
   author       = {RMvdesi},
   title        = {{Obsidian Prism: Modular Optical UI, Workbench Enhancements, Omni File Viewer, Quota Telemetry & Thought Translator for Antigravity}},
   year         = {2026},
-  version      = {1.0.8-beta.3},
+  version      = {1.0.8-beta.4},
   license      = {GPL-3.0-only},
   url          = {https://github.com/RMvdesi/obsidian-prism}
 }

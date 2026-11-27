@@ -8,8 +8,10 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+const cjsRequire = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const importRel = (rel) => import(pathToFileURL(path.join(ROOT, rel)).href);
 
@@ -675,7 +677,7 @@ test('security-sidecar 2: workbench-page /sandbox-init failure renders .wb-empty
 
 test('security-sidecar 3: sidebar-service disables pick-folder in sandboxMode, runs pick-folder outside serialized queue, blocks UNC paths & retries Windows rename', async (t) => {
   const { SidebarStudioService } = await importRel('vendor/sidebar-studio/sidebar-service.mjs');
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-sec-sb-'));
+  const tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-sec-sb-')));
   t.after(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -693,6 +695,8 @@ test('security-sidecar 3: sidebar-service disables pick-folder in sandboxMode, r
   assert.match(String(pickSandboxRes.error?.message || pickSandboxRes.error || ''), /sandboxMode/i);
 
   // 2) pick-folder bypasses serialized _enqueue queue & strips blocked UNC initialDir
+  const fakeWatcherExe = path.join(tmpDir, 'obsidian-prism-watcher.exe');
+  fs.writeFileSync(fakeWatcherExe, 'stub-watcher-exe', 'utf8');
   let capturedEnv = null;
   const mockExecFile = async (_cmd, _args, opts) => {
     capturedEnv = opts?.env || null;
@@ -706,6 +710,7 @@ test('security-sidecar 3: sidebar-service disables pick-folder in sandboxMode, r
     statePath: path.join(tmpDir, 'sidebar-real.json'),
     sandboxMode: false,
     execFile: mockExecFile,
+    watcherExePath: fakeWatcherExe,
   });
   t.after(async () => {
     await realSvc.dispose();
@@ -1286,7 +1291,7 @@ test('security-sidecar 6: red-team hardening for NT device/mixed-slash UNC white
   const { SidebarStudioService, isBlockedUncPath: sidebarIsBlockedUncPath } = await importRel('vendor/sidebar-studio/sidebar-service.mjs');
   const { UpdateService } = await importRel('sidecars/daemon/update-service.mjs');
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-sec-redteam6-'));
+  const tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-sec-redteam6-')));
   t.after(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -1333,10 +1338,13 @@ test('security-sidecar 6: red-team hardening for NT device/mixed-slash UNC white
 
   // 2) sidebar-service pickFolder & revealFolder must reject mixed-slash / NT device paths BEFORE fs.realpathSync
   {
+    const fakeWatcherExe = path.join(tmpDir, 'obsidian-prism-watcher.exe');
+    fs.writeFileSync(fakeWatcherExe, 'stub-watcher-exe', 'utf8');
     let capturedPickEnv = null;
     const sbSvc = new SidebarStudioService({
       statePath: path.join(tmpDir, 'sidebar-decoupled.json'),
       sandboxMode: false,
+      watcherExePath: fakeWatcherExe,
       execFile: async (_cmd, _args, opts) => {
         capturedPickEnv = opts?.env || null;
         return { stdout: '' };

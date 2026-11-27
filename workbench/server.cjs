@@ -7,6 +7,10 @@ const { pathToFileURL } = require('node:url');
 
 const WORKBENCH_DIR = __dirname;
 const REPO_ROOT = path.resolve(__dirname, '..');
+const PKG_VERSION = (() => {
+  try { const v = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))?.version?.trim(); if (v) return v; } catch {}
+  return '1.0.8-beta.3';
+})();
 const DEFAULT_TOKENS_PATH = path.join(WORKBENCH_DIR, 'design-tokens.json');
 const SIDEBAR_STATE_MACHINE_PATH = path.join(REPO_ROOT, 'vendor', 'sidebar-studio', 'state-machine.mjs');
 const SIDEBAR_SERVICE_PATH = path.join(REPO_ROOT, 'vendor', 'sidebar-studio', 'sidebar-service.mjs');
@@ -126,11 +130,12 @@ function parseReplicaPrismConfig(searchParams) {
     homeLayout: ['studio', 'classic', 'off'],
     telemetryModule: ['auto', 'on', 'off'],
     effortSliderModule: ['auto', 'on', 'off'],
-    language: ['zh-CN', 'zh-TW', 'yue', 'en', 'ja'],
+    language: ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'],
     codeFont: ['default', 'jetbrains', 'cascadia', 'sfmono'],
   };
   for (const [k, vals] of Object.entries(allow)) {
-    const v = searchParams.get(k);
+    const raw = searchParams.get(k);
+    const v = k === 'language' && raw && /^(?:yue(?:$|[-_])|zh-yue$)/i.test(raw) ? 'zh-CN' : raw;
     if (v && vals.includes(v)) cfg[k] = v;
   }
   const cornersAlias = searchParams.get('corners');
@@ -902,7 +907,7 @@ if (require.main === module) {
   const server = createWorkbenchServer();
   server.listen(port, host, () => {
     const addr = server.address();
-    console.log(`Obsidian Prism v1.0.8-beta.3 Workbench listening on http://${host}:${addr.port}`);
+    console.log(`Obsidian Prism v${PKG_VERSION} Workbench listening on http://${host}:${addr.port}`);
     console.log(`  · Optical Workbench: http://${host}:${addr.port}/`);
     console.log(`  · Bipolar Studio:    http://${host}:${addr.port}/studio`);
   });

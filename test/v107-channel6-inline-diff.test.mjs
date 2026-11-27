@@ -262,6 +262,7 @@ test('Channel 6 inline-diff standalone compilation, idempotent mount, missing-fi
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-ch6-missing-'));
   try {
     fs.copyFileSync(path.join(ROOT, 'cdp.js'), path.join(tmpDir, 'cdp.js'));
+    fs.cpSync(path.join(ROOT, 'src'), path.join(tmpDir, 'src'), { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'config.example.json'), path.join(tmpDir, 'config.example.json'));
     const isolatedCdp = require(path.join(tmpDir, 'cdp.js'));
     assert.equal(isolatedCdp.buildInlineDiffInjectExpression(isolatedCdp.DEFAULT_CONFIG), '');
@@ -282,6 +283,7 @@ test('Channel 6 participates in 6-Channel .bundle-cache.json with SHA-256 invali
 
     fs.mkdirSync(clientDir, { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'cdp.js'), path.join(tmpDir, 'cdp.js'));
+    fs.cpSync(path.join(ROOT, 'src'), path.join(tmpDir, 'src'), { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'config.example.json'), path.join(tmpDir, 'config.example.json'));
     fs.copyFileSync(path.join(ROOT, 'vendor', 'inline-diff', 'inline-diff-client.js'), clientPath);
 

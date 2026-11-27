@@ -1120,13 +1120,7 @@ test('Scenario 7 (R1~R5 防风控加固): 拖动松手单次提交 + 零原型�
   assert.equal(googleTransRe.test(expr), false, 'R4: compiled bundle must contain zero translate.googleapis.com');
   assert.ok(Buffer.byteLength(expr, 'utf8') <= 704000, 'Default bundle must stay <= 704,000 B (< 690 KiB)');
 
-  // R5: inline-widget.cjs QUOTA_HOVER_COOLDOWN >= 20000 & MANUAL_REFRESH_COOLDOWN >= 5000 + host-workbench-enhancer 分帧折叠
-  const iwSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'pulse-dashboard', 'compat', 'inline-widget.cjs'), 'utf8');
-  const qm = iwSrc.match(/QUOTA_HOVER_COOLDOWN=(\d+)/);
-  assert.ok(qm && Number(qm[1]) >= 20000, 'R5: QUOTA_HOVER_COOLDOWN must be >= 20000ms');
-  const mm = iwSrc.match(/MANUAL_REFRESH_COOLDOWN=(\d+)/);
-  assert.ok(mm && Number(mm[1]) >= 5000, 'R5: MANUAL_REFRESH_COOLDOWN must be >= 5000ms');
-
+  // R5: host-workbench-enhancer 分帧折叠（原 0 调用孤儿 compat/inline-widget.cjs 已物理移除）
   const hweSrc = fs.readFileSync(path.join(ROOT, 'host-workbench-enhancer.js'), 'utf8');
   const hweEnv = createSimEnv();
   const conv = hweEnv.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });

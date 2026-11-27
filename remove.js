@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Stop watch/daemon processes and remove Obsidian Prism from every open Antigravity window.
 // Passing --purge-data additionally removes Prism user configs, caches (including usage rollup cache), and telemetry safely.
 const fs = require('fs');
@@ -22,15 +23,24 @@ const REDLINE_DIR_SEGMENTS = new Set([
   'prism-knowledge-space',
   'antigravity-spark',
 ]);
-const PURGE_EXACT_FILES = [
+let sharedPurgeDataFiles = null;
+try {
+  const manifestMod = require('./src/platform/install-manifest.cjs');
+  if (Array.isArray(manifestMod?.PURGE_DATA_FILES) && manifestMod.PURGE_DATA_FILES.length > 0) {
+    sharedPurgeDataFiles = [...manifestMod.PURGE_DATA_FILES];
+  }
+} catch {}
+const PURGE_EXACT_FILES = sharedPurgeDataFiles || [
   'obsidian-prism-config.backup.json',
   'obsidian-prism-thought.json',
   'obsidian-prism-thought-cache.json',
   USAGE_ROLLUP_CACHE_FILENAME,
+  'obsidian-prism-storage-guard-state.json',
   'obsidian-prism-sidebar.json',
   'obsidian-prism-sidebar.json.lock',
   'obsidian-prism-wallpaper.json',
   'obsidian-prism-suggester.json',
+  'obsidian-prism-prompt-enhancer.json',
 ];
 
 function parseCliArgs(argv = process.argv.slice(2)) {
@@ -400,6 +410,7 @@ if (require.main === module) {
 
 module.exports = {
   USAGE_ROLLUP_CACHE_FILENAME,
+  PURGE_EXACT_FILES,
   DAEMON_STOP_POLL_MS,
   DAEMON_STOP_GRACEFUL_TIMEOUT_MS,
   DAEMON_STOP_SIGKILL_WAIT_MS,

@@ -1143,3 +1143,41 @@ test('Battle 5: detectExternalSwarmI18n yields to Antigravity-Hans, 3169657175, 
   envLangEn.doc.documentElement.setAttribute('lang', 'en');
   assert.equal(swarmRuntime.detectExternalSwarmI18n(envLangEn.win, envLangEn.doc), null);
 });
+
+test('Turkish (tr) Swarm localization: locale gating, single-dictionary isolation, VM translation & restore', () => {
+  const trSwarmDict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor/host-i18n/swarm-tr.json'), 'utf8'));
+  assert.ok(trSwarmDict.exact && trSwarmDict.exact.Board, 'swarm-tr.json must contain Board translation');
+  assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'tr' }), true);
+  assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'auto', language: 'auto' }, 'tr-TR'), true);
+  assert.equal(cdp.shouldEnableSwarmI18n({ hostLocalization: 'off', language: 'tr' }), false);
+  assert.equal(path.basename(cdp.getSwarmI18nDictionaryPath({ language: 'tr' })), 'swarm-tr.json');
+  assert.equal(path.basename(cdp.getSwarmI18nDictionaryPath({ language: 'zh-CN' })), 'swarm-zh-CN.json');
+  assert.equal(path.basename(cdp.getSwarmI18nDictionaryPath({ language: 'auto' }, 'tr-TR')), 'swarm-tr.json');
+
+  const trExpr = cdp.buildSwarmI18nExpression({ hostLocalization: 'auto', language: 'tr' }, { noDiskCache: true });
+  assert.ok(Buffer.byteLength(trExpr, 'utf8') > 5000 && Buffer.byteLength(trExpr, 'utf8') <= 49152);
+  // Single-dictionary isolation: tr bundle must not embed zh-CN dictionary entries
+  assert.equal(trExpr.includes('留言板'), false, 'Turkish Swarm payload must not bundle zh-CN dictionary');
+
+  const vmEnv = createSwarmTestDom();
+  const vmTabs = vmEnv.makeEl('nav', { attrs: { 'data-testid': 'swarm-tabs' } });
+  const vmBtn = vmEnv.makeEl('button', { id: 'tabbtn-feed', text: 'Board' });
+  vmTabs.append(vmBtn);
+  vmEnv.doc.body.append(vmTabs);
+  const ctx = vm.createContext({
+    window: vmEnv.win,
+    document: vmEnv.doc,
+    globalThis: vmEnv.win,
+    MutationObserver: vmEnv.win.MutationObserver,
+    requestAnimationFrame: vmEnv.win.requestAnimationFrame,
+    cancelAnimationFrame: vmEnv.win.cancelAnimationFrame,
+  });
+  vmEnv.win.window = vmEnv.win;
+  vmEnv.win.globalThis = vmEnv.win;
+  const res = vm.runInContext(trExpr, ctx);
+  assert.equal(res.ok, true);
+  assert.equal(res.status, 'active');
+  assert.equal(vmBtn.textContent, trSwarmDict.exact.Board);
+  vm.runInContext(cdp.SWARM_I18N_REMOVE_EXPRESSION, ctx);
+  assert.equal(vmBtn.textContent, 'Board');
+});

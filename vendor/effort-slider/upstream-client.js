@@ -1,36 +1,14 @@
 "use strict";
-/**
-* Antigravity Codex 风格推理等级滑条 (antigravity-codex-effort-slider)
-*/
 (function (root, factory) {
 try {
 var exportsObj = factory(root);
-if (typeof module === "object" && module && typeof module.exports === "object") {
-module.exports = exportsObj;
-}
-if (root && typeof root === "object") {
-root.AntigravityCodexEffortSlider = exportsObj;
-}
-} catch (err) {
-// Factory error handled silently
-}
+if (typeof module === "object" && module && typeof module.exports === "object") module.exports = exportsObj;
+if (root && typeof root === "object") root.AntigravityCodexEffortSlider = exportsObj;
+} catch (err) {}
 })(typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : this, function (globalRoot) {
-// ── 常量与默认几何参数 ──────────────────────────────────────────────────────
-var STYLE_ELEMENT_ID = "ag-codex-effort-slider-styles";
-var KNOB_RADIUS = 14;
-var ENERGY_START = 0;
-var ENERGY_END = 0.5;
-// Antigravity 官方推理档位枚举与展示名映射（对应 main.js 中的 DXb / EXb / GXb）
+var STYLE_ELEMENT_ID = "ag-codex-effort-slider-styles", KNOB_RADIUS = 14, ENERGY_START = 0, ENERGY_END = 0.5;
 var AG_EFFORT_ORDER = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
-var AG_EFFORT_LABELS = {
-off: "Off",
-minimal: "Minimal",
-low: "Low",
-medium: "Medium",
-high: "High",
-xhigh: "Extra",
-max: "Max"
-};
+var AG_EFFORT_LABELS = { off: "Off", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "Extra", max: "Max" };
 var AG_MODEL_LABEL_RE = /^(.*?)\s*\((off|minimal|low|medium|high|xhigh|extra|max)(?:\s+thinking)?\)\s*$/i;
 var _EFF_ALIAS = Object.create(null);
 "xhigh:xhigh|extra|extra high|超高|极高|極高|特高|很高;high:high|高;medium:medium|med|中|中等;low:low|低;minimal:minimal|极低|極低|最小|最低|极简|極簡;max:max|最高|最大|极限|極限;off:off|关闭|關閉|关|關|不推理|无|無|none|disabled;auto:auto|自动|自動;adaptive:adaptive|自适应|自適應;thinking:thinking|深度思考|思考中|思考;fixed:fixed|固定".split(";").forEach(function (g) {
@@ -60,23 +38,11 @@ else if (typeof el.className === "string") el.className += (el.className ? " " :
 }
 return el;
 }
-var CLAUDE_CELL = 28 / 6;
-var CLAUDE_SWEEP_MS = 1600;
-function isClaudeModel(name) {
-if (!name || typeof name !== "string") return false;
-return /claude/i.test(name);
-}
-// ── 连续物理运动参数 ────────────────────────────────────────────────────────
-// full: 完整星云阻尼变速动画；fast: 快速 ~70ms 跟手吸附（默认）；quick: 0 动画直接跳格
-var _F = Object.freeze;
-var MOTION = _F({ maxSpeed: 3.2, accel: 28, decel: 18, snapEps: 0.0015, velEps: 0.01 });
-var MOTION_REDUCED = _F({ maxSpeed: 1e6, accel: 1e9, decel: 1e9, snapEps: 1e-4, velEps: 1e6 });
-var MOTION_FAST = _F({ maxSpeed: 18, accel: 260, decel: 180, snapEps: 0.002, velEps: 0.04 });
-var _REL_PRJ = 0.09, _PS_EMA = 0.45, _PS_STL = 0.05, _PS_TAU = 0.035;
-var SETTINGS_KEY = "ag.codexEffortSlider.settings.v1";
-var LEGACY_SETTINGS_KEY = "dsh.codexEffortSlider.settings.v1";
-var SETTINGS_EVENT = "ag:codex-effort-slider:settings";
-var SETTINGS_VERSION = 1;
+var CLAUDE_CELL=28/6,CLAUDE_SWEEP_MS=1600;
+function isClaudeModel(name){return typeof name==="string"&&/claude/i.test(name);}
+// 物理运动参数
+var _F=Object.freeze,MOTION=_F({maxSpeed:3.2,accel:28,decel:18,snapEps:0.0015,velEps:0.01}),MOTION_REDUCED=_F({maxSpeed:1e6,accel:1e9,decel:1e9,snapEps:1e-4,velEps:1e6}),MOTION_FAST=_F({maxSpeed:18,accel:260,decel:180,snapEps:0.002,velEps:0.04});
+var _REL_PRJ=0.09,_PS_EMA=0.45,_PS_STL=0.05,_PS_TAU=0.035,SETTINGS_KEY="ag.codexEffortSlider.settings.v1",LEGACY_SETTINGS_KEY="dsh.codexEffortSlider.settings.v1",SETTINGS_EVENT="ag:codex-effort-slider:settings",SETTINGS_VERSION=1;
 var SETTINGS_SCHEMA = _F([
 _F({ key: "motion", label: "动画效果", labelEn: "Animation", defaultValue: "fast", options: _F([
 _F({ value: "fast", label: "快速动画", labelEn: "Fast", hint: "拨过 1/3 即切档 · ~70ms 快速吸附", hintEn: "Snaps after 1/3 travel (~70ms)" }),
@@ -132,7 +98,14 @@ w.addEventListener(SETTINGS_EVENT, hC); w.addEventListener("storage", hS);
 return function () { w.removeEventListener(SETTINGS_EVENT, hC); w.removeEventListener("storage", hS); };
 }
 function prefersReducedMotion(win) {
-try { var w = _win(win); return Boolean(w && w.matchMedia && w.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; }
+try {
+var w = _win(win);
+if (w && typeof w.__agPrismReducedMotion === "function") return Boolean(w.__agPrismReducedMotion());
+var d = (w && w.document) || (typeof document !== "undefined" ? document : null), r = d && d.documentElement;
+if (r && r.getAttribute && r.getAttribute("data-ag-cs-motion") === "off") return true;
+if (r && r.getAttribute && r.getAttribute("data-ag-cs-ignore-rm") === "1") return false;
+return Boolean(w && w.matchMedia && w.matchMedia("(prefers-reduced-motion: reduce)").matches);
+} catch (e) { return false; }
 }
 function getPrismRootAttr(doc, win, attr) {
 try { var d = doc || (win && win.document) || (typeof document !== "undefined" ? document : null), r = d && d.documentElement; return (r && r.getAttribute && r.getAttribute(attr)) || ""; } catch (e) { return ""; }
@@ -141,17 +114,16 @@ function isPrismMotionOff(doc, win) { return getPrismRootAttr(doc, win, "data-ag
 function resolvePrismAccentTone(doc, win) { var ac = getPrismRootAttr(doc, win, "data-ag-cs-accent"); return ac === "mono" || ac === "amber" || ac === "iris" || ac === "cobalt" ? ac : "follow"; }
 function motionMode(win, explicitSettings, doc) { return isPrismMotionOff(doc, win) ? "quick" : (explicitSettings ? normalizeSettings(explicitSettings) : readSettings(win)).motion || "fast"; }
 function motionParamsForMode(mode) { return mode === "quick" ? MOTION_REDUCED : mode === "full" ? MOTION : MOTION_FAST; }
-// ── 诊断环形缓冲区 ──────────────────────────────────────────────────────────
+// 诊断缓冲
 var _tr = [];
 function tracePush(type, detail) {
 var e = Object.assign({ t: Date.now(), type: String(type || "event") }, detail && typeof detail === "object" ? detail : null);
 _tr.push(e);
 if (_tr.length > 200) _tr.splice(0, _tr.length - 200);
 }
-function dumpTrace(win) {
-var w = _win(win);
-return { plugin: "antigravity-codex-effort-slider@1.2.1", time: new Date().toISOString(), ua: w && w.navigator ? w.navigator.userAgent : "node", settings: readSettings(w), events: _tr.slice() };
-}
+var _SAN_HOME_RE = /(?:[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s"'`]+|\/(?:Users|home)\/[^/\s"'`]+)/g;
+function _sanTr(v) { return typeof v === "string" ? v.replace(_SAN_HOME_RE, "<USER_HOME>") : Array.isArray(v) ? v.map(_sanTr) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, _sanTr(x)])) : v; }
+function dumpTrace(win) { var w = _win(win); return _sanTr({ plugin: "antigravity-codex-effort-slider@1.2.1", time: new Date().toISOString(), ua: w?.navigator ? w.navigator.userAgent : "node", settings: readSettings(w), events: _tr.slice() }); }
 function clamp01(v) { var n = Number(v); return !Number.isFinite(n) || n <= 0 ? 0 : n >= 1 ? 1 : n; }
 function clampAbs(v, l) { var m = Math.max(0, Number(l) || 0), n = Number(v) || 0; return n > m ? m : n < -m ? -m : n; }
 function pctFromIndex(i, c) { var n = Number(c) || 0; return n <= 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round(Number(i) || 0))) / (n - 1); }
@@ -208,11 +180,8 @@ var v = decayPointerSpeed(rawSpeed, idleSeconds);
 var projected = clamp01((Number(ptrPct) || 0) + v * _REL_PRJ);
 return indexFromPct(projected, count);
 }
-// ── 22 颗黄金分割确定性星尘与色彩引擎（对齐 dsh-codex-effort-slider 右向左横穿星空） ──
-var PARTICLE_COUNT = 22;
-var _SF_MEAN = 1.5;
-var _SF_SPR = 0.08;
-var STARFIELD_MIN = 0.5;
+// 22 颗星尘参数
+var PARTICLE_COUNT = 22, _SF_MEAN = 1.5, _SF_SPR = 0.08, STARFIELD_MIN = 0.5;
 var GOLDEN_RATIO = 0.6180339887498949;
 var MAX_SPEED_FACTOR = 2;
 var _RM_SLOW = 2.6;
@@ -497,8 +466,8 @@ if (!tp && idx <= first) return lo;
 if (isClaude && n === 3 && idx === 1) return "#a78bfa";
 return mixHex(lo, hi, clamp01((idx - first) / Math.max(1, n - 1 - first)));
 }
-// ── 样式表注入（对齐 dsh-codex-effort-slider 右向左星尘横穿 + 星云扫光 + Antigravity 面板适配） ──
-var SLIDER_CSS = "@keyframes ces-sweep{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes ces-star-sweep{0%{transform:translate3d(0,0,0);opacity:0}6%,94%{opacity:1}100%{transform:translate3d(-100%,0,0);opacity:0}}.ces-inline,.ces-root,.ces-track,.ces-ag-section,.ces-ag-effort-row{box-sizing:border-box}.ces-inline,.ces-root,.ces-ag-section,.ces-ag-section *{user-select:none!important;-webkit-user-select:none!important;-webkit-tap-highlight-color:transparent!important}.ces-inline{width:100%;padding-top:6px}.ces-root{position:relative;width:100%;outline:none!important;box-shadow:none!important}.ces-track{position:relative;width:100%;height:28px;border-radius:999px;background:rgba(128,128,145,.18);box-shadow:inset 0 1px 2px rgba(0,0,0,.24),inset 0 0 0 1px rgba(255,255,255,.06);cursor:pointer;touch-action:none;transition:opacity .15s,box-shadow .2s}.ces-root[data-energy='1'] .ces-track{box-shadow:0 0 calc(var(--ces-energy,0) * 16px) rgba(168,85,247,.5),inset 0 1px 2px rgba(0,0,0,.24)}.ces-root[data-energy='0'] .ces-star,.ces-root[data-energy='0'] .ces-energy__sweep{animation-play-state:paused}.ces-track.is-locked{opacity:.45;cursor:not-allowed;filter:saturate(.25)}.ces-fill,.ces-energy,.ces-stars{position:absolute;top:0;left:0;bottom:0;width:var(--ces-fill,14px);border-radius:14px 0 0 14px;pointer-events:none}.ces-fill{background:var(--ces-fill-bg,#4d93f8);overflow:hidden}.ces-energy{overflow:hidden;opacity:var(--ces-energy,0);transition:opacity .2s;background:linear-gradient(90deg,#3b1178,#6d28d9 30%,#9333ea 62%,#c084fc)}.ces-energy__sweep{position:absolute;inset:0;background:linear-gradient(100deg,transparent 18%,rgba(255,255,255,.3) 50%,transparent 82%);transform:translateX(100%);animation:ces-sweep 2.4s linear infinite;pointer-events:none}.ces-stars{opacity:var(--ces-star-opacity,0);transition:opacity .2s;overflow:hidden}.ces-star{position:absolute;left:0;right:0;height:3px;margin-top:-1.5px;pointer-events:none;animation:ces-star-sweep linear infinite}.ces-star__dot{position:absolute;left:100%;top:0;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:#f5f3ff;box-shadow:0 0 5px rgba(216,180,254,.95);opacity:var(--ces-b,1);transform:scale(var(--ces-b,1))}.ces-ticks{position:absolute;inset:0;pointer-events:none}.ces-tick{position:absolute;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(255,255,255,.28);pointer-events:none;transition:background-color .12s}.ces-tick.is-on{background:rgba(255,255,255,.65)}.ces-tick.is-dim{background:rgba(255,255,255,.28)}.ces-knob{position:absolute;top:50%;left:var(--ces-fill,14px);width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.34),0 0 0 .5px rgba(0,0,0,.06);pointer-events:none;will-change:transform}.ces-root[data-theme='claude'] .ces-stars,.ces-root[data-theme='claude'] .ces-energy{display:none!important}.ces-root[data-theme='claude'] .ces-track{background:rgba(128,128,145,.16);box-shadow:inset 0 1px 2px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.08)}.ces-root[data-theme='claude'][data-energy='1'] .ces-track{box-shadow:0 0 16px rgba(167,139,250,.45),inset 0 1px 2px rgba(0,0,0,.22)}.ces-root[data-theme='claude'] .ces-knob{width:24px;height:30px;margin:-15px 0 0 -12px;border-radius:7px;box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center}.ces-knob-notch{display:none;width:2px;height:10px;border-radius:999px;background:rgba(0,0,0,.28)}.ces-root[data-theme='claude'] .ces-knob-notch{display:block}.ces-claude-canvas{position:absolute;left:0;top:0;border-radius:14px 0 0 14px;display:none;pointer-events:none}.ces-root[data-theme='claude'][data-energy='1'] .ces-claude-canvas{display:block}@keyframes ces-claude-rise{0%{transform:translateY(20%) scale(.98);opacity:.15}60%{opacity:1}85%{transform:translateY(-2%) scale(1.01)}100%{transform:none;opacity:1}}.ces-ag-effort-value:is(.is-claude-changing,.ces-text-rise){animation:ces-claude-rise .24s cubic-bezier(.2,.85,.25,1)}.ces-ag-effort-value.is-glowing:is(.is-claude-changing,.ces-text-rise){animation:ces-claude-rise .24s cubic-bezier(.2,.85,.25,1),ces-text-bloom .4s cubic-bezier(.16,1,.3,1) forwards}[data-testid='model-selector-panel'].ces-ag-panel-enhanced{max-height:26rem!important}.ces-ag-section,.ces-ag-section *{outline:none!important}.ces-ag-section,.ces-ag-effort-row{display:flex;flex-direction:column;width:100%}.ces-ag-section{flex-shrink:0}.ces-ag-effort-row{padding:6px 8px 8px;border-radius:6px;transition:box-shadow .2s,background-color .2s}.ces-ag-effort-row:hover{background:rgba(128,128,145,.08)}.ces-ag-effort-row[data-ces-max='true'],[data-ces-effort-row='true'][data-ces-max='true']{box-shadow:inset 0 0 0 1px rgba(139,92,246,.42),0 0 14px -4px rgba(139,92,246,.45)!important;background:rgba(139,92,246,.06)}.ces-ag-effort-head{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:18px;padding:1px 0;font-size:12px;line-height:16px;overflow-y:clip;overflow-clip-margin:10px}.ces-ag-effort-title{display:inline-flex;align-items:center;gap:6px;color:inherit;font-weight:500;opacity:.9}.ces-ag-effort-value{position:relative;z-index:1;display:inline-block;font-size:12px;font-weight:600;transition:color .15s}.ces-ag-effort-value::after{content:'';position:absolute;top:50%;left:50%;width:52px;height:26px;border-radius:999px;transform:translate(-50%,-50%) scale(.6);background:radial-gradient(ellipse,var(--ces-glow-color,rgba(168,85,247,.85)),var(--ces-glow-color,rgba(168,85,247,.45)) 45%,rgba(168,85,247,0) 75%);filter:blur(8px);pointer-events:none;opacity:0;z-index:-1}@keyframes ces-glow-flash{0%{opacity:.95;transform:translate(-50%,-50%) scale(.65);filter:blur(6px)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.15);filter:blur(8px)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5);filter:blur(14px)}}@keyframes ces-text-bloom{0%{text-shadow:0 0 8px var(--ces-glow-color,#c084fc)}30%{text-shadow:0 0 14px var(--ces-glow-color,#c084fc),0 0 3px #fff}100%{text-shadow:none}}.ces-ag-effort-value.is-glowing{animation:ces-text-bloom .4s cubic-bezier(.16,1,.3,1) forwards}.ces-ag-effort-value.is-glowing::after{animation:ces-glow-flash .4s cubic-bezier(.16,1,.3,1) forwards}@media (prefers-reduced-motion:reduce){.ces-panel-shaking,.ces-ag-effort-value.is-glowing,.ces-ag-effort-value.is-glowing::after,.ces-ag-effort-value.ces-text-rise,.ces-ag-effort-value.is-claude-changing{animation:none!important}}html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='model-selector-effort-option']):not(:has([data-testid='model-selector-panel'])),html[data-ces-slider-ready='1'] div[role='presentation']:has(>[role='menu'] [data-testid='model-selector-effort-option']):not(:has([data-testid='model-selector-panel'])),html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel'])):not(:has([data-testid='orchestrator-picker-row'])):not([data-ag-cs-orch-l2='1']),html[data-ces-slider-ready='1'] div[role='presentation']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel'])):not(:has([data-testid='orchestrator-picker-row'])):not(:has([data-ag-cs-orch-l2='1'])),html[data-ces-slider-ready='1'] [data-testid='orchestrator-picker-effort']:not(:has([data-testid='model-selector-panel'])),html[data-ces-slider-ready='1'] [data-ag-cs-orch-l3='1']{display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important}html[data-ces-slider-ready='1'] [role='menuitem']:has([data-testid='model-selector-effort-group'])>span.shrink-0:last-child,html[data-ces-slider-ready='1'] [data-ces-orch-row='1']>svg:last-child:not(:first-child):not(.lucide-check),html[data-ces-slider-ready='1'] [data-ces-orch-row='1']>span:last-child:not(:first-child):has(>svg:only-child:not(.lucide-check)),html[data-ces-slider-ready='1'] [data-ces-orch-row='1']>*:last-child>svg:last-child:not(.lucide-check){display:none!important}html[data-ces-slider-ready='1'] [role='menuitem']:has([data-testid='model-selector-effort-group'])>.group-hover\\:hidden{display:flex!important}[role='menuitem'][data-ces-model-selected='true'],[data-ces-orch-row='1'][data-ces-model-selected='true']{background:rgba(128,128,145,.14)}.ces-set{position:fixed;z-index:2147483646;width:268px;padding:12px;border-radius:10px;background:rgba(24,24,28,.96);color:#f4f4f6;border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 32px rgba(0,0,0,.55);backdrop-filter:blur(12px);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;box-sizing:border-box;user-select:none}.ces-set-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);font-weight:600;font-size:12.5px}.ces-set-ver{font-size:11px;font-weight:400;opacity:.55}.ces-set-group{margin-bottom:10px}.ces-set-label{margin-bottom:5px;font-size:11px;opacity:.72}.ces-set-opts{display:flex;gap:4px}.ces-set-opt{flex:1;padding:5px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#d4d4d8;font-size:11.5px;cursor:pointer;text-align:center;transition:all .12s ease}.ces-set-opt:hover{background:rgba(255,255,255,.1);color:#fff}.ces-set-opt.is-on{background:rgba(139,92,246,.28);border-color:rgba(139,92,246,.75);color:#fff;font-weight:600}.ces-set-actions{display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}.ces-set-btn{flex:1;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e4e4e7;font-size:11px;cursor:pointer}.ces-set-btn:hover{background:rgba(255,255,255,.14)}[data-testid='model-selector-panel'] .ces-ag-section[data-effort-slot='true']{grid-template-rows:auto auto}[data-testid='model-selector-panel'] .ces-ag-section[data-effort-slot='true']>[role='separator']{grid-row:1;grid-column:1}[data-testid='model-selector-panel'] .ces-ag-section[data-effort-slot='true']>:is(.ces-ag-effort-row,[data-testid='orchestrator-effort-bar']){grid-row:2!important;grid-column:1!important}";
+// 样式表注入
+var SLIDER_CSS = "@property --ces-energy{syntax:\"<number>\";inherits:false;initial-value:0}@property --ces-fill{syntax:\"<length-percentage>\";inherits:false;initial-value:14px}@property --ces-star-opacity{syntax:\"<number>\";inherits:false;initial-value:0}@keyframes ces-sweep{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}@keyframes ces-star-sweep{0%{transform:translate3d(0,0,0);opacity:0}6%,94%{opacity:1}100%{transform:translate3d(-100%,0,0);opacity:0}}.ces-inline,.ces-root,.ces-track,.ces-ag-section,.ces-ag-effort-row{box-sizing:border-box}.ces-inline,.ces-root,.ces-ag-section,.ces-ag-section *{user-select:none!important;-webkit-user-select:none!important;-webkit-tap-highlight-color:transparent!important}.ces-inline{width:100%;padding-top:6px}.ces-root{position:relative;width:100%;outline:none!important;box-shadow:none!important}.ces-track{position:relative;width:100%;height:28px;border-radius:999px;background:rgba(128,128,145,.18);box-shadow:inset 0 1px 2px rgba(0,0,0,.24),inset 0 0 0 1px rgba(255,255,255,.06);cursor:pointer;touch-action:none;transition:opacity .15s,box-shadow .2s}.ces-root[data-energy='1'] .ces-track{box-shadow:0 0 calc(var(--ces-energy,0) * 16px) rgba(168,85,247,.5),inset 0 1px 2px rgba(0,0,0,.24)}.ces-root[data-energy='0'] .ces-star,.ces-root[data-energy='0'] .ces-energy__sweep{animation-play-state:paused}.ces-track.is-locked{opacity:.45;cursor:not-allowed;filter:saturate(.25)}.ces-fill,.ces-energy,.ces-stars{position:absolute;top:0;left:0;bottom:0;width:var(--ces-fill,14px);border-radius:14px 0 0 14px;pointer-events:none}.ces-fill{background:var(--ces-fill-bg,#4d93f8);overflow:hidden}.ces-energy{overflow:hidden;opacity:var(--ces-energy,0);transition:opacity .2s;background:linear-gradient(90deg,#3b1178,#6d28d9 30%,#9333ea 62%,#c084fc)}.ces-energy__sweep{position:absolute;inset:0;background:linear-gradient(100deg,transparent 18%,rgba(255,255,255,.3) 50%,transparent 82%);transform:translateX(100%);animation:ces-sweep 2.4s linear infinite;pointer-events:none}.ces-stars{opacity:var(--ces-star-opacity,0);transition:opacity .2s;overflow:hidden}.ces-star{position:absolute;left:0;right:0;height:3px;margin-top:-1.5px;pointer-events:none;animation:ces-star-sweep linear infinite}.ces-star__dot{position:absolute;left:100%;top:0;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:#f5f3ff;box-shadow:0 0 5px rgba(216,180,254,.95);opacity:var(--ces-b,1);transform:scale(var(--ces-b,1))}.ces-ticks{position:absolute;inset:0;pointer-events:none}.ces-tick{position:absolute;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(255,255,255,.28);pointer-events:none;transition:background-color .12s}.ces-tick.is-on{background:rgba(255,255,255,.65)}.ces-tick.is-dim{background:rgba(255,255,255,.28)}.ces-knob{position:absolute;top:50%;left:var(--ces-fill,14px);width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.34),0 0 0 .5px rgba(0,0,0,.06);pointer-events:none;will-change:transform}.ces-root[data-theme='claude'] .ces-stars,.ces-root[data-theme='claude'] .ces-energy{display:none!important}.ces-root[data-theme='claude'] .ces-track{background:rgba(128,128,145,.16);box-shadow:inset 0 1px 2px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.08)}.ces-root[data-theme='claude'][data-energy='1'] .ces-track{box-shadow:0 0 16px rgba(167,139,250,.45),inset 0 1px 2px rgba(0,0,0,.22)}.ces-root[data-theme='claude'] .ces-knob{width:24px;height:30px;margin:-15px 0 0 -12px;border-radius:7px;box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center}.ces-knob-notch{display:none;width:2px;height:10px;border-radius:999px;background:rgba(0,0,0,.28)}.ces-root[data-theme='claude'] .ces-knob-notch{display:block}.ces-claude-canvas{position:absolute;left:0;top:0;border-radius:14px 0 0 14px;display:none;pointer-events:none}.ces-root[data-theme='claude'][data-energy='1'] .ces-claude-canvas{display:block}@keyframes ces-claude-rise{0%{transform:translateY(20%) scale(.98);opacity:.15}60%{opacity:1}85%{transform:translateY(-2%) scale(1.01)}100%{transform:none;opacity:1}}.ces-ag-effort-value:is(.is-claude-changing,.ces-text-rise){animation:ces-claude-rise .24s cubic-bezier(.2,.85,.25,1)}.ces-ag-effort-value.is-glowing:is(.is-claude-changing,.ces-text-rise){animation:ces-claude-rise .24s cubic-bezier(.2,.85,.25,1),ces-text-bloom .4s cubic-bezier(.16,1,.3,1) forwards}[data-testid='model-selector-panel'].ces-ag-panel-enhanced{max-height:26rem!important}.ces-ag-section,.ces-ag-section *{outline:none!important}.ces-ag-section,.ces-ag-effort-row{display:flex;flex-direction:column;width:100%}.ces-ag-section{flex-shrink:0}.ces-ag-effort-row{padding:6px 8px 8px;border-radius:6px;transition:box-shadow .2s,background-color .2s}.ces-ag-effort-row:hover{background:rgba(128,128,145,.08)}.ces-ag-effort-row[data-ces-max='true'],[data-ces-effort-row='true'][data-ces-max='true']{box-shadow:inset 0 0 0 1px rgba(139,92,246,.42),0 0 14px -4px rgba(139,92,246,.45)!important;background:rgba(139,92,246,.06)}.ces-ag-effort-head{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:18px;padding:1px 0;font-size:12px;line-height:16px;overflow-y:clip;overflow-clip-margin:10px}.ces-ag-effort-title{display:inline-flex;align-items:center;gap:6px;color:inherit;font-weight:500;opacity:.9}.ces-ag-effort-value{position:relative;z-index:1;display:inline-block;font-size:12px;font-weight:600;transition:color .15s}.ces-ag-effort-value::after{content:'';position:absolute;top:50%;left:50%;width:52px;height:26px;border-radius:999px;transform:translate(-50%,-50%) scale(.6);background:radial-gradient(ellipse,var(--ces-glow-color,rgba(168,85,247,.85)),var(--ces-glow-color,rgba(168,85,247,.45)) 45%,rgba(168,85,247,0) 75%);filter:blur(8px);pointer-events:none;opacity:0;z-index:-1}@keyframes ces-glow-flash{0%{opacity:.95;transform:translate(-50%,-50%) scale(.65);filter:blur(6px)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.15);filter:blur(8px)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5);filter:blur(14px)}}@keyframes ces-text-bloom{0%{text-shadow:0 0 8px var(--ces-glow-color,#c084fc)}30%{text-shadow:0 0 14px var(--ces-glow-color,#c084fc),0 0 3px #fff}100%{text-shadow:none}}.ces-ag-effort-value.is-glowing{animation:ces-text-bloom .4s cubic-bezier(.16,1,.3,1) forwards}.ces-ag-effort-value.is-glowing::after{animation:ces-glow-flash .4s cubic-bezier(.16,1,.3,1) forwards}@media (prefers-reduced-motion:reduce){:root:not([data-ag-cs-ignore-rm='1']) :is(.ces-panel-shaking,.ces-ag-effort-value.is-glowing,.ces-ag-effort-value.is-glowing::after,.ces-ag-effort-value.ces-text-rise,.ces-ag-effort-value.is-claude-changing){animation:none!important}}html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='model-selector-effort-option']):not(:has([data-testid='model-selector-panel'])),html[data-ces-slider-ready='1'] div[role='presentation']:has(>[role='menu'] [data-testid='model-selector-effort-option']):not(:has([data-testid='model-selector-panel'])),html[data-ces-slider-ready='1'] [role='menu']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel'])):not(:has([data-testid='orchestrator-picker-row'])):not([data-ag-cs-orch-l2='1']),html[data-ces-slider-ready='1'] div[role='presentation']:has([data-testid='orchestrator-picker-effort']):not(:has([data-testid='model-selector-panel'])):not(:has([data-testid='orchestrator-picker-row'])):not(:has([data-ag-cs-orch-l2='1'])),html[data-ces-slider-ready='1'] [data-testid='orchestrator-picker-effort']:not(:has([data-testid='model-selector-panel'])),html[data-ces-slider-ready='1'] [data-ag-cs-orch-l3='1']{display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important}html[data-ces-slider-ready='1'] [role='menuitem']:has([data-testid='model-selector-effort-group'])>span.shrink-0:last-child,html[data-ces-slider-ready='1'] [data-ces-orch-row='1']>svg:last-child:not(:first-child):not(.lucide-check),html[data-ces-slider-ready='1'] [data-ces-orch-row='1']>span:last-child:not(:first-child):has(>svg:only-child:not(.lucide-check)),html[data-ces-slider-ready='1'] [data-ces-orch-row='1']>*:last-child>svg:last-child:not(.lucide-check){display:none!important}html[data-ces-slider-ready='1'] [role='menuitem']:has([data-testid='model-selector-effort-group'])>.group-hover\\:hidden{display:flex!important}[role='menuitem'][data-ces-model-selected='true'],[data-ces-orch-row='1'][data-ces-model-selected='true']{background:rgba(128,128,145,.14)}.ces-set{position:fixed;z-index:2147483646;width:268px;padding:12px;border-radius:10px;background:rgba(24,24,28,.96);color:#f4f4f6;border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 32px rgba(0,0,0,.55);backdrop-filter:blur(12px);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;box-sizing:border-box;user-select:none}.ces-set-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);font-weight:600;font-size:12.5px}.ces-set-ver{font-size:11px;font-weight:400;opacity:.55}.ces-set-group{margin-bottom:10px}.ces-set-label{margin-bottom:5px;font-size:11px;opacity:.72}.ces-set-opts{display:flex;gap:4px}.ces-set-opt{flex:1;padding:5px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#d4d4d8;font-size:11.5px;cursor:pointer;text-align:center;transition:all .12s ease}.ces-set-opt:hover{background:rgba(255,255,255,.1);color:#fff}.ces-set-opt.is-on{background:rgba(139,92,246,.28);border-color:rgba(139,92,246,.75);color:#fff;font-weight:600}.ces-set-actions{display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}.ces-set-btn{flex:1;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e4e4e7;font-size:11px;cursor:pointer}.ces-set-btn:hover{background:rgba(255,255,255,.14)}[data-testid='model-selector-panel'] .ces-ag-section[data-effort-slot='true']{grid-template-rows:auto auto}[data-testid='model-selector-panel'] .ces-ag-section[data-effort-slot='true']>[role='separator']{grid-row:1;grid-column:1}[data-testid='model-selector-panel'] .ces-ag-section[data-effort-slot='true']>:is(.ces-ag-effort-row,[data-testid='orchestrator-effort-bar']){grid-row:2!important;grid-column:1!important}html[data-ag-cs-style][data-ag-cs-win-blur='1'] :is(.ces-star,.ces-energy__sweep){animation-play-state:paused!important}html[data-ag-cs-style][data-ag-cs-perf-mode='performance'] :is(.ces-star,.ces-energy__sweep){animation-timing-function:steps(24)!important}html[data-ag-cs-style]:is([data-ag-cs-win-blur='1'],[data-ag-cs-perf-mode='performance'],[data-ag-cs-motion='off']) .ces-set{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(24,24,28,.99)}";
 function installStyles(doc) {
 var d = doc || (typeof document !== "undefined" ? document : null);
 if (!d || !d.head) return null;
@@ -507,17 +476,12 @@ if (!s) { s = d.createElement("style"); s.id = STYLE_ELEMENT_ID; d.head.appendCh
 if (s.textContent !== SLIDER_CSS) s.textContent = SLIDER_CSS;
 return s;
 }
-// ── 右键设置面板 ────────────────────────────────────────────────────────────
-var SET_TITLE_I18N = { "zh-CN": "推理等级滑条设置", "zh-TW": "推理等級滑桿設定", en: "Effort Slider", ja: "推論スライダー設定", ko: "추론 슬라이더 설정", es: "Ajustes de esfuerzo", fr: "Réglages d’effort", de: "Aufwandsregler-Einstellungen" };
-var SET_HEAD_I18N = { "zh-CN": "推理等级滑条", "zh-TW": "推理等級滑桿", en: "Effort Slider", ja: "推論スライダー", ko: "추론 슬라이더", es: "Nivel de esfuerzo", fr: "Niveau d’effort", de: "Aufwandsregler" };
-var FIXED_I18N = { "zh-CN": "固定", "zh-TW": "固定", en: "Fixed", ja: "固定", ko: "고정", es: "Fijo", fr: "Fixe", de: "Fest" };
+var SET_TITLE_I18N={"zh-CN":"推理等级滑条设置","zh-TW":"推理等級滑桿設定",en:"Effort Slider",ja:"推論スライダー設定",ko:"추론 슬라이더 설정",es:"Ajustes de esfuerzo",fr:"Réglages d’effort",de:"Aufwandsregler-Einstellungen",tr:"Çaba kaydırıcısı ayarları"};
+var SET_HEAD_I18N={"zh-CN":"推理等级滑条","zh-TW":"推理等級滑桿",en:"Effort Slider",ja:"推論スライダー",ko:"추론 슬라이더",es:"Nivel de esfuerzo",fr:"Niveau d’effort",de:"Aufwandsregler",tr:"Çaba kaydırıcısı"};
+var FIXED_I18N={"zh-CN":"固定","zh-TW":"固定",en:"Fixed",ja:"固定",ko:"고정",es:"Fijo",fr:"Fixe",de:"Fest",tr:"Sabit"};
 function _normSliderLang(raw, win) {
 var v = String(raw || "").trim();
-if (!v || v.toLowerCase() === "auto") {
-var w = _win(win);
-var navObj = w && "navigator" in w ? w.navigator : (typeof navigator !== "undefined" ? navigator : null);
-v = String(navObj?.language || "").trim();
-}
+if (!v || v.toLowerCase() === "auto") { var w = _win(win); var navObj = w && "navigator" in w ? w.navigator : (typeof navigator !== "undefined" ? navigator : null); v = String(navObj?.language || "").trim(); }
 var s = v.toLowerCase().replace(/_/g, "-");
 if (!s || s === "auto") return "en";
 if (s === "yue" || s.startsWith("yue-") || s === "zh-yue" || s.includes("cantonese")) return "zh-CN";
@@ -528,6 +492,7 @@ if (/^(ko|kr)/.test(s) || s === "korean") return "ko";
 if (/^es/.test(s) || s === "spanish") return "es";
 if (/^fr/.test(s) || s === "french") return "fr";
 if (/^de/.test(s) || s === "german") return "de";
+if (/^tr/.test(s) || s === "turkish" || s === "türkçe" || s === "turkce") return "tr";
 return "en";
 }
 function _isZhLang(lk) { var n = _normSliderLang(lk); return n === "zh-CN" || n === "zh-TW"; }
@@ -613,21 +578,14 @@ var evs = [
 evs.forEach((e) => d.addEventListener(e[0], e[1], true));
 return { stop: () => { clr(); ac?.(); ac = null; evs.forEach((e) => d.removeEventListener(e[0], e[1], true)); } };
 }
-// ── DOM 与 Antigravity React Fiber 解析辅助函数 ─────────────────────────────
 var INFERENCE_LABELS = ["推理等级", "Reasoning effort", "Reasoning Effort", "Thinking effort", "推理强度"];
 function parseModelLabel(label) {
 if (!label || typeof label !== "string") return null;
 var match = AG_MODEL_LABEL_RE.exec(label.trim());
 if (!match) return null;
-var base = match[1].trim();
-var effort = match[2].toLowerCase();
-// 兼容展示名 "(Extra)" 与内部枚举 "(xhigh)"，统一归并到 xhigh 槽位进行排序与着色
+var base = match[1].trim(), effort = match[2].toLowerCase();
 if (effort === "extra") effort = "xhigh";
-return {
-base: base,
-effort: effort,
-effortLabel: AG_EFFORT_LABELS[effort] || match[2]
-};
+return { base: base, effort: effort, effortLabel: AG_EFFORT_LABELS[effort] || match[2] };
 }
 var _AG_TRIG_SEL = '[data-testid="model-selector-trigger"],button[aria-label^="Select model"]';
 var _AG_PANE_SEL = '[data-testid="agent-input-box"],[data-testid="conversation-view"],.surface-composer-card,[data-tiling-pane]';
@@ -873,13 +831,7 @@ var act = f(ovr) || f(pk.model) || def;
 var oi = ctx.orchIdx || ctx.orchestratorPlannerIndex;
 return act ? { opt: act, def: def, idx: oi instanceof Map && oi.size ? oi : ctx.effortIndex } : null;
 }
-/**
-* 从 Antigravity 的 DOM 节点向上遍历 React Fiber 树，提取：
-* - OXb.Provider: effortIndex, modelOptions, selectedModel, groups
-* - $Xb         : 未包装 setIsOpen(false) 的 setSelectedModel, open, setIsOpen
-* - cYb         : conversationId
-* - eKa.Provider: setModelConfigByLabelForConversation（直接切档不关菜单、不抢焦点）
-*/
+// 向上遍历 React Fiber 提取 effortIndex/modelOptions/selectedModel/setModelConfigByLabelForConversation
 function _rdAgFiber(el) {
 var cur = getReactFiber(el);
 if (!cur) return null;
@@ -1008,7 +960,7 @@ if (typeof item?.label === "string" && item.label) return item.label;
 if (typeof seat?.formatEffortLabel === "function") { try { var f = seat.formatEffortLabel(effortKey); if (f) return String(f); } catch {} }
 return AG_EFFORT_LABELS[String(effortKey || "").toLowerCase()] || String(effortKey || "");
 }
-var EFFORT_TITLE_I18N = { "zh-CN": "推理等级", "zh-TW": "推理等級", en: "Reasoning Effort", ja: "推論レベル", ko: "추론 수준", es: "Nivel de razonamiento", fr: "Niveau de raisonnement", de: "Denkaufwand" };
+var EFFORT_TITLE_I18N={"zh-CN":"推理等级","zh-TW":"推理等級",en:"Reasoning Effort",ja:"推論レベル",ko:"추론 수준",es:"Nivel de razonamiento",fr:"Niveau de raisonnement",de:"Denkaufwand",tr:"Akıl yürütme çabası"};
 function resolveEffortTitle(doc, win) {
 var lang = _normSliderLang(getPrismRootAttr(doc, win, "data-ag-cs-lang"), win);
 try {
@@ -1049,8 +1001,8 @@ if (!container || !doc) {
 return { unmount: function () {}, refresh: function () {} };
 }
 installStyles(doc);
-// 清空宿主容器并构建 DOM 树（对齐 dsh-codex-effort-slider 四层结构：fill / energy+sweep / stars+dot / knob）
-container.innerHTML = "";
+function _clrEl(e){if(!e)return;if(e.replaceChildren)e.replaceChildren();else if(e.removeChild){var c;while((c=e.firstChild||(e.children&&e.children[0])))e.removeChild(c);}else if(Array.isArray(e.children))e.children.length=0;}
+_clrEl(container);
 var _sa = function (el, k, v) { if (el && typeof el.setAttribute === "function" && el.getAttribute(k) !== v) el.setAttribute(k, v); };
 function _ce(tag, cls, part, parent) {
 var el = doc.createElement(tag);
@@ -1239,7 +1191,7 @@ var tickMode = readSettings(win).ticks || "highlight", count = snap.count;
 if (tickMode === "hidden" || count <= 1) { if (ticksEl.style.display !== "none") ticksEl.style.display = "none"; return; }
 if (ticksEl.style.display !== "") ticksEl.style.display = "";
 if (_lastTicks !== count) {
-ticksEl.innerHTML = ""; tickNodes = [];
+_clrEl(ticksEl); tickNodes = [];
 for (var i = 0; i < count; i += 1) {
 var tick = _ce("span", "ces-tick", "tick", ticksEl), tp = pctFromIndex(i, count);
 tick.style.left = knobOffsetOf(tp, KNOB_RADIUS);
@@ -1333,7 +1285,7 @@ if (snap.locked) { if (!trackEl.classList.contains("is-locked")) trackEl.classLi
 else if (trackEl.classList.contains("is-locked")) trackEl.classList.remove("is-locked");
 var curTone = resolvePrismAccentTone(doc, win), motOff = isPrismMotionOff(doc, win);
 var offsetCss = knobOffsetOf(p, KNOB_RADIUS), fillBg = fillBackgroundFor(p, snap.energyStart, snap.energyEnd, snap.isClaude, curTone);
-if (offsetCss !== _lastFillCss) { _lastFillCss = offsetCss; trackEl.style.setProperty("--ces-fill", offsetCss); }
+if (offsetCss !== _lastFillCss) { _lastFillCss = offsetCss; trackEl.style.setProperty("--ces-fill", offsetCss); fillEl.style.setProperty("--ces-fill", offsetCss); energyEl.style.setProperty("--ces-fill", offsetCss); starsEl.style.setProperty("--ces-fill", offsetCss); knobEl.style.setProperty("--ces-fill", offsetCss); }
 if (fillBg !== _lastFillBg) { _lastFillBg = fillBg; trackEl.style.setProperty("--ces-fill-bg", fillBg); }
 var kW = dragging ? (_dLW || trackEl.clientWidth || (dragTrackRect && dragTrackRect.width) || 0) : 0;
 if (kW > 0) {
@@ -1353,9 +1305,13 @@ var energy = snap.locked || motOff ? 0 : energyForPct(p, snap.energyStart), slow
 if (Math.abs(energy - _lastEng) > 1e-5 || slowdown !== _lastSlow) {
 _lastEng = energy; _lastSlow = slowdown;
 _sa(rootEl, "data-energy", energy > 0 ? "1" : "0");
-rootEl.style.setProperty("--ces-energy", String(Math.round(energy * 1000) / 1000));
+var eStr = String(Math.round(energy * 1000) / 1000);
+rootEl.style.setProperty("--ces-energy", eStr);
+trackEl.style.setProperty("--ces-energy", eStr);
+energyEl.style.setProperty("--ces-energy", eStr);
 var slo = String(starLayerOpacityFor(energy)), vc = Math.round(energy * PARTICLES.length), sf = speedFor(p, snap.energyStart);
 trackEl.style.setProperty("--ces-star-opacity", slo);
+starsEl.style.setProperty("--ces-star-opacity", slo);
 starsEl.style.opacity = slo;
 starsEl.setAttribute("data-count", String(vc));
 for (var i = 0; i < starNodes.length; i += 1) {
@@ -1405,10 +1361,7 @@ if (valEl.style && valEl.style.setProperty) valEl.style.setProperty("--ces-glow-
 _reAnim(valEl, ["is-glowing"], "_g", 450);
 }
 }
-/**
-* 立即把目标档位写回宿主（Antigravity React Fiber 或 Seat）：
-* 拖过档位边界时同步触发，无需等待 pointerup 松手。
-*/
+// 拖过档位边界时同步写回宿主
 function commitAtIndex(targetIndex, reason) {
 var snap = readSeatSnapshot();
 if (snap.locked || snap.count <= 1) return;

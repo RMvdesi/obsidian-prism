@@ -241,7 +241,7 @@ test('workbench & host runtime enforce GPU compositor optimization, 32% aura hei
   assert.ok(src.includes('ag-v2-conv-aura') && src.includes('ag-v2-conv-glow'));
 
   // 2. Host style.css & ui-runtime.js performance & compatibility contracts
-  assert.ok(hostCssSrc.includes('[data-testid="send-button"] svg{display:none !important;}'));
+  assert.match(hostCssSrc, /\[data-testid="send-button"\] svg\{display:none\s*!important;?\}/);
   assert.ok(hostCssSrc.includes('[data-testid="input-cancel-button"]::before'));
   assert.ok(runtimeSrc.includes('enterIdleSleep()'), 'ui-runtime.js ripple must support 0fps true idle sleep');
   assert.ok(runtimeSrc.includes('enterAuraSleep()'), 'ui-runtime.js conversation aura must support 0fps true idle sleep');

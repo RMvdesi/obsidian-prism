@@ -1,12 +1,4 @@
-// Obsidian Prism — Channel 7 Local Static/Dynamic Wallpaper Client Runtime (v1.0.8-beta.3 · Beta)
-// Decoupled from Channel 1 static bundle:
-// - Pure DOM construction (0 innerHTML), 5+1 anti-translation attributes, dedicated <style id="ag-prism-wallpaper-css">
-// - 0 :has() selectors, balanced braces, 0 style impact when wallpaper is disabled
-// - Automatic Browser Hole avoidance (CSS + MutationObserver)
-// - Strict 0fps sleep for <video> on hidden / win-blur / chat mode / motion=off / browser-hole
-// - Graceful CSP fallback for static images <= 8 MB via get-media-blob -> ObjectURL (with leak-free revokeObjectURL)
-// - Full hardware decoder release on destroy(): video.pause() -> removeAttribute('src') -> load()
-
+// Obsidian Prism Channel 7 Wallpaper Client Runtime
 (function (root) {
   'use strict';
   const G = root || (typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : null);
@@ -18,18 +10,15 @@
   const WALLPAPER_HOLE_ATTR = 'data-ag-prism-wallpaper-hole';
   const DEFAULT_RPC_TIMEOUT_MS = 10000;
   const PICK_RPC_TIMEOUT_MS = 125000;
+  const NO_TR_ATTRS = [['translate', 'no'], ['data-no-translate', 'true'], ['data-ag-localization-skip', 'true'], ['data-agy-no-translate', 'true'], ['data-antigravity-zh-skip', '1'], ['data-ag-no-i18n', '']];
 
-  const NO_TR_ATTRS = [
-    ['translate', 'no'],
-    ['data-no-translate', 'true'],
-    ['data-ag-localization-skip', 'true'],
-    ['data-agy-no-translate', 'true'],
-    ['data-antigravity-zh-skip', '1'],
-    ['data-ag-no-i18n', ''],
-  ];
-
-  // Strictly pure ASCII, 0 :has(), balanced braces, 0 style impact when html[data-ag-prism-wallpaper="on"] is absent
   const WALLPAPER_CSS = [
+    '@property --ag-prism-wp-opacity{syntax:"<number>";inherits:false;initial-value:0.28}',
+    '@property --ag-prism-wp-blur{syntax:"<length>";inherits:false;initial-value:4px}',
+    '@property --ag-prism-wp-filter{syntax:"*";inherits:false;initial-value:blur(4px)}',
+    '@property --ag-prism-wp-blur-pad{syntax:"<length>";inherits:false;initial-value:0px}',
+    '@property --ag-prism-wp-dim{syntax:"<number>";inherits:false;initial-value:0.45}',
+    '@property --ag-prism-wp-fit{syntax:"cover | contain";inherits:false;initial-value:cover}',
     '#ag-prism-wallpaper-root{position:fixed;inset:0;z-index:-1;background:var(--body-background,var(--background,#0B0B0E));pointer-events:none;overflow:hidden;contain:strict;opacity:0;visibility:hidden;transition:opacity 180ms ease;}',
     'html[data-ag-prism-wallpaper="on"] #ag-prism-wallpaper-root{opacity:1;visibility:visible;}',
     'html[data-ag-prism-wallpaper="on"][data-ag-cs-motion="off"] #ag-prism-wallpaper-root{transition:none !important;}',
@@ -112,110 +101,55 @@
     return out;
   }
 
-  function releaseVideoElement(videoEl) {
-    if (!videoEl) return;
-    try {
-      if (typeof videoEl.pause === 'function') videoEl.pause();
-    } catch {}
-    try {
-      if (typeof videoEl.removeAttribute === 'function') videoEl.removeAttribute('src');
-    } catch {}
-    try {
-      videoEl.src = '';
-    } catch {}
-    try {
-      if (typeof videoEl.load === 'function') videoEl.load();
-    } catch {}
+  function releaseVideoElement(v) {
+    if (!v) return;
+    try { v.pause?.(); } catch {}
+    try { v.removeAttribute?.('src'); } catch {}
+    try { v.src = ''; } catch {}
+    try { v.load?.(); } catch {}
   }
 
   function createWallpaperBridge(win) {
     const pending = new Map();
-    let seq = 1;
-    let disposed = false;
-
+    let seq = 1, disposed = false;
     function resolve(id, resp) {
-      const numId = Number(id);
-      const entry = pending.get(numId);
+      const n = Number(id), entry = pending.get(n);
       if (!entry) return false;
-      pending.delete(numId);
-      if (entry.timer) {
-        try {
-          clearTimeout(entry.timer);
-        } catch {}
-      }
+      pending.delete(n);
+      if (entry.timer) try { clearTimeout(entry.timer); } catch {}
       entry.resolve(resp && typeof resp === 'object' ? resp : { ok: false, error: 'invalid-response' });
       return true;
     }
-
-    function isOnline() {
-      return !disposed && typeof win.__agPrismWallpaperCall === 'function';
-    }
-
+    const isOnline = () => !disposed && typeof win.__agPrismWallpaperCall === 'function';
     function call(action, payload = {}) {
-      if (disposed) {
-        return Promise.resolve({ ok: false, offline: true, code: 'bridge-disposed', error: 'Wallpaper bridge disposed' });
-      }
+      if (disposed) return Promise.resolve({ ok: false, offline: true, code: 'bridge-disposed', error: 'Wallpaper bridge disposed' });
       const rawFn = typeof win.__agPrismWallpaperCall === 'function' ? win.__agPrismWallpaperCall : null;
-      if (!rawFn) {
-        return Promise.resolve({ ok: false, offline: true, code: 'bridge-offline', error: 'Wallpaper daemon bridge offline' });
-      }
-      const id = seq++;
-      const timeoutMs = action === 'pick-media' ? PICK_RPC_TIMEOUT_MS : DEFAULT_RPC_TIMEOUT_MS;
+      if (!rawFn) return Promise.resolve({ ok: false, offline: true, code: 'bridge-offline', error: 'Wallpaper daemon bridge offline' });
+      const id = seq++, timeoutMs = action === 'pick-media' ? PICK_RPC_TIMEOUT_MS : DEFAULT_RPC_TIMEOUT_MS;
       return new Promise((res) => {
-        const timer = setTimeout(() => {
-          if (pending.has(id)) {
-            pending.delete(id);
-            res({ ok: false, timeout: true, code: 'rpc-timeout', error: 'Wallpaper request timed out' });
-          }
-        }, timeoutMs);
+        const timer = setTimeout(() => { if (pending.delete(id)) res({ ok: false, timeout: true, code: 'rpc-timeout', error: 'Wallpaper request timed out' }); }, timeoutMs);
         pending.set(id, { resolve: res, timer });
         try {
           const ret = rawFn(JSON.stringify({ id, action, payload: payload || {} }));
-          // 兼容单测或非 CDP 环境中直接返回 Promise 的 mock 实现
-          if (ret && typeof ret.then === 'function') {
-            ret.then(
-              (val) => resolve(id, val),
-              (err) => resolve(id, { ok: false, code: 'rpc-error', error: String(err?.message || err) })
-            );
-          }
-        } catch (err) {
-          resolve(id, { ok: false, code: 'rpc-error', error: String(err?.message || err) });
-        }
+          if (ret && typeof ret.then === 'function') ret.then((v) => resolve(id, v), (e) => resolve(id, { ok: false, code: 'rpc-error', error: String(e?.message || e) }));
+        } catch (e) { resolve(id, { ok: false, code: 'rpc-error', error: String(e?.message || e) }); }
       });
     }
-
     function dispose() {
       disposed = true;
       for (const [id, entry] of pending.entries()) {
         pending.delete(id);
-        if (entry.timer) {
-          try {
-            clearTimeout(entry.timer);
-          } catch {}
-        }
-        try {
-          entry.resolve({ ok: false, offline: true, code: 'bridge-disposed' });
-        } catch {}
+        if (entry.timer) try { clearTimeout(entry.timer); } catch {}
+        try { entry.resolve({ ok: false, offline: true, code: 'bridge-disposed' }); } catch {}
       }
     }
-
     const bridge = {
-      call,
-      resolve,
-      isOnline,
-      dispose,
-      getConfig: () => call('get-config', {}),
-      saveConfig: (patch) => call('save-config', patch || {}),
-      pickMedia: (opts) => call('pick-media', opts || {}),
-      clearMedia: () => call('clear-media', {}),
-      getMediaBlob: (opts) => call('get-media-blob', opts || {}),
-      status: () => call('status', {}),
+      call, resolve, isOnline, dispose,
+      getConfig: () => call('get-config', {}), saveConfig: (p) => call('save-config', p || {}),
+      pickMedia: (o) => call('pick-media', o || {}), clearMedia: () => call('clear-media', {}),
+      getMediaBlob: (o) => call('get-media-blob', o || {}), status: () => call('status', {}),
     };
-
-    try {
-      win.__agPrismWallpaperBridge = bridge;
-      win.__agPrismWallpaperResolve = resolve;
-    } catch {}
+    try { win.__agPrismWallpaperBridge = bridge; win.__agPrismWallpaperResolve = resolve; } catch {}
     return bridge;
   }
 
@@ -250,28 +184,13 @@
         winBlurred = true;
       }
     } catch {}
-    let rootEl = null;
-    let dimEl = null;
-    let mediaEl = null;
-    let mediaTag = '';
-    let activeSrc = '';
-    let activeObjectUrl = '';
-    let renderMode = 'idle'; // 'idle' | 'http' | 'blob-fallback' | 'error'
-    let lastError = '';
-    let blobFallbackTriedRev = -1;
-    let blobFallbackInFlight = false;
-    let htmlObserver = null;
-    let bodyObserver = null;
-    let listenersBound = false;
-    let videoPausedByRule = false;
+    let rootEl = null, dimEl = null, mediaEl = null, mediaTag = '', activeSrc = '', activeObjectUrl = '';
+    let renderMode = 'idle', lastError = '', blobFallbackTriedRev = -1, blobFallbackInFlight = false;
+    let htmlObserver = null, bodyObserver = null, listenersBound = false, videoPausedByRule = false, adoptedSheet = null;
 
     function notifySubscribers() {
       const snap = getState();
-      for (const fn of subscribers) {
-        try {
-          fn(snap);
-        } catch {}
-      }
+      for (const fn of subscribers) { try { fn(snap); } catch {} }
     }
 
     function revokeActiveObjectUrl() {
@@ -280,14 +199,23 @@
       activeObjectUrl = '';
       try {
         const urlApi = win.URL || (typeof URL !== 'undefined' ? URL : null);
-        if (urlApi && typeof urlApi.revokeObjectURL === 'function') {
-          urlApi.revokeObjectURL(toRevoke);
-        }
+        if (urlApi && typeof urlApi.revokeObjectURL === 'function') urlApi.revokeObjectURL(toRevoke);
       } catch {}
     }
 
     function ensureStyleTag() {
-      if (destroyed || !doc.head) return null;
+      if (destroyed) return null;
+      const SheetCtor = win.CSSStyleSheet || (typeof CSSStyleSheet === 'function' ? CSSStyleSheet : null);
+      if (SheetCtor && typeof SheetCtor.prototype?.replaceSync === 'function' && doc.adoptedStyleSheets && typeof doc.adoptedStyleSheets[Symbol.iterator] === 'function') {
+        try {
+          if (!adoptedSheet) { adoptedSheet = new SheetCtor(); adoptedSheet.replaceSync(WALLPAPER_CSS); }
+          const cur = Array.from(doc.adoptedStyleSheets);
+          if (!cur.includes(adoptedSheet)) doc.adoptedStyleSheets = cur.concat(adoptedSheet);
+          doc.getElementById?.(WALLPAPER_STYLE_ID)?.remove?.();
+          return adoptedSheet;
+        } catch {}
+      }
+      if (!doc.head) return null;
       let st = doc.getElementById ? doc.getElementById(WALLPAPER_STYLE_ID) : null;
       if (!st) {
         st = doc.createElement('style');
@@ -295,9 +223,7 @@
         markNoTrOwned(st);
         st.textContent = WALLPAPER_CSS;
         doc.head.appendChild(st);
-      } else if (st.textContent !== WALLPAPER_CSS) {
-        st.textContent = WALLPAPER_CSS;
-      }
+      } else if (st.textContent !== WALLPAPER_CSS) st.textContent = WALLPAPER_CSS;
       return st;
     }
 
@@ -339,7 +265,10 @@
       if (html && typeof html.getAttribute === 'function') {
         if (html.getAttribute('data-ag-prism-mode') === 'chat') return true;
         if (html.getAttribute('data-ag-cs-motion') === 'off') return true;
-        if (html.getAttribute('data-ag-pp-open') === '1') return true;
+        if (html.getAttribute('data-ag-pp-open') === '1') {
+          const pm = String(html.dataset?.agCsPerfMode || html.getAttribute('data-ag-cs-perf-mode') || '').trim().toLowerCase();
+          if (pm === 'performance' || pm === 'eco') return true;
+        }
         if (state.pauseOnBlur !== false && html.getAttribute('data-ag-cs-win-blur') === '1') return true;
       }
       if (state.pauseOnBlur !== false && winBlurred) return true;
@@ -369,26 +298,27 @@
     }
 
     function applyCssVars() {
-      const html = doc.documentElement;
-      if (!html || !html.style || typeof html.style.setProperty !== 'function') return;
-      const opacity = clampNum(state.opacity, 0.05, 0.85, 0.28);
-      const blurPx = clampNum(state.blurPx, 0, 24, 4);
-      const dimOverlay = clampNum(state.dimOverlay, 0, 0.85, 0.45);
-      const fit = state.fit === 'contain' ? 'contain' : 'cover';
-      const blurPad = blurPx > 0 ? Math.min(48, Math.ceil(blurPx * 2)) : 0;
-      html.style.setProperty('--ag-prism-wp-opacity', String(opacity));
-      html.style.setProperty('--ag-prism-wp-blur', `${blurPx}px`);
-      html.style.setProperty('--ag-prism-wp-filter', blurPx > 0 ? `blur(${blurPx}px)` : 'none');
-      html.style.setProperty('--ag-prism-wp-blur-pad', `${blurPad}px`);
-      html.style.setProperty('--ag-prism-wp-dim', String(dimOverlay));
-      html.style.setProperty('--ag-prism-wp-fit', fit);
+      if (!rootEl?.style?.setProperty) return;
+      const b = clampNum(state.blurPx, 0, 24, 4);
+      const vals = [
+        String(clampNum(state.opacity, 0.05, 0.85, 0.28)),
+        `${b}px`,
+        b > 0 ? `blur(${b}px)` : 'none',
+        `${b > 0 ? Math.min(48, Math.ceil(b * 2)) : 0}px`,
+        String(clampNum(state.dimOverlay, 0, 0.85, 0.45)),
+        state.fit === 'contain' ? 'contain' : 'cover',
+      ];
+      for (let i = 0; i < CSS_VARS.length; i++) {
+        rootEl.style.setProperty(CSS_VARS[i], vals[i]);
+        if (i === 4) dimEl?.style?.setProperty?.(CSS_VARS[i], vals[i]);
+        else mediaEl?.style?.setProperty?.(CSS_VARS[i], vals[i]);
+      }
     }
 
     function clearCssVars() {
-      const html = doc.documentElement;
-      if (!html || !html.style || typeof html.style.removeProperty !== 'function') return;
-      for (let i = 0; i < CSS_VARS.length; i++) {
-        html.style.removeProperty(CSS_VARS[i]);
+      for (const t of [rootEl, mediaEl, dimEl, doc.documentElement]) {
+        if (!t?.style?.removeProperty) continue;
+        for (let i = 0; i < CSS_VARS.length; i++) t.style.removeProperty(CSS_VARS[i]);
       }
     }
 
@@ -516,7 +446,6 @@
 
       const html = doc.documentElement;
       if (html) html.setAttribute(WALLPAPER_HTML_ATTR, 'on');
-      applyCssVars();
 
       const wantTag = state.mediaType === 'video' ? 'VIDEO' : 'IMG';
       const targetUrl = state.mediaUrl || '';
@@ -583,6 +512,7 @@
         lastError = '';
       }
 
+      applyCssVars();
       syncHoleAvoidance();
       syncVideoPlayback();
       notifySubscribers();
@@ -639,7 +569,7 @@
           try {
             htmlObserver.observe(doc.documentElement, {
               attributes: true,
-              attributeFilter: ['data-ag-cs-win-blur', 'data-ag-prism-mode', 'data-ag-cs-motion', 'data-ag-cs-theme', 'data-ag-pp-open'],
+              attributeFilter: ['data-ag-cs-win-blur', 'data-ag-prism-mode', 'data-ag-cs-motion', 'data-ag-cs-theme', 'data-ag-pp-open', 'data-ag-cs-perf-mode'],
             });
           } catch {}
         }
@@ -758,7 +688,7 @@
         lastError,
         mediaTag,
         hasRoot: Boolean(rootEl && rootEl.parentElement),
-        hasStyle: Boolean(doc.getElementById && doc.getElementById(WALLPAPER_STYLE_ID)),
+        hasStyle: Boolean(adoptedSheet || (doc.getElementById && doc.getElementById(WALLPAPER_STYLE_ID))),
         holeHidden: isBrowserHoleActive(),
         videoPaused: videoPausedByRule,
         hasObjectUrl: Boolean(activeObjectUrl),
@@ -808,10 +738,11 @@
           orphanRoot.remove?.();
         }
       } catch {}
-      try {
-        const st = doc.getElementById ? doc.getElementById(WALLPAPER_STYLE_ID) : null;
-        if (st) st.remove?.();
-      } catch {}
+      if (adoptedSheet && doc.adoptedStyleSheets && typeof doc.adoptedStyleSheets[Symbol.iterator] === 'function') {
+        try { doc.adoptedStyleSheets = Array.from(doc.adoptedStyleSheets).filter((s) => s !== adoptedSheet); } catch {}
+      }
+      adoptedSheet = null;
+      try { doc.getElementById?.(WALLPAPER_STYLE_ID)?.remove?.(); } catch {}
       bridge.dispose();
     }
 

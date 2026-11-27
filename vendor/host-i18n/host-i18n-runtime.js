@@ -1,11 +1,5 @@
 /**
- * Obsidian Prism — Channel 4 On-Demand Host UI Localization Runtime
- * Zero-dependency UMD runtime (CommonJS + Browser IIFE) with:
- *   1. Universal 4-layer external localization auto-yield (known markers, zero-signature Chrome UI zh-CN sampling,
- *      1200ms delayed-plugin recheck, and 3000ms ping-pong conflict circuit breaker)
- *   2. 100% reversible destroy() using WeakMap snapshots (zero DOM property pollution)
- *   3. Strict Prism-owned UI, model-selector, code/editor, and chat-prose isolation
- *   4. 0fps visibility/blur/win-blur hibernation + time-sliced rAF scheduling (<= 80 nodes & < 5ms/frame)
+ * Obsidian Prism — Channel 4 On-Demand Host UI Localization Runtime (UMD, WeakMap reversible, 0fps idle)
  *
  * Upstream Credit:
  *   Dictionary & DOM localization approach inspired by yiheng8023/antigravity-chinese (v3.3.63)
@@ -47,18 +41,8 @@
     TITLE: 1,
   };
 
-  var IGNORED_CLASSES = [
-    'monaco-editor',
-    'view-lines',
-    'view-line',
-    'monaco-mouse-cursor-text',
-    'xterm',
-    'terminal',
-    'token',
-    'hljs',
-    'code-block',
-    'editor-instance',
-  ];
+  var IGNORED_CLASSES = ['monaco-editor', 'monaco-diff-editor', 'diffOverview', 'view-lines', 'view-line', 'cdr', 'line-insert', 'line-delete', 'monaco-mouse-cursor-text', 'xterm', 'terminal', 'token', 'hljs', 'shiki', 'cm-editor', 'code-block', 'editor-instance', 'ag-cs-inline-diff-box', 'ag-cs-inline-diff-card', 'diff-editor', 'diff-view', 'diff-line', 'diff-hunk'];
+  var DIFF_CLASS_SUBSTRS = ['diff-editor', 'diff-view', 'diff-line', 'diff-hunk', 'cm-editor', 'shiki', 'hljs'];
 
   function toLookupMap(arr) {
     var map = Object.create(null);
@@ -123,7 +107,6 @@
     'user-message-content': 1,
     'user-input-step': 1,
     'planner-response-text': 1,
-    'agent-response': 1,
     'artifact-view': 1,
     'side-question-panel': 1,
     'side-question-conversation': 1,
@@ -162,27 +145,15 @@
 
   var EXTERNAL_GLOBAL_SIGNATURE_GROUPS = [
     { provider: 'antigravity-cn-community', keys: ['__agySidebarDragFixInstalled'] },
-    {
-      provider: 'yuexps/Antigravity-Hans',
-      keys: ['__antigravityZhPatchInstalled', '__antigravityZhSetLang', '__antigravityZhPatchObserver'],
-    },
-    {
-      provider: 'yiheng8023',
-      keys: ['__AGY_I18N_INITIALIZED__', '__AGY_I18N_DATA__', '__AGY_CREATE_ENGINE__', '__AGY_SWARM_I18N__', '__AGY_I18N__'],
-    },
+    { provider: 'yuexps/Antigravity-Hans', keys: ['__antigravityZhPatchInstalled', '__antigravityZhSetLang', '__antigravityZhPatchObserver'] },
+    { provider: 'yiheng8023', keys: ['__AGY_I18N_INITIALIZED__', '__AGY_I18N_DATA__', '__AGY_CREATE_ENGINE__', '__AGY_SWARM_I18N__', '__AGY_I18N__'] },
     { provider: '3169657175', keys: ['__agyI18n', '__agyTranslateEnhancementText'] },
-    {
-      provider: 'renkeshui',
-      keys: ['__antigravity_i18n_runner_active', '__ANTIGRAVITY_I18N_DATA__', '__ANTIGRAVITY_REVERSE_MAP__'],
-    },
+    { provider: 'renkeshui', keys: ['__antigravity_i18n_runner_active', '__ANTIGRAVITY_I18N_DATA__', '__ANTIGRAVITY_REVERSE_MAP__'] },
     { provider: 'nianshou555qiansui', keys: ['__ag_hanhua_engine__'] },
     { provider: 'Ace2025001', keys: ['__AGY_ZHCN__', '__AGY_ZHCN_LOOKUP__'] },
     { provider: 'Zero-Touch', keys: ['__antigravityZh', '__antigravityZhDict'] },
     { provider: 'yunjuanyunshu', keys: ['__AG_ZH__'] },
-    {
-      provider: 'generic-external',
-      keys: ['__ANTIGRAVITY_CN__', '__ANTIGRAVITY_I18N__', '__AG_I18N__', '__AG_CN_PATCH__', '__AGY_CN__', '__I18N_PATCHED__'],
-    },
+    { provider: 'generic-external', keys: ['__ANTIGRAVITY_CN__', '__ANTIGRAVITY_I18N__', '__AG_I18N__', '__AG_CN_PATCH__', '__AGY_CN__', '__I18N_PATCHED__'] },
   ];
 
   var KNOWN_EXTERNAL_ATTRS = ['data-agy-i18n', 'data-ag-cn', 'data-i18n-patched', 'data-translated'];
@@ -212,13 +183,26 @@
     return getAttr(el, name) !== null;
   }
 
+  var EMPTY_CLASS_TOKENS = [];
+  var classTokenCache = typeof WeakMap === 'function' ? new WeakMap() : null;
   function getClassTokens(el) {
-    if (!el) return [];
+    if (!el) return EMPTY_CLASS_TOKENS;
     var raw = typeof el.className === 'string' ? el.className : '';
-    if (!raw) return [];
-    var trimmed = raw.trim();
-    if (!trimmed) return [];
-    return trimmed.indexOf(' ') === -1 && !/\s/.test(trimmed) ? [trimmed] : trimmed.split(/\s+/);
+    if (!raw) return EMPTY_CLASS_TOKENS;
+    if (classTokenCache) {
+      var cached = classTokenCache.get(el);
+      if (cached && cached.raw === raw) return cached.tokens;
+    }
+    var tokens = [], len = raw.length, start = -1;
+    for (var i = 0; i < len; i++) {
+      var c = raw.charCodeAt(i);
+      if (c === 32 || c === 9 || c === 10 || c === 13 || c === 12 || c === 11 || c === 160) {
+        if (start >= 0) { tokens.push(raw.slice(start, i)); start = -1; }
+      } else if (start < 0) start = i;
+    }
+    if (start >= 0) tokens.push(start === 0 ? raw : raw.slice(start));
+    if (classTokenCache) classTokenCache.set(el, { raw: raw, tokens: tokens });
+    return tokens;
   }
 
   function hasElementChild(el) {
@@ -340,7 +324,7 @@
   function isConversationStreamSelf(el) {
     if (!el || el.nodeType !== 1) return false;
     var tid = getAttr(el, 'data-testid');
-    if (tid === 'conversation-view' || tid === 'agent-input-box') return true;
+    if (tid === 'conversation-view' || tid === 'agent-input-box' || tid === 'agent-response') return true;
     if (hasAttr(el, 'data-cascade-id')) return true;
     return false;
   }
@@ -355,7 +339,7 @@
       return true;
     }
     var tid = getAttr(el, 'data-testid');
-    if (tid === 'permissions-selector-trigger' || tid === 'plan-command-fyi-alert') return true;
+    if (tid === 'permissions-selector-trigger' || tid === 'plan-command-fyi-alert' || tid === 'changed-files-card-header') return true;
     return false;
   }
 
@@ -380,6 +364,18 @@
     return false;
   }
 
+  function isCodeDiffContainerSelf(el, tokens, tid) {
+    if (hasAttr(el, 'data-ag-cs-inline-diff')) return true;
+    if (tid) { var tl = String(tid).toLowerCase(); if (tl.indexOf('diff') !== -1 || tl.indexOf('code-viewer') !== -1 || tl.indexOf('file-viewer') !== -1) return true; }
+    for (var i = 0; i < tokens.length; i++) {
+      var tok = tokens[i];
+      if (IGNORED_CLASS_MAP[tok]) return true;
+      var cl = tok.toLowerCase();
+      for (var d = 0; d < DIFF_CLASS_SUBSTRS.length; d++) { if (cl.indexOf(DIFF_CLASS_SUBSTRS[d]) !== -1) return true; }
+    }
+    return false;
+  }
+
   function isDirectIgnoredSelf(el) {
     if (!el || el.nodeType !== 1) return false;
     var tag = el.tagName ? String(el.tagName).toUpperCase() : '';
@@ -392,10 +388,7 @@
     if (isModelSelectorSelf(el, tid)) return true;
     if (isChatProseSelf(el, tokens, tid)) return true;
     if (isUserContentBoundarySelf(el, tokens, tid)) return true;
-    for (var i = 0; i < tokens.length; i++) {
-      if (IGNORED_CLASS_MAP[tokens[i]]) return true;
-    }
-    return false;
+    return isCodeDiffContainerSelf(el, tokens, tid);
   }
 
   /**
@@ -758,26 +751,11 @@
   }
 
   function detectExternalLocalization(rootObj, doc, options) {
+    if (options && options.locale === 'tr') return { detected: false, layer: 0, reason: null, provider: null, detail: null };
     var l1 = detectLayer1External(rootObj, doc);
-    if (l1.hit) {
-      return {
-        detected: true,
-        layer: 1,
-        reason: 'external-ui-zh',
-        provider: l1.provider || 'generic-external',
-        detail: l1.detail,
-      };
-    }
+    if (l1.hit) return { detected: true, layer: 1, reason: 'external-ui-zh', provider: l1.provider || 'generic-external', detail: l1.detail };
     var l2 = detectLayer2ChromeZh(doc, options);
-    if (l2.hit) {
-      return {
-        detected: true,
-        layer: 2,
-        reason: 'external-ui-zh',
-        provider: 'generic-zh-dom',
-        detail: l2,
-      };
-    }
+    if (l2.hit) return { detected: true, layer: 2, reason: 'external-ui-zh', provider: 'generic-zh-dom', detail: l2 };
     return { detected: false, layer: 0, reason: null, provider: null, detail: l2 };
   }
 
@@ -1888,12 +1866,9 @@
       }
     } catch (e) {}
     var mode = opts.mode === 'on' || opts.mode === 'off' ? opts.mode : 'auto';
-    var nowFn =
-      typeof opts.nowFn === 'function'
-        ? opts.nowFn
-        : function () {
-            return Date.now();
-          };
+    var locale = opts.locale === 'tr' ? 'tr' : 'zh-CN';
+    var initialHtmlLang = doc && doc.documentElement ? getAttr(doc.documentElement, 'lang') : null;
+    var nowFn = typeof opts.nowFn === 'function' ? opts.nowFn : function () { return Date.now(); };
     var perfNowFn =
       typeof opts.perfNowFn === 'function'
         ? opts.perfNowFn
@@ -1916,8 +1891,9 @@
         : function (id) {
             clearTimeout(id);
           };
+    var hasCustomRaf = typeof opts.rafFn === 'function';
     var hasRafSupport =
-      typeof opts.rafFn === 'function' || Boolean(win && typeof win.requestAnimationFrame === 'function');
+      hasCustomRaf || Boolean(win && typeof win.requestAnimationFrame === 'function');
     var rafFn =
       typeof opts.rafFn === 'function'
         ? opts.rafFn
@@ -2291,10 +2267,14 @@
       return textCount + attrCount;
     }
 
-    function disconnectObserver() {
-      if (observer && observing) {
+    var busDomUnsub = null;
+    function getHostDomBus() {
+      return (!customMutationObserver && win && (win.__agDomBus || win.__agPrismDomBus)) || null;
+    }
+    function disconnectObserver(hard) {
+      if (observer && (observing || hard)) {
         try {
-          observer.disconnect();
+          observer.disconnect(hard);
         } catch (e) {}
         observing = false;
       }
@@ -2371,7 +2351,10 @@
       dirtyObserver = null;
       pendingFullFloatScan = false;
       clearOffRetryTimers();
-      if (rafId !== null) {
+      if (rafId === 'bus') {
+        try { var _b = getHostDomBus(); if (_b && typeof _b.cancelTask === 'function') _b.cancelTask('conv:host-i18n-flush'); } catch (e) {}
+        rafId = null;
+      } else if (rafId !== null) {
         try {
           cancelRafFn(rafId);
         } catch (e) {}
@@ -2428,7 +2411,7 @@
     }
 
     function rollbackAllSnapshots() {
-      disconnectObserver();
+      disconnectObserver(true);
       var rollbackTextNode = function (node) {
         var snap = textSnapshots.get(node);
         if (snap) {
@@ -2504,6 +2487,7 @@
       textUntranslatedCache = new WeakMap();
       attrUntranslatedCache = new WeakMap();
       elementConflictState = new WeakMap();
+      hoverBoundaryCache = new WeakMap();
       exemptElements = new WeakSet();
       exemptNodes = new WeakSet();
       processedAlerts = new WeakSet();
@@ -2619,7 +2603,7 @@
         origText !== undefined
           ? currentText === origText
           : hasOwn.call(st.entries, currentText) || currentText === st.lastOrig;
-      var isExternalZh = ZH_CHAR_RE.test(currentText || '') && currentText !== expectedText;
+      var isExternalZh = locale !== 'tr' && ZH_CHAR_RE.test(currentText || '') && currentText !== expectedText;
       if (isBackToOrig || isExternalZh) {
         var refAt = translatedAt || st.lastTranslatedAt;
         var inWindow =
@@ -2730,7 +2714,7 @@
 
       // Host updated to genuinely new English copy (e.g. "Save" -> "Saved")
       var isBackToOrig = currentVal === snap.orig;
-      var isExternalZh = ZH_CHAR_RE.test(currentVal || '');
+      var isExternalZh = locale !== 'tr' && ZH_CHAR_RE.test(currentVal || '');
       if (!isBackToOrig && !isExternalZh) {
         textSnapshots.delete(node);
         modifiedTextNodes.delete(node);
@@ -2749,6 +2733,7 @@
 
       var isBackToOrig = hasOwn.call(st.entries, curText) || curText === st.lastOrig;
       var isExternalZh =
+        locale !== 'tr' &&
         ZH_CHAR_RE.test(curText) &&
         curText !== st.lastExpected &&
         (!st.lastExpected || curText.indexOf(st.lastExpected) === -1) &&
@@ -3089,6 +3074,8 @@
       if (!el || el.nodeType !== 1) return;
       if (el.isConnected === false) return;
       if (exemptElements.has(el)) return;
+      var _bus = getHostDomBus();
+      if (_bus && typeof _bus.isSkipped === 'function' && _bus.isSkipped(el)) return;
 
       var ctx = boundaryCtx || measureSafeBoundaryDepth(el);
       if (!ctx || ctx.state === -1 || ctx.remDepth < 0) return;
@@ -3269,694 +3256,679 @@
       disconnectObserver();
       try {
         translateElement(doc.documentElement, visitedSet, null, budget);
-        if (state.mode === 'off') scanOffSidebarChrome();
-      } catch (e) {}
-      reconnectObserver();
-      if (state.active && !state.destroyed && pendingNodes.length > 0) {
-        scheduleFlush();
-      }
-    }
-
-    function flushPendingNodes() {
-      rafId = null;
-      if (!state.active || state.destroyed) return;
-      if (isPaused()) {
-        if (!hibernating) enterHibernation(true);
-        else missedWhilePaused = true;
-        return;
-      }
-      modifiedTextNodes.prune();
-      modifiedAttrElements.prune();
-      if (pendingNodes.length === 0) return;
-
-      var takeCount = Math.min(pendingNodes.length, MAX_NODES_PER_FRAME);
-      var batch = pendingNodes.splice(0, takeCount);
-      for (var b = 0; b < batch.length; b++) {
-        pendingNodeSet.delete(batch[b]);
-      }
-
-      var budget = createScanBudget(MAX_NODES_PER_FRAME, FRAME_BUDGET_MS);
-      var visitedSet = new WeakSet();
-      disconnectObserver();
-      try {
-        for (var i = 0; i < batch.length; i++) {
-          if (!state.active || state.destroyed) break;
-          var node = batch[i];
-          if (!node || node.isConnected === false) continue;
-          if (i > 0 && budget.isExhausted()) {
-            for (var r = i; r < batch.length; r++) {
-              enqueueNode(batch[r]);
-            }
-            break;
-          }
-          if (node.nodeType === 1) {
-            translateElement(node, visitedSet, null, budget);
-          } else if (node.nodeType === 3) {
-            translateTextNode(node, false);
-            budget.tick();
-          }
-        }
-      } catch (e) {}
-      reconnectObserver();
-
-      if (state.active && !state.destroyed && pendingNodes.length > 0) {
-        scheduleFlush();
-      }
-    }
-
-    function scheduleFlush() {
-      if (!state.active || state.destroyed) return;
-      if (isPaused()) {
-        if (!hibernating) enterHibernation(true);
-        else missedWhilePaused = true;
-        return;
-      }
-      if (rafId === null) {
-        rafId = rafFn(flushPendingNodes);
-      }
-    }
-
-    function inspectExternalDelayedMutation(node) {
-      if (state.mode !== 'auto') return false;
-      if (nowFn() - bootAt > LAYER2B_WINDOW_MS) return false;
-      if (!node) return false;
-
-      function checkSingleTextNode(tNode) {
-        if (!tNode || tNode.nodeType !== 3) return;
-        var parent = tNode.parentElement || tNode.parentNode;
-        if (
-          !parent ||
-          isPrismOwnedElement(parent) ||
-          isUserContentBoundary(parent) ||
-          isInsideConversationStream(parent) ||
-          isIgnoredBoundary(parent)
-        ) {
-          return;
-        }
-        var val = (tNode.nodeValue || '').trim();
-        if (!val || !ZH_CHAR_RE.test(val)) return;
-        var snap = textSnapshots.get(tNode);
-        if (snap && snap.expected === tNode.nodeValue) return;
-        if (hasOwn.call(translatedValues, val) || isInsideExplicitDelayedChrome(parent)) {
-          delayedExternalNodes.add(parent);
-        }
-      }
-
-      if (node.nodeType === 3) {
-        checkSingleTextNode(node);
-      } else if (node.nodeType === 1) {
-        if (
-          isPrismOwnedElement(node) ||
-          isUserContentBoundary(node) ||
-          isInsideConversationStream(node) ||
-          isIgnoredBoundary(node)
-        ) {
-          return false;
-        }
-        var stack = [node];
-        var steps = 0;
-        while (stack.length > 0 && steps < 120) {
-          steps++;
-          var cur = stack.pop();
-          if (cur.nodeType === 3) {
-            checkSingleTextNode(cur);
-          } else if (
-            cur.nodeType === 1 &&
-            !isDirectIgnoredSelf(cur) &&
-            !isConversationStreamSelf(cur)
-          ) {
-            var ch = cur.firstChild;
-            while (ch) {
-              stack.push(ch);
-              ch = ch.nextSibling;
-            }
-          }
-        }
-      }
-
-      if (delayedExternalNodes.size >= 2) {
-        yieldAndRollback('external-ui-zh');
-        return true;
-      }
-      return false;
-    }
-
-    var FLOATING_CONTAINER_SEL =
-      '[role="tooltip"], [role="menu"], [role="listbox"], [data-floating-ui-portal], [data-radix-popper-content-wrapper], .popover, .tooltip, .context-view, .monaco-hover';
-
-    function hasFloatingShellHint(el) {
-      if (!el || el.nodeType !== 1) return false;
-      if (isDialogOrPortalWrappingDialog(el) || isDirectIgnoredSelf(el)) return false;
-      if (isFloatingElement(el, doc)) return true;
-      if (hasAttr(el, 'data-radix-portal') || hasAttr(el, 'data-floating-ui-focus-guard')) return true;
-      var idStr = typeof el.id === 'string' ? el.id.toLowerCase() : '';
-      return Boolean(idStr && (idStr.indexOf('portal') !== -1 || idStr.indexOf('tooltip') !== -1 || idStr.indexOf('popover') !== -1));
-    }
-
-    function collectTriggerFloatingHint(target, addCandidate) {
-      var hit = false;
-      var cur = target;
-      for (var depth = 0; depth < 2 && cur && cur.nodeType === 1; depth++) {
-        var desc = getAttr(cur, 'aria-describedby') || getAttr(cur, 'aria-controls') || '';
-        if (desc) {
-          hit = true;
-          if (typeof doc.getElementById === 'function') {
-            var parts = desc.trim().split(/\s+/);
-            for (var i = 0; i < parts.length; i++) {
-              if (!parts[i]) continue;
-              var refEl = doc.getElementById(parts[i]);
-              if (refEl) addCandidate(refEl);
-            }
-          }
-        }
-        if (getAttr(cur, 'data-state') === 'open' || getAttr(cur, 'aria-expanded') === 'true') {
-          hit = true;
-        }
-        cur = cur.parentElement;
-      }
-      return hit;
-    }
-
-    function scanFloatingContainers(fullScan, triggerTarget) {
-      if (!state.active || state.destroyed || !doc || !doc.body) return;
-      if (isPaused()) {
-        if (!hibernating) enterHibernation();
-        return;
-      }
-
-      var candidates = [];
-      var candidateSet = new Set();
-      function addCandidate(el) {
-        if (!el || el.nodeType !== 1 || el.isConnected === false) return;
-        if (candidateSet.has(el) || exemptElements.has(el)) return;
-        if (isDialogOrPortalWrappingDialog(el) || isDirectIgnoredSelf(el)) return;
-        if (hasAttr(el, 'data-hover-card-popup') || (typeof el.querySelector === 'function' && (hasAttr(el, 'data-base-ui-portal') || hasAttr(el, 'data-floating-ui-portal')) && el.querySelector('[data-hover-card-popup]'))) return;
-        candidateSet.add(el);
-        candidates.push(el);
-      }
-
-      var hasFloatHint = Boolean(fullScan);
-      var tail = doc.body.lastElementChild;
-      for (var step = 0; tail && step < 4; step++, tail = tail.previousElementSibling) {
-        if (isFloatingElement(tail, doc)) {
-          addCandidate(tail);
-          hasFloatHint = true;
-        } else if (!hasFloatHint && hasFloatingShellHint(tail)) {
-          hasFloatHint = true;
-        }
-      }
-      if (!fullScan && triggerTarget && collectTriggerFloatingHint(triggerTarget, addCandidate)) {
-        hasFloatHint = true;
-      }
-      if ((fullScan || hasFloatHint) && typeof doc.querySelectorAll === 'function') {
-        var popups = doc.querySelectorAll(FLOATING_CONTAINER_SEL);
-        if (popups && popups.length > 0) {
-          for (var pIdx = 0; pIdx < popups.length; pIdx++) {
-            addCandidate(popups[pIdx]);
-          }
-        }
-      }
-
-      if (candidates.length === 0) return;
-
-      var visitedSet = new WeakSet();
-      disconnectObserver();
-      try {
-        for (var cIdx = 0; cIdx < candidates.length; cIdx++) {
-          if (!state.active || state.destroyed) break;
-          translateElement(candidates[cIdx], visitedSet, null, null);
-        }
-      } catch (e) {}
-      reconnectObserver();
-    }
-
-    function runHoverTargetScan(target) {
-      if (!state.active || state.destroyed || isPaused() || !target || target.nodeType !== 1) return;
-      if (target.isConnected === false || exemptElements.has(target)) return;
-      if (isDialogOrPortalWrappingDialog(target) || isWorkbenchOrRoot(target, doc)) return;
-
-      var targetCtx = measureSafeBoundaryDepth(target);
-      if (targetCtx.blocked) return;
-
-      var scanTarget = getChildElementCount(target) <= 12;
-      var parent = target.parentElement;
-      var parentCtx = null;
-      if (
-        parent &&
-        !isWorkbenchOrRoot(parent, doc) &&
-        !isDialogOrPortalWrappingDialog(parent) &&
-        getChildElementCount(parent) <= 8
-      ) {
-        var pCtx = measureSafeBoundaryDepth(parent);
-        if (!pCtx.blocked) parentCtx = pCtx;
-      }
-
-      if (!scanTarget && !parentCtx) return;
-
-      var visitedSet = new WeakSet();
-      disconnectObserver();
-      try {
-        if (scanTarget) {
-          translateElement(target, visitedSet, targetCtx, null);
-        }
-        if (parentCtx && state.active && !state.destroyed) {
-          translateElement(parent, visitedSet, parentCtx, null);
-        }
-      } catch (err) {}
-      reconnectObserver();
-    }
-
-    function enterHibernation(markMissed) {
-      if (!state.active || state.destroyed) return;
-      var wasCovered = observing || dirtyProbeActive;
-      hibernating = true;
-      pendingFullFloatScan = false;
-      if (rafId !== null) {
-        cancelRafFn(rafId);
-        rafId = null;
-      }
-      if (hoverScanTimer !== null) {
-        clearTimeoutFn(hoverScanTimer);
-        hoverScanTimer = null;
-      }
-      if (hoverCardTimer !== null) {
-        clearTimeoutFn(hoverCardTimer);
-        hoverCardTimer = null;
-      }
-      pendingHoverCardNode = null;
-      if (focusWakeTimer !== null) {
-        clearTimeoutFn(focusWakeTimer);
-        focusWakeTimer = null;
-      }
-      var hadOffRetry = clearOffRetryTimers();
-      if (markMissed || hadOffRetry || pendingNodes.length > 0 || !wasCovered) {
-        missedWhilePaused = true;
-      }
-      pendingNodes.length = 0;
-      pendingNodeSet.clear();
-      var hiddenNow = Boolean(doc && doc.hidden === true);
-      if (hiddenNow) {
-        missedWhilePaused = true;
-        disconnectDirtyObserver();
-      }
-      if (state.mode !== 'auto' || nowFn() - bootAt > LAYER2B_WINDOW_MS) {
-        if (observer && observing) {
-          try {
-            if (typeof observer.takeRecords === 'function') {
-              var recs = observer.takeRecords();
-              if (recs && recs.length > 0) missedWhilePaused = true;
-            }
-          } catch (e) {}
-        }
-        disconnectObserver();
-        if (!hiddenNow && !missedWhilePaused) {
-          armDirtyObserver();
-        } else {
-          disconnectDirtyObserver();
-        }
-      }
-    }
-
-    function wakeFromHibernation() {
-      if (!state.active || state.destroyed) return;
-      if (isPaused()) return;
-      hibernating = false;
-      var hadProbe = dirtyProbeActive;
-      if (dirtyObserver && dirtyProbeActive) {
-        try {
-          if (typeof dirtyObserver.takeRecords === 'function') {
-            var recs = dirtyObserver.takeRecords();
-            if (recs && recs.length > 0) missedWhilePaused = true;
-          }
-        } catch (e) {}
-        disconnectDirtyObserver();
-      }
-      if (missedWhilePaused || pendingNodes.length > 0 || (!observing && !hadProbe)) {
-        missedWhilePaused = false;
-        pendingNodes.length = 0;
-        pendingNodeSet.clear();
-        safeBudgetedScan();
-      }
-      reconnectObserver();
-    }
-
-    function attachListenersAndObserver() {
-      if (!doc || !doc.documentElement || state.destroyed || !state.active) return;
-
-      var MutationObserverClass =
-        customMutationObserver ||
-        (win && win.MutationObserver) ||
-        (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
-
-      var isFocusGuard = function (n) {
-        return Boolean(n && n.nodeType === 1 && (hasAttr(n, 'data-floating-ui-focus-guard') || hasAttr(n, 'data-base-ui-focus-guard')));
-      };
-      var isHoverCardPortalOrSelf = function (n) {
-        if (!n || n.nodeType !== 1 || n === doc.body || n === doc.documentElement) return false;
-        if (hasAttr(n, 'data-hover-card-popup')) return true;
-        if (typeof n.closest === 'function' && n.closest('[data-hover-card-popup]')) return true;
-        if ((hasAttr(n, 'data-base-ui-portal') || hasAttr(n, 'data-floating-ui-portal') || getAttr(n, 'role') === 'presentation') && typeof n.querySelector === 'function' && n.querySelector('[data-hover-card-popup]')) return true;
-        for (var c = n.firstElementChild, k = 0; c && k < 4; c = c.nextElementSibling, k++) {
-          if (hasAttr(c, 'data-hover-card-popup') || hasAttr(c.firstElementChild, 'data-hover-card-popup') || hasAttr(c.lastElementChild, 'data-hover-card-popup')) return true;
-        }
-        return false;
-      };
-      var scheduleHoverCardNode = function (n) {
-        pendingHoverCardNode = n;
-        if (hoverCardTimer !== null) clearTimeoutFn(hoverCardTimer);
-        hoverCardTimer = setTimeoutFn(function () {
-          hoverCardTimer = null;
-          var hc = pendingHoverCardNode;
-          pendingHoverCardNode = null;
-          if (!state.active || state.destroyed || isPaused() || !hc || hc.isConnected === false) return;
-          enqueueNode(hc);
-          scheduleFlush();
-        }, 120);
-      };
-
-      if (MutationObserverClass) {
-        observer = new MutationObserverClass(function (mutations) {
-          if (!state.active || state.destroyed) return;
-          var inLayer2b = state.mode === 'auto' && nowFn() - bootAt <= LAYER2B_WINDOW_MS;
-          var pausedNow = isPaused();
-          if (pausedNow) {
-            if (!hibernating) enterHibernation(true);
-            else missedWhilePaused = true;
-            if (!inLayer2b) return;
-          }
-
-          var batchBoundaryCache = new WeakMap();
-          function getCachedBoundary(el) {
-            var hit = batchBoundaryCache.get(el);
-            if (hit !== undefined) return hit;
-            var res = measureSafeBoundaryDepth(el);
-            batchBoundaryCache.set(el, res);
-            return res;
-          }
-
-          for (var i = 0; i < mutations.length; i++) {
-            if (!state.active || state.destroyed) return;
-            var mutation = mutations[i];
-            if (mutation.type === 'childList') {
-              var targetEl = mutation.target;
-              var added = mutation.addedNodes;
-              if (targetEl && targetEl.nodeType === 1) {
-                if (targetEl.isConnected === false || exemptElements.has(targetEl)) continue;
-                var targetIsHoverCard = isHoverCardPortalOrSelf(targetEl);
-                if (targetIsHoverCard) {
-                  if (!pausedNow && added && added.length > 0) scheduleHoverCardNode(targetEl);
-                  continue;
-                }
-                var targetBound = getCachedBoundary(targetEl);
-                if (targetBound.blocked && !targetBound.canDescendConv) {
-                  continue;
-                }
-                if (!pausedNow && !targetBound.blocked && checkChildListConflict(targetEl)) {
-                  continue;
-                }
-                if (!state.active || state.destroyed) return;
-                if (!added || added.length === 0) continue;
-                for (var j = 0; j < added.length; j++) {
-                  var addedNode = added[j];
-                  if (!addedNode || addedNode.isConnected === false) continue;
-                  if (addedNode.nodeType === 3) {
-                    if (targetBound.blocked || exemptNodes.has(addedNode)) continue;
-                  } else if (addedNode.nodeType === 1) {
-                    if (exemptElements.has(addedNode) || isDirectIgnoredSelf(addedNode) || isFocusGuard(addedNode)) continue;
-                    if (isHoverCardPortalOrSelf(addedNode)) {
-                      if (!pausedNow) scheduleHoverCardNode(addedNode);
-                      continue;
-                    }
-                    if (
-                      targetBound.canDescendConv &&
-                      !isInteractiveChatChromeSelf(addedNode, true) &&
-                      !hasElementChild(addedNode)
-                    ) {
-                      continue;
-                    }
-                  } else {
-                    continue;
-                  }
-                  if (inLayer2b && inspectExternalDelayedMutation(addedNode)) return;
-                  if (!pausedNow) enqueueNode(addedNode);
-                }
-              } else if (added && added.length > 0) {
-                for (var k = 0; k < added.length; k++) {
-                  var rootAdded = added[k];
-                  if (!rootAdded || rootAdded.isConnected === false) continue;
-                  if (inLayer2b && inspectExternalDelayedMutation(rootAdded)) return;
-                  if (!pausedNow) enqueueNode(rootAdded);
-                }
-              }
-            } else if (mutation.type === 'characterData' && mutation.target) {
-              var target = mutation.target;
-              if (target.isConnected === false || exemptNodes.has(target)) continue;
-              var parent = target.parentElement || target.parentNode;
-              if (!parent || parent.nodeType !== 1 || parent.isConnected === false || exemptElements.has(parent)) {
-                continue;
-              }
-              if (isHoverCardPortalOrSelf(parent)) {
-                if (!pausedNow) scheduleHoverCardNode(parent);
-                continue;
-              }
-              var snap = textSnapshots.get(target);
-              if (snap && snap.expected === target.nodeValue) continue;
-              var parentBound = getCachedBoundary(parent);
-              if (parentBound.blocked) continue;
-              if (inLayer2b && inspectExternalDelayedMutation(target)) return;
-              if (pausedNow) continue;
-              if (checkNodeConflict(target)) continue;
-              if (!state.active || state.destroyed) return;
-              enqueueNode(target);
-            }
-          }
-          if (!pausedNow && pendingNodes.length > 0) {
-            scheduleFlush();
-          }
-        });
-      }
-
-      if (!isPaused()) {
-        safeBudgetedScan();
-      } else {
-        // 窗口可见但暂时失焦（如热切换配置/外部改 config.json）时，off 模式先同步执行一次全量还原，随后保持 0fps 休眠
-        if (state.mode === 'off' && !(doc && doc.hidden === true)) {
-          safeFullScan();
-          disconnectObserver();
-        }
-        hibernating = true;
-        missedWhilePaused = true;
-      }
-      if (!state.active || state.destroyed) return;
-
-      if (observer && (!isPaused() || (state.mode === 'auto' && nowFn() - bootAt <= LAYER2B_WINDOW_MS))) {
-        reconnectObserver();
-      }
-
-      if (MutationObserverClass && doc.documentElement) {
-        try {
-          winBlurObserver = new MutationObserverClass(function (muts) {
-            if (!state.active || state.destroyed) return;
-            var sawPauseAttr = false;
-            for (var wi = 0; wi < muts.length; wi++) {
-              var attrName = muts[wi].attributeName;
-              if (
-                muts[wi].type === 'attributes' &&
-                (!attrName || attrName === 'data-ag-cs-win-blur' || attrName === 'data-ag-pp-open')
-              ) {
-                sawPauseAttr = true;
-                break;
-              }
-            }
-            if (!sawPauseAttr) return;
-            if (isPaused()) {
-              enterHibernation();
-            } else if (hibernating) {
-              wakeFromHibernation();
-            }
-          });
-          winBlurObserver.observe(doc.documentElement, {
-            attributes: true,
-            attributeFilter: ['data-ag-cs-win-blur', 'data-ag-pp-open'],
-          });
-        } catch (e) {
-          winBlurObserver = null;
-        }
-      }
-
-      // Layer 2b delayed-plugin check within 1200ms window (auto mode only)
-      if (state.mode === 'auto') {
-        var checkDelays = [450, 1150];
-        for (var d = 0; d < checkDelays.length; d++) {
-          (function (delayMs) {
-            var tid = setTimeoutFn(function () {
-              if (!state.active || state.destroyed || state.mode !== 'auto') return;
-              if (nowFn() - bootAt > LAYER2B_WINDOW_MS + 100) return;
-              var l1 = detectLayer1External(win, doc);
-              if (l1.hit) {
-                yieldAndRollback('external-ui-zh', l1.provider);
-                return;
-              }
-              var l2 = detectLayer2ChromeZh(doc, { textSnapshots: textSnapshots });
-              if (l2.hit) {
-                yieldAndRollback('external-ui-zh', 'generic-zh-dom');
-                return;
-              }
-              if (delayMs >= 1150 && isPaused()) {
-                disconnectObserver();
-                if (doc && doc.hidden === true) {
-                  missedWhilePaused = true;
-                } else if (!missedWhilePaused) {
-                  armDirtyObserver();
-                }
-              }
-            }, delayMs);
-            layer2bTimers.push(tid);
-          })(checkDelays[d]);
-        }
-      }
-
-      // Hover & ContextMenu targeted floating scan (leading + trailing 120ms throttle)
-      hoverHandler = function (e) {
-        if (!state.active || state.destroyed) return;
-        if (isPaused()) {
-          if (!hibernating) enterHibernation();
-          return;
-        }
-        if (hibernating) {
-          wakeFromHibernation();
-        }
-        var rawTarget = e && e.target;
-        var target = rawTarget && rawTarget.nodeType === 3 ? rawTarget.parentElement || rawTarget.parentNode : rawTarget;
-        if (!target || target.nodeType !== 1 || target.isConnected === false) return;
-
-        var isContextMenu = Boolean(e && e.type === 'contextmenu');
-        if (isContextMenu) {
-          pendingFullFloatScan = true;
-        } else if (e && e.type === 'pointerenter') {
-          var tg = String(target.tagName || '').toUpperCase();
-          if (tg === 'PATH' || tg === 'CIRCLE' || tg === 'RECT' || tg === 'LINE' || tg === 'POLYLINE' || tg === 'POLYGON' || tg === 'ELLIPSE' || tg === 'G' || tg === 'DEFS' || tg === 'USE' || tg === 'STOP') return;
-          if (exemptElements.has(target) || isDialogOrPortalWrappingDialog(target)) return;
-          if (target.closest?.('[data-testid="conversation-row-sidebar"],[data-testid="project-header"],[data-testid="conversation-list-sidebar"],[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup]')) return;
-          var hoverBound = measureSafeBoundaryDepth(target);
-          if (hoverBound.blocked) return;
-          if (isInsideDialog(target) && !isSmallHoverControl(target)) return;
-        }
-
-        var now = nowFn();
-        var elapsed = now - lastHoverTime;
-        var ranImmediate = false;
-        if (elapsed >= 120) {
-          lastHoverTime = now;
-          ranImmediate = true;
-          runHoverTargetScan(target);
-        }
-        if (hoverScanTimer !== null) {
-          clearTimeoutFn(hoverScanTimer);
-        }
-        var delay = ranImmediate ? 50 : Math.max(50, 120 - elapsed + 20);
-        hoverScanTimer = setTimeoutFn(function () {
-          hoverScanTimer = null;
-          lastHoverTime = nowFn();
-          if (!ranImmediate) {
-            runHoverTargetScan(target);
-          }
-          var doFull = pendingFullFloatScan;
-          pendingFullFloatScan = false;
-          scanFloatingContainers(doFull, target);
-        }, delay);
-      };
-
-      if (typeof doc.addEventListener === 'function') {
-        doc.addEventListener('pointerenter', hoverHandler, { capture: true, passive: true });
-        doc.addEventListener('contextmenu', hoverHandler, { capture: true, passive: true });
-
-        visibilityHandler = function () {
-          if (!state.active || state.destroyed) return;
-          if (isPaused()) {
-            enterHibernation();
-          } else {
-            wakeFromHibernation();
-          }
-        };
-        doc.addEventListener('visibilitychange', visibilityHandler);
-      }
-
-      if (win && typeof win.addEventListener === 'function') {
-        blurHandler = function () {
-          pausedByWindowBlur = true;
-          enterHibernation();
-        };
-        focusHandler = function () {
-          pausedByWindowBlur = false;
-          if (!isPaused()) {
-            wakeFromHibernation();
-          } else if (isWinBlurAttrSet() && focusWakeTimer === null) {
-            // Allow companion runtime's focus handler to clear data-ag-cs-win-blur in the same turn
-            focusWakeTimer = setTimeoutFn(function () {
-              focusWakeTimer = null;
-              if (!isPaused()) wakeFromHibernation();
-            }, 0);
-          }
-        };
-        win.addEventListener('blur', blurHandler);
-        win.addEventListener('focus', focusHandler);
-      }
-    }
-
-    function boot(targetMode) {
-      mode = targetMode === 'on' || targetMode === 'off' ? targetMode : 'auto';
-      state.mode = mode;
-
-      selectEngineForMode(mode);
-
-      state.destroyed = false;
-      state.yielded = false;
-      state.reason = null;
-      state.detectedProvider = null;
-      bootAt = nowFn();
-      pausedByWindowBlur = false;
-      hibernating = Boolean((doc && doc.hidden === true) || isWinBlurAttrSet());
-      missedWhilePaused = false;
-      dirtyProbeActive = false;
-      pendingFullFloatScan = false;
-      inOffRetryPass = false;
-      delayedExternalNodes.clear();
-      globalConflictRecords.length = 0;
-
-      if (mode === 'off') {
-        var l1Pre = detectLayer1External(win, doc);
-        if (l1Pre.hit) {
-          state.detectedProvider = l1Pre.provider || null;
-        }
-        activateTier1Suppression();
-        state.active = true;
-        state.status = 'off-enforced';
-        setRootStatusAttr('off-enforced');
-
-        if (doc) {
-          if (doc.readyState === 'loading' && typeof doc.addEventListener === 'function') {
-            domReadyHandler = function () {
-              if (!state.active || state.destroyed || state.mode !== 'off') return;
-              attachListenersAndObserver();
-            };
-            doc.addEventListener('DOMContentLoaded', domReadyHandler, { once: true });
-          } else {
-            attachListenersAndObserver();
-          }
-        }
-        return;
-      }
+if (state.mode === 'off') scanOffSidebarChrome();
+} catch (e) {}
+reconnectObserver();
+if (state.active && !state.destroyed && pendingNodes.length > 0) scheduleFlush();
+}
+function flushPendingNodes() {
+rafId = null;
+if (!state.active || state.destroyed) return;
+if (isPaused()) {
+if (!hibernating) enterHibernation(true);
+else missedWhilePaused = true;
+return;
+}
+modifiedTextNodes.prune();
+modifiedAttrElements.prune();
+if (pendingNodes.length === 0) return;
+var takeCount = Math.min(pendingNodes.length, MAX_NODES_PER_FRAME);
+var batch = pendingNodes.splice(0, takeCount);
+for (var b = 0; b < batch.length; b++) {
+pendingNodeSet.delete(batch[b]);
+}
+var budget = createScanBudget(MAX_NODES_PER_FRAME, FRAME_BUDGET_MS);
+var visitedSet = new WeakSet();
+disconnectObserver();
+try {
+for (var i = 0; i < batch.length; i++) {
+if (!state.active || state.destroyed) break;
+var node = batch[i];
+if (!node || node.isConnected === false) continue;
+if (i > 0 && budget.isExhausted()) {
+for (var r = i; r < batch.length; r++) {
+enqueueNode(batch[r]);
+}
+break;
+}
+if (node.nodeType === 1) {
+translateElement(node, visitedSet, null, budget);
+} else if (node.nodeType === 3) {
+translateTextNode(node, false);
+budget.tick();
+}
+}
+} catch (e) {}
+reconnectObserver();
+if (state.active && !state.destroyed && pendingNodes.length > 0) scheduleFlush();
+}
+function scheduleFlush() {
+if (!state.active || state.destroyed) return;
+if (isPaused()) {
+if (!hibernating) enterHibernation(true);
+else missedWhilePaused = true;
+return;
+}
+if (rafId === null) {
+var _b = !hasCustomRaf ? getHostDomBus() : null;
+if (_b && typeof _b.scheduleTask === 'function') {
+rafId = 'bus';
+_b.scheduleTask('conv:host-i18n-flush', flushPendingNodes, { priority: 'background' });
+} else {
+rafId = rafFn(flushPendingNodes);
+}
+}
+}
+function inspectExternalDelayedMutation(node) {
+if (state.mode !== 'auto') return false;
+if (nowFn() - bootAt > LAYER2B_WINDOW_MS) return false;
+if (!node) return false;
+function checkSingleTextNode(tNode) {
+if (!tNode || tNode.nodeType !== 3) return;
+var parent = tNode.parentElement || tNode.parentNode;
+if (
+!parent ||
+isPrismOwnedElement(parent) ||
+isUserContentBoundary(parent) ||
+isInsideConversationStream(parent) ||
+isIgnoredBoundary(parent)
+) {
+return;
+}
+var val = (tNode.nodeValue || '').trim();
+if (!val || !ZH_CHAR_RE.test(val)) return;
+var snap = textSnapshots.get(tNode);
+if (snap && snap.expected === tNode.nodeValue) return;
+if (hasOwn.call(translatedValues, val) || isInsideExplicitDelayedChrome(parent)) {
+delayedExternalNodes.add(parent);
+}
+}
+if (node.nodeType === 3) {
+checkSingleTextNode(node);
+} else if (node.nodeType === 1) {
+if (
+isPrismOwnedElement(node) ||
+isUserContentBoundary(node) ||
+isInsideConversationStream(node) ||
+isIgnoredBoundary(node)
+) {
+return false;
+}
+var stack = [node];
+var steps = 0;
+while (stack.length > 0 && steps < 120) {
+steps++;
+var cur = stack.pop();
+if (cur.nodeType === 3) {
+checkSingleTextNode(cur);
+} else if (
+cur.nodeType === 1 &&
+!isDirectIgnoredSelf(cur) &&
+!isConversationStreamSelf(cur)
+) {
+var ch = cur.firstChild;
+while (ch) {
+stack.push(ch);
+ch = ch.nextSibling;
+}
+}
+}
+}
+if (delayedExternalNodes.size >= 2) {
+yieldAndRollback('external-ui-zh');
+return true;
+}
+return false;
+}
+var FLOATING_CONTAINER_SEL =
+'[role="tooltip"], [role="menu"], [role="listbox"], [data-floating-ui-portal], [data-radix-popper-content-wrapper], .popover, .tooltip, .context-view, .monaco-hover';
+function hasFloatingShellHint(el) {
+if (!el || el.nodeType !== 1) return false;
+if (isDialogOrPortalWrappingDialog(el) || isDirectIgnoredSelf(el)) return false;
+if (isFloatingElement(el, doc)) return true;
+if (hasAttr(el, 'data-radix-portal') || hasAttr(el, 'data-floating-ui-focus-guard')) return true;
+var idStr = typeof el.id === 'string' ? el.id.toLowerCase() : '';
+return Boolean(idStr && (idStr.indexOf('portal') !== -1 || idStr.indexOf('tooltip') !== -1 || idStr.indexOf('popover') !== -1));
+}
+function collectTriggerFloatingHint(target, addCandidate) {
+var hit = false;
+var cur = target;
+for (var depth = 0; depth < 2 && cur && cur.nodeType === 1; depth++) {
+var desc = getAttr(cur, 'aria-describedby') || getAttr(cur, 'aria-controls') || '';
+if (desc) {
+hit = true;
+if (typeof doc.getElementById === 'function') {
+var parts = desc.trim().split(/\s+/);
+for (var i = 0; i < parts.length; i++) {
+if (!parts[i]) continue;
+var refEl = doc.getElementById(parts[i]);
+if (refEl) addCandidate(refEl);
+}
+}
+}
+if (getAttr(cur, 'data-state') === 'open' || getAttr(cur, 'aria-expanded') === 'true') {
+hit = true;
+}
+cur = cur.parentElement;
+}
+return hit;
+}
+function scanFloatingContainers(fullScan, triggerTarget) {
+if (!state.active || state.destroyed || !doc || !doc.body) return;
+if (isPaused()) {
+if (!hibernating) enterHibernation();
+return;
+}
+var candidates = [];
+var candidateSet = new Set();
+function addCandidate(el) {
+if (!el || el.nodeType !== 1 || el.isConnected === false) return;
+if (candidateSet.has(el) || exemptElements.has(el)) return;
+if (isDialogOrPortalWrappingDialog(el) || isDirectIgnoredSelf(el)) return;
+if (hasAttr(el, 'data-hover-card-popup') || (typeof el.querySelector === 'function' && (hasAttr(el, 'data-base-ui-portal') || hasAttr(el, 'data-floating-ui-portal')) && el.querySelector('[data-hover-card-popup]'))) return;
+candidateSet.add(el);
+candidates.push(el);
+}
+var hasFloatHint = Boolean(fullScan);
+var tail = doc.body.lastElementChild;
+for (var step = 0; tail && step < 4; step++, tail = tail.previousElementSibling) {
+if (isFloatingElement(tail, doc)) {
+addCandidate(tail);
+hasFloatHint = true;
+} else if (!hasFloatHint && hasFloatingShellHint(tail)) {
+hasFloatHint = true;
+}
+}
+if (!fullScan && triggerTarget && collectTriggerFloatingHint(triggerTarget, addCandidate)) {
+hasFloatHint = true;
+}
+if ((fullScan || hasFloatHint) && typeof doc.querySelectorAll === 'function') {
+var popups = doc.querySelectorAll(FLOATING_CONTAINER_SEL);
+if (popups && popups.length > 0) {
+for (var pIdx = 0; pIdx < popups.length; pIdx++) {
+addCandidate(popups[pIdx]);
+}
+}
+}
+if (candidates.length === 0) return;
+var visitedSet = new WeakSet();
+var domBus = (win && (win.__agDomBus || win.__agPrismDomBus)) || (typeof window !== 'undefined' && (window.__agDomBus || window.__agPrismDomBus));
+if (candidates.length > 24 && domBus && typeof domBus.runChunked === 'function') {
+domBus.runChunked(candidates, function (el) {
+if (!state.active || state.destroyed || isPaused()) return;
+disconnectObserver();
+try { translateElement(el, visitedSet, null, null); } catch (e) {}
+reconnectObserver();
+}, { budgetMs: 3.5 });
+return;
+}
+disconnectObserver();
+try {
+for (var cIdx = 0; cIdx < candidates.length; cIdx++) {
+if (!state.active || state.destroyed) break;
+translateElement(candidates[cIdx], visitedSet, null, null);
+}
+} catch (e) {}
+reconnectObserver();
+}
+var hoverBoundaryCache = new WeakMap();
+function getHoverBoundary(el, now) {
+if (!el || el.nodeType !== 1) return { blocked: true };
+var cached = hoverBoundaryCache.get(el);
+if (cached && now - cached.ts < 64) return cached.res;
+var res = measureSafeBoundaryDepth(el);
+hoverBoundaryCache.set(el, { ts: now, res: res });
+return res;
+}
+function hasHoverCandidateWork(el, includeSubtree) {
+if (!el || el.nodeType !== 1 || state.mode === 'off') return true;
+if (exemptElements.has(el)) return false;
+var stack = [[el, 0]], visited = 0;
+while (stack.length) {
+var pair = stack.pop(), cur = pair[0], depth = pair[1];
+if (!cur || cur.nodeType !== 1 || cur.isConnected === false || exemptElements.has(cur)) continue;
+if (depth > 0 && (IGNORED_TAGS[String(cur.tagName || '').toUpperCase()] || isIgnoredBoundary(cur))) continue;
+if (++visited > 40) return true;
+for (var ai = 0; ai < TRANSLATABLE_ATTRS.length; ai++) {
+var attr = TRANSLATABLE_ATTRS[ai];
+if (!hasAttr(cur, attr)) continue;
+var val = getAttr(cur, attr);
+if (!val) continue;
+var mapRec = attrSnapshots.get(cur), aSnap = mapRec && attr in mapRec.entries ? mapRec.entries[attr] : null;
+if (aSnap && aSnap.expected === val) continue;
+var untransMap = attrUntranslatedCache.get(cur);
+if (!aSnap && untransMap && attr in untransMap && untransMap[attr] === val) continue;
+return true;
+}
+for (var child = cur.firstChild; child; child = child.nextSibling) {
+if (child.nodeType === 3) {
+if (!exemptNodes.has(child)) {
+var txt = child.nodeValue;
+if (txt && txt.trim()) {
+var tSnap = textSnapshots.get(child);
+if (!(tSnap && tSnap.expected === txt) && !(!tSnap && textUntranslatedCache.get(child) === txt)) return true;
+}
+}
+} else if (child.nodeType === 1 && includeSubtree) {
+if (depth >= 4) return true;
+stack.push([child, depth + 1]);
+}
+}
+}
+return false;
+}
+function runHoverTargetScan(target, preBound) {
+if (!state.active || state.destroyed || isPaused() || !target || target.nodeType !== 1) return;
+if (target.isConnected === false || exemptElements.has(target)) return;
+if (isDialogOrPortalWrappingDialog(target) || isWorkbenchOrRoot(target, doc)) return;
+var now = nowFn(), targetCtx = preBound || getHoverBoundary(target, now);
+if (targetCtx.blocked) return;
+var scanTarget = getChildElementCount(target) <= 12, parent = target.parentElement, parentCtx = null;
+if (parent && !isWorkbenchOrRoot(parent, doc) && !isDialogOrPortalWrappingDialog(parent) && getChildElementCount(parent) <= 8) {
+var pCtx = getHoverBoundary(parent, now);
+if (!pCtx.blocked) parentCtx = pCtx;
+}
+if (!scanTarget && !parentCtx) return;
+var needTarget = scanTarget && hasHoverCandidateWork(target, true), needParent = !!parentCtx && hasHoverCandidateWork(parent, true);
+var visitedSet = new WeakSet();
+disconnectObserver();
+try {
+if (needTarget) translateElement(target, visitedSet, targetCtx, null);
+if (needParent && state.active && !state.destroyed) translateElement(parent, visitedSet, parentCtx, null);
+} catch (err) {}
+reconnectObserver();
+}
+function enterHibernation(markMissed) {
+if (!state.active || state.destroyed) return;
+var wasCovered = observing || dirtyProbeActive;
+hibernating = true;
+pendingFullFloatScan = false;
+if (rafId === 'bus') {
+try { var _hb = getHostDomBus(); if (_hb && typeof _hb.cancelTask === 'function') _hb.cancelTask('conv:host-i18n-flush'); } catch (e) {}
+rafId = null;
+} else if (rafId !== null) {
+cancelRafFn(rafId);
+rafId = null;
+}
+if (hoverScanTimer !== null) {
+clearTimeoutFn(hoverScanTimer);
+hoverScanTimer = null;
+}
+if (hoverCardTimer !== null) {
+clearTimeoutFn(hoverCardTimer);
+hoverCardTimer = null;
+}
+pendingHoverCardNode = null;
+if (focusWakeTimer !== null) {
+clearTimeoutFn(focusWakeTimer);
+focusWakeTimer = null;
+}
+var hadOffRetry = clearOffRetryTimers();
+if (markMissed || hadOffRetry || pendingNodes.length > 0 || !wasCovered) missedWhilePaused = true;
+pendingNodes.length = 0;
+pendingNodeSet.clear();
+var hiddenNow = Boolean(doc && doc.hidden === true);
+if (hiddenNow) {
+missedWhilePaused = true;
+disconnectDirtyObserver();
+}
+if (state.mode !== 'auto' || nowFn() - bootAt > LAYER2B_WINDOW_MS) {
+if (observer && observing) {
+try {
+if (typeof observer.takeRecords === 'function') {
+var recs = observer.takeRecords();
+if (recs && recs.length > 0) missedWhilePaused = true;
+}
+} catch (e) {}
+}
+disconnectObserver(true);
+if (!hiddenNow && !missedWhilePaused) {
+armDirtyObserver();
+} else {
+disconnectDirtyObserver();
+}
+}
+}
+function wakeFromHibernation() {
+if (!state.active || state.destroyed) return;
+if (isPaused()) return;
+hibernating = false;
+var hadProbe = dirtyProbeActive;
+if (dirtyObserver && dirtyProbeActive) {
+try {
+if (typeof dirtyObserver.takeRecords === 'function') {
+var recs = dirtyObserver.takeRecords();
+if (recs && recs.length > 0) missedWhilePaused = true;
+}
+} catch (e) {}
+disconnectDirtyObserver();
+}
+if (missedWhilePaused || pendingNodes.length > 0 || (!observing && !hadProbe)) {
+missedWhilePaused = false;
+pendingNodes.length = 0;
+pendingNodeSet.clear();
+safeBudgetedScan();
+}
+reconnectObserver();
+}
+function attachListenersAndObserver() {
+if (!doc || !doc.documentElement || state.destroyed || !state.active) return;
+var MutationObserverClass =
+customMutationObserver ||
+(win && win.MutationObserver) ||
+(typeof MutationObserver !== 'undefined' ? MutationObserver : null);
+var isFocusGuard = function (n) {
+return Boolean(n && n.nodeType === 1 && (hasAttr(n, 'data-floating-ui-focus-guard') || hasAttr(n, 'data-base-ui-focus-guard')));
+};
+var isHoverCardPortalOrSelf = function (n) {
+if (!n || n.nodeType !== 1 || n === doc.body || n === doc.documentElement) return false;
+if (hasAttr(n, 'data-hover-card-popup')) return true;
+if (typeof n.closest === 'function' && n.closest('[data-hover-card-popup]')) return true;
+if ((hasAttr(n, 'data-base-ui-portal') || hasAttr(n, 'data-floating-ui-portal') || getAttr(n, 'role') === 'presentation') && typeof n.querySelector === 'function' && n.querySelector('[data-hover-card-popup]')) return true;
+for (var c = n.firstElementChild, k = 0; c && k < 4; c = c.nextElementSibling, k++) {
+if (hasAttr(c, 'data-hover-card-popup') || hasAttr(c.firstElementChild, 'data-hover-card-popup') || hasAttr(c.lastElementChild, 'data-hover-card-popup')) return true;
+}
+return false;
+};
+var scheduleHoverCardNode = function (n) {
+pendingHoverCardNode = n;
+if (hoverCardTimer !== null) clearTimeoutFn(hoverCardTimer);
+hoverCardTimer = setTimeoutFn(function () {
+hoverCardTimer = null;
+var hc = pendingHoverCardNode;
+pendingHoverCardNode = null;
+if (!state.active || state.destroyed || isPaused() || !hc || hc.isConnected === false) return;
+enqueueNode(hc);
+scheduleFlush();
+}, 120);
+};
+var domBusInst = getHostDomBus();
+var onDomMutations = function (mutations) {
+if (!observing || !state.active || state.destroyed) return;
+var inLayer2b = state.mode === 'auto' && nowFn() - bootAt <= LAYER2B_WINDOW_MS;
+var pausedNow = isPaused();
+if (pausedNow) {
+if (!hibernating) enterHibernation(true);
+else missedWhilePaused = true;
+if (!inLayer2b) return;
+}
+var batchBoundaryCache = new WeakMap();
+function getCachedBoundary(el) {
+var hit = batchBoundaryCache.get(el);
+if (hit !== undefined) return hit;
+var res = measureSafeBoundaryDepth(el);
+batchBoundaryCache.set(el, res);
+return res;
+}
+for (var i = 0; i < mutations.length; i++) {
+if (!state.active || state.destroyed) return;
+var mutation = mutations[i];
+if (mutation.type === 'childList') {
+var targetEl = mutation.target;
+var added = mutation.addedNodes;
+if (targetEl && targetEl.nodeType === 1) {
+if (targetEl.isConnected === false || exemptElements.has(targetEl)) continue;
+var targetIsHoverCard = isHoverCardPortalOrSelf(targetEl);
+if (targetIsHoverCard) {
+if (!pausedNow && added && added.length > 0) scheduleHoverCardNode(targetEl);
+continue;
+}
+var targetBound = getCachedBoundary(targetEl);
+if (targetBound.blocked && !targetBound.canDescendConv) continue;
+if (!pausedNow && !targetBound.blocked && checkChildListConflict(targetEl)) {
+continue;
+}
+if (!state.active || state.destroyed) return;
+if (!added || added.length === 0) continue;
+for (var j = 0; j < added.length; j++) {
+var addedNode = added[j];
+if (!addedNode || addedNode.isConnected === false) continue;
+if (addedNode.nodeType === 3) {
+if (targetBound.blocked || exemptNodes.has(addedNode)) continue;
+} else if (addedNode.nodeType === 1) {
+if (exemptElements.has(addedNode) || isDirectIgnoredSelf(addedNode) || isFocusGuard(addedNode)) continue;
+if (isHoverCardPortalOrSelf(addedNode)) {
+if (!pausedNow) scheduleHoverCardNode(addedNode);
+continue;
+}
+if (
+targetBound.canDescendConv &&
+!isInteractiveChatChromeSelf(addedNode, true) &&
+!hasElementChild(addedNode)
+) {
+continue;
+}
+} else {
+continue;
+}
+if (inLayer2b && inspectExternalDelayedMutation(addedNode)) return;
+if (!pausedNow) enqueueNode(addedNode);
+}
+} else if (added && added.length > 0) {
+for (var k = 0; k < added.length; k++) {
+var rootAdded = added[k];
+if (!rootAdded || rootAdded.isConnected === false) continue;
+if (inLayer2b && inspectExternalDelayedMutation(rootAdded)) return;
+if (!pausedNow) enqueueNode(rootAdded);
+}
+}
+} else if (mutation.type === 'characterData' && mutation.target) {
+var target = mutation.target;
+if (target.isConnected === false || exemptNodes.has(target)) continue;
+var parent = target.parentElement || target.parentNode;
+if (!parent || parent.nodeType !== 1 || parent.isConnected === false || exemptElements.has(parent)) {
+continue;
+}
+if (isHoverCardPortalOrSelf(parent)) {
+if (!pausedNow) scheduleHoverCardNode(parent);
+continue;
+}
+var snap = textSnapshots.get(target);
+if (snap && snap.expected === target.nodeValue) continue;
+var parentBound = getCachedBoundary(parent);
+if (parentBound.blocked) continue;
+if (inLayer2b && inspectExternalDelayedMutation(target)) return;
+if (pausedNow) continue;
+if (checkNodeConflict(target)) continue;
+if (!state.active || state.destroyed) return;
+enqueueNode(target);
+}
+}
+if (!pausedNow && pendingNodes.length > 0) scheduleFlush();
+};
+if (domBusInst && typeof domBusInst.subscribe === 'function') {
+observer = {
+observe: function () {
+if (!busDomUnsub) busDomUnsub = domBusInst.subscribe('host-i18n-dom', onDomMutations, { doc: doc, win: win, priority: 'low', observeOptions: { childList: true, subtree: true, characterData: true } });
+},
+disconnect: function (hard) {
+if (hard && busDomUnsub) { try { busDomUnsub(); } catch (e) {} busDomUnsub = null; }
+},
+};
+} else if (MutationObserverClass) {
+observer = new MutationObserverClass(onDomMutations);
+}
+if (!isPaused()) {
+safeBudgetedScan();
+} else {
+// 窗口可见但暂时失焦（如热切换配置/外部改 config.json）时，off 模式先同步执行一次全量还原，随后保持 0fps 休眠
+if (state.mode === 'off' && !(doc && doc.hidden === true)) {
+safeFullScan();
+disconnectObserver();
+}
+hibernating = true;
+missedWhilePaused = true;
+}
+if (!state.active || state.destroyed) return;
+if (observer && (!isPaused() || (state.mode === 'auto' && nowFn() - bootAt <= LAYER2B_WINDOW_MS))) {
+reconnectObserver();
+}
+var onWinBlurMuts = function (muts) {
+if (!state.active || state.destroyed) return;
+var sawPauseAttr = false;
+for (var wi = 0; wi < muts.length; wi++) {
+var attrName = muts[wi].attributeName;
+if (muts[wi].type === 'attributes' && (!attrName || attrName === 'data-ag-cs-win-blur' || attrName === 'data-ag-pp-open')) { sawPauseAttr = true; break; }
+}
+if (!sawPauseAttr) return;
+if (isPaused()) enterHibernation();
+else if (hibernating) wakeFromHibernation();
+};
+if (doc.documentElement) {
+if (domBusInst && typeof domBusInst.subscribe === 'function') {
+winBlurObserver = { disconnect: domBusInst.subscribe('host-i18n-blur', onWinBlurMuts, { doc: doc, win: win, priority: 'high', observeOptions: { childList: false, subtree: false, attributes: true, attributeFilter: ['data-ag-cs-win-blur', 'data-ag-pp-open'] } }) };
+} else if (MutationObserverClass) {
+try {
+winBlurObserver = new MutationObserverClass(onWinBlurMuts);
+winBlurObserver.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-ag-cs-win-blur', 'data-ag-pp-open'] });
+} catch (e) { winBlurObserver = null; }
+}
+}
+// Layer 2b delayed-plugin check within 1200ms window (auto mode only)
+if (state.mode === 'auto') {
+var checkDelays = [450, 1150];
+for (var d = 0; d < checkDelays.length; d++) {
+(function (delayMs) {
+var tid = setTimeoutFn(function () {
+if (!state.active || state.destroyed || state.mode !== 'auto') return;
+if (nowFn() - bootAt > LAYER2B_WINDOW_MS + 100) return;
+var l1 = detectLayer1External(win, doc);
+if (l1.hit) {
+yieldAndRollback('external-ui-zh', l1.provider);
+return;
+}
+var l2 = detectLayer2ChromeZh(doc, { textSnapshots: textSnapshots });
+if (l2.hit) {
+yieldAndRollback('external-ui-zh', 'generic-zh-dom');
+return;
+}
+if (delayMs >= 1150 && isPaused()) {
+disconnectObserver();
+if (doc && doc.hidden === true) {
+missedWhilePaused = true;
+} else if (!missedWhilePaused) {
+armDirtyObserver();
+}
+}
+}, delayMs);
+layer2bTimers.push(tid);
+})(checkDelays[d]);
+}
+}
+// Hover & ContextMenu targeted floating scan (leading + trailing 120ms throttle)
+hoverHandler = function (e) {
+if (!state.active || state.destroyed) return;
+if (isPaused()) {
+if (!hibernating) enterHibernation();
+return;
+}
+if (hibernating) wakeFromHibernation();
+var rawTarget = e && e.target;
+var target = rawTarget && rawTarget.nodeType === 3 ? rawTarget.parentElement || rawTarget.parentNode : rawTarget;
+if (!target || target.nodeType !== 1 || target.isConnected === false) return;
+var now = nowFn(), isContextMenu = Boolean(e && e.type === 'contextmenu'), hoverBound = null;
+if (isContextMenu) {
+pendingFullFloatScan = true;
+} else if (e && e.type === 'pointerenter') {
+var tg = String(target.tagName || '').toUpperCase();
+if (IGNORED_TAGS[tg] || tg === 'PATH' || tg === 'CIRCLE' || tg === 'RECT' || tg === 'LINE' || tg === 'POLYLINE' || tg === 'POLYGON' || tg === 'ELLIPSE' || tg === 'G' || tg === 'DEFS' || tg === 'USE' || tg === 'STOP') return;
+if (exemptElements.has(target) || hasAttr(target, 'data-ag-owned') || hasAttr(target, 'data-ag-no-i18n') || isDialogOrPortalWrappingDialog(target)) return;
+if (target.closest?.('[data-testid="conversation-row-sidebar"],[data-testid="project-header"],[data-testid="conversation-list-sidebar"],[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup]')) return;
+hoverBound = getHoverBoundary(target, now);
+if (hoverBound.blocked) return;
+if (isInsideDialog(target) && !isSmallHoverControl(target)) return;
+}
+var elapsed = now - lastHoverTime, ranImmediate = false;
+if (elapsed >= 120) { lastHoverTime = now; ranImmediate = true; runHoverTargetScan(target, hoverBound); }
+if (hoverScanTimer !== null) clearTimeoutFn(hoverScanTimer);
+var delay = ranImmediate ? 50 : Math.max(50, 120 - elapsed + 20);
+hoverScanTimer = setTimeoutFn(function () {
+hoverScanTimer = null;
+lastHoverTime = nowFn();
+if (!ranImmediate) runHoverTargetScan(target, hoverBound);
+var doFull = pendingFullFloatScan;
+pendingFullFloatScan = false;
+scanFloatingContainers(doFull, target);
+}, delay);
+};
+if (typeof doc.addEventListener === 'function') {
+doc.addEventListener('pointerenter', hoverHandler, { capture: true, passive: true });
+doc.addEventListener('contextmenu', hoverHandler, { capture: true, passive: true });
+visibilityHandler = function () {
+if (!state.active || state.destroyed) return;
+if (isPaused()) {
+enterHibernation();
+} else {
+wakeFromHibernation();
+}
+};
+doc.addEventListener('visibilitychange', visibilityHandler);
+}
+if (win && typeof win.addEventListener === 'function') {
+blurHandler = function () {
+pausedByWindowBlur = true;
+enterHibernation();
+};
+focusHandler = function () {
+pausedByWindowBlur = false;
+if (!isPaused()) {
+wakeFromHibernation();
+} else if (isWinBlurAttrSet() && focusWakeTimer === null) {
+// Allow companion runtime's focus handler to clear data-ag-cs-win-blur in the same turn
+focusWakeTimer = setTimeoutFn(function () {
+focusWakeTimer = null;
+if (!isPaused()) wakeFromHibernation();
+}, 0);
+}
+};
+win.addEventListener('blur', blurHandler);
+win.addEventListener('focus', focusHandler);
+}
+}
+function boot(targetMode) {
+mode = targetMode === 'on' || targetMode === 'off' ? targetMode : 'auto';
+state.mode = mode;
+if (locale === 'tr' && doc && doc.documentElement) { try { doc.documentElement.setAttribute('lang', 'tr'); } catch (e) {} }
+selectEngineForMode(mode);
+state.destroyed = false;
+state.yielded = false;
+state.reason = null;
+state.detectedProvider = null;
+bootAt = nowFn();
+pausedByWindowBlur = false;
+hibernating = Boolean((doc && doc.hidden === true) || isWinBlurAttrSet());
+missedWhilePaused = false;
+dirtyProbeActive = false;
+pendingFullFloatScan = false;
+inOffRetryPass = false;
+delayedExternalNodes.clear();
+globalConflictRecords.length = 0;
+if (mode === 'off') {
+var l1Pre = detectLayer1External(win, doc);
+if (l1Pre.hit) state.detectedProvider = l1Pre.provider || null;
+activateTier1Suppression();
+state.active = true;
+state.status = 'off-enforced';
+setRootStatusAttr('off-enforced');
+if (doc) {
+if (doc.readyState === 'loading' && typeof doc.addEventListener === 'function') {
+domReadyHandler = function () {
+if (!state.active || state.destroyed || state.mode !== 'off') return;
+attachListenersAndObserver();
+};
+doc.addEventListener('DOMContentLoaded', domReadyHandler, { once: true });
+} else {
+attachListenersAndObserver();
+}
+}
+return;
+}
 
       if (mode === 'auto') {
-        var extCheck = detectExternalLocalization(win, doc);
+        var extCheck = detectExternalLocalization(win, doc, { locale: locale });
         if (extCheck.detected) {
-          state.active = false;
-          state.status = 'yielded';
-          state.reason = extCheck.reason || 'external-ui-zh';
-          state.detectedProvider = extCheck.provider || 'generic-external';
-          state.yielded = true;
-          setRootStatusAttr('yielded');
+          state.active = false; state.status = 'yielded'; state.reason = extCheck.reason || 'external-ui-zh';
+          state.detectedProvider = extCheck.provider || 'generic-external'; state.yielded = true; setRootStatusAttr('yielded');
           return;
         }
       }
@@ -3970,7 +3942,7 @@
           domReadyHandler = function () {
             if (!state.active || state.destroyed) return;
             if (state.mode === 'auto') {
-              var recheck = detectExternalLocalization(win, doc);
+              var recheck = detectExternalLocalization(win, doc, { locale: locale });
               if (recheck.detected) {
                 yieldAndRollback(recheck.reason || 'external-ui-zh', recheck.provider);
                 return;
@@ -3992,19 +3964,16 @@
         var modUnits = countTranslatedUnits();
         var isOffMode = state.mode === 'off';
         return {
-          active: state.active,
-          mode: state.mode,
-          status: state.status,
-          reason: state.reason,
-          detectedProvider: state.detectedProvider,
-          translatedCount: isOffMode ? 0 : modUnits,
-          restoredCount: isOffMode ? modUnits : 0,
-          blockedCount: isOffMode ? blockedElementsTracker.countActive() : 0,
-          yielded: state.yielded,
+          active: state.active, mode: state.mode, status: state.status, reason: state.reason,
+          detectedProvider: state.detectedProvider, translatedCount: isOffMode ? 0 : modUnits,
+          restoredCount: isOffMode ? modUnits : 0, blockedCount: isOffMode ? blockedElementsTracker.countActive() : 0, yielded: state.yielded,
         };
       },
       destroy: function () {
         teardownRuntime('off', 'destroyed', false, null, true);
+        if (locale === 'tr' && doc && doc.documentElement && getAttr(doc.documentElement, 'lang') === 'tr') {
+          try { if (initialHtmlLang === null) doc.documentElement.removeAttribute('lang'); else doc.documentElement.setAttribute('lang', initialHtmlLang); } catch (e) {}
+        }
       },
       setMode: function (nextMode, forceReboot) {
         var norm = nextMode === 'on' || nextMode === 'off' ? nextMode : 'auto';

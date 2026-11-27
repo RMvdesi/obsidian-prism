@@ -16,6 +16,17 @@ import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import tls from 'node:tls';
 import zlib from 'node:zlib';
+import {
+  BLOCKED_AI_PORTS,
+  parseIpv4Octets,
+  parseIpv6Hextets,
+  isExplicitLoopbackHost,
+  isBlockedSsrfHost,
+  isPrivateOrReservedIp,
+  verifyOutboundUrlSafety,
+  atomicWriteFileExclusiveSync,
+  atomicWriteFileExclusiveAsync,
+} from '../../src/security/net-guard.mjs';
 
 export const SYSTEM_PROMPTS = Object.freeze({
   technical:
@@ -73,6 +84,12 @@ export const SYSTEM_PROMPTS_BY_LANG = Object.freeze({
     concise:
       'Du bist ein effizienter Assistent für prägnante Übersetzungen technischer Überlegungen. Fasse die eingegebene Gedankenkette klar und knapp in der Ich-Form auf Deutsch zusammen. Bewahre alle exakten Dateipfade, Zeilennummern, wichtigen Code-Bezeichner und Kernbegründungen ohne zusätzliche Überschriften oder Fülltext.',
   }),
+  tr: Object.freeze({
+    technical:
+      'Kıdemli bir yazılım mühendisliği akıl yürütme çeviri asistanısın. Girilen düşünce zincirini (Chain-of-Thought) doğal ve net birinci tekil şahıs Türkçe mühendislik notlarına doğru biçimde çevir. İngilizce veya diğer dillerdeki tüm paragraf ve cümleleri eksiksiz olarak Türkçeye çevir. Tüm kod tanımlayıcılarını, fonksiyon/sınıf adlarını, dosya yollarını, satır numaralarını (örn. path/file.js#L12), terminal komutlarını ve ters tırnak biçimlendirmesini aynen koru. Selamlama veya başlık ekleme; yalnızca çevrilmiş akıl yürütme metnini döndür.',
+    concise:
+      'Teknik akıl yürütme özetleme ve çeviri asistanısın. Girilen düşünce zincirini özlü birinci tekil şahıs Türkçe mühendislik notlarına çevirip özetle. Kesin dosya yollarını, satır numaralarını, temel kod tanımlayıcılarını ve sonuçları aynen koru; yalnızca çevrilmiş notları döndür.',
+  }),
 });
 
 const GTX_TARGET_LANG_MAP = Object.freeze({
@@ -84,6 +101,7 @@ const GTX_TARGET_LANG_MAP = Object.freeze({
   es: 'es',
   fr: 'fr',
   de: 'de',
+  tr: 'tr',
 });
 
 export function normalizeTargetLang(lang) {
@@ -97,6 +115,7 @@ export function normalizeTargetLang(lang) {
   if (/^es(?:\b|-)/.test(s) || s === 'spanish') return 'es';
   if (/^fr(?:\b|-)/.test(s) || s === 'french') return 'fr';
   if (/^de(?:\b|-)/.test(s) || s === 'german') return 'de';
+  if (/^tr(?:\b|-)/.test(s) || s === 'turkish' || s === 'türkçe') return 'tr';
   if (/^en(?:\b|-)/.test(s) || s === 'english') return 'en';
   return 'zh-CN';
 }
@@ -105,128 +124,6 @@ const KEY_REDACT_RE =
   /(sk-[A-Za-z0-9_\-]{6,}|gsk_[A-Za-z0-9_\-]{12,}|hf_[A-Za-z0-9_\-]{12,}|pplx-[A-Za-z0-9_\-]{12,}|csk-[A-Za-z0-9_\-]{12,}|nvapi-[A-Za-z0-9_\-]{12,}|AIza[A-Za-z0-9_\-]{12,}|xai-[A-Za-z0-9_\-]{8,}|ghp_[A-Za-z0-9]{12,}|github_pat_[A-Za-z0-9_]{12,}|Bearer\s+[A-Za-z0-9._\-:+/=]{6,}|(?:Proxy-)?Authorization\s*:\s*Basic\s+[A-Za-z0-9+/=]{4,})/gi;
 const URL_KEY_PARAM_RE = /([?&](?:api_key|apikey|key|token|access_token)=)[^&\s"'<>]+/gi;
 const URL_USERINFO_PASS_RE = /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^@\s/"'<>]+@/gi;
-
-const BLOCKED_AI_PORTS = new Set([
-  21, 22, 23, 25, 53, 110, 135, 139, 143, 445, 1433, 3306, 3389, 5432, 6379, 11211, 27017,
-]);
-
-function parseIpv4Octets(raw) {
-  const parts = String(raw || '').split('.');
-  if (parts.length !== 4) return null;
-  const out = [];
-  for (let i = 0; i < 4; i++) {
-    if (!/^\d{1,3}$/.test(parts[i])) return null;
-    const n = Number(parts[i]);
-    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
-    out.push(n);
-  }
-  return out;
-}
-
-function isBlockedIpv4(a, b, c, d) {
-  if (a === 0) return true; // 0.0.0.0/8 未指定地址
-  if (a === 169 && b === 254) return true; // 169.254.0.0/16 云元数据与链路本地
-  if (a === 100 && b === 100 && c === 100 && d === 200) return true; // 阿里云元数据
-  return false;
-}
-
-function parseIpv6Hextets(raw) {
-  let s = String(raw || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
-  const zoneIdx = s.indexOf('%');
-  if (zoneIdx >= 0) s = s.slice(0, zoneIdx);
-  if (!s.includes(':')) return null;
-
-  let ipv4Tail = null;
-  const lastColon = s.lastIndexOf(':');
-  const tailPart = s.slice(lastColon + 1);
-  if (tailPart.includes('.')) {
-    const octets = parseIpv4Octets(tailPart);
-    if (!octets) return null;
-    ipv4Tail = [(octets[0] << 8) | octets[1], (octets[2] << 8) | octets[3]];
-    if (lastColon > 0 && s[lastColon - 1] === ':') {
-      // 保留完整 "::"（如 "::169.254.169.254" 或 "64:ff9b::169.254.169.254"）
-      s = s.slice(0, lastColon + 1);
-    } else {
-      s = s.slice(0, lastColon);
-    }
-  }
-
-  const targetGroups = ipv4Tail ? 6 : 8;
-  const dblIdx = s.indexOf('::');
-  let groups;
-  if (dblIdx >= 0) {
-    if (s.indexOf('::', dblIdx + 2) >= 0) return null;
-    const leftStr = s.slice(0, dblIdx);
-    const rightStr = s.slice(dblIdx + 2);
-    const left = leftStr ? leftStr.split(':') : [];
-    const right = rightStr ? rightStr.split(':') : [];
-    const missing = targetGroups - left.length - right.length;
-    if (missing < 1) return null;
-    groups = [...left, ...new Array(missing).fill('0'), ...right];
-  } else {
-    groups = s.split(':');
-    if (groups.length !== targetGroups) return null;
-  }
-
-  const hextets = [];
-  for (let i = 0; i < groups.length; i++) {
-    if (!/^[0-9a-f]{1,4}$/.test(groups[i])) return null;
-    hextets.push(parseInt(groups[i], 16));
-  }
-  if (ipv4Tail) {
-    hextets.push(ipv4Tail[0], ipv4Tail[1]);
-  }
-  return hextets.length === 8 ? hextets : null;
-}
-
-function isBlockedSsrfHost(rawHost) {
-  const host = String(rawHost || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  if (!host) return true;
-  if (
-    host === 'metadata.google.internal' ||
-    host.endsWith('.metadata.google.internal') ||
-    host === 'metadata.goog' ||
-    host === 'metadata' ||
-    host === 'instance-data'
-  ) {
-    return true;
-  }
-  const v4 = parseIpv4Octets(host);
-  if (v4) {
-    return isBlockedIpv4(v4[0], v4[1], v4[2], v4[3]);
-  }
-  if (host.includes(':')) {
-    const h = parseIpv6Hextets(host);
-    if (!h) return true; // 畸形 IPv6 保守拦截
-    // 未指定地址 ::
-    if (h.every((x) => x === 0)) return true;
-    // 回环 ::1 允许（用于本地大模型服务）
-    if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0 && h[6] === 0 && h[7] === 1) {
-      return false;
-    }
-    // 链路本地 fe80::/10 (fe80..febf)
-    if ((h[0] & 0xffc0) === 0xfe80) return true;
-    // AWS IMDSv2 IPv6 元数据 fd00:ec2::254 (fd00:ec2::/32)
-    if (h[0] === 0xfd00 && h[1] === 0x0ec2) return true;
-    // IPv4-mapped (::ffff:0:0/96)、IPv4-translated (::ffff:0:0:0/96)、IPv4-compatible (::/96)、NAT64 (64:ff9b::/96, 64:ff9b:1::/48)
-    const isV4Mapped = h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0xffff;
-    const isV4Translated = h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0xffff && h[5] === 0;
-    const isV4Compatible = h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0;
-    const isNat64 =
-      h[0] === 0x0064 &&
-      h[1] === 0xff9b &&
-      ((h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) || h[2] === 0x0001);
-    if (isV4Mapped || isV4Translated || isV4Compatible || isNat64) {
-      if (isBlockedIpv4(h[6] >> 8, h[6] & 0xff, h[7] >> 8, h[7] & 0xff)) return true;
-    }
-    // 6to4 (2002::/16) 内嵌 IPv4
-    if (h[0] === 0x2002) {
-      if (isBlockedIpv4(h[1] >> 8, h[1] & 0xff, h[2] >> 8, h[2] & 0xff)) return true;
-    }
-    return false;
-  }
-  return false;
-}
 
 function createManagedTimeoutSignal(timeoutMs) {
   const ctl = new AbortController();
@@ -306,17 +203,27 @@ export function redactSecrets(text, explicitKey = '') {
   return out;
 }
 
-export function validateOpenAiBaseUrl(rawUrl) {
+export function validateOpenAiBaseUrl(rawUrl, opts = {}) {
   let u = String(rawUrl || '').trim();
-  if (!u) return { ok: true, url: 'https://api.openai.com/v1', isDefault: true };
-  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(u)) {
-    const bare = u.split('/')[0].toLowerCase();
-    const isLocalBare =
-      bare.startsWith('localhost') ||
-      bare.startsWith('127.') ||
-      bare.startsWith('[::1]') ||
-      /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)/.test(bare);
-    u = (isLocalBare ? 'http://' : 'https://') + u;
+  if (!u) return { ok: true, url: 'https://api.openai.com/v1', isDefault: true, insecureHttp: false };
+  const hasExplicitScheme =
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(u) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+(?:[/?#]|$))/.test(u);
+  if (!hasExplicitScheme) {
+    const authority = u.split(/[/?#]/)[0].toLowerCase().replace(/^[^@]*@/, '');
+    const bareHost = authority.startsWith('[')
+      ? authority.slice(0, authority.indexOf(']') + 1)
+      : authority.split(':')[0];
+    const bareV4 = parseIpv4Octets(bareHost);
+    const isLocalOrLanBare =
+      isExplicitLoopbackHost(bareHost) ||
+      Boolean(
+        bareV4 &&
+          (bareV4[0] === 10 ||
+            (bareV4[0] === 192 && bareV4[1] === 168) ||
+            (bareV4[0] === 172 && bareV4[1] >= 16 && bareV4[1] <= 31))
+      );
+    u = (isLocalOrLanBare ? 'http://' : 'https://') + u;
   }
   try {
     const parsed = new URL(u);
@@ -330,6 +237,14 @@ export function validateOpenAiBaseUrl(rawUrl) {
     if (parsed.port && BLOCKED_AI_PORTS.has(Number(parsed.port))) {
       return { ok: false, reason: 'blocked-port', error: `Blocked Base URL port: ${parsed.port}` };
     }
+    const insecureHttp = Boolean(parsed.protocol === 'http:' && !isExplicitLoopbackHost(cleanHost));
+    if (insecureHttp && opts?.allowInsecureHttp === false) {
+      return {
+        ok: false,
+        reason: 'insecure-http',
+        error: 'Plaintext http:// is blocked for non-loopback endpoints (use https:// or set allowInsecureHttp: true)',
+      };
+    }
     parsed.username = '';
     parsed.password = '';
     parsed.hash = '';
@@ -342,14 +257,14 @@ export function validateOpenAiBaseUrl(rawUrl) {
     let pathname = stripTrailingSlashes(parsed.pathname);
     pathname = stripTrailingSlashes(pathname.replace(/\/chat\/completions$/i, '').replace(/\/models$/i, ''));
     if (!pathname) pathname = '/v1';
-    return { ok: true, url: `${parsed.origin}${pathname}`, isDefault: false };
+    return { ok: true, url: `${parsed.origin}${pathname}`, isDefault: false, insecureHttp };
   } catch {
     return { ok: false, reason: 'invalid-url', error: 'Invalid Base URL format' };
   }
 }
 
-export function normalizeOpenAiBaseUrl(rawUrl) {
-  const checked = validateOpenAiBaseUrl(rawUrl);
+export function normalizeOpenAiBaseUrl(rawUrl, opts = {}) {
+  const checked = validateOpenAiBaseUrl(rawUrl, opts);
   return checked.ok ? checked.url : 'https://api.openai.com/v1';
 }
 
@@ -362,7 +277,10 @@ export const MAX_TOTAL_THOUGHT_CHARS = 96000;
 export function isKeylessAllowedEndpoint(rawUrl) {
   const raw = String(rawUrl || '').trim();
   if (!raw) return false;
-  const withProto = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) ? raw : 'http://' + raw;
+  const hasExplicitScheme =
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+(?:[/?#]|$))/.test(raw);
+  const withProto = hasExplicitScheme ? raw : 'http://' + raw;
   try {
     const rawParsed = new URL(withProto);
     if (rawParsed.protocol !== 'http:' && rawParsed.protocol !== 'https:') return false;
@@ -393,6 +311,17 @@ export function isKeylessAllowedEndpoint(rawUrl) {
   }
 }
 
+function isOpenAiReasoningModel(model) {
+  return /(?:^|\/)o[134](?:[-_.]|$)|gpt-5/i.test(String(model || '').trim());
+}
+
+function chatSamplingParams(model, temperature, tokenLimit) {
+  if (isOpenAiReasoningModel(model)) {
+    return tokenLimit === undefined ? {} : { max_completion_tokens: tokenLimit };
+  }
+  return tokenLimit === undefined ? { temperature } : { temperature, max_tokens: tokenLimit };
+}
+
 export function buildNoThinkingParams(model, baseUrl = '') {
   const m = String(model || '').trim().toLowerCase();
   if (!m) return null;
@@ -410,7 +339,7 @@ export function buildNoThinkingParams(model, baseUrl = '') {
   if (/glm|zhipu|deepseek|doubao|kimi|moonshot/i.test(m)) {
     return { thinking: { type: 'disabled' } };
   }
-  if (/^(?:o1|o3|o4)(?:[-_]|$)|gpt-5|reasoning/i.test(m)) {
+  if (isOpenAiReasoningModel(m) || /reasoning/i.test(m)) {
     return { reasoning_effort: 'low' };
   }
   if (isOllamaPort && /r1|think|nemotron/i.test(m)) {
@@ -1274,6 +1203,8 @@ export class ThoughtTranslatorService {
     this._proxyExecFileAsync = typeof opts.proxyExecFileAsync === 'function' ? opts.proxyExecFileAsync : null;
     this._proxyTlsOptions = opts.proxyTlsOptions || null;
     this._dnsLookup = typeof opts.dnsLookup === 'function' ? opts.dnsLookup : null;
+    this._allowInsecureHttp = opts.allowInsecureHttp !== false;
+    this._allowPrivateIp = opts.allowPrivateIp !== false;
     this._socks5HandshakeTimeoutMs = Number(opts.socks5HandshakeTimeoutMs) || 0;
     this._connectHandshakeTimeoutMs = Number(opts.connectHandshakeTimeoutMs) || 0;
     this._proxyCache = { ts: 0, value: null, loaded: false };
@@ -1366,7 +1297,13 @@ export class ThoughtTranslatorService {
       if (seen.has(id)) continue;
       seen.add(id);
       const rawBaseUrl = typeof item.baseUrl === 'string' ? item.baseUrl.trim() : '';
-      const checkedUrl = validateOpenAiBaseUrl(rawBaseUrl);
+      const allowHttp =
+        item.allowInsecureHttp !== undefined
+          ? Boolean(item.allowInsecureHttp)
+          : raw.allowInsecureHttp !== undefined
+          ? Boolean(raw.allowInsecureHttp)
+          : this._allowInsecureHttp;
+      const checkedUrl = validateOpenAiBaseUrl(rawBaseUrl, { allowInsecureHttp: allowHttp });
       const preservedError = !rawBaseUrl && typeof item.baseUrlError === 'string' ? item.baseUrlError.trim() : '';
       const profileRec = {
         id,
@@ -1374,6 +1311,7 @@ export class ThoughtTranslatorService {
         baseUrl: checkedUrl.ok && !preservedError ? checkedUrl.url : '',
         apiKey: typeof item.apiKey === 'string' ? item.apiKey.trim() : '',
         model: String(item.model || '').trim().slice(0, 120),
+        ...(typeof item.allowInsecureHttp === 'boolean' ? { allowInsecureHttp: item.allowInsecureHttp } : {}),
       };
       if (!checkedUrl.ok) {
         profileRec.baseUrlError = checkedUrl.error;
@@ -1396,32 +1334,15 @@ export class ThoughtTranslatorService {
       translateTitles,
       activeProfileId,
       profiles,
+      ...(typeof raw.allowInsecureHttp === 'boolean' ? { allowInsecureHttp: raw.allowInsecureHttp } : {}),
     };
   }
 
   _persistStore(store) {
-    const tmp = `${this.configFile}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     try {
-      fs.mkdirSync(path.dirname(this.configFile), { recursive: true });
-      fs.writeFileSync(tmp, JSON.stringify(store, null, 2), { encoding: 'utf8', mode: 0o600 });
-      for (let attempt = 0; ; attempt++) {
-        try {
-          fs.renameSync(tmp, this.configFile);
-          break;
-        } catch (err) {
-          if (process.platform !== 'win32' || attempt >= 3 || !['EBUSY', 'EPERM', 'EACCES'].includes(err?.code)) {
-            throw err;
-          }
-          try {
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15 * (attempt + 1));
-          } catch {}
-        }
-      }
+      atomicWriteFileExclusiveSync(this.configFile, JSON.stringify(store, null, 2), 0o600);
       return { ok: true };
     } catch (err) {
-      try {
-        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
-      } catch {}
       return { ok: false, error: redactSecrets(err?.message || String(err)) };
     }
   }
@@ -1446,6 +1367,7 @@ export class ThoughtTranslatorService {
         id: p.id,
         name: p.name,
         baseUrl: p.baseUrl,
+        ...(p.baseUrlError ? { baseUrlError: p.baseUrlError } : {}),
         model: p.model,
         hasApiKey: Boolean(p.apiKey),
         keylessAllowed: isKeylessAllowedEndpoint(p.baseUrl),
@@ -1529,9 +1451,19 @@ export class ThoughtTranslatorService {
               baseUrl: p?.baseUrl,
               model: p?.model,
               apiKey: looksLikeMask || isMaskedUnchanged ? (old ? old.apiKey : '') : rawKey,
+              ...(p?.allowInsecureHttp !== undefined
+                ? { allowInsecureHttp: Boolean(p.allowInsecureHttp) }
+                : typeof old?.allowInsecureHttp === 'boolean'
+                ? { allowInsecureHttp: old.allowInsecureHttp }
+                : {}),
             };
           })
         : prev.profiles,
+      ...(input.allowInsecureHttp !== undefined
+        ? { allowInsecureHttp: Boolean(input.allowInsecureHttp) }
+        : typeof prev.allowInsecureHttp === 'boolean'
+        ? { allowInsecureHttp: prev.allowInsecureHttp }
+        : {}),
     };
 
     this._config = this._normalizeStore(nextRaw);
@@ -1540,6 +1472,15 @@ export class ThoughtTranslatorService {
     const out = this.getSanitizedConfig();
     if (persisted && persisted.ok === false) {
       return { ...out, ok: false, error: persisted.error || 'Failed to persist translator config' };
+    }
+    if (Array.isArray(input.profiles)) {
+      const activeProf = this._config.profiles.find((p) => p.id === this._config.activeProfileId);
+      const invalidProf = activeProf?.baseUrlError
+        ? activeProf
+        : this._config.profiles.find((p) => p.baseUrlError);
+      if (invalidProf?.baseUrlError) {
+        return { ...out, ok: false, error: invalidProf.baseUrlError };
+      }
     }
     return out;
   }
@@ -1551,8 +1492,16 @@ export class ThoughtTranslatorService {
     const hasInputUrl = typeof input.baseUrl === 'string' && input.baseUrl.trim() !== '';
     let baseUrl = 'https://api.openai.com/v1';
     let baseUrlError = '';
+    const allowHttp =
+      input.allowInsecureHttp !== undefined
+        ? Boolean(input.allowInsecureHttp)
+        : saved?.allowInsecureHttp !== undefined
+        ? Boolean(saved.allowInsecureHttp)
+        : store.allowInsecureHttp !== undefined
+        ? Boolean(store.allowInsecureHttp)
+        : this._allowInsecureHttp;
     if (hasInputUrl) {
-      const checked = validateOpenAiBaseUrl(input.baseUrl);
+      const checked = validateOpenAiBaseUrl(input.baseUrl, { allowInsecureHttp: allowHttp });
       if (checked.ok) {
         baseUrl = checked.url;
       } else {
@@ -1563,7 +1512,7 @@ export class ThoughtTranslatorService {
       baseUrl = '';
       baseUrlError = saved.baseUrlError;
     } else {
-      const checked = validateOpenAiBaseUrl(saved?.baseUrl || '');
+      const checked = validateOpenAiBaseUrl(saved?.baseUrl || '', { allowInsecureHttp: allowHttp });
       if (checked.ok) {
         baseUrl = checked.url;
       } else {
@@ -1578,7 +1527,7 @@ export class ThoughtTranslatorService {
         canReuseSavedKey = false;
       } else {
         try {
-          const savedChecked = validateOpenAiBaseUrl(saved?.baseUrl || '');
+          const savedChecked = validateOpenAiBaseUrl(saved?.baseUrl || '', { allowInsecureHttp: allowHttp });
           if (!savedChecked.ok || new URL(baseUrl).origin !== new URL(savedChecked.url).origin) {
             canReuseSavedKey = false;
           }
@@ -1838,7 +1787,7 @@ export class ThoughtTranslatorService {
     if (!resolvedIp || !net.isIP(resolvedIp)) {
       return targetHost;
     }
-    if (isBlockedSsrfHost(resolvedIp)) {
+    if (isBlockedSsrfHost(resolvedIp) || isPrivateOrReservedIp(resolvedIp)) {
       throw new Error('Blocked target host for proxy request (SSRF protection)');
     }
     return resolvedIp;
@@ -2583,16 +2532,22 @@ export class ThoughtTranslatorService {
   }
 
   async _request(url, init = {}, proxyOverride = null) {
-    if (!this._hasCustomFetch) {
-      const proxy = await this._resolveProxyForUrlAsync(url, proxyOverride);
-      if (proxy) {
-        return this._fetchViaProxy(url, init, proxy);
-      }
+    const safeInit = { ...(init && typeof init === 'object' ? init : {}), redirect: 'error' };
+    const proxy = !this._hasCustomFetch ? await this._resolveProxyForUrlAsync(url, proxyOverride) : null;
+    const isSocks5 = Boolean(proxy && (proxy.protocol === 'socks5:' || proxy.protocol === 'socks5h:'));
+    await verifyOutboundUrlSafety(url, {
+      dnsLookup: this._dnsLookup,
+      skipDnsLookup: isSocks5 || (this._hasCustomFetch && !this._dnsLookup),
+      allowUnresolvedForProxy: Boolean(proxy),
+      allowPrivateIp: this._allowPrivateIp,
+    });
+    if (proxy) {
+      return this._fetchViaProxy(url, safeInit, proxy);
     }
     if (!this.fetchImpl) {
       throw new Error('Fetch unavailable in runtime');
     }
-    return this.fetchImpl(url, init);
+    return this.fetchImpl(url, safeInit);
   }
 
   _resolveSystemPrompt(store, targetLang = 'zh-CN') {
@@ -2608,6 +2563,7 @@ export class ThoughtTranslatorService {
         es: 'Spanish (Español)',
         fr: 'French (Français)',
         de: 'German (Deutsch)',
+        tr: 'Turkish (Türkçe)',
       };
       return `${cp}\n\n[Output Language Requirement] Target output language MUST be ${langNames[tl] || tl}. When the source mixes languages, preserve already-natural target-language parts and translate all foreign paragraphs completely.`;
     }
@@ -2765,8 +2721,7 @@ export class ThoughtTranslatorService {
       const payload = {
         model,
         stream: false,
-        max_tokens: 160,
-        temperature: 0.2,
+        ...chatSamplingParams(model, 0.2, 160),
         messages: [
           {
             role: 'user',
@@ -2815,7 +2770,12 @@ export class ThoughtTranslatorService {
         return { ok: false, status: res.status, latencyMs, model, error: '响应非合法 JSON' };
       }
       const replyRaw = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || '';
-      const reply = stripThinkTagsAndQuotes(replyRaw).slice(0, 80) || 'OK';
+      const reply = stripThinkTagsAndQuotes(replyRaw).slice(0, 80);
+      if (!reply) {
+        const reason = data?.choices?.[0]?.finish_reason;
+        const error = reason === 'length' ? '模型达到输出上限，未返回回复正文' : '模型未返回回复正文';
+        return { ok: false, status: res.status, latencyMs, model, error };
+      }
       return { ok: true, status: res.status, latencyMs, model, reply };
     } catch (err) {
       return {
@@ -3318,19 +3278,12 @@ export class ThoughtTranslatorService {
       this._saveCacheTimer = null;
     }
     this._flushDirty = false;
-    const tmp = `${this.cacheFile}.${process.pid}.tmp`;
     try {
-      fs.mkdirSync(path.dirname(this.cacheFile), { recursive: true });
       const jsonStr = this._buildDiskCacheJson();
-      fs.writeFileSync(tmp, jsonStr, { encoding: 'utf8', mode: 0o600 });
-      fs.renameSync(tmp, this.cacheFile);
+      atomicWriteFileExclusiveSync(this.cacheFile, jsonStr, 0o600);
       this._lastDiskBytes = Buffer.byteLength(jsonStr, 'utf8');
       this._hasDiskFile = true;
-    } catch {
-      try {
-        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
-      } catch {}
-    }
+    } catch {}
   }
 
   _flushCacheToDiskAsync() {
@@ -3347,23 +3300,15 @@ export class ThoughtTranslatorService {
     const jsonStr = this._buildDiskCacheJson();
     const byteLen = Buffer.byteLength(jsonStr, 'utf8');
     this._lastDiskBytes = byteLen;
-    const tmp = `${this.cacheFile}.${process.pid}.${Date.now().toString(36)}.tmp`;
     this._flushPromise = (async () => {
       try {
-        await fs.promises.mkdir(path.dirname(this.cacheFile), { recursive: true });
         if (epoch !== this._cacheEpoch) return;
-        await fs.promises.writeFile(tmp, jsonStr, { encoding: 'utf8', mode: 0o600 });
-        if (epoch !== this._cacheEpoch) {
-          await fs.promises.unlink(tmp).catch(() => {});
-          return;
-        }
-        await fs.promises.rename(tmp, this.cacheFile);
+        await atomicWriteFileExclusiveAsync(this.cacheFile, jsonStr, 0o600);
         if (epoch === this._cacheEpoch) {
           this._lastDiskBytes = byteLen;
           this._hasDiskFile = true;
         }
       } catch {
-        await fs.promises.unlink(tmp).catch(() => {});
       } finally {
         this._flushPromise = null;
         if (this._flushDirty && epoch === this._cacheEpoch && this.memCache.size > 0) {
@@ -3604,8 +3549,8 @@ export class ThoughtTranslatorService {
     const prose = stripNonProseForLangCheck(p).trim();
     if (!prose) return true;
     const tl = normalizeTargetLang(targetLang);
-    if (tl === 'zh-TW' || tl === 'es' || tl === 'fr' || tl === 'de') {
-      // 繁中及西/法/德语机翻需经过 GTX 完整转换，仅纯符号/无正文跳过
+    if (tl === 'zh-TW' || tl === 'es' || tl === 'fr' || tl === 'de' || tl === 'tr') {
+      // 繁中及西/法/德/土语机翻需经过 GTX 完整转换，仅纯符号/无正文跳过
       return false;
     }
     const latinWords = (prose.match(/[A-Za-z]{3,}/g) || []).length;
@@ -3775,7 +3720,7 @@ export class ThoughtTranslatorService {
       const payload = {
         model,
         stream: true,
-        temperature: 0.32,
+        ...chatSamplingParams(model, 0.32),
         messages: [
           { role: 'system', content: sysPrompt },
           { role: 'user', content: userContent },
@@ -4143,7 +4088,7 @@ export class ThoughtTranslatorService {
             const payload = {
               model,
               stream: false,
-              temperature: 0.1,
+              ...chatSamplingParams(model, 0.1),
               messages: [
                 { role: 'system', content: sysPrompt },
                 { role: 'user', content: numberedInput },

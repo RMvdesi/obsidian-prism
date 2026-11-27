@@ -570,12 +570,13 @@ test(
   }
 );
 
-test('tools/install-plugin.cjs enforces POSIX least-privilege chmod, COPYFILE_EXCL, and thought-cache symlink guard', () => {
+test('tools/install-plugin.cjs enforces POSIX least-privilege chmod, atomic upgrade engine (0 raw copyFileSync), and thought-cache symlink guard', () => {
   const src = fs.readFileSync(path.join(ROOT_DIR, 'tools', 'install-plugin.cjs'), 'utf8');
   assert.ok(src.includes('process.platform === "win32"'), 'clearReadOnlyIfRegularFile must branch on win32 vs POSIX');
   assert.ok(src.includes('(st.mode & 0o200) === 0'), 'POSIX clearReadOnlyIfRegularFile must only add owner write bit when missing');
   assert.ok(src.includes('(st.mode & 0o777) | 0o200'), 'POSIX clearReadOnlyIfRegularFile must preserve existing bits without making files world-writable');
-  assert.ok(src.includes('fs.constants.COPYFILE_EXCL'), 'safeCopyFileNoSymlink fallback tmp copy must use COPYFILE_EXCL');
+  assert.equal(src.includes('fs.copyFileSync('), false, 'tools/install-plugin.cjs must not use raw fs.copyFileSync on upgrade paths');
+  assert.ok(src.includes('applyManifestAtomicUpgrade'), 'copyDirRecursiveSync must delegate to install-manifest applyManifestAtomicUpgrade');
   assert.match(
     src,
     /obsidian-prism-thought-cache\.json[\s\S]{0,180}assertNotSymbolicLink/,
@@ -871,6 +872,7 @@ test(
           '/r:System.Windows.Forms.dll',
           path.join(ROOT_DIR, 'installer', 'common', 'MiniJson.cs'),
           path.join(ROOT_DIR, 'installer', 'common', 'CdpClient.cs'),
+          path.join(ROOT_DIR, 'installer', 'common', 'InstallManifest.cs'),
           path.join(ROOT_DIR, 'installer', 'setup', 'Program.cs'),
           probeCs,
         ],

@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -11,7 +12,25 @@ const cdp = require('../cdp.js');
 const i18nCore = require('../i18n-core.js');
 const i18nLocales = require('../i18n-locales.js');
 const settingsPanel = require('../settings-panel.js');
+const settingsExtBeta4 = require('../src/runtime/settings-ext-beta4.js');
+const promptEnhancerSettingsExt = require('../src/runtime/prompt-enhancer-settings-ext.js');
+const i18nExtBeta4 = require('../src/runtime/i18n-ext-beta4.js');
 const { PrismDaemon } = await import('../sidecars/daemon/main.mjs');
+
+function installSettingsExtensions(win) {
+  globalThis.__agPrismSettingsExtBeta4 = settingsExtBeta4;
+  globalThis.__agPrismPromptEnhancerSettingsExt = promptEnhancerSettingsExt;
+  globalThis.__agPrismI18nExtBeta4 = i18nExtBeta4;
+  win.__agPrismSettingsExtBeta4 = settingsExtBeta4;
+  win.__agPrismPromptEnhancerSettingsExt = promptEnhancerSettingsExt;
+  win.__agPrismI18nExtBeta4 = i18nExtBeta4;
+}
+
+function clearSettingsExtensions() {
+  delete globalThis.__agPrismSettingsExtBeta4;
+  delete globalThis.__agPrismPromptEnhancerSettingsExt;
+  delete globalThis.__agPrismI18nExtBeta4;
+}
 
 function createMockDomEnv(initialTheme = 'dark') {
   const storeMap = new Map([['ag-prism:settings-open', '1']]);
@@ -152,6 +171,10 @@ function createMockDomEnv(initialTheme = 'dark') {
         else attrs.delete(k);
         return on;
       },
+      append(...children) {
+        for (const child of children) el.appendChild(child);
+      },
+      get firstChild() { return el.children[0] || null; },
       appendChild(child) {
         if (!child) return child;
         if (child.parentElement) child.remove();
@@ -278,6 +301,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
   globalThis.document = doc;
   globalThis.window = win;
   globalThis.localStorage = storage;
+  installSettingsExtensions(win);
   // Force clipboard fallback in exportBtn so test can inspect exported JSON string directly
   delete globalThis.Blob;
 
@@ -362,24 +386,31 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     let sec = doc.getElementById(settingsPanel.SETTINGS_SEC_ID);
     assert.ok(sec, 'Settings section must mount into Appearance dialog');
 
-    // 1. Verify all 33 setting rows mount cleanly, external zh-plugin no-translate markers are stamped, and updateChannel mounts in About
+    // 1. Verify the complete Settings Channel rows, including independently mounted extensions.
     assert.equal(sec.getAttribute('translate'), 'no');
     assert.equal(sec.getAttribute('data-no-translate'), 'true');
     assert.equal(sec.getAttribute('data-ag-localization-skip'), 'true');
     assert.equal(sec.getAttribute('data-agy-no-translate'), 'true');
     assert.equal(sec.getAttribute('data-antigravity-zh-skip'), '1');
     const allRows = sec.querySelectorAll('[data-ag-cs-row]');
-    assert.equal(allRows.length, 38, 'Must render all 38 setting rows');
+    assert.equal(allRows.length, 43, 'Must render all 43 setting rows with runtime extensions');
     const interactionGrp = sec.querySelector('[data-ag-cs-group="interaction"]');
     const interactionRowKeys = interactionGrp.querySelectorAll('[data-ag-cs-row]').map((r) => r.getAttribute('data-ag-cs-row'));
     assert.ok(interactionRowKeys.includes('sidebarNavFold'), 'interaction group must include sidebarNavFold');
     const modulesGrp = sec.querySelector('[data-ag-cs-group="modules"]');
     const moduleRowKeys = modulesGrp.querySelectorAll('[data-ag-cs-row]').map((r) => r.getAttribute('data-ag-cs-row'));
-    assert.deepEqual(moduleRowKeys, ['telemetryModule', 'effortSliderModule', 'effortMemory', 'periodicModelPicker', 'omniModule', 'linkTarget']);
+    assert.deepEqual(moduleRowKeys, ['telemetryModule', 'effortSliderModule', 'effortMemory', 'periodicModelPicker', 'omniModule', 'linkTarget', 'telemetryQuotaMode']);
     const betaGrp = sec.querySelector('[data-ag-cs-group="beta"]');
     assert.ok(betaGrp, 'Beta features group must mount');
     const betaRowKeys = betaGrp.querySelectorAll('[data-ag-cs-row]').map((r) => r.getAttribute('data-ag-cs-row'));
-    assert.deepEqual(betaRowKeys, ['sidebarStudio']);
+    assert.deepEqual(betaRowKeys, ['sidebarStudio', 'promptEnhancer']);
+    const promptEnhancerRow = sec.querySelector('[data-ag-cs-row="promptEnhancer"]');
+    const promptEnhancerTitle = promptEnhancerRow.querySelector('[data-pe-title]');
+    assert.equal(promptEnhancerTitle.textContent, i18nExtBeta4.getStrings('zh-CN').setPromptEnhancerTitle);
+    promptEnhancerRow.querySelector('button[data-ag-cs-pe-value="on"]').click();
+    assert.equal(state.promptEnhancer, 'on', 'Prompt Enhancer toggle must write through Settings Channel state');
+    promptEnhancerRow.querySelector('button[data-ag-cs-pe-value="off"]').click();
+    assert.equal(state.promptEnhancer, 'off', 'Prompt Enhancer can be disabled again');
 
     // 2. Toggle omniModule='off' -> linkTarget row dims to 0.55; toggle linkTarget='external'; toggle omniModule='on' -> restores full opacity; toggle sidebarStudio
     const findSegBtn = (key, val) =>
@@ -440,7 +471,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     await new Promise((r) => setTimeout(r, 25));
     assert.equal(clipboardWrites.length, 1);
     const exportedObj = JSON.parse(clipboardWrites[0]);
-    assert.equal(Object.keys(exportedObj.settings).length, 39);
+    assert.equal(Object.keys(exportedObj.settings).length, 40);
     assert.equal(exportedObj.settings.darkAura, 'balanced');
     assert.equal(exportedObj.settings.darkAuraStyle, 'prism');
     assert.equal(exportedObj.settings.convRipple, 'off');
@@ -470,6 +501,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
 
     sec = doc.getElementById(settingsPanel.SETTINGS_SEC_ID);
     assert.equal(sec.getAttribute('data-ag-cs-lang'), 'en', 'Panel must rebuild in English');
+    assert.equal(sec.querySelector('[data-ag-cs-row="promptEnhancer"] [data-pe-title]').textContent, i18nExtBeta4.getStrings('en').setPromptEnhancerTitle);
     assert.equal(state.omniModule, 'off');
     assert.equal(state.linkTarget, 'builtin');
     assert.ok(reloadConfigCalls >= 1, 'Import must trigger thoughtUiHandle.reloadConfig()');
@@ -483,6 +515,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     sec = doc.getElementById(settingsPanel.SETTINGS_SEC_ID);
     assert.equal(state.language, 'auto');
     assert.equal(sec.getAttribute('data-ag-cs-lang'), 'zh-CN');
+    assert.equal(sec.querySelector('[data-ag-cs-row="promptEnhancer"] [data-pe-title]').textContent, i18nExtBeta4.getStrings('zh-CN').setPromptEnhancerTitle);
     assert.equal(state.omniModule, 'on');
     assert.equal(state.linkTarget, 'builtin');
     const statusAfterReset = sec.querySelector('[data-ag-cs-cfg-status]');
@@ -519,6 +552,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     }
   } finally {
     delete globalThis.__agPrismThoughtSettingsUi;
+    clearSettingsExtensions();
     if (prevDoc === undefined) delete globalThis.document;
     else globalThis.document = prevDoc;
     if (prevWin === undefined) delete globalThis.window;
@@ -651,6 +685,7 @@ test('settings-panel lazy foldBody deferral on collapsed mount, memoized syncRoo
   globalThis.document = doc;
   globalThis.window = win;
   globalThis.localStorage = storage;
+  installSettingsExtensions(win);
 
   const state = settingsPanel.getDefaultSettingsPatch();
   let matchCalls = 0;
@@ -691,15 +726,15 @@ test('settings-panel lazy foldBody deferral on collapsed mount, memoized syncRoo
     // Updating state while collapsed updates fold summary in O(1) without building or scanning buttons
     state.palette = 'warm';
     mountOrSync();
-    assert.equal(summaryEl.textContent, 'zh-CN:warm:ultra');
+    assert.equal(summaryEl.textContent, 'auto:warm:ultra');
     assert.equal(foldBody.children.length, 0);
     assert.equal(matchCalls, 0);
 
-    // First click on foldHead lazily constructs all 38 rows and 6 groups
+    // First click on foldHead lazily constructs the base rows; runtime extensions then add their rows.
     foldHead.click();
     assert.equal(sec.getAttribute('data-open'), '1');
     assert.equal(sec.getAttribute('data-body-built'), '1');
-    assert.equal(sec.querySelectorAll('[data-ag-cs-row]').length, 38);
+    assert.equal(sec.querySelectorAll('[data-ag-cs-row]').length, 43);
     assert.equal(sec.querySelectorAll('.ag-cs-settings-group').length, 6);
     assert.equal(sec.querySelector('button[data-ag-cs-repo-sync]')?.getAttribute('data-tone'), 'secondary');
     assert.equal(sec.querySelector('button[data-ag-cs-update-check]')?.getAttribute('data-tone'), null);
@@ -747,6 +782,7 @@ test('settings-panel lazy foldBody deferral on collapsed mount, memoized syncRoo
       .find((b) => b.getAttribute('data-ag-cs-val') === '"subtle"');
     assert.equal(subtleBtn.getAttribute('aria-pressed'), 'true');
   } finally {
+    clearSettingsExtensions();
     if (prevDoc === undefined) delete globalThis.document;
     else globalThis.document = prevDoc;
     if (prevWin === undefined) delete globalThis.window;

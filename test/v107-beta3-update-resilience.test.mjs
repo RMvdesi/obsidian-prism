@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -475,6 +476,10 @@ test('盲区 2 (tools/install-plugin.cjs): --status 升级字段、中英文自�
     assert.equal(installRes.ok, true);
     assert.equal(installRes.selfCheck.hasThoughtTranslator, true);
     assert.equal(installRes.selfCheck.hasWallpaperChannel, true);
+    assert.equal(installRes.selfCheck.hasPromptEnhancer, true);
+    for (const file of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'CITATION.cff']) {
+      assert.deepEqual(fs.readFileSync(path.join(targetDir, file)), fs.readFileSync(path.join(ROOT_DIR, file)), file);
+    }
     assert.equal(installRes.selfCheck.bareAntigravityRunning, true);
     assert.equal(installRes.selfCheck.watcherInstalled, false);
     assert.equal(installRes.selfCheck.thoughtTranslateMode, 'off');
@@ -523,8 +528,11 @@ test('盲区 2 (tools/install-plugin.cjs): --status 升级字段、中英文自�
     assert.equal(parsedCliStatus.installed, true);
     assert.equal(parsedCliStatus.hasThoughtTranslator, true);
     assert.equal(parsedCliStatus.hasWallpaperChannel, true);
+    assert.equal(parsedCliStatus.hasPromptEnhancer, true);
     assert.equal(typeof parsedCliStatus.bareAntigravityRunning, 'boolean');
     assert.equal(typeof parsedCliStatus.watcherInstalled, 'boolean');
+    fs.unlinkSync(path.join(targetDir, 'src', 'daemon', 'prompt-enhancer-rpc.mjs'));
+    assert.equal(installTool.getPluginInstallStatus({ targetDir, hostProbe: () => [] }).hasPromptEnhancer, false);
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

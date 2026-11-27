@@ -1,11 +1,5 @@
-/**
- * Obsidian Prism v1.0.2 双极工作台共享纯状态机（vendor/sidebar-studio/state-machine.mjs）
- *
- * 架构约束：
- * - 零 DOM、零 Node I/O、零时钟、零随机数依赖：Node 与浏览器原生 ESM 直接消费，100% 确定性纯函数。
- * - 唯一逻辑源：渲染层客户端、sidebar-service.mjs 与 Workbench `/studio` 预览台共用同一份导出与契约。
- * - 项目级权限隔离适配器严格限定 `projectSettingsProvider` 4 个项目级 setter，零接触全局 Code 权限。
- */
+// Obsidian Prism 双极工作台共享纯状态机（零 DOM/IO 纯函数）
+import { TR_GREETING_POOL, TR_HERO_GREETING_POOL } from './greetings-tr.mjs';
 
 export const SCHEMA_VERSION = 2;
 
@@ -95,7 +89,7 @@ export const DEFAULT_CHAT_POLICY = Object.freeze({
 });
 
 /**
- * 5 语随机问候词库（带用户名与无用户名兜底，绝不硬编码特定人名）
+ * 8 语随机问候词库（带用户名与无用户名兜底，绝不硬编码特定人名）
  */
 export const GREETING_POOLS = Object.freeze({
   'zh-CN': Object.freeze({
@@ -124,19 +118,6 @@ export const GREETING_POOLS = Object.freeze({
       '隨時開始。',
     ]),
   }),
-  yue: Object.freeze({
-    withUser: Object.freeze([
-      '{user}，你嚟啦！',
-      '哈囉，{user}！',
-      '今日想傾啲咩，{user}？',
-      '隨時可以開始，{user}。',
-    ]),
-    anonymous: Object.freeze([
-      '你嚟啦！',
-      '今日想傾啲咩？',
-      '隨時可以開始。',
-    ]),
-  }),
   en: Object.freeze({
     withUser: Object.freeze([
       'Hi, {user}!',
@@ -163,13 +144,71 @@ export const GREETING_POOLS = Object.freeze({
       'いつでも始められます。',
     ]),
   }),
+  ko: Object.freeze({
+    withUser: Object.freeze([
+      '안녕하세요, {user}님!',
+      '{user}님, 어서 오세요!',
+      '오늘은 무엇을 이야기해 볼까요, {user}님?',
+      '언제든 시작하세요, {user}님.',
+    ]),
+    anonymous: Object.freeze([
+      '어서 오세요!',
+      '오늘은 무엇을 이야기해 볼까요?',
+      '언제든 시작하세요.',
+    ]),
+  }),
+  es: Object.freeze({
+    withUser: Object.freeze([
+      '¡Hola, {user}!',
+      '¡Qué bueno verte, {user}!',
+      '¿Qué tienes en mente hoy, {user}?',
+      'Listo cuando quieras, {user}.',
+    ]),
+    anonymous: Object.freeze([
+      '¡Hola!',
+      '¿Qué tienes en mente hoy?',
+      'Listo cuando quieras.',
+    ]),
+  }),
+  fr: Object.freeze({
+    withUser: Object.freeze([
+      'Bonjour, {user} !',
+      'Ravi de vous revoir, {user} !',
+      'De quoi souhaitez-vous discuter, {user} ?',
+      'Prêt quand vous voulez, {user}.',
+    ]),
+    anonymous: Object.freeze([
+      'Bonjour !',
+      'De quoi souhaitez-vous discuter ?',
+      'Prêt quand vous voulez.',
+    ]),
+  }),
+  de: Object.freeze({
+    withUser: Object.freeze([
+      'Hallo, {user}!',
+      'Schön, dass du da bist, {user}!',
+      'Worüber möchtest du heute sprechen, {user}?',
+      'Bereit, wann immer du willst, {user}.',
+    ]),
+    anonymous: Object.freeze([
+      'Hallo!',
+      'Worüber möchtest du heute sprechen?',
+      'Bereit, wann immer du willst.',
+    ]),
+  }),
+  tr: TR_GREETING_POOL,
 });
 
 export function normalizeGreetingLang(rawLang) {
   const s = String(rawLang || 'zh-CN').trim().toLowerCase();
-  if (s === 'zh-tw' || s === 'zh-hk' || s === 'zh-hant') return 'zh-TW';
-  if (s === 'yue' || s === 'zh-yue') return 'yue';
+  if (s === 'zh-tw' || s === 'zh-hk' || s === 'zh-mo' || s === 'zh-hant' || s.startsWith('zh-hant')) return 'zh-TW';
+  if (s === 'yue' || s.startsWith('yue-') || s === 'zh-yue' || s.includes('cantonese')) return 'zh-CN';
   if (s.startsWith('ja')) return 'ja';
+  if (s.startsWith('ko')) return 'ko';
+  if (s.startsWith('es')) return 'es';
+  if (s.startsWith('fr')) return 'fr';
+  if (s.startsWith('de')) return 'de';
+  if (s.startsWith('tr') || s === 'turkish' || s === 'türkçe') return 'tr';
   if (s.startsWith('en')) return 'en';
   return 'zh-CN';
 }
@@ -187,7 +226,7 @@ export function formatGreeting(lang = 'zh-CN', userName = '', seedIndex = 0) {
 
 /**
  * Gemini 官方双层居中问候语池（第一行：图标 + 轻柔副标；第二行：轻字重主问候）。
- * 100% 开源中性，支持 5 语言按种子随机组合，零私密硬编码、采用中性自然表达。
+ * 100% 开源中性，支持 8 语言按种子随机组合，零私密硬编码、采用中性自然表达。
  */
 export const HERO_GREETING_POOLS = Object.freeze({
   'zh-CN': Object.freeze({
@@ -226,23 +265,6 @@ export const HERO_GREETING_POOLS = Object.freeze({
       '隨時聊聊你的新想法。',
     ]),
   }),
-  yue: Object.freeze({
-    eyebrowWithUser: Object.freeze([
-      '哈囉，{user}',
-      '你好呀，{user}',
-      '歡迎返嚟，{user}',
-    ]),
-    eyebrowAnonymous: Object.freeze([
-      '哈囉',
-      '歡迎返嚟',
-      '隨時開始',
-    ]),
-    headlines: Object.freeze([
-      '今日想我幫你做啲乜？',
-      '想由邊度開始傾起？',
-      '有咩新想法隨時講。',
-    ]),
-  }),
   en: Object.freeze({
     eyebrowWithUser: Object.freeze([
       'Hi, {user}',
@@ -277,6 +299,71 @@ export const HERO_GREETING_POOLS = Object.freeze({
       'どんなアイデアでも気軽にどうぞ。',
     ]),
   }),
+  ko: Object.freeze({
+    eyebrowWithUser: Object.freeze([
+      '안녕하세요, {user}님',
+      '다시 오셨군요, {user}님',
+    ]),
+    eyebrowAnonymous: Object.freeze([
+      '안녕하세요',
+      '다시 오셨군요',
+      '언제든 시작할 수 있어요',
+    ]),
+    headlines: Object.freeze([
+      '오늘은 무엇을 도와드릴까요?',
+      '어디서부터 시작해 볼까요?',
+      '새로운 아이디어를 편하게 들려주세요.',
+    ]),
+  }),
+  es: Object.freeze({
+    eyebrowWithUser: Object.freeze([
+      'Hola, {user}',
+      'Bienvenido de nuevo, {user}',
+    ]),
+    eyebrowAnonymous: Object.freeze([
+      'Hola',
+      'Bienvenido de nuevo',
+      'Listo cuando quieras',
+    ]),
+    headlines: Object.freeze([
+      '¿Por dónde empezamos?',
+      '¿En qué puedo ayudarte hoy?',
+      '¿Qué te gustaría explorar?',
+    ]),
+  }),
+  fr: Object.freeze({
+    eyebrowWithUser: Object.freeze([
+      'Bonjour, {user}',
+      'Bon retour, {user}',
+    ]),
+    eyebrowAnonymous: Object.freeze([
+      'Bonjour',
+      'Bon retour',
+      'Prêt quand vous l’êtes',
+    ]),
+    headlines: Object.freeze([
+      'Par où commençons-nous ?',
+      'Comment puis-je vous aider aujourd’hui ?',
+      'Que souhaitez-vous explorer ?',
+    ]),
+  }),
+  de: Object.freeze({
+    eyebrowWithUser: Object.freeze([
+      'Hallo, {user}',
+      'Willkommen zurück, {user}',
+    ]),
+    eyebrowAnonymous: Object.freeze([
+      'Hallo',
+      'Willkommen zurück',
+      'Bereit, wann immer du bist',
+    ]),
+    headlines: Object.freeze([
+      'Womit sollen wir anfangen?',
+      'Wie kann ich dir heute helfen?',
+      'Was möchtest du erkunden?',
+    ]),
+  }),
+  tr: TR_HERO_GREETING_POOL,
 });
 
 export function formatHeroGreeting(lang = 'zh-CN', userName = '', seedIndex = 0) {

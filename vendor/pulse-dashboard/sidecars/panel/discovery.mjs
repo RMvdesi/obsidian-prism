@@ -1,6 +1,6 @@
 // Upstream: ATtacK030130/antigrative-dashboard v0.9.1 (MIT License — Copyright (c) 2026 AG Pulse contributors)
 // Integrated & adapted for Obsidian Prism under GPL-3.0-only compatibility terms.
-// Includes Windows TUN fake-IP filtering, State-0 loopback recovery, and multi-instance cdpPort process lineage matching.
+// Windows zero-PowerShell / zero-WMI / zero-Add-Type discovery using native tasklist + netstat + loopback probe.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, readdir } from 'node:fs/promises';
@@ -11,6 +11,7 @@ import { performance } from 'node:perf_hooks';
 const exec = promisify(execFile);
 const languageServer = command => /(?:^|[\/\\])language_server(?:_(?:windows|linux|macos|darwin)(?:_(?:x64|arm|arm64))?)?(?:\.exe)?(?:\s|$)/i.test(command);
 const agyHubCommand = command => /(?:^|[\/\\"'])agy(?:\.exe)?(?:["']?(?:\s|$))/i.test(command) && /(?:^|\s)["']?--hub(?:["']?)(?=\s|$)/i.test(command) && !/(?:^|\s)["']?--enable_lsp(?:=|\s|$)/i.test(command);
+const agyExeName = name => /^agy(?:\.exe)?$/i.test(String(name || '').trim());
 
 export function extractHubPort(command) {
   const m = String(command || '').match(/(?:^|\s)--hub-port(?:=|\s+)["']?(\d{1,5})["']?(?=\s|$)/i);
@@ -73,10 +74,64 @@ const endpoint = value => {
 };
 const integer = value => typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
 
+function parseCsvFields(line) {
+  const fields = [];
+  let i = 0;
+  const n = line.length;
+  while (i < n) {
+    if (line[i] === '"') {
+      i += 1;
+      let val = '';
+      while (i < n) {
+        if (line[i] === '"') {
+          if (i + 1 < n && line[i + 1] === '"') {
+            val += '"';
+            i += 2;
+          } else {
+            i += 1;
+            break;
+          }
+        } else {
+          val += line[i++];
+        }
+      }
+      fields.push(val);
+      while (i < n && line[i] !== ',') i += 1;
+      if (i < n && line[i] === ',') i += 1;
+    } else {
+      const start = i;
+      while (i < n && line[i] !== ',') i += 1;
+      fields.push(line.slice(start, i).trim());
+      if (i < n && line[i] === ',') i += 1;
+    }
+  }
+  return fields;
+}
+
+export function parseTasklistCsv(text) {
+  const rows = [];
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const line = rawLine.replace(/^\uFEFF/, '').trim();
+    if (!line || !line.startsWith('"')) continue;
+    const fields = parseCsvFields(line);
+    if (fields.length < 2) continue;
+    const name = String(fields[0] || '').trim();
+    const pid = integer(String(fields[1] || '').trim());
+    if (!name || !validPid(pid)) continue;
+    rows.push({
+      ProcessId: pid,
+      ParentProcessId: 0,
+      Name: name,
+      CommandLine: name,
+    });
+  }
+  return rows;
+}
+
 function netstatSnapshot(text) {
   const ports = new Map(), rejectedPids = new Set();
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(/^\s*TCP\s+(\S+)\s+(\S+)\s+(?:LISTENING|LISTEN|侦听|监听)\s+(\d+)\s*$/i);
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = line.match(/^\s*TCP\s+(\S+)\s+(\S+)\s+(?:LISTENING|LISTEN|ABHÖREN|ÉCOUTE|ESCUCHANDO|侦听|监听|待機|대기)\s+(\d+)\s*$/i);
     if (!match) continue;
     const local = endpoint(match[1]), remote = endpoint(match[2]), pid = Number(match[3]);
     if (!validPid(pid)) continue;
@@ -157,36 +212,22 @@ export async function discoverWindowsPorts(pids, { run = exec, expectedPorts = n
     return !found.length || snapshot.rejectedPids.has(pid);
   });
   if (!missing.length) return ports;
-  const script = `$pulsePids = @(${missing.join(',')}); Get-NetTCPConnection -OwningProcess $pulsePids -ErrorAction SilentlyContinue | Select-Object OwningProcess,LocalAddress,LocalPort,RemoteAddress,RemotePort,State | ConvertTo-Json -Compress`;
-  try {
-    const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000, maxBuffer: 1048576 });
-    const parsed = stdout.replace(/^\uFEFF/, '').trim();
-    const value = parsed ? JSON.parse(parsed) : [], allowed = new Set(missing), uncertain = new Map();
-    for (const row of Array.isArray(value) ? value : [value]) {
-      const pid = integer(row?.OwningProcess), port = integer(row?.LocalPort), state = row?.State;
-      const listen = state === 2 || state === '2' || typeof state === 'string' && /^listen$/i.test(state);
-      const tunUnknown = state === 0 || state === '0';
-      if (!allowed.has(pid) || !validPort(port) || !localAddress(row?.LocalAddress)
-        || !unspecifiedAddress(row?.RemoteAddress) || integer(row?.RemotePort) !== 0) continue;
-      if (!(listen || tunUnknown)) {
-        if (Object.hasOwn(row, 'State') && (state === null || state === '') && port === preferred.get(pid)
-          && uncertain.size < 4 && !uncertain.has(pid)) uncertain.set(pid, port);
-        continue;
-      }
+
+  // 零 PowerShell / 零 WMI 回环探测恢复（处理 TUN 环境下 netstat 未呈现预期监听端口的 State-0 场景）
+  const deadline = performance.now() + 1500;
+  let probed = 0;
+  for (const pid of missing) {
+    if (probed >= 4) break;
+    const expected = preferred.get(pid);
+    if (!validPort(expected) || ports.get(pid)?.includes(expected)) continue;
+    const timeoutMs = Math.min(400, Math.floor(deadline - performance.now()));
+    if (timeoutMs <= 0) break;
+    probed += 1;
+    if (await boundedProbe(probe, expected, timeoutMs)) {
       if (!ports.has(pid)) ports.set(pid, []);
-      if (!ports.get(pid).includes(port)) ports.get(pid).push(port);
+      if (!ports.get(pid).includes(expected)) ports.get(pid).push(expected);
     }
-    const deadline = performance.now() + 1500;
-    for (const [pid, port] of uncertain) {
-      if (ports.get(pid)?.includes(port)) continue;
-      const timeoutMs = Math.min(400, Math.floor(deadline - performance.now()));
-      if (timeoutMs <= 0) break;
-      if (await boundedProbe(probe, port, timeoutMs)) {
-        if (!ports.has(pid)) ports.set(pid, []);
-        ports.get(pid).push(port);
-      }
-    }
-  } catch {}
+  }
   return ports;
 }
 
@@ -246,142 +287,24 @@ export function selectServerByCdpLineage(candidates, allRows, portOwners, cdpPor
   return matched.length ? matched : candidates;
 }
 
-export async function discoverProcesses({ platform = process.platform, run = exec, uid = process.getuid?.(), proc = '/proc', expectedPorts = [], cdpPort = null } = {}) {
+export async function discoverProcesses({ platform = process.platform, run = exec, uid = process.getuid?.(), proc = '/proc', expectedPorts = [], cdpPort = null, probe = probeLoopbackPort } = {}) {
   const targetCdpPort = typeof cdpPort === 'function' ? Number(cdpPort()) : Number(cdpPort);
   const hasCdpHint = validPort(targetCdpPort);
 
   if (platform === 'win32') {
-    // Zero-WMI Win32 kernel fast-path (NtQueryInformationProcess Basic=0 + CommandLine=60):
-    // immune to Windows WMI (Winmgmt) service hangs (8s+ ETIMEDOUT under heavy IDE/Swarm load)
-    // and 100% architecture-independent across x64 & ARM64, with automatic CIM fallback if blocked.
-    const buildZeroWmiScript = (fullTree) => `
-$ErrorActionPreference = 'SilentlyContinue'
-try {
-  Add-Type -TypeDefinition @'
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-public static class AgFastProc {
-  [StructLayout(LayoutKind.Sequential)]
-  struct PBI { public IntPtr ExitStatus; public IntPtr PebBaseAddress; public UIntPtr AffinityMask; public int BasePriority; public UIntPtr UniqueProcessId; public IntPtr InheritedFromUniqueProcessId; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct US { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
-  [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr h, int cls, IntPtr buf, int cb, out int ret);
-  [DllImport("ntdll.dll", EntryPoint="NtQueryInformationProcess")] static extern int NtQueryPbi(IntPtr h, int cls, ref PBI pbi, int cb, out int ret);
-  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint acc, bool inh, int pid);
-  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
-  static string ReadCmd(IntPtr h) {
-    int needed = 0;
-    int st = NtQueryInformationProcess(h, 60, IntPtr.Zero, 0, out needed);
-    if (needed <= 0 || needed > 65536) return "";
-    IntPtr mem = Marshal.AllocHGlobal(needed);
-    try {
-      if (NtQueryInformationProcess(h, 60, mem, needed, out needed) != 0) return "";
-      US us = (US)Marshal.PtrToStructure(mem, typeof(US));
-      if (us.Length == 0 || us.Buffer == IntPtr.Zero) return "";
-      return Marshal.PtrToStringUni(us.Buffer, us.Length / 2) ?? "";
-    } finally { Marshal.FreeHGlobal(mem); }
-  }
-  public static object[] Scan(bool fullTree) {
-    var cands = new List<object>();
-    var otherMeta = new List<KeyValuePair<int, string>>();
-    bool hasHub = false;
-    foreach (var p in Process.GetProcesses()) {
-      int pid = 0; string n = "";
-      try { pid = p.Id; n = p.ProcessName ?? ""; } catch { p.Dispose(); continue; }
-      p.Dispose();
-      bool isCand = n.StartsWith("language_server", StringComparison.OrdinalIgnoreCase) || string.Equals(n, "agy", StringComparison.OrdinalIgnoreCase);
-      if (!isCand) {
-        otherMeta.Add(new KeyValuePair<int, string>(pid, n));
-        continue;
-      }
-      int ppid = 0; string cmd = "";
-      IntPtr h = OpenProcess(0x1000u, false, pid);
-      if (h != IntPtr.Zero) {
-        try {
-          PBI pbi = new PBI(); int ret;
-          if (NtQueryPbi(h, 0, ref pbi, Marshal.SizeOf(pbi), out ret) == 0) ppid = (int)pbi.InheritedFromUniqueProcessId.ToInt64();
-          cmd = ReadCmd(h);
-        } finally { CloseHandle(h); }
-      }
-      cands.Add(new { ProcessId = pid, ParentProcessId = ppid, Name = n + ".exe", CommandLine = cmd });
-      if (string.Equals(n, "agy", StringComparison.OrdinalIgnoreCase)) hasHub = true;
-    }
-    if (fullTree || cands.Count > 1 || hasHub) {
-      foreach (var kv in otherMeta) {
-        int ppid = 0;
-        IntPtr h = OpenProcess(0x1000u, false, kv.Key);
-        if (h != IntPtr.Zero) {
-          try {
-            PBI pbi = new PBI(); int ret;
-            if (NtQueryPbi(h, 0, ref pbi, Marshal.SizeOf(pbi), out ret) == 0) ppid = (int)pbi.InheritedFromUniqueProcessId.ToInt64();
-          } finally { CloseHandle(h); }
-        }
-        cands.Add(new { ProcessId = kv.Key, ParentProcessId = ppid, Name = kv.Value + ".exe", CommandLine = "" });
-      }
-    }
-    return cands.ToArray();
-  }
-}
-'@
-  $res = [AgFastProc]::Scan($${fullTree ? 'true' : 'false'})
-  if ($null -ne $res) { $res | ConvertTo-Json -Compress }
-} catch {
-  Get-CimInstance Win32_Process${fullTree ? '' : " -Filter \"Name LIKE 'language_server%' OR Name = 'agy.exe'\""} | Select-Object ProcessId,ParentProcessId,Name${fullTree ? '' : ',CommandLine'} | ConvertTo-Json -Compress
-}`;
-    const { stdout } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildZeroWmiScript(false)], {
-      windowsHide: true,
-      timeout: 6000,
-      maxBuffer: 4194304,
-    });
-    const parseWinRows = (raw) => {
-      const trimmed = String(raw || '').replace(/^\uFEFF/, '').trim();
-      if (!trimmed) return [];
-      const parsed = JSON.parse(trimmed);
-      return (Array.isArray(parsed) ? parsed : [parsed])
-        .filter((r) => validPid(integer(r?.ProcessId)))
-        .map((r) => ({
-          ...r,
-          ProcessId: integer(r.ProcessId),
-          ParentProcessId: integer(r.ParentProcessId),
-        }));
-    };
-    const fastRows = parseWinRows(stdout);
-    let candidates = fastRows.filter(
-      (row) =>
-        (languageServer(row.Name || row.CommandLine || '') && /(?:^|\s)--standalone(?:\s|=|$)/.test(row.CommandLine || '')) ||
-        (hasCdpHint &&
-          (agyHubCommand(row.CommandLine || '') ||
-            (languageServer(row.Name || row.CommandLine || '') && /--subclient_type(?:=|\s+)["']?ide["']?/i.test(row.CommandLine || ''))))
+    // 纯原生 Windows 探测：零 PowerShell、零 WMI、零动态编译、零跨进程句柄读取
+    const [{ stdout: taskOut }, { stdout: netOut }] = await Promise.all([
+      run('tasklist.exe', ['/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 5000, maxBuffer: 4194304 }).catch(() => ({ stdout: '' })),
+      run('netstat.exe', ['-ano', '-p', 'tcp'], { windowsHide: true, timeout: 4000, maxBuffer: 4194304 }).catch(() => ({ stdout: '' })),
+    ]);
+
+    const allRows = parseTasklistCsv(taskOut);
+    let candidates = allRows.filter(
+      (row) => languageServer(row.Name || row.CommandLine || '') || (hasCdpHint && agyExeName(row.Name))
     );
     if (!candidates.length) return [];
 
-    let cachedNetstatStdout = null;
-    if (hasCdpHint && (candidates.length > 1 || candidates.some((c) => agyHubCommand(c.CommandLine || '')))) {
-      const candPids = new Set(candidates.map((c) => c.ProcessId));
-      const alreadyHasTreeRows = fastRows.some((r) => !candPids.has(r.ProcessId));
-      const [{ stdout: netOut }, { stdout: treeOut }] = await Promise.all([
-        run('netstat.exe', ['-ano', '-p', 'tcp'], { windowsHide: true, timeout: 4000, maxBuffer: 4194304 }).catch(() => ({ stdout: '' })),
-        alreadyHasTreeRows
-          ? Promise.resolve({ stdout: '' })
-          : run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildZeroWmiScript(true)], {
-              windowsHide: true,
-              timeout: 4500,
-              maxBuffer: 4194304,
-            }).catch(() => ({ stdout: '' })),
-      ]);
-      cachedNetstatStdout = netOut || null;
-      let treeRows = [];
-      try {
-        treeRows = parseWinRows(treeOut);
-      } catch {}
-      const mergedByPid = new Map();
-      for (const r of fastRows) mergedByPid.set(r.ProcessId, r);
-      for (const r of treeRows) {
-        if (!mergedByPid.has(r.ProcessId)) mergedByPid.set(r.ProcessId, r);
-      }
-      const allRows = [...mergedByPid.values()];
+    if (hasCdpHint && candidates.length > 1 && allRows.some((r) => validPid(r.ParentProcessId))) {
       const snap = netstatSnapshot(netOut);
       const portOwners = new Map();
       for (const [pid, pList] of snap.ports) {
@@ -401,7 +324,7 @@ public static class AgFastProc {
     );
     const ports = await discoverWindowsPorts(
       candidates.map((row) => row.ProcessId),
-      { run, expectedPorts: expMap, preloadedNetstatStdout: cachedNetstatStdout }
+      { run, expectedPorts: expMap, probe, preloadedNetstatStdout: netOut || null }
     );
     return candidates.map((row) => ({ ...row, Ports: ports.get(row.ProcessId) || [], HubPort: extractHubPort(row.CommandLine) }));
   }

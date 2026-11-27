@@ -12,13 +12,18 @@ const ROOT = path.resolve(__dirname, '..');
 
 const rippleCore = require(path.join(ROOT, 'ripple-core.js'));
 
-test('165Hz beat-frequency aliasing fix: nebulaFrameMs <= 30 keeps every 36.36ms WebGL2 idle frame uploading smoothly', () => {
+test('165Hz smooth GPU draw + 500ms idle texture upload throttling (-94% idle CPU/VRAM upload, immediate wave upload)', () => {
   assert.ok(
     rippleCore.RIPPLE.nebulaFrameMs > 15 && rippleCore.RIPPLE.nebulaFrameMs <= 30,
     `Expected nebulaFrameMs in (15, 30], got ${rippleCore.RIPPLE.nebulaFrameMs}`
   );
+  assert.ok(
+    rippleCore.RIPPLE.idleUploadMs >= 450,
+    `Expected idleUploadMs >= 450ms for -94% idle upload throttle, got ${rippleCore.RIPPLE.idleUploadMs}`
+  );
 
   let uploads = 0;
+  let draws = 0;
   const gl = {
     VERTEX_SHADER: 35633, FRAGMENT_SHADER: 35632, COMPILE_STATUS: 35713, LINK_STATUS: 35714,
     COLOR_BUFFER_BIT: 16384, TRIANGLES: 4, TEXTURE_2D: 3553, TEXTURE0: 33984, TEXTURE1: 33985,
@@ -32,7 +37,7 @@ test('165Hz beat-frequency aliasing fix: nebulaFrameMs <= 30 keeps every 36.36ms
     deleteTexture() {}, activeTexture() {}, bindTexture() {}, texParameteri() {}, texStorage2D() {},
     texImage2D() {}, texSubImage2D() { uploads += 1; }, viewport() {},
     uniform1i() {}, uniform1f() {}, uniform2f() {}, uniform3f() {}, uniform4f() {},
-    clearColor() {}, clear() {}, drawArrays() {}, getExtension: () => null,
+    clearColor() {}, clear() {}, drawArrays() { draws += 1; }, getExtension: () => null,
   };
   const atlasCtx = { setTransform() {}, clearRect() {}, fillText() {}, font: '', fillStyle: '', textAlign: '', textBaseline: '' };
   const canvas = {
@@ -48,11 +53,19 @@ test('165Hz beat-frequency aliasing fix: nebulaFrameMs <= 30 keeps every 36.36ms
   let t = 1000;
   field.draw(t, pal, false);
   const baseUploads = uploads;
+  const baseDraws = draws;
   for (let i = 0; i < 10; i++) {
     t += 36.36;
     field.draw(t, pal, false);
   }
-  assert.equal(uploads - baseUploads, 10, 'Every 36.36ms frame at 165Hz must upload without beat-frequency frame skipping');
+  assert.equal(draws - baseDraws, 10, 'Every 36.36ms GPU frame at 165Hz must still draw smoothly via shader analytic breath/cloud');
+  assert.ok(uploads - baseUploads <= 1, `Expected <= 1 idle texSubImage2D across 363ms, got ${uploads - baseUploads}`);
+
+  // Disturbing a wave must immediately upload cell texture on the very next frame
+  waves.disturb(10, 5);
+  const preWaveUploads = uploads;
+  field.draw(t + 16, pal, false);
+  assert.equal(uploads - preWaveUploads, 1, 'Active wave frame must immediately upload cell texture');
   field.dispose();
 });
 

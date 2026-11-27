@@ -548,7 +548,7 @@ test('style.css: zero -webkit-mask:var(--_m0) / background:var(--_x0), 6 CSSOM-s
   assert.equal(css.includes('--_m0'), false, 'must remove obsolete --_m0 token');
   assert.equal(css.includes('background:var(--_x0)'), false, 'must not contain background:var(--_x0) shorthand');
   assert.equal(css.includes('background-color:var(--_x0)'), true, 'input-cancel-button must use background-color:var(--_x0)');
-  const safeMasks = css.match(/mask:linear-gradient\(#000 0 0\) content-box exclude,linear-gradient\(#000 0 0\);/g) || [];
+  const safeMasks = css.match(/mask:linear-gradient\(#000 0 0\) content-box exclude,linear-gradient\(#000 0 0\)[;}]/g) || [];
   assert.equal(safeMasks.length, 6, 'all 6 border masks must use CSSOM round-trip safe mask syntax');
   assert.equal(/:has\(/.test(css), false, 'style.css must have 0 :has()');
   assert.equal(/[^\x00-\x7F]/.test(css), false, 'style.css must be 100% ASCII');

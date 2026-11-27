@@ -200,6 +200,16 @@ async function readResponseBufferWithLimit(res, maxBytes) {
   throw new Error('unsupported_response_body');
 }
 
+function readPackageVersion(fallback = '1.0.8-beta.3') {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) return pkg.version.trim();
+  } catch {}
+  return fallback;
+}
+
+const DEFAULT_CURRENT_VERSION = readPackageVersion();
+
 function normalizeVersionStr(v) {
   return String(v || '').trim().replace(/^v/i, '');
 }
@@ -209,7 +219,7 @@ export class UpdateService {
     fetchFn = globalThis.fetch,
     spawnFn = spawn,
     platform = process.platform,
-    currentVersion = '1.0.8-beta.3',
+    currentVersion = DEFAULT_CURRENT_VERSION,
     channel = 'stable',
     checkTtlMs = CHECK_TTL_MS,
     manualCooldownMs = MANUAL_COOLDOWN_MS,
@@ -221,7 +231,7 @@ export class UpdateService {
     this.fetchFn = fetchFn;
     this.spawnFn = spawnFn;
     this.platform = platform;
-    this.currentVersion = normalizeVersionStr(currentVersion) || '1.0.8-beta.3';
+    this.currentVersion = normalizeVersionStr(currentVersion) || DEFAULT_CURRENT_VERSION;
     this.channel = normalizeUpdateChannel(channel);
     this.checkTtlMs = Math.max(0, Number(checkTtlMs) || 0);
     this.manualCooldownMs = Math.max(0, Number(manualCooldownMs) || 0);

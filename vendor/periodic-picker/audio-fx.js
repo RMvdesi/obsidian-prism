@@ -60,21 +60,28 @@
     var _audioRmMqlCache = typeof WeakMap === 'function' ? new WeakMap() : null;
     function isReducedMotion(doc, root) {
       try {
+        var r = root || (typeof window !== 'undefined' ? window : null);
         if (doc && doc.documentElement && doc.documentElement.getAttribute('data-ag-cs-motion') === 'off') {
           return true;
         }
-        if (root && typeof root.matchMedia === 'function') {
-          var mm = root.matchMedia;
+        if (r && typeof r.__agPrismReducedMotion === 'function') {
+          return Boolean(r.__agPrismReducedMotion(doc, r));
+        }
+        if (doc && doc.documentElement && doc.documentElement.getAttribute('data-ag-cs-ignore-rm') === '1') {
+          return false;
+        }
+        if (r && typeof r.matchMedia === 'function') {
+          var mm = r.matchMedia;
           if (_audioRmMqlCache) {
-            var cached = _audioRmMqlCache.get(root);
+            var cached = _audioRmMqlCache.get(r);
             if (cached && cached.fn === mm && cached.mq) {
               return Boolean(cached.mq.matches);
             }
-            var mq = mm.call(root, '(prefers-reduced-motion: reduce)');
-            _audioRmMqlCache.set(root, { fn: mm, mq: mq });
+            var mq = mm.call(r, '(prefers-reduced-motion: reduce)');
+            _audioRmMqlCache.set(r, { fn: mm, mq: mq });
             return Boolean(mq && mq.matches);
           }
-          return Boolean(mm.call(root, '(prefers-reduced-motion: reduce)').matches);
+          return Boolean(mm.call(r, '(prefers-reduced-motion: reduce)').matches);
         }
       } catch (e) {}
       return false;

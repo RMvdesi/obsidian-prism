@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: add the downstream Prompt Enhancer module.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,7 +21,6 @@ export const PROMPT_ENHANCER_ACTIONS = new Set([
 
 export const DEFAULT_PROMPT_ENHANCER_CONFIG = Object.freeze({
   version: 1,
-  enabled: false,
   profileId: '',
   model: '',
 });
@@ -85,7 +85,6 @@ export function sanitizePromptEnhancerConfig(raw = {}) {
   const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   return {
     version: 1,
-    enabled: Boolean(src.enabled),
     profileId: typeof src.profileId === 'string' ? src.profileId.trim().slice(0, 80) : '',
     model: typeof src.model === 'string' ? src.model.trim().slice(0, 140) : '',
   };
@@ -136,7 +135,22 @@ function extractAssistantText(body) {
 }
 
 export function stripPromptAsterisks(text = '') {
-  return String(text ?? '').replace(/\*/g, '');
+  const protectedParts = [];
+  let output = String(text ?? '')
+    // Keep glob patterns such as src/**/*.ts intact.
+    .replace(/\*{1,2}\/[^\s]+/g, (match) => {
+      protectedParts.push(match);
+      return `\u0000${protectedParts.length - 1}\u0000`;
+    })
+    // Keep inline and fenced code intact.
+    .replace(/```[\s\S]*?```|`[^`\n]*`/g, (match) => {
+      protectedParts.push(match);
+      return `\u0000${protectedParts.length - 1}\u0000`;
+    });
+  output = output
+    .replace(/(^|[^\w*])\*\*(\S(?:[^*\n]*?\S)?)\*\*(?=$|[^\w*])/g, '$1$2')
+    .replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?=$|[^\w*])/g, '$1$2');
+  return output.replace(/\u0000(\d+)\u0000/g, (_, index) => protectedParts[Number(index)] || '');
 }
 
 export class PromptEnhancerService {
@@ -144,6 +158,7 @@ export class PromptEnhancerService {
     const configDir = options.configDir || path.join(os.homedir(), '.gemini', 'config');
     this.configFile = options.configFile || path.join(configDir, 'obsidian-prism-prompt-enhancer.json');
     this._getTranslatorService = typeof options.getTranslatorService === 'function' ? options.getTranslatorService : null;
+    this._getEnabled = typeof options.getEnabled === 'function' ? options.getEnabled : null;
     this._translatorService = options.translatorService || null;
     this.requestTimeoutMs = Math.max(100, Number(options.requestTimeoutMs) || 25000);
     this._config = null;
@@ -188,6 +203,9 @@ export class PromptEnhancerService {
 
   async getPublicState() {
     const config = this.loadConfig();
+    if (this._getEnabled) {
+      try { config.enabled = Boolean(this._getEnabled()); } catch { config.enabled = false; }
+    }
     const translator = await this._getTranslator();
     let store = {};
     let publicConfig = {};
@@ -300,7 +318,11 @@ export class PromptEnhancerService {
 
   async enhance(payload = {}) {
     const config = this.loadConfig();
-    if (!config.enabled) return { ok: false, reason: 'disabled', error: 'prompt_enhancer_disabled' };
+    let enabled = config.enabled;
+    if (this._getEnabled) {
+      try { enabled = Boolean(this._getEnabled()); } catch { enabled = false; }
+    }
+    if (!enabled) return { ok: false, reason: 'disabled', error: 'prompt_enhancer_disabled' };
     const original = typeof payload.original === 'string' ? payload.original.trim() : '';
     if (!original) return { ok: false, reason: 'empty-input', error: 'prompt_required' };
     if (original.length > MAX_PROMPT_CHARS) return { ok: false, reason: 'input-too-long', error: 'prompt_too_long' };
@@ -383,7 +405,7 @@ export class PromptEnhancerService {
     if (action === 'get-config') return this.getPublicState();
     if (action === 'save-config') {
       const patch = {};
-      if (payload.enabled !== undefined) patch.enabled = Boolean(payload.enabled);
+      if (!this._getEnabled && payload.enabled !== undefined) patch.enabled = Boolean(payload.enabled);
       if (typeof payload.profileId === 'string') patch.profileId = payload.profileId;
       if (typeof payload.model === 'string') patch.model = payload.model;
       const saved = this.saveConfig(patch);
@@ -397,6 +419,10 @@ export class PromptEnhancerService {
   }
 
   dispose() {
+    this.cancelAllRequests();
+  }
+
+  cancelAllRequests() {
     for (const id of this._inflight.keys()) this.cancelRequest(id);
   }
 }

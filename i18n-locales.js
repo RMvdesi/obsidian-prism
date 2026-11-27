@@ -2,68 +2,32 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.__agCsLocales = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
-  const LANG_IDS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de'];
-
-  const LANG_INDEX = {
-    'zh-CN': 0,
-    'zh-TW': 1,
-    en: 2,
-    ja: 3,
-    ko: 4,
-    es: 5,
-    fr: 6,
-    de: 7,
-  };
-
+  const LANG_IDS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr'];
+  const LANG_INDEX = { 'zh-CN': 0, 'zh-TW': 1, en: 2, ja: 3, ko: 4, es: 5, fr: 6, de: 7, tr: 8 };
   function resolveLangId(lang) {
     if (Object.prototype.hasOwnProperty.call(LANG_INDEX, lang)) return lang;
     const core = typeof globalThis !== 'undefined' ? globalThis.__agCsI18nCore : null;
-    if (core && typeof core.normalizeLanguage === 'function') {
-      return core.normalizeLanguage(lang, 'en');
-    }
+    if (core && typeof core.normalizeLanguage === 'function') return core.normalizeLanguage(lang, 'en');
     if (typeof lang !== 'string') return 'en';
-    const clean = lang.trim().toLowerCase().replace(/_/g, '-').split(/[.@]/)[0];
-    if (!clean) return 'en';
-    if (clean === 'ja' || clean.startsWith('ja-') || clean === 'jp') return 'ja';
-    if (clean === 'ko' || clean.startsWith('ko-') || clean === 'kr') return 'ko';
-    if (clean === 'es' || clean.startsWith('es-')) return 'es';
-    if (clean === 'fr' || clean.startsWith('fr-')) return 'fr';
-    if (clean === 'de' || clean.startsWith('de-')) return 'de';
-    if (clean === 'yue' || clean.startsWith('yue-') || clean === 'zh-yue') return 'zh-CN';
-    if (
-      clean === 'zh-tw' ||
-      clean.startsWith('zh-tw-') ||
-      clean === 'zh-hk' ||
-      clean.startsWith('zh-hk-') ||
-      clean === 'zh-mo' ||
-      clean.startsWith('zh-mo-') ||
-      clean === 'zh-hant' ||
-      clean.startsWith('zh-hant-')
-    ) {
-      return 'zh-TW';
-    }
-    if (clean === 'zh' || clean === 'zh-cn' || clean === 'zh-hans' || clean.startsWith('zh-')) return 'zh-CN';
+    const c = lang.trim().toLowerCase().replace(/_/g, '-').split(/[.@]/)[0];
+    if (!c) return 'en';
+    if (c === 'ja' || c.startsWith('ja-') || c === 'jp') return 'ja';
+    if (c === 'ko' || c.startsWith('ko-') || c === 'kr') return 'ko';
+    if (c === 'es' || c.startsWith('es-')) return 'es';
+    if (c === 'fr' || c.startsWith('fr-')) return 'fr';
+    if (c === 'de' || c.startsWith('de-')) return 'de';
+    if (c === 'tr' || c.startsWith('tr-') || c === 'turkish' || c === 'türkçe' || c === 'turkce') return 'tr';
+    if (c === 'yue' || c.startsWith('yue-') || c === 'zh-yue') return 'zh-CN';
+    if (/^zh-(?:tw|hk|mo|hant)(?:-|$)/.test(c)) return 'zh-TW';
+    if (c === 'zh' || c === 'zh-cn' || c === 'zh-hans' || c.startsWith('zh-')) return 'zh-CN';
     return 'en';
   }
-
   function pick(lang, arr) {
     const idx = Object.prototype.hasOwnProperty.call(LANG_INDEX, lang) ? LANG_INDEX[lang] : 2;
     return arr[idx] !== undefined ? arr[idx] : arr[2];
   }
-
-  // Unified 8-language table for Obsidian Prism UI [zh-CN, zh-TW, en, ja, ko, es, fr, de]
   const UI_TABLE = {
-    // ── Brand Header & Collapsible Banner ────────────────────────────────────
-    sectionTitle: [
-      'Obsidian Prism · 黑曜棱镜',
-      'Obsidian Prism · 黑曜稜鏡',
-      'Obsidian Prism',
-      'Obsidian Prism · 黒曜プリズム',
-      'Obsidian Prism · 흑요석 프리즘',
-      'Obsidian Prism',
-      'Obsidian Prism',
-      'Obsidian Prism',
-    ],
+    sectionTitle: ['Obsidian Prism · 黑曜棱镜', 'Obsidian Prism · 黑曜稜鏡', 'Obsidian Prism', 'Obsidian Prism · 黒曜プリズム', 'Obsidian Prism · 흑요석 프리즘', 'Obsidian Prism', 'Obsidian Prism', 'Obsidian Prism'],
     sectionSubtitle: [
       'Clean UI & Productivity Suite for Antigravity',
       'Clean UI & Productivity Suite for Antigravity',
@@ -1804,45 +1768,22 @@
     'optThoughtBilingual',
   ]);
 
+  // Attach Turkish (tr, index 8) from modular table to keep monolith within Law 2 ratchet
+  const _trPack =
+    (typeof globalThis !== 'undefined' && globalThis.__agPrismI18nTr) ||
+    (typeof window !== 'undefined' && window.__agPrismI18nTr) ||
+    (typeof require === 'function' ? (() => { try { return require('./src/runtime/i18n-tr-locale.js'); } catch { return null; } })() : null);
+  for (const _k in UI_TABLE) {
+    if (UI_TABLE[_k].length === 8) UI_TABLE[_k].push((_trPack && _trPack[_k]) || UI_TABLE[_k][2]);
+  }
+
   function getUiStrings(lang) {
     const out = {};
-    for (const key in UI_TABLE) {
-      out[key] = pick(lang, UI_TABLE[key]);
-    }
+    for (const key in UI_TABLE) out[key] = pick(lang, UI_TABLE[key]);
     out.optViewImmersive = out.optThoughtImmersive;
     out.optViewBilingual = out.optThoughtBilingual;
-    out.swarmSplitSub = (mainPct, subPct) =>
-      lang === 'zh-CN'
-        ? `主会话 ${mainPct}% · 子代理 ${subPct}%`
-        : lang === 'zh-TW'
-        ? `主工作階段 ${mainPct}% · 子代理 ${subPct}%`
-        : lang === 'ja'
-        ? `メイン ${mainPct}% · 子 ${subPct}%`
-        : lang === 'ko'
-        ? `메인 ${mainPct}% · 서브 ${subPct}%`
-        : lang === 'es'
-        ? `Principal ${mainPct}% · Sub ${subPct}%`
-        : lang === 'fr'
-        ? `Principal ${mainPct} % · Sous-agents ${subPct} %`
-        : lang === 'de'
-        ? `Haupt ${mainPct} % · Sub ${subPct} %`
-        : `Main ${mainPct}% · Swarm ${subPct}%`;
-    out.showMoreN = (n) =>
-      lang === 'zh-CN'
-        ? `再显示 ${n} 个`
-        : lang === 'zh-TW'
-        ? `再顯示 ${n} 個`
-        : lang === 'ja'
-        ? `さらに ${n} 件表示`
-        : lang === 'ko'
-        ? `${n}개 더 보기`
-        : lang === 'es'
-        ? `Mostrar ${n} más`
-        : lang === 'fr'
-        ? `Afficher ${n} de plus`
-        : lang === 'de'
-        ? `${n} weitere anzeigen`
-        : `Show ${n} more`;
+    out.swarmSplitSub = (m, s) => lang === 'zh-CN' ? `主会话 ${m}% · 子代理 ${s}%` : lang === 'zh-TW' ? `主工作階段 ${m}% · 子代理 ${s}%` : lang === 'ja' ? `メイン ${m}% · 子 ${s}%` : lang === 'ko' ? `메인 ${m}% · 서브 ${s}%` : lang === 'es' ? `Principal ${m}% · Sub ${s}%` : lang === 'fr' ? `Principal ${m} % · Sous-agents ${s} %` : lang === 'de' ? `Haupt ${m} % · Sub ${s} %` : lang === 'tr' ? `Ana ${m}% · Swarm ${s}%` : `Main ${m}% · Swarm ${s}%`;
+    out.showMoreN = (n) => lang === 'zh-CN' ? `再显示 ${n} 个` : lang === 'zh-TW' ? `再顯示 ${n} 個` : lang === 'ja' ? `さらに ${n} 件表示` : lang === 'ko' ? `${n}개 더 보기` : lang === 'es' ? `Mostrar ${n} más` : lang === 'fr' ? `Afficher ${n} de plus` : lang === 'de' ? `${n} weitere anzeigen` : lang === 'tr' ? `${n} tane daha göster` : `Show ${n} more`;
     return out;
   }
 

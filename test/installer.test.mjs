@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -34,6 +35,7 @@ function runExe(exePath, args, timeoutMs = 20000, customEnv = null) {
 }
 
 import { VALIDATORS, buildInstaller } from '../scripts/build-installer.mjs';
+import { collectNativePluginEntries } from '../scripts/build-common.mjs';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +43,13 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const cdp = require(path.join(ROOT_DIR, 'cdp.js'));
 const cliInstaller = require(path.join(ROOT_DIR, 'tools', 'install-plugin.cjs'));
+
+test('Native installer payload retains upstream license, notices, and citation', () => {
+  const entries = new Map(collectNativePluginEntries().map(({ name, data }) => [name, data]));
+  for (const file of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'CITATION.cff']) {
+    assert.deepEqual(entries.get('native-plugin/' + file), fs.readFileSync(path.join(ROOT_DIR, file)), file);
+  }
+});
 
 function createMockCdpServer(options = {}) {
   const extraTargets = Array.isArray(options.extraTargets) ? options.extraTargets : [];
@@ -139,6 +148,19 @@ function createMockCdpServer(options = {}) {
           },
         };
       } else if (expr.includes('const targetHash =') && expr.includes('__agPrismInlineDiff')) {
+        result = {
+          result: {
+            type: 'object',
+            value: { ok: true, status: 'mounted' },
+          },
+        };
+      } else if (
+        expr.includes('const targetHash =') &&
+        (expr.includes('__agPrismTelemetry') ||
+          expr.includes('__agPrismEffortSlider') ||
+          expr.includes('__agPrismHostEnhancer') ||
+          expr.includes('__agPrismContextMenu'))
+      ) {
         result = {
           result: {
             type: 'object',
@@ -398,7 +420,7 @@ test('installer manifest validators match inject.js, cdp.js, and config.example.
   assert.deepEqual(Object.keys(VALIDATORS).sort(), Object.keys(cdp.VALIDATORS).sort());
 
   const exampleCfg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'config.example.json'), 'utf8'));
-  assert.deepEqual(Object.keys(exampleCfg).sort(), Object.keys(cdp.VALIDATORS).sort());
+  assert.deepEqual(Object.keys(exampleCfg).sort(), Object.keys(cdp.DEFAULT_CONFIG).sort());
   for (const k of Object.keys(cdp.VALIDATORS)) {
     assert.ok(k in cdp.DEFAULT_CONFIG, `DEFAULT_CONFIG includes ${k}`);
     assert.ok(k in exampleCfg, `config.example.json includes ${k}`);
@@ -426,7 +448,11 @@ test('installer manifest validators match inject.js, cdp.js, and config.example.
   // Wave 2: 6 new settings + host-workbench-enhancer.js registration parity
   assert.deepEqual(VALIDATORS.accentTone, ['follow', 'cobalt', 'iris', 'amber', 'mono']);
   assert.deepEqual(VALIDATORS.cornerStyle, ['sharp', 'balanced', 'soft']);
-  assert.deepEqual(VALIDATORS.codeFont, ['default', 'jetbrains', 'cascadia', 'sfmono']);
+  assert.deepEqual(VALIDATORS.codeFont, ['default', 'jetbrains', 'cascadia', 'sfmono', 'custom']);
+  assert.equal(VALIDATORS.codeFontCustom, 'string');
+  assert.deepEqual(VALIDATORS.chatFont, ['default', 'system-sans', 'noto-sans', 'inter', 'harmony', 'custom']);
+  assert.equal(VALIDATORS.chatFontCustom, 'string');
+  assert.equal(VALIDATORS.ignoreReducedMotion, 'boolean');
   assert.equal(VALIDATORS.codeLigatures, 'boolean');
   assert.deepEqual(VALIDATORS.ambientIntensity, ['0', '35', '70', '100']);
   assert.deepEqual(VALIDATORS.thoughtView, ['immersive', 'bilingual']);
@@ -436,7 +462,7 @@ test('installer manifest validators match inject.js, cdp.js, and config.example.
   assert.equal(exampleCfg.codeLigatures, false);
   assert.equal(exampleCfg.ambientIntensity, '100');
   assert.equal(exampleCfg.thoughtView, 'immersive');
-  assert.ok(cdp.RUNTIME_PARTS.includes('host-workbench-enhancer.js'));
+  assert.ok(cdp.DEFERRED_ROOT_MODULES.includes('host-workbench-enhancer.js'));
   assert.ok(cdp.SYNC_ROOT_FILES.includes('host-workbench-enhancer.js'));
 });
 
@@ -517,6 +543,9 @@ test(
       assert.ok(fs.existsSync(path.join(installDir, 'vendor', 'effort-slider', 'slider-coexist.js')));
       assert.ok(fs.existsSync(path.join(installDir, 'vendor', 'thought-translator', 'thought-client.js')));
       assert.ok(fs.existsSync(path.join(installDir, 'vendor', 'thought-translator', 'thought-settings-ui.js')));
+      for (const chId of ['telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu']) {
+        assert.ok(fs.existsSync(path.join(installDir, 'runtime-channels', `${chId}.js`)), `installer.exe must deploy runtime-channels/${chId}.js`);
+      }
       assert.ok(fs.existsSync(path.join(installDir, '.watch.pid')));
 
       // Verify full 5-channel native Sidecar plugin directory deployed cleanly
@@ -1201,6 +1230,8 @@ test('Windows C# installer & Watcher Channel 5 contracts and cdp.js REMOVE_EXPRE
   assert.ok(cdpCs.includes('ResolveSafePluginFile'));
   assert.ok(cdpCs.includes('vendor/thought-translator/thought-client.js'));
   assert.ok(cdpCs.includes('vendor/thought-translator/thought-settings-ui.js'));
+  assert.ok(cdpCs.includes('vendor/thought-translator/tool-step-verbs.js'), 'C# BuildThoughtExpression must prepend optional tool-step-verbs.js');
+  assert.ok(cdpCs.includes('ruleStr == "string"') && cdpCs.includes('sv.Length <= 160'), 'C# ValidateConfigEntry must support string rule with <=160 char and control-char check');
 
   assert.ok(watcherCs.includes('public string ThoughtScriptId;'));
   assert.ok(watcherCs.includes('CdpHelper.ShouldEnableThought('));
@@ -2224,6 +2255,383 @@ test(
       try {
         fs.rmSync(workDir, { recursive: true, force: true });
       } catch {}
+    }
+  }
+);
+
+test('Phase 4A P0: C# CdpClient fixes bundleUnchanged/destroy() and static runtime-channels/*.js fallback compiles & packages cleanly', async () => {
+  const cdpCs = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'common', 'CdpClient.cs'), 'utf8');
+  const runtimeChannelsCs = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'common', 'RuntimeChannels.cs'), 'utf8');
+  const watcherCs = fs.readFileSync(path.join(ROOT_DIR, 'installer', 'watcher', 'Program.cs'), 'utf8');
+
+  // 1) bundleUnchanged must NOT require offloaded Ch13/Ch14 globals, and C# else branch must invoke existingPrism?.destroy?.()
+  const unchangedMatch = cdpCs.match(/const bundleUnchanged = Boolean\([\s\S]*?if \(bundleUnchanged\)[\s\S]*?\} else \{[\s\S]*?globalThis\.__agCsUiMain\(bootCfg\);/);
+  assert.ok(unchangedMatch, 'CdpClient.cs must contain bundleUnchanged block');
+  const unchangedBlock = unchangedMatch[0];
+  const condOnly = unchangedBlock.slice(0, unchangedBlock.indexOf('if (bundleUnchanged)'));
+  assert.equal(condOnly.includes('window.__agPrismTelemetry'), false, 'C# bundleUnchanged must not check offloaded __agPrismTelemetry');
+  assert.equal(condOnly.includes('window.__agPrismEffortSlider'), false, 'C# bundleUnchanged must not check offloaded __agPrismEffortSlider');
+  assert.ok(unchangedBlock.includes('existingPrism?.destroy?.()'), 'C# BuildInjectExpression else branch must destroy existingPrism before remount');
+
+  // 2) RuntimeChannels.cs must load precompiled runtime-channels/<id>.js with zero hand-assembled JS templates
+  assert.ok(runtimeChannelsCs.includes('runtime-channels/'), 'RuntimeChannels.cs must load precompiled runtime-channels/<id>.js');
+  assert.equal(runtimeChannelsCs.includes('(() =>'), false, 'RuntimeChannels.cs must not hand-assemble JS templates');
+  assert.equal(runtimeChannelsCs.includes('document.createElement'), false, 'RuntimeChannels.cs must not hand-assemble DOM JS');
+  assert.ok(watcherCs.includes('RuntimeChannelFallback.LoadEnabledExpressions'), 'Windows Watcher Program.cs must load precompiled runtime channels');
+
+  // 3) build-common static precompiled Ch13-Ch16 entries compile to valid JS and are tracked in install-manifest.json
+  const buildCommon = await import('../scripts/build-common.mjs');
+  const staticEntries = buildCommon.collectStaticRuntimeChannelEntries();
+  const expectedNames = [
+    'runtime-channels/telemetry.js',
+    'runtime-channels/effortSlider.js',
+    'runtime-channels/workbenchEnhancer.js',
+    'runtime-channels/contextMenu.js',
+  ];
+  assert.deepEqual(staticEntries.map((e) => e.name), expectedNames);
+  for (const ent of staticEntries) {
+    const code = ent.data.toString('utf8');
+    assert.ok(code.length > 500, `${ent.name} must contain non-trivial precompiled JS`);
+    assert.doesNotThrow(() => new vm.Script(code), `${ent.name} must be syntactically valid JS`);
+  }
+  const topEntries = buildCommon.collectOptionalOmniTopEntries();
+  const topNames = new Set(topEntries.map((e) => e.name));
+  for (const name of expectedNames) {
+    assert.equal(topNames.has(name), true, `collectOptionalOmniTopEntries must include ${name}`);
+  }
+  const { manifest } = buildCommon.createInstallManifestPayload({
+    version: cdp.PLUGIN_VERSION,
+    installEntries: topEntries,
+    pluginEntries: [],
+  });
+  const manifestPaths = new Set(manifest.files.map((f) => f.path));
+  for (const name of expectedNames) {
+    assert.equal(manifestPaths.has(name), true, `install-manifest.json must include ${name}`);
+  }
+
+  // 4) On Windows, compile RuntimeChannels.cs with csc /warnaserror and verify config-gated loading at runtime
+  if (process.platform === 'win32') {
+    const winDir = process.env.WINDIR || 'C:\\Windows';
+    const csc = [
+      path.join(winDir, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
+      path.join(winDir, 'Microsoft.NET', 'Framework', 'v4.0.30319', 'csc.exe'),
+    ].find((p) => fs.existsSync(p));
+    assert.ok(csc, 'Expected .NET Framework csc.exe on Windows');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-rtch-cs-'));
+    try {
+      const baseDir = path.join(tmpDir, 'base');
+      fs.mkdirSync(path.join(baseDir, 'runtime-channels'), { recursive: true });
+      for (const ent of staticEntries) {
+        fs.writeFileSync(path.join(baseDir, ...ent.name.split('/')), ent.data);
+      }
+      const probeCs = path.join(tmpDir, 'RtProbe.cs');
+      const probeExe = path.join(tmpDir, 'rt-probe.exe');
+      fs.writeFileSync(
+        probeCs,
+        [
+          'using System;',
+          'using System.Collections.Generic;',
+          'using AgyClaudeStyle;',
+          'class RtProbe {',
+          '  static void Main(string[] args) {',
+          '    string dir = args[0];',
+          '    var allOn = new Dictionary<string, object>(StringComparer.Ordinal);',
+          '    var loadedOn = RuntimeChannelFallback.LoadEnabledExpressions(dir, allOn);',
+          '    var allOff = new Dictionary<string, object>(StringComparer.Ordinal);',
+          '    allOff["telemetryModule"] = "off";',
+          '    allOff["effortSliderModule"] = "off";',
+          '    allOff["workbenchEnhancer"] = "off";',
+          '    allOff["contextMenu"] = false;',
+          '    var loadedOff = RuntimeChannelFallback.LoadEnabledExpressions(dir, allOff);',
+          '    var outObj = new Dictionary<string, object>(StringComparer.Ordinal);',
+          '    outObj["onCount"] = loadedOn.Count;',
+          '    outObj["offCount"] = loadedOff.Count;',
+          '    outObj["hasTel"] = loadedOn.ContainsKey("telemetry");',
+          '    outObj["hasEff"] = loadedOn.ContainsKey("effortSlider");',
+          '    outObj["hasWb"] = loadedOn.ContainsKey("workbenchEnhancer");',
+          '    outObj["hasCtx"] = loadedOn.ContainsKey("contextMenu");',
+          '    var man = new PluginManifest();',
+          '    man.Validators = new Dictionary<string, object>(StringComparer.Ordinal);',
+          '    man.Validators["chatFontCustom"] = "string";',
+          '    man.Validators["codeFontCustom"] = "string";',
+          '    outObj["strOk"] = CdpHelper.ValidateConfigEntry(man, "chatFontCustom", "LXGW WenKai, Inter");',
+          '    outObj["strMax"] = CdpHelper.ValidateConfigEntry(man, "codeFontCustom", new string(\'A\', 160));',
+          '    outObj["strTooLong"] = CdpHelper.ValidateConfigEntry(man, "chatFontCustom", new string(\'A\', 161));',
+          '    outObj["strNl"] = CdpHelper.ValidateConfigEntry(man, "chatFontCustom", "Bad\\nFont");',
+          '    outObj["strCr"] = CdpHelper.ValidateConfigEntry(man, "chatFontCustom", "Bad\\rFont");',
+          '    outObj["strNul"] = CdpHelper.ValidateConfigEntry(man, "chatFontCustom", "Bad\\0Font");',
+          '    outObj["strNonStr"] = CdpHelper.ValidateConfigEntry(man, "chatFontCustom", 123);',
+          '    string thDir = System.IO.Path.Combine(dir, "vendor", "thought-translator");',
+          '    System.IO.Directory.CreateDirectory(thDir);',
+          '    System.IO.File.WriteAllText(System.IO.Path.Combine(thDir, "thought-client.js"), "window.__tClient=1;");',
+          '    System.IO.File.WriteAllText(System.IO.Path.Combine(thDir, "thought-settings-ui.js"), "window.__tUi=1;");',
+          '    var thCfg = new Dictionary<string, object>(StringComparer.Ordinal);',
+          '    thCfg["thoughtTranslate"] = "ai";',
+          '    string exprNoVerbs = CdpHelper.BuildThoughtExpression(dir, thCfg);',
+          '    System.IO.File.WriteAllText(System.IO.Path.Combine(thDir, "tool-step-verbs.js"), "window.__agPrismToolStepVerbs=1;");',
+          '    string exprWithVerbs = CdpHelper.BuildThoughtExpression(dir, thCfg);',
+          '    outObj["thNoVerbsOk"] = exprNoVerbs.Contains("window.__tClient=1;") && !exprNoVerbs.Contains("__agPrismToolStepVerbs");',
+          '    outObj["thWithVerbsOrder"] = exprWithVerbs.IndexOf("__agPrismToolStepVerbs") >= 0 && exprWithVerbs.IndexOf("__agPrismToolStepVerbs") < exprWithVerbs.IndexOf("window.__tClient=1;");',
+          '    outObj["thHashChanged"] = exprNoVerbs != exprWithVerbs;',
+          '    Console.Write(MiniJson.Stringify(outObj, false));',
+          '  }',
+          '}',
+        ].join('\n'),
+        'utf8'
+      );
+      execFileSync(
+        csc,
+        [
+          '/nologo',
+          '/utf8output',
+          '/codepage:65001',
+          '/warnaserror',
+          '/target:exe',
+          `/out:${probeExe}`,
+          '/r:System.dll',
+          '/r:System.Core.dll',
+          '/r:System.Drawing.dll',
+          '/r:System.Net.Http.dll',
+          '/r:System.Windows.Forms.dll',
+          path.join(ROOT_DIR, 'installer', 'common', 'MiniJson.cs'),
+          path.join(ROOT_DIR, 'installer', 'common', 'CdpClient.cs'),
+          path.join(ROOT_DIR, 'installer', 'common', 'RuntimeChannels.cs'),
+          probeCs,
+        ],
+        { stdio: 'pipe' }
+      );
+      const parsed = JSON.parse(execFileSync(probeExe, [baseDir], { encoding: 'utf8' }));
+      assert.equal(parsed.onCount, 4);
+      assert.equal(parsed.offCount, 0);
+      assert.equal(parsed.hasTel, true);
+      assert.equal(parsed.hasEff, true);
+      assert.equal(parsed.hasWb, true);
+      assert.equal(parsed.hasCtx, true);
+      assert.equal(parsed.strOk, true);
+      assert.equal(parsed.strMax, true);
+      assert.equal(parsed.strTooLong, false);
+      assert.equal(parsed.strNl, false);
+      assert.equal(parsed.strCr, false);
+      assert.equal(parsed.strNul, false);
+      assert.equal(parsed.strNonStr, false);
+      assert.equal(parsed.thNoVerbsOk, true);
+      assert.equal(parsed.thWithVerbsOrder, true);
+      assert.equal(parsed.thHashChanged, true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test(
+  'Windows C# CdpClient 55-key schema runtime parity: defaults, validators, deserialization tolerance & zero silent key drop',
+  { skip: process.platform !== 'win32' ? 'Windows-only csc runtime verification' : false },
+  () => {
+    const winDir = process.env.WINDIR || 'C:\\Windows';
+    const csc = [
+      path.join(winDir, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
+      path.join(winDir, 'Microsoft.NET', 'Framework', 'v4.0.30319', 'csc.exe'),
+    ].find((p) => fs.existsSync(p));
+    assert.ok(csc, 'Expected .NET Framework csc.exe on Windows');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-cs-schema55-'));
+    try {
+      const cfgDir = path.join(tmpDir, 'plugin');
+      fs.mkdirSync(cfgDir, { recursive: true });
+
+      // Simulate legacy manifest.json missing all 26 newly added keys
+      fs.writeFileSync(
+        path.join(cfgDir, 'manifest.json'),
+        JSON.stringify({
+          version: cdp.PLUGIN_VERSION,
+          styleId: cdp.STYLE_ID,
+          settingBinding: cdp.SETTING_BINDING,
+          parts: ['ui-runtime.js'],
+          defaultConfig: { palette: 'obsidian', language: 'auto' },
+          validators: { palette: ['host', 'obsidian', 'warm', 'claude'] },
+        }),
+        'utf8'
+      );
+
+      // Config with legacy aliases, invalid/null values for tolerance test, optional keys & unknown future key
+      fs.writeFileSync(
+        path.join(cfgDir, 'config.json'),
+        JSON.stringify({
+          lang: 'yue',
+          palette: 'claude',
+          performanceMode: 'eco',
+          ignoreReducedMotion: 'on',
+          sidebarCompact: 'not-on',
+          autoArchiveOnExit: 'true',
+          effortMemory: false,
+          periodicModelPicker: true,
+          mascot: 'r:c1,k1+m',
+          chatFontCustom: 'Inter\r\nBad\0Name',
+          codeFontCustom: 12345,
+          telemetryQuotaMode: null,
+          targetFps: '999',
+          pollIntervalMs: 'not-a-number',
+          autoPromptCdpRelaunch: 'on',
+          autoRelaunchOnBareLaunch: false,
+          customFutureKey: 'preserve-me',
+        }),
+        'utf8'
+      );
+
+      const probeCs = path.join(tmpDir, 'SchemaProbe.cs');
+      const probeExe = path.join(tmpDir, 'schema-probe.exe');
+      fs.writeFileSync(
+        probeCs,
+        [
+          'using System;',
+          'using System.Collections.Generic;',
+          'using System.IO;',
+          'using AgyClaudeStyle;',
+          'class SchemaProbe {',
+          '  static void Main(string[] args) {',
+          '    string dir = args[0];',
+          '    var m = PluginManifest.Load(dir);',
+          '    var defaults = CdpHelper.CreateDefaultConfig();',
+          '    var validators = CdpHelper.CreateDefaultValidators();',
+          '    var readBefore = CdpHelper.ReadConfig(dir, m);',
+          '    var valChecks = new Dictionary<string, object>(StringComparer.Ordinal) {',
+          '      { "quotaCompact", CdpHelper.ValidateConfigEntry(m, "telemetryQuotaMode", "compact") },',
+          '      { "quotaBoth", CdpHelper.ValidateConfigEntry(m, "telemetryQuotaMode", "both") },',
+          '      { "quotaBad", CdpHelper.ValidateConfigEntry(m, "telemetryQuotaMode", "full") },',
+          '      { "fps180", CdpHelper.ValidateConfigEntry(m, "targetFps", "180") },',
+          '      { "fpsNative", CdpHelper.ValidateConfigEntry(m, "targetFps", "native") },',
+          '      { "fpsNumBad", CdpHelper.ValidateConfigEntry(m, "targetFps", 180) },',
+          '      { "perfEco", CdpHelper.ValidateConfigEntry(m, "performanceMode", "eco") },',
+          '      { "pollOkMin", CdpHelper.ValidateConfigEntry(m, "pollIntervalMs", 500) },',
+          '      { "pollOkMax", CdpHelper.ValidateConfigEntry(m, "pollIntervalMs", 60000) },',
+          '      { "pollLow", CdpHelper.ValidateConfigEntry(m, "pollIntervalMs", 499) },',
+          '      { "pollHigh", CdpHelper.ValidateConfigEntry(m, "pollIntervalMs", 60001) },',
+          '      { "pollFloat", CdpHelper.ValidateConfigEntry(m, "pollIntervalMs", 2500.5) },',
+          '      { "pollStr", CdpHelper.ValidateConfigEntry(m, "pollIntervalMs", "2500") },',
+          '      { "optPromptTrue", CdpHelper.ValidateConfigEntry(m, "autoPromptCdpRelaunch", true) },',
+          '      { "optPromptStr", CdpHelper.ValidateConfigEntry(m, "autoPromptCdpRelaunch", "on") },',
+          '      { "optBareFalse", CdpHelper.ValidateConfigEntry(m, "autoRelaunchOnBareLaunch", false) },',
+          '      { "optBareStr", CdpHelper.ValidateConfigEntry(m, "autoRelaunchOnBareLaunch", "off") },',
+          '      { "mascotRosterOk", CdpHelper.ValidateConfigEntry(m, "mascot", "r:c1,d1+m") },',
+          '      { "mascotRosterOver", CdpHelper.ValidateConfigEntry(m, "mascot", "r:c4,k3") },',
+          '      { "mascotRosterDup", CdpHelper.ValidateConfigEntry(m, "mascot", "r:c1,c1") },',
+          '      { "unknownKey", CdpHelper.ValidateConfigEntry(m, "totallyUnknownKey", "x") }',
+          '    };',
+          '    var patch = new Dictionary<string, object>(StringComparer.Ordinal) {',
+          '      { "telemetryQuotaMode", "both" },',
+          '      { "lightPreset", "alabaster" },',
+          '      { "darkAuraStyle", "neon" },',
+          '      { "performanceMode", "auto" },',
+          '      { "pollIntervalMs", 4000 },',
+          '      { "autoPromptCdpRelaunch", false },',
+          '      { "mascot", "r:c1,d1+m" },',
+          '      { "invalidIgnored", "nope" }',
+          '    };',
+          '    bool updated = CdpHelper.UpdateConfigBatch(dir, m, patch);',
+          '    var persisted = MiniJson.ParseObject(File.ReadAllText(Path.Combine(dir, "config.json"), System.Text.Encoding.UTF8));',
+          '    var outObj = new Dictionary<string, object>(StringComparer.Ordinal) {',
+          '      { "defaults", defaults },',
+          '      { "validators", validators },',
+          '      { "manifestDefaultCount", m.DefaultConfig.Count },',
+          '      { "manifestValidatorCount", m.Validators.Count },',
+          '      { "readBefore", readBefore },',
+          '      { "valChecks", valChecks },',
+          '      { "updated", updated },',
+          '      { "persisted", persisted }',
+          '    };',
+          '    Console.Write(MiniJson.Stringify(outObj, false));',
+          '  }',
+          '}',
+        ].join('\n'),
+        'utf8'
+      );
+
+      execFileSync(
+        csc,
+        [
+          '/nologo',
+          '/utf8output',
+          '/codepage:65001',
+          '/warnaserror',
+          '/target:exe',
+          `/out:${probeExe}`,
+          '/r:System.dll',
+          '/r:System.Core.dll',
+          '/r:System.Net.Http.dll',
+          path.join(ROOT_DIR, 'installer', 'common', 'MiniJson.cs'),
+          path.join(ROOT_DIR, 'installer', 'common', 'CdpClient.cs'),
+          probeCs,
+        ],
+        { stdio: 'pipe' }
+      );
+
+      const res = JSON.parse(execFileSync(probeExe, [cfgDir], { encoding: 'utf8' }));
+      assert.deepEqual(res.defaults, cdp.DEFAULT_CONFIG, 'C# CreateDefaultConfig() must match DEFAULT_CONFIG 100%');
+      assert.deepEqual(res.validators, cdp.VALIDATORS, 'C# CreateDefaultValidators() must match VALIDATORS 100%');
+      assert.equal(res.manifestDefaultCount, Object.keys(cdp.DEFAULT_CONFIG).length);
+      assert.equal(res.manifestValidatorCount, Object.keys(cdp.VALIDATORS).length);
+
+      // Reconcile & tolerance checks on readBefore
+      assert.equal(res.readBefore.language, 'zh-CN');
+      assert.equal(res.readBefore.lang, 'zh-CN');
+      assert.equal(res.readBefore.palette, 'warm');
+      assert.equal(res.readBefore.performanceMode, 'performance');
+      assert.equal(res.readBefore.ignoreReducedMotion, true);
+      assert.equal(res.readBefore.sidebarCompact, false);
+      assert.equal(res.readBefore.autoArchiveOnExit, true);
+      assert.equal(res.readBefore.effortMemory, 'off');
+      assert.equal(res.readBefore.periodicModelPicker, 'on');
+      assert.equal(res.readBefore.mascot, 'minis');
+      assert.equal(res.readBefore.chatFontCustom, 'InterBadName');
+      assert.equal(res.readBefore.codeFontCustom, '');
+      assert.equal(res.readBefore.telemetryQuotaMode, 'compact');
+      assert.equal(res.readBefore.targetFps, '180');
+      assert.equal(res.readBefore.pollIntervalMs, 2500);
+      assert.equal(Object.prototype.hasOwnProperty.call(res.readBefore, 'autoPromptCdpRelaunch'), false, 'C# ReadConfig must reject string value for strictBoolean autoPromptCdpRelaunch');
+      assert.equal(res.readBefore.autoRelaunchOnBareLaunch, false);
+      assert.equal(res.readBefore.customFutureKey, 'preserve-me');
+
+      // ValidateConfigEntry parity
+      assert.equal(res.valChecks.quotaCompact, true);
+      assert.equal(res.valChecks.quotaBoth, true);
+      assert.equal(res.valChecks.quotaBad, false);
+      assert.equal(res.valChecks.fps180, true);
+      assert.equal(res.valChecks.fpsNative, true);
+      assert.equal(res.valChecks.fpsNumBad, false);
+      assert.equal(res.valChecks.perfEco, true);
+      assert.equal(res.valChecks.pollOkMin, true);
+      assert.equal(res.valChecks.pollOkMax, true);
+      assert.equal(res.valChecks.pollLow, false);
+      assert.equal(res.valChecks.pollHigh, false);
+      assert.equal(res.valChecks.pollFloat, false);
+      assert.equal(res.valChecks.pollStr, false);
+      assert.equal(res.valChecks.optPromptTrue, true);
+      assert.equal(res.valChecks.optPromptStr, false);
+      assert.equal(res.valChecks.optBareFalse, true);
+      assert.equal(res.valChecks.optBareStr, false);
+      assert.equal(res.valChecks.mascotRosterOk, true);
+      assert.equal(res.valChecks.mascotRosterOver, false);
+      assert.equal(res.valChecks.mascotRosterDup, false);
+      assert.equal(res.valChecks.unknownKey, false);
+
+      // UpdateConfigBatch persists all 52 non-optional keys + set optional keys with zero silent drop
+      assert.equal(res.updated, true);
+      for (const k of Object.keys(cdp.DEFAULT_CONFIG)) {
+        assert.ok(Object.prototype.hasOwnProperty.call(res.persisted, k), `Persisted config.json silently dropped key "${k}"`);
+      }
+      assert.equal(res.persisted.telemetryQuotaMode, 'both');
+      assert.equal(res.persisted.lightPreset, 'alabaster');
+      assert.equal(res.persisted.darkAuraStyle, 'neon');
+      assert.equal(res.persisted.performanceMode, 'balanced');
+      assert.equal(res.persisted.pollIntervalMs, 4000);
+      assert.equal(res.persisted.autoPromptCdpRelaunch, false);
+      assert.equal(res.persisted.autoRelaunchOnBareLaunch, false);
+      assert.equal(res.persisted.mascot, 'r:c1,d1+m');
+      assert.equal(res.persisted.customFutureKey, 'preserve-me');
+      assert.equal(Object.prototype.hasOwnProperty.call(res.persisted, 'invalidIgnored'), false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   }
 );

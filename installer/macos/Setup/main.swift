@@ -13,6 +13,7 @@ final class InstallerOptions {
     var noKillLegacy = false
     var noNativeDaemon = false
     var noRelaunchPrompt = false
+    var noAutoRelaunch = false
     var purgeData = false
     var createLauncher = true
     var explicitLauncherFlag = false
@@ -489,31 +490,21 @@ enum InstallerCore {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
-    static func registerLaunchAgent(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, lang: String? = nil) throws {
+    static func registerLaunchAgent(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, noAutoRelaunch: Bool = false, lang: String? = nil) throws {
         let plistPath = getLaunchAgentPlistPath()
         let launchAgentsDir = (plistPath as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: launchAgentsDir, withIntermediateDirectories: true, attributes: nil)
 
         let watcherExe = (installDir as NSString).appendingPathComponent(watcherExeName)
-        var args = [watcherExe, "--watch", "--dir", installDir]
-        if !pluginDir.isEmpty {
-            args.append("--plugin-dir")
-            args.append(pluginDir)
-        }
-        if let port = cdpPort, port > 0 {
-            args.append("--cdp-port")
-            args.append(String(port))
-        }
-        if noNativeDaemon {
-            args.append("--no-native-daemon")
-        }
-        if noRelaunchPrompt {
-            args.append("--no-relaunch-prompt")
-        }
-        if let explicitLang = InstallerI18n.normalizeLangCode(lang) {
-            args.append("--lang")
-            args.append(explicitLang)
-        }
+        let args = [watcherExe] + CdpHelper.buildWatcherWatchArgs(
+            installDir: installDir,
+            pluginDir: pluginDir,
+            cdpPort: cdpPort,
+            noNativeDaemon: noNativeDaemon,
+            noRelaunchPrompt: noRelaunchPrompt,
+            noAutoRelaunch: noAutoRelaunch,
+            lang: lang
+        )
         let argsXml = args.map { "    <string>\(xmlEscape($0))</string>" }.joined(separator: "\n")
         let outLog = (installDir as NSString).appendingPathComponent("launchd.out.log")
         let errLog = (installDir as NSString).appendingPathComponent("launchd.err.log")
@@ -531,6 +522,10 @@ enum InstallerCore {
           </array>
           <key>WorkingDirectory</key>
           <string>\(xmlEscape(installDir))</string>
+          <key>LimitLoadToSessionType</key>
+          <string>Aqua</string>
+          <key>ProcessType</key>
+          <string>Background</string>
           <key>RunAtLoad</key>
           <true/>
           <key>KeepAlive</key>
@@ -552,27 +547,17 @@ enum InstallerCore {
         }
     }
 
-    private static func spawnWatcherDirectly(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, lang: String? = nil) throws {
+    private static func spawnWatcherDirectly(installDir: String, pluginDir: String, cdpPort: Int?, noNativeDaemon: Bool = false, noRelaunchPrompt: Bool = false, noAutoRelaunch: Bool = false, lang: String? = nil) throws {
         let watcherExe = (installDir as NSString).appendingPathComponent(watcherExeName)
-        var args = ["--watch", "--dir", installDir]
-        if !pluginDir.isEmpty {
-            args.append("--plugin-dir")
-            args.append(pluginDir)
-        }
-        if let port = cdpPort, port > 0 {
-            args.append("--cdp-port")
-            args.append(String(port))
-        }
-        if noNativeDaemon {
-            args.append("--no-native-daemon")
-        }
-        if noRelaunchPrompt {
-            args.append("--no-relaunch-prompt")
-        }
-        if let explicitLang = InstallerI18n.normalizeLangCode(lang) {
-            args.append("--lang")
-            args.append(explicitLang)
-        }
+        let args = CdpHelper.buildWatcherWatchArgs(
+            installDir: installDir,
+            pluginDir: pluginDir,
+            cdpPort: cdpPort,
+            noNativeDaemon: noNativeDaemon,
+            noRelaunchPrompt: noRelaunchPrompt,
+            noAutoRelaunch: noAutoRelaunch,
+            lang: lang
+        )
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: watcherExe)
         proc.arguments = args
@@ -720,50 +705,23 @@ enum InstallerCore {
         }
     }
 
-    private static func copyNativePluginAssets(from srcRoot: String, to pluginDir: String, preserveConfig: Bool) throws {
+    private static func copyNativePluginAssets(from srcRoot: String, to pluginDir: String, preserveConfig: Bool, relPrefix: String = "", protectedPaths: [String] = InstallManifestHelper.defaultProtectedUserPaths) throws {
         let fm = FileManager.default
-        if isSymbolicLink(pluginDir) {
-            throw CdpError(InstallerI18n.tr(
-                "检测到插件目录为符号链接，已拒绝写入: \(pluginDir)",
-                "Plugin directory is a symbolic link; write refused: \(pluginDir)"
-            ))
-        }
-        if fm.fileExists(atPath: pluginDir) {
-            clearReadOnlyPermissionsNoSymlink(pluginDir)
-        }
+        if isSymbolicLink(pluginDir) { throw CdpError(InstallerI18n.tr("检测到插件目录为符号链接，已拒绝写入: \(pluginDir)", "Plugin directory is a symbolic link; write refused: \(pluginDir)")) }
+        if fm.fileExists(atPath: pluginDir) { clearReadOnlyPermissionsNoSymlink(pluginDir) }
         try fm.createDirectory(atPath: pluginDir, withIntermediateDirectories: true, attributes: nil)
-        let entries = try fm.contentsOfDirectory(atPath: srcRoot)
-        let skipNames: Set<String> = [
-            ".git", ".DS_Store", "__pycache__", ".daemon.pid", ".watch.pid", ".watch.lock",
-            "node_modules", "installer", "scripts", "test", "tools",
-            "Obsidian Prism.app", "Obsidian-Prism-macOS-universal.dmg", "installer.exe",
-        ]
-        for name in entries {
-            if skipNames.contains(name) || name.hasSuffix(".log") || name.hasSuffix(".tmp") { continue }
+        for name in try fm.contentsOfDirectory(atPath: srcRoot) {
+            let rel = relPrefix.isEmpty ? name : "\(relPrefix)/\(name)"
+            if InstallManifestHelper.shouldSkipNativeAsset(name, relPath: rel) { continue }
             let src = (srcRoot as NSString).appendingPathComponent(name)
             let dest = (pluginDir as NSString).appendingPathComponent(name)
-            if isSymbolicLink(src) {
-                throw CdpError(InstallerI18n.tr(
-                    "检测到插件源条目为符号链接，已拒绝部署: \(src)",
-                    "Plugin source entry is a symbolic link; deployment refused: \(src)"
-                ))
-            }
-            if isSymbolicLink(dest) {
-                throw CdpError(InstallerI18n.tr(
-                    "检测到插件目标路径为符号链接，已拒绝覆盖: \(dest)",
-                    "Plugin target path is a symbolic link; overwrite refused: \(dest)"
-                ))
-            }
+            if isSymbolicLink(src) { throw CdpError(InstallerI18n.tr("检测到插件源条目为符号链接，已拒绝部署: \(src)", "Plugin source entry is a symbolic link; deployment refused: \(src)")) }
+            if isSymbolicLink(dest) { throw CdpError(InstallerI18n.tr("检测到插件目标路径为符号链接，已拒绝覆盖: \(dest)", "Plugin target path is a symbolic link; overwrite refused: \(dest)")) }
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: src, isDirectory: &isDir) else { continue }
-            if !isDir.boolValue && name.caseInsensitiveCompare("config.json") == .orderedSame && preserveConfig && fm.fileExists(atPath: dest) {
-                continue
-            }
-            if isDir.boolValue {
-                try copyNativePluginAssets(from: src, to: dest, preserveConfig: false)
-            } else {
-                try copyItemSafelyWithRetry(from: src, to: dest)
-            }
+            if preserveConfig && fm.fileExists(atPath: dest) && InstallManifestHelper.isProtectedUserPath(rel, manifestProtectedPaths: protectedPaths) { continue }
+            if isDir.boolValue { try copyNativePluginAssets(from: src, to: dest, preserveConfig: preserveConfig, relPrefix: rel, protectedPaths: protectedPaths) }
+            else { try copyItemSafelyWithRetry(from: src, to: dest) }
         }
     }
 
@@ -972,7 +930,7 @@ enum InstallerCore {
     }
 
     static func generateLauncherInfoPlist(version: String) -> String {
-        let safeShort = xmlEscape(version.isEmpty ? "1.0.8-beta.3" : version)
+        let safeShort = xmlEscape(version.isEmpty ? "1.0.8-beta.4" : version)
         let numericParts = version.split(separator: "-").first.map(String.init) ?? "1.0.8"
         let safeBundleVer = xmlEscape(numericParts.isEmpty ? "1.0.8" : numericParts)
         return """
@@ -1471,33 +1429,27 @@ enum InstallerCore {
 
             currentStep = "extract-payload"
             var preservedConfig = false
-            let payloadEntries = try fm.contentsOfDirectory(atPath: payloadDir)
-            for name in payloadEntries {
+            let installM = InstallManifestHelper.loadFromDir(payloadDir)
+            for name in try fm.contentsOfDirectory(atPath: payloadDir) {
                 if name.hasPrefix(".") || name == "native-plugin" { continue }
                 let src = (payloadDir as NSString).appendingPathComponent(name)
                 let dest = (installDir as NSString).appendingPathComponent(name)
                 currentTargetPath = dest
                 var isDir: ObjCBool = false
                 guard fm.fileExists(atPath: src, isDirectory: &isDir) else { continue }
-
-                if !isDir.boolValue && name.caseInsensitiveCompare("config.json") == .orderedSame && fm.fileExists(atPath: dest) {
-                    preservedConfig = true
-                    continue
-                }
+                if InstallManifestHelper.shouldSkipProtectedPayloadItem(name, dest: dest, isDir: isDir.boolValue, manifest: installM, preservedConfig: &preservedConfig) { continue }
                 try copyItemSafelyWithRetry(from: src, to: dest)
             }
+            InstallManifestHelper.cleanupObsoletePaths(in: installDir, manifest: installM, isSymbolicLink: isSymbolicLink, hasSymbolicLinkInChain: hasSymbolicLinkInChain)
 
             if !pluginDir.isEmpty {
                 currentTargetPath = pluginDir
-                if let nativeSrc = resolveNativePluginSourceDir(payloadDir: payloadDir) {
-                    try copyNativePluginAssets(from: nativeSrc, to: pluginDir, preserveConfig: true)
-                } else {
-                    try copyNativePluginAssets(from: payloadDir, to: pluginDir, preserveConfig: true)
-                }
-                if fm.fileExists(atPath: installCfgPath) && !pluginCfgPath.isEmpty {
-                    if hadInstallCfg || !fm.fileExists(atPath: pluginCfgPath) {
-                        try? copyItemSafelyWithRetry(from: installCfgPath, to: pluginCfgPath)
-                    }
+                let nativeSrc = resolveNativePluginSourceDir(payloadDir: payloadDir) ?? payloadDir
+                let pluginM = InstallManifestHelper.loadFromDir(nativeSrc)
+                try copyNativePluginAssets(from: nativeSrc, to: pluginDir, preserveConfig: true, protectedPaths: pluginM.protectedUserPaths)
+                InstallManifestHelper.cleanupObsoletePaths(in: pluginDir, manifest: pluginM, isSymbolicLink: isSymbolicLink, hasSymbolicLinkInChain: hasSymbolicLinkInChain)
+                if fm.fileExists(atPath: installCfgPath) && !pluginCfgPath.isEmpty && (hadInstallCfg || !fm.fileExists(atPath: pluginCfgPath)) {
+                    try? copyItemSafelyWithRetry(from: installCfgPath, to: pluginCfgPath)
                 }
             }
             result.nativePluginDeployed = !pluginDir.isEmpty && fm.fileExists(atPath: (pluginDir as NSString).appendingPathComponent("plugin.json"))
@@ -1607,6 +1559,7 @@ enum InstallerCore {
                         cdpPort: opts.cdpPort,
                         noNativeDaemon: opts.noNativeDaemon,
                         noRelaunchPrompt: opts.noRelaunchPrompt,
+                        noAutoRelaunch: opts.noAutoRelaunch,
                         lang: opts.lang
                     )
                     Thread.sleep(forTimeInterval: 0.25)
@@ -1646,6 +1599,7 @@ enum InstallerCore {
                             cdpPort: opts.cdpPort,
                             noNativeDaemon: opts.noNativeDaemon,
                             noRelaunchPrompt: opts.noRelaunchPrompt,
+                            noAutoRelaunch: opts.noAutoRelaunch,
                             lang: opts.lang
                         )
                         spawned = true
@@ -2342,11 +2296,8 @@ enum InstallerCore {
             _ = CdpHelper.syncHostPluginRegistry(pluginDir: pluginDir, enable: false)
         }
         if !pluginDir.isEmpty && FileManager.default.fileExists(atPath: pluginDir) && !isSymbolicLink(pluginDir) {
-            report(78, InstallerI18n.tr(
-                "正在清理本地插件目录: \(pluginDir)",
-                "Removing local plugin directory: \(pluginDir)"
-            ))
-            try? FileManager.default.removeItem(atPath: pluginDir)
+            report(78, InstallerI18n.tr("正在清理本地插件目录: \(pluginDir)", "Removing local plugin directory: \(pluginDir)"))
+            InstallManifestHelper.uninstallDirPreservingUserAssets(pluginDir, purgeData: opts.purgeData, isSymbolicLink: isSymbolicLink)
         }
 
         if shouldManageHostLauncher(opts: opts, installDir: installDir) {
@@ -3064,6 +3015,8 @@ func parseInstallerArgs(_ args: [String]) -> InstallerOptions {
         else if a == "--no-kill-legacy" { opts.noKillLegacy = true }
         else if a == "--no-native-daemon" { opts.noNativeDaemon = true }
         else if a == "--no-relaunch-prompt" { opts.noRelaunchPrompt = true }
+        else if a == "--auto-relaunch" { opts.noAutoRelaunch = false }
+        else if a == "--no-auto-relaunch" { opts.noAutoRelaunch = true }
         else if a == "--purge-data" { opts.purgeData = true }
         else if a == "--create-launcher" {
             opts.createLauncher = true
