@@ -79,13 +79,8 @@ extension CdpHelper {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-p", String(pid), "-o", "args="]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
+            let data = try CdpHelper.readProcessOutput(proc)
             guard proc.terminationStatus == 0 else { return nil }
             let trimmed = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return trimmed.isEmpty ? nil : trimmed
@@ -99,13 +94,8 @@ extension CdpHelper {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-p", String(pid), "-o", "etime="]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
+            let data = try CdpHelper.readProcessOutput(proc)
             guard proc.terminationStatus == 0,
                   let out = String(data: data, encoding: .utf8) else { return nil }
             let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)

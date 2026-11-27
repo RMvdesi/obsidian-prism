@@ -1285,3 +1285,48 @@ test('macOS Cold-start event-driven Launch Guard (default-on with opt-out): Laun
     'CdpClient.swift buildThoughtExpression must safely prepend optional tool-step-verbs.js before thought-client.js'
   );
 });
+
+test('macOS Watcher process queries release their pipe descriptors', { skip: process.platform !== 'darwin' }, (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-pipe-test-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const common = path.join(ROOT_DIR, 'installer/macos/Common');
+  const sources = ['MiniJson', 'CdpClient', 'LaunchGuard', 'RuntimeChannels']
+    .map(name => path.join(common, name + '.swift'));
+  const driver = path.join(dir, 'main.swift');
+  const binary = path.join(dir, 'probe');
+  fs.writeFileSync(driver, `
+import Foundation
+import Darwin
+
+func pipeCount() throws -> Int {
+    let descriptors = try FileManager.default.contentsOfDirectory(atPath: "/dev/fd")
+    var info = stat()
+    return descriptors.compactMap(Int32.init).filter { fd in
+        fstat(fd, &info) == 0 && (info.st_mode & S_IFMT) == S_IFIFO
+    }.count
+}
+
+func query() {
+    let missing = Process()
+    missing.executableURL = URL(fileURLWithPath: "/dev/null/missing")
+    precondition((try? CdpHelper.readProcessOutput(missing)) == nil)
+    _ = CdpHelper.isExpectedDaemonProcess(pid: getpid())
+    _ = CdpHelper.listRunningAppFamilyPids(appPath: "/Applications/Antigravity.app")
+}
+
+let seq = Process()
+seq.executableURL = URL(fileURLWithPath: "/usr/bin/seq")
+seq.arguments = ["1", "20000"]
+let output = try CdpHelper.readProcessOutput(seq)
+precondition(output.count > 65536 && seq.terminationStatus == 0)
+
+query() // Warm up Foundation before measuring steady-state usage.
+let before = try pipeCount()
+for _ in 0..<8 { query() }
+print(before, try pipeCount())
+`);
+  execFileSync('xcrun', ['swiftc', '-swift-version', '5', ...sources, driver, '-o', binary]);
+  const counts = execFileSync(binary, { encoding: 'utf8', timeout: 15000 }).trim();
+  const [before, after] = counts.split(/\s+/).map(Number);
+  assert.equal(after, before, 'open pipe descriptors before and after repeated queries: ' + counts);
+});

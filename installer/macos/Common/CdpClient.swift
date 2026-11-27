@@ -929,17 +929,29 @@ enum CdpHelper {
         return nil
     }
 
+    static func readProcessOutput(_ process: Process) throws -> Data {
+        try autoreleasepool {
+            let output = Pipe()
+            defer {
+                try? output.fileHandleForReading.close()
+                try? output.fileHandleForWriting.close()
+            }
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            // Drain stdout before waiting: a process listing can exceed the pipe capacity.
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return data
+        }
+    }
+
     private static func runPsQuery(pid: Int32, format: String) -> String {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-p", "\(pid)", "-o", format]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = Pipe()
         do {
-            try proc.run()
-            proc.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let data = try CdpHelper.readProcessOutput(proc)
             return String(data: data, encoding: .utf8) ?? ""
         } catch {
             return ""
@@ -1447,13 +1459,8 @@ enum CdpHelper {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-ax", "-o", "pid=,etime=,command="]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
+            let data = try CdpHelper.readProcessOutput(proc)
             guard let out = String(data: data, encoding: .utf8) else { return nil }
             let nowMs = nowEpochMs()
             var candidate: BareHostAppInfo?
@@ -1626,13 +1633,8 @@ enum CdpHelper {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-ax", "-o", "pid=,command="]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
+            let data = try CdpHelper.readProcessOutput(proc)
             if let out = String(data: data, encoding: .utf8) {
                 for rawLine in out.components(separatedBy: CharacterSet.newlines) {
                     let line = rawLine.trimmingCharacters(in: .whitespaces)
@@ -1665,13 +1667,8 @@ enum CdpHelper {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-ax", "-o", "pid=,command="]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
+            let data = try CdpHelper.readProcessOutput(proc)
             guard let out = String(data: data, encoding: .utf8) else { return nil }
             for rawLine in out.components(separatedBy: CharacterSet.newlines) {
                 let line = rawLine.trimmingCharacters(in: .whitespaces)
@@ -1712,13 +1709,8 @@ enum CdpHelper {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         proc.arguments = ["-e", script]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
+            let data = try CdpHelper.readProcessOutput(proc)
             if proc.terminationStatus != 0 { return false }
             let out = String(data: data, encoding: .utf8) ?? ""
             return out.contains(relaunchBtn)
