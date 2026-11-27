@@ -369,7 +369,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     assert.equal(sec.getAttribute('data-agy-no-translate'), 'true');
     assert.equal(sec.getAttribute('data-antigravity-zh-skip'), '1');
     const allRows = sec.querySelectorAll('[data-ag-cs-row]');
-    assert.equal(allRows.length, 38, 'Must render all 38 setting rows');
+    assert.equal(allRows.length, 39, 'Must render all 39 setting rows');
     const interactionGrp = sec.querySelector('[data-ag-cs-group="interaction"]');
     const interactionRowKeys = interactionGrp.querySelectorAll('[data-ag-cs-row]').map((r) => r.getAttribute('data-ag-cs-row'));
     assert.ok(interactionRowKeys.includes('sidebarNavFold'), 'interaction group must include sidebarNavFold');
@@ -379,7 +379,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     const betaGrp = sec.querySelector('[data-ag-cs-group="beta"]');
     assert.ok(betaGrp, 'Beta features group must mount');
     const betaRowKeys = betaGrp.querySelectorAll('[data-ag-cs-row]').map((r) => r.getAttribute('data-ag-cs-row'));
-    assert.deepEqual(betaRowKeys, ['sidebarStudio']);
+    assert.deepEqual(betaRowKeys, ['sidebarStudio', 'sidebarModeOrder']);
 
     // 2. Toggle omniModule='off' -> linkTarget row dims to 0.55; toggle linkTarget='external'; toggle omniModule='on' -> restores full opacity; toggle sidebarStudio
     const findSegBtn = (key, val) =>
@@ -695,11 +695,11 @@ test('settings-panel lazy foldBody deferral on collapsed mount, memoized syncRoo
     assert.equal(foldBody.children.length, 0);
     assert.equal(matchCalls, 0);
 
-    // First click on foldHead lazily constructs all 38 rows and 6 groups
+    // First click on foldHead lazily constructs all 39 rows and 6 groups
     foldHead.click();
     assert.equal(sec.getAttribute('data-open'), '1');
     assert.equal(sec.getAttribute('data-body-built'), '1');
-    assert.equal(sec.querySelectorAll('[data-ag-cs-row]').length, 38);
+    assert.equal(sec.querySelectorAll('[data-ag-cs-row]').length, 39);
     assert.equal(sec.querySelectorAll('.ag-cs-settings-group').length, 6);
     assert.equal(sec.querySelector('button[data-ag-cs-repo-sync]')?.getAttribute('data-tone'), 'secondary');
     assert.equal(sec.querySelector('button[data-ag-cs-update-check]')?.getAttribute('data-tone'), null);

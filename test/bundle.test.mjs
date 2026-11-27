@@ -526,7 +526,7 @@ test('inject expression mounts cleanly without model-button or telemetry conflic
         .map((b) => b.getAttribute('data-ag-cs-key'))
         .filter(Boolean)
     );
-    assert.equal(settingKeys.size, 38);
+    assert.equal(settingKeys.size, 39);
     assert.ok(settingKeys.has('darkAura'), 'Expected darkAura setting key in Appearance panel');
     assert.ok(settingKeys.has('darkAuraStyle'), 'Expected darkAuraStyle setting key in Appearance panel');
     for (const expectedKey of [

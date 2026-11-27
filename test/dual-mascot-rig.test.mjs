@@ -2341,7 +2341,7 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
 
   // 1. Strict 39 schema keys (37 baseline + darkAura + darkAuraStyle) & 4 mascot presets
   assert.equal(Object.keys(sp.PRISM_SETTINGS_SCHEMA).length, 39, 'PRISM_SETTINGS_SCHEMA must remain strictly 39 keys');
-  assert.deepEqual([...sp.PRISM_SETTINGS_SCHEMA.mascot.allowed], ['crab', 'quad', 'quad-minis', 'off']);
+  assert.deepEqual([...sp.PRISM_SETTINGS_SCHEMA.mascot.allowed], ['crab', 'swarm-team', 'quad', 'quad-minis', 'off']);
 
   // 2. 8-language coverage (including all stage keys), /4 cap copy, zero CJK in en/es/fr/de, and 0 new keys leaked into RUNTIME_UI_KEYS
   const newKeys = [
@@ -2423,7 +2423,7 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
     const mascotRow = panel.querySelector('[data-ag-cs-row="mascot"]');
     assert.ok(mascotRow, 'Mascot settings row must render');
     const presetBtns = mascotRow.querySelectorAll('button[data-ag-cs-key="mascot"]');
-    assert.equal(presetBtns.length, 4, 'Mascot row must present 4 quick preset buttons');
+    assert.equal(presetBtns.length, 5, 'Mascot row must present 5 quick preset buttons');
     const openStageBtn = mascotRow.querySelector('button[data-ag-mascot-stage-open="1"]');
     assert.ok(openStageBtn, 'Mascot row must render Open Casting Stage button');
     assert.ok(openStageBtn.children[0]?.innerHTML?.includes('<svg'), 'Stage entry button must render built-in SVG spotlight icon (no emoji)');
@@ -2458,7 +2458,7 @@ test('Octopath HD-2D 16:9 Mascot Casting Stage sub-panel: Ch9 fallback when masc
     const countEl = stageView.querySelector('[data-ag-mascot-count]');
     const stagePresets = stageView.querySelectorAll('button[data-ag-stage-preset]');
     const stagePreset = (val) => stageView.querySelector(`button[data-ag-stage-preset="${val}"]`);
-    assert.equal(stagePresets.length, 4, 'Stage bottom bar must expose 4 presets');
+    assert.equal(stagePresets.length, 5, 'Stage bottom bar must expose 5 presets');
     assert.strictEqual(toggleBtn('minis'), minisBtn, '5th toggle button must preserve data-ag-mascot-minis="1" hook');
 
     // Hover resting dragon slot -> spotlight pre-warms (> 0)
