@@ -5,7 +5,7 @@
   if (!G) return;
 
   const NS = 'http://www.w3.org/2000/svg';
-  const NO_TR_S = 'translate=no,data-no-translate=true,data-ag-localization-skip=true,data-agy-no-translate=true,data-antigravity-zh-skip=1';
+  const NO_TR_S = 'translate=no,data-no-translate=true,data-ag-localization-skip=true,data-agy-no-translate=true,data-antigravity-zh-skip=1,data-ag-no-i18n=1,data-ag-owned=1';
   const CMDS = new Set(['/compact', '/learn', '/grill-me', '/plan']);
   const CONV = '[data-testid="conversation-view"]';
   const BOX = '[data-testid="agent-input-box"]';
@@ -18,6 +18,7 @@
   const EXCL = EDIT + ',a[href],button,[role="button"],aside,[data-testid="conversation-row-sidebar"],[data-testid="diff-line-count"],[data-ag-diff-chip="1"],' + SIDE + ',[role="dialog"],[role="menu"],.ag-cs-ctx-menu,.ag-cs-diff-ctx-menu,.ag-omni-menu,#ag-prism-settings-sec,#ag-cs-settings-sec,.ces-set,.agy-overlay,[data-ag-zh-widget],.ag-zh-widget,#ag-zh-panel,[data-testid="host-i18n-widget"],img,video,audio,canvas,iframe,.agy-selection-pill';
   const SLASH = '[id^="typeahead-item-"][role="option"],[role="listbox"] [role="option"],[data-testid="slash-command-menu"] [role="option"]';
   const SEND = '[data-testid="input-send-button"],[data-testid="send-button"],' + BOX + ' button[type="submit"]';
+  const PO_ID = 'ag-prism-overlay-portal';
 
   // [copy, btw, plan, compact, learn, grill-me]
   const ICONS = [
@@ -49,21 +50,14 @@
     const s = String(r || '').trim().toLowerCase().replace(/_/g, '-');
     if (!s || s === 'auto') return 'en';
     if (s === 'yue' || s.startsWith('yue-') || s === 'zh-yue' || s.includes('cantonese')) return 'zh-CN';
-    if (/^zh-(tw|hant|hk|mo)/.test(s) || s === 'tw' || s === 'hant') return 'zh-TW';
+    if (/^zh-(tw|hant|hk|mo)|^(tw|hant)$/.test(s)) return 'zh-TW';
     if (/^zh/.test(s)) return 'zh-CN';
-    if (/^(ja|jp)/.test(s) || s === 'japanese') return 'ja';
-    if (/^(ko|kr)/.test(s) || s === 'korean') return 'ko';
-    if (/^es/.test(s) || s === 'spanish') return 'es';
-    if (/^fr/.test(s) || s === 'french') return 'fr';
-    if (/^de/.test(s) || s === 'german') return 'de';
+    for (const [r, c] of [[/^(ja|jp)|^japanese$/, 'ja'], [/^(ko|kr)|^korean$/, 'ko'], [/^es|^spanish$/, 'es'], [/^fr|^french$/, 'fr'], [/^de|^german$/, 'de']]) if (r.test(s)) return c;
     return 'en';
   };
   const sa = (el, o) => { if (el?.setAttribute) for (const k in o) el.setAttribute(k, o[k]); return el; };
   const noTr = (el) => {
-    if (el?.setAttribute) {
-      for (const s of NO_TR_S.split(',')) { const p = s.split('='); el.setAttribute(p[0], p[1]); }
-      el.setAttribute('data-ag-no-i18n', '1');
-    }
+    if (el?.setAttribute) for (const s of NO_TR_S.split(',')) { const p = s.split('='); el.setAttribute(p[0], p[1]); }
     return el;
   };
   const clip = (r, m = 8000, q) => {
@@ -127,6 +121,18 @@
       clean.add(c = () => { clrT(id); r(); });
     });
 
+    const mk = (t, txt) => { const n = doc.createElement(t); if (txt != null) n.textContent = txt; return n; };
+    const getPortal = () => {
+      const b = doc?.body;
+      if (!b) return null;
+      let p = doc.getElementById?.(PO_ID) || qs('#' + PO_ID, b);
+      if (!p && doc.createElement) {
+        p = sa(noTr(mk('div')), { id: PO_ID });
+        b.appendChild(p);
+      }
+      return p || b;
+    };
+
     const clearToast = () => {
       if (toastTid) { safe(toastTid); clean.delete(toastTid); toastTid = null; }
       safe(() => toastEl?.remove());
@@ -134,11 +140,11 @@
     };
 
     const showToast = (msg, tone = 'info') => {
-      if (destroyed || !doc?.body || !msg) return;
+      const host = getPortal();
+      if (destroyed || !host || !msg) return;
       clearToast();
-      const el = sa(noTr(doc.createElement('div')), { class: 'ag-cs-ctx-toast', role: 'status', 'aria-live': 'polite', 'data-tone': tone });
-      el.textContent = String(msg);
-      doc.body.appendChild(el);
+      const el = sa(noTr(mk('div', String(msg))), { class: 'ag-cs-ctx-toast', role: 'status', 'aria-live': 'polite', 'data-tone': tone });
+      host.appendChild(el);
       toastEl = el;
       toastTid = defer(() => { toastTid = null; if (toastEl === el) { safe(() => el.remove()); toastEl = null; } }, toastMs);
     };
@@ -348,11 +354,12 @@
       const fin = (ok) => (ok && showToast(P()[1], 'ok'), ok);
       if (env.copyText) return fin((await env.copyText(text)) !== false);
       if (nav?.clipboard?.writeText) { try { await nav.clipboard.writeText(text); return fin(true); } catch {} }
-      if (doc?.body && doc.execCommand) {
-        const ta = sa(doc.createElement('textarea'), { readonly: 'true' });
+      const host = getPortal();
+      if (host && doc.execCommand) {
+        const ta = sa(mk('textarea'), { readonly: 'true' });
         ta.value = text;
         ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-        doc.body.appendChild(ta);
+        host.appendChild(ta);
         try { ta.select?.(); return fin(!!doc.execCommand('copy')); } catch { return false; } finally { safe(() => ta.remove()); }
       }
       return false;
@@ -395,7 +402,7 @@
       const m = on ? 'addEventListener' : 'removeEventListener';
       doc?.[m]?.('mousedown', onOutside, true);
       doc?.[m]?.('keydown', onKey, true);
-      doc?.[m]?.('scroll', onScroll, true);
+      doc?.[m]?.('scroll', onScroll, { capture: true, passive: true });
       win?.[m]?.('blur', close);
       win?.[m]?.('resize', close);
       win?.[m]?.('ag-prism:ctx-open', onOtherCtxOpen);
@@ -424,8 +431,7 @@
       const p = P();
       curSel = sel;
       rawPos = [x, y];
-      const mk = (t, txt) => { const n = doc.createElement(t); if (txt != null) n.textContent = txt; return n; };
-      const mkS = (t) => (doc.createElementNS ? doc.createElementNS(NS, t) : doc.createElement(t));
+      const mkS = (t) => (doc.createElementNS ? doc.createElementNS(NS, t) : mk(t));
       const el = sa(noTr(mk('div')), { class: 'ag-cs-ctx-menu', role: 'menu', tabindex: '-1', 'data-ag-cs-ctx-mode': hasSel ? 'selection' : 'plain', 'data-ag-cs-ctx-lang': lang });
       el.addEventListener('mousedown', (e) => e.preventDefault?.());
 
@@ -442,7 +448,7 @@
       ];
       items = [];
       for (const row of spec) {
-        if (!row) { el.appendChild(sa(mk('hr'), { role: 'separator' })); continue; }
+        if (!row) { el.appendChild(sa(mk('div'), { role: 'separator' })); continue; }
         const [id, li, ii] = row;
         const btn = sa(mk('button'), { role: 'menuitem', 'data-ctx-action': id, type: 'button' });
         const idx = items.length;
@@ -458,7 +464,7 @@
         el.appendChild(btn);
       }
       el.appendChild(mk('footer', 'Shift+' + p[11]));
-      doc.body.appendChild(el);
+      (getPortal() || doc.body).appendChild(el);
       menuEl = el;
 
       const vw = +(win?.innerWidth || de?.clientWidth || 1280);
@@ -530,6 +536,8 @@
       close(); clearToast(); toggleCtx(false);
       clean.forEach((f) => safe(f)); clean.clear();
       qa('.ag-cs-ctx-menu,.ag-cs-ctx-toast').forEach((n) => safe(() => n.remove()));
+      const pr = qs('#' + PO_ID);
+      if (pr && !pr.children?.length) safe(() => pr.remove());
     };
 
     if (doc && enabled) toggleCtx(true);

@@ -948,8 +948,19 @@
       if (menu.style) {
         menu.style.left = `${Math.max(8, Math.min(vw - 208, Math.round(Number(ev?.clientX) || 0)))}px`;
         menu.style.top = `${Math.max(8, Math.min(vh - 124, Math.round(Number(ev?.clientY) || 0)))}px`;
+        menu.style.pointerEvents = 'auto';
+        menu.style.contain = 'layout style';
       }
-      mut(() => doc.body.appendChild(menu));
+      mut(() => {
+        let portal = doc.getElementById?.('ag-prism-overlay-portal') || doc.body.querySelector?.('#ag-prism-overlay-portal');
+        if (!portal && doc.createElement) {
+          portal = markNoTrOwned(doc.createElement('div'));
+          sa(portal, 'id', 'ag-prism-overlay-portal');
+          if (portal.style) portal.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9990;contain:layout style';
+          doc.body.appendChild(portal);
+        }
+        (portal || doc.body).appendChild(menu);
+      });
       diffCtxMenuEl = menu;
       return true;
     }

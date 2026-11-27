@@ -3832,6 +3832,7 @@
 
         var isContextMenu = Boolean(e && e.type === 'contextmenu');
         if (isContextMenu) {
+          if (e.defaultPrevented || exemptElements.has(target) || target.closest?.('.ag-cs-ctx-menu,.ag-cs-diff-ctx-menu,.ag-omni-menu,#ag-prism-overlay-portal,[data-ag-owned="1"]')) return;
           pendingFullFloatScan = true;
         } else if (e && e.type === 'pointerenter') {
           var tg = String(target.tagName || '').toUpperCase();

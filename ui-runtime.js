@@ -1603,7 +1603,8 @@
         sp(pill, k, v);
       }
     }
-    if (D.body) D.body.appendChild(pill);
+    const pHost = D.getElementById?.('ag-prism-overlay-portal') || D.body;
+    if (pHost) pHost.appendChild(pill);
     try {
       motionEngine.glideIndicator(pill, prevRect || prevBtn, nextRect || nextBtn, { durationMs: 220 });
     } catch {}
@@ -3092,7 +3093,7 @@
         qa(D, `[${a}]`).forEach((e) => ra(e, a));
       }
       for (const a of ['data-has-sep', 'data-pv-warn', 'data-ag-sp-running']) qa(D, `[${a}]`).forEach((e) => ra(e, a));
-      qa(D, '#ag-prism-settings-v101-css,#ag-prism-studio-v101-css,#ag-prism-omni-css,#ag-prism-motion-off-css,#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap,#ag-prism-wallpaper-root,#ag-prism-wallpaper-css,#ag-prism-suggester-css,.ag-omni-dock,.ag-omni-menu,.ag-prism-omni-menu,.ag-prism-omni-pane,.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-sb-more-wrap,[data-ag-prism-omni-owned="1"],.ag-cs-home-panel,.ag-cs-home-panel-seat,.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill,.ag-cs-pill-glide,.ag-cs-conv-aura-host,.ag-cs-conv-glow,.ag-cs-prism-rim-cv,.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-model-glyph,.ag-cs-panel-row-glyph,[data-testid="orchestrator-effort-bar"],.ag-cs-thinking-spark,.ag-cs-orbital-backdrop,.ag-cs-perf-backdrop,.ag-v2-habitat-prop,#' + SETTINGS_SEC_ID).forEach((e) => e.remove());
+      qa(D, '#ag-prism-overlay-portal,#ag-prism-settings-v101-css,#ag-prism-studio-v101-css,#ag-prism-omni-css,#ag-prism-motion-off-css,#ag-prism-periodic-picker-css,#ag-prism-periodic-picker-root,.ag-pp-hold-ring,.ag-pp-mini-keycap,#ag-prism-wallpaper-root,#ag-prism-wallpaper-css,#ag-prism-suggester-css,.ag-omni-dock,.ag-omni-menu,.ag-prism-omni-menu,.ag-prism-omni-pane,.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-sb-more-wrap,[data-ag-prism-omni-owned="1"],.ag-cs-home-panel,.ag-cs-home-panel-seat,.ag-cs-liftoff-veil,.ag-cs-sidebar-glide-pill,.ag-cs-pill-glide,.ag-cs-conv-aura-host,.ag-cs-conv-glow,.ag-cs-prism-rim-cv,.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-model-glyph,.ag-cs-panel-row-glyph,[data-testid="orchestrator-effort-bar"],.ag-cs-thinking-spark,.ag-cs-orbital-backdrop,.ag-cs-perf-backdrop,.ag-v2-habitat-prop,#' + SETTINGS_SEC_ID).forEach((e) => e.remove());
       const html = de();
       if (html) {
         for (const s of 'style|theme|palette|light-preset|motion|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);

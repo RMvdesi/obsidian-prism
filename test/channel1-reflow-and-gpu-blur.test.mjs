@@ -453,3 +453,86 @@ test('DOM perf fixes: thought-client caps below-fold sidebar title layout/visibi
   assert.ok(visCalls <= 8, `Below-fold sidebar rows must short-circuit checkVisibility; got ${visCalls} calls on 120 rows`);
   sb.__agPrismThought.destroy();
 });
+
+test('perf guard 28 (DOM-08): context-menu-btw mounts inside persistent #ag-prism-overlay-portal with zero <hr> & zero repeat body mutations', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'context-menu-btw.js'), 'utf8');
+  let bodyAppends = 0;
+  let bodyRemovals = 0;
+  const makeNode = (tag) => {
+    const attrs = new Map();
+    const children = [];
+    const node = {
+      nodeType: 1, tagName: String(tag).toUpperCase(), style: {}, children, parentNode: null, parentElement: null,
+      get childElementCount() { return children.length; },
+      setAttribute(k, v) { attrs.set(k, String(v)); if (k === 'id') this.id = String(v); if (k === 'class') this.className = String(v); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      removeAttribute(k) { attrs.delete(k); },
+      appendChild(ch) {
+        if (this === body) bodyAppends++;
+        children.push(ch); ch.parentNode = this; ch.parentElement = this; return ch;
+      },
+      remove() {
+        const p = this.parentNode;
+        if (!p) return;
+        if (p === body) bodyRemovals++;
+        const i = p.children.indexOf(this);
+        if (i >= 0) p.children.splice(i, 1);
+        this.parentNode = this.parentElement = null;
+      },
+      querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+      querySelectorAll(sel) {
+        const out = [];
+        const walk = (n) => {
+          for (const c of n.children) {
+            if (sel === '#ag-prism-overlay-portal' && c.id === 'ag-prism-overlay-portal') out.push(c);
+            else if (sel === 'hr' && c.tagName === 'HR') out.push(c);
+            else if (sel === '[role="separator"]' && c.getAttribute('role') === 'separator') out.push(c);
+            else if (sel.includes('.ag-cs-ctx-menu') && String(c.className || '').includes('ag-cs-ctx-menu')) out.push(c);
+            else if (sel.includes('.ag-cs-ctx-toast') && String(c.className || '').includes('ag-cs-ctx-toast')) out.push(c);
+            walk(c);
+          }
+        };
+        walk(this);
+        return out;
+      },
+      getBoundingClientRect: () => ({ width: 230, height: 180 }),
+      addEventListener() {}, removeEventListener() {},
+    };
+    return node;
+  };
+  const body = makeNode('body');
+  const html = makeNode('html');
+  const scrollOpts = [];
+  const doc = {
+    body, documentElement: html,
+    createElement: makeNode,
+    createElementNS: (_ns, t) => makeNode(t),
+    getElementById: (id) => (id === 'ag-prism-overlay-portal' ? body.querySelector('#ag-prism-overlay-portal') : null),
+    querySelector: (s) => body.querySelector(s),
+    querySelectorAll: (s) => body.querySelectorAll(s),
+    addEventListener(type, _fn, opt) { if (type === 'scroll') scrollOpts.push(opt); },
+    removeEventListener() {},
+  };
+  const win = { innerWidth: 1440, innerHeight: 900, addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, setTimeout, clearTimeout };
+  const sb = { window: win, document: doc, navigator: { language: 'en' }, setTimeout, clearTimeout, Date, Math, Number, String, Boolean, Array, Object, Set, Map, RegExp, Promise };
+  sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+  const ctl = sb.__agPrismContextMenu.createContextMenuController({ doc, win, nav: sb.navigator });
+  const m1 = ctl.openAt(400, 300);
+  assert.equal(m1.parentNode?.id, 'ag-prism-overlay-portal', 'menu must mount inside persistent #ag-prism-overlay-portal');
+  assert.equal(m1.getAttribute('data-ag-owned'), '1', 'menu must carry data-ag-owned="1"');
+  assert.equal(m1.querySelectorAll('hr').length, 0, 'menu must NOT insert <hr> (triggers Blink BODY .md-divider-spacing hr + * invalidation)');
+  assert.ok(m1.querySelectorAll('[role="separator"]').length >= 1, 'menu must use <div role="separator">');
+  assert.equal(bodyAppends, 1, 'portal appended to body exactly once');
+  assert.equal(bodyRemovals, 0, 'body children never removed on open');
+  assert.ok(scrollOpts.some((o) => o && o.capture === true && o.passive === true), 'scroll close listener must be passive');
+  ctl.close();
+  ctl.openAt(500, 320);
+  ctl.close();
+  assert.equal(bodyAppends, 1, 'subsequent open/close cycles must perform 0 additional document.body.appendChild calls');
+  assert.equal(bodyRemovals, 0, 'subsequent close calls must perform 0 document.body child removals');
+  ctl.destroy();
+  const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  assert.ok(css.includes('&>:is(hr,[role="separator"]){'), 'style.css must style [role="separator"] inside .ag-cs-ctx-menu');
+  assert.ok(css.includes('pointer-events:auto;contain:layout style;'), '.ag-cs-ctx-menu must isolate layout/style containment');
+});

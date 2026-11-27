@@ -1629,7 +1629,18 @@
 
       activeMenuEl = menu;
       activeMenuItems = itemButtons;
-      (D.body || D.documentElement).appendChild(menu);
+      menu.style.pointerEvents = 'auto';
+      menu.style.contain = 'layout style';
+      const bodyHost = D.body || D.documentElement;
+      let portalHost = D.getElementById?.('ag-prism-overlay-portal') || bodyHost?.querySelector?.('#ag-prism-overlay-portal');
+      if (!portalHost && D.body && D.createElement) {
+        portalHost = markNoTranslate(D.createElement('div'));
+        portalHost.id = 'ag-prism-overlay-portal';
+        portalHost.setAttribute('data-ag-owned', '1');
+        portalHost.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9990;contain:layout style';
+        D.body.appendChild(portalHost);
+      }
+      (portalHost || bodyHost).appendChild(menu);
 
       const vw = W?.innerWidth || 1280;
       const vh = W?.innerHeight || 800;
@@ -1968,7 +1979,8 @@
       let selectedText = '';
       try { selectedText = String(W?.getSelection?.()?.toString?.() || '').trim(); } catch (_) {}
 
-      const meta = extractTargetMeta(el, getStrings().omniMermaidDiagram) || hitTestHighlightedToken(ev.clientX, ev.clientY);
+      const canHitToken = Boolean((urlHighlight?.size || pathHighlight?.size) && highlightedParentCount.get(el));
+      const meta = extractTargetMeta(el, getStrings().omniMermaidDiagram) || (canHitToken ? hitTestHighlightedToken(ev.clientX, ev.clientY) : null);
       if (!meta) {
         closeContextMenu();
         return;
