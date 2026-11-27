@@ -36,19 +36,24 @@
   });
 
   const EXT_CSS = [
-    '.ag-cs-font-select{min-width:148px;max-width:210px;height:28px;padding:0 8px;border-radius:var(--ag-cs-r-sm,6px);border:1px solid var(--ag-cs-border-1,rgba(148,163,184,.26));background-color:var(--ag-cs-tonal-2,#13161E);color:var(--foreground,#F2F2F5);font-size:12px;font-weight:500;outline:0;cursor:pointer;}',
-    '.ag-cs-font-select option{background-color:var(--ag-cs-tonal-2,#13161E);color:var(--foreground,#F2F2F5);}',
-    'html[data-ag-cs-theme="light"] .ag-cs-font-select,html[data-ag-cs-theme="light"] .ag-cs-font-select option{background-color:#FFFFFF;color:#0F172A;border-color:rgba(15,23,42,.18);}',
-    '.ag-cs-font-custom-box{margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--ag-cs-border-1,rgba(148,163,184,.22));background:var(--ag-cs-tonal-1,rgba(148,163,184,.06));display:flex;flex-direction:column;gap:6px;}',
+    '.ag-cs-font-select{min-width:154px;max-width:220px;height:31px;padding:0 10px;border-radius:8px;border:1px solid var(--_kb,var(--ag-cs-border-1));background-color:var(--_k1,#090A0D);box-shadow:var(--_kw,none);color:var(--foreground,#F2F2F5);font-size:12.5px;font-weight:500;outline:0;cursor:pointer;transition:border-color .14s;}',
+    '.ag-cs-font-select:hover,.ag-cs-font-select:focus{border-color:var(--ag-cs-border-2);}',
+    '.ag-cs-font-select option{background-color:#13161E;color:var(--foreground,#F2F2F5);}',
+    'html[data-ag-cs-theme="light"] .ag-cs-font-select,html[data-ag-cs-theme="light"] .ag-cs-font-select option{background-color:#FFFFFF;color:#0F172A;border-color:rgba(15,23,42,.14);}',
+    '.ag-cs-font-custom-box{margin:0 15px 12px;padding:9px 11px;border-radius:9px;border:1px solid var(--_kb,var(--ag-cs-border-1));background:var(--_k1,var(--ag-cs-tonal-1));display:flex;flex-direction:column;gap:6px;}',
     '.ag-cs-font-custom-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}',
     '.ag-cs-font-input{flex:1 1 200px;min-width:140px;height:28px;padding:0 9px;border-radius:6px;border:1px solid var(--ag-cs-border-1,rgba(148,163,184,.28));background:var(--ag-cs-tonal-0,rgba(0,0,0,.22));color:var(--foreground,#F2F2F5);font-size:12px;outline:0;}',
     'html[data-ag-cs-theme="light"] .ag-cs-font-input{background:#FFFFFF;color:#0F172A;border-color:rgba(15,23,42,.18);}',
-    '.ag-cs-font-input:focus{border-color:var(--primary,#669DF6);}',
+    '.ag-cs-font-input:focus,.ag-cs-font-act-btn:hover{border-color:var(--primary,#669DF6);}',
     '.ag-cs-font-act-btn{height:28px;padding:0 9px;border-radius:6px;border:1px solid var(--ag-cs-border-1,rgba(148,163,184,.28));background:var(--ag-cs-tonal-3,rgba(148,163,184,.12));color:var(--foreground,#F2F2F5);font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;}',
     'html[data-ag-cs-theme="light"] .ag-cs-font-act-btn{background:#F1F5F9;color:#0F172A;border-color:rgba(15,23,42,.16);}',
-    '.ag-cs-font-act-btn:hover{border-color:var(--primary,#669DF6);}',
     '.ag-cs-font-hint{font-size:11px;line-height:1.4;color:var(--muted-foreground,#94A3B8);}',
     '.ag-cs-font-hint[data-tone="warn"]{color:var(--warning,#F2B84B);}',
+    '#ag-cs-settings-sec:not([data-ag-cs-active-subtab="all"]) .ag-cs-settings-group[data-ag-cs-split="1"]>.ag-cs-settings-subhead:first-child{display:none;}',
+    '#ag-cs-settings-sec .ag-cs-split-head{margin-top:8px;}#ag-cs-settings-sec .ag-cs-split-head[data-first="1"]{margin-top:0;}',
+    '#ag-cs-settings-sec [data-ag-cs-dimmed="1"]{opacity:.46;pointer-events:none;}',
+    '#ag-cs-settings-sec .ag-cs-about-box .divide-y{border:0!important;box-shadow:none!important;background:var(--_k1)!important;border-radius:9px!important;}',
+    '@media (max-width:560px){#ag-cs-settings-sec .ag-cs-about-credits{grid-template-columns:1fr!important;}}',
   ].join('\n');
 
   const sa = (el, k, v = '') => el && el.setAttribute && el.setAttribute(k, String(v));
@@ -541,6 +546,27 @@
     return row;
   }
 
+  const setDimmed = (row, dimmed) => { if (!row) return; if (dimmed) sa(row, 'data-ag-cs-dimmed', '1'); else ra(row, 'data-ag-cs-dimmed'); };
+  const setRowHidden = (row, hide) => { if (!row) return; row.hidden = !!hide; if (hide) sa(row, 'hidden', ''); else ra(row, 'hidden'); if (row.style) row.style.display = hide ? 'none' : ''; };
+  function splitGroupIntoCards(rootEl, doc, groupId, sections) {
+    const grpEl = qs(rootEl, `[data-ag-cs-group="${groupId}"]`);
+    if (!grpEl) return;
+    const origCard = qs(grpEl, '.divide-y:not([data-ag-cs-split-card])');
+    const cardCls = (origCard && origCard.className) || 'divide-y divide-border/50 rounded-lg border border-border/50 bg-card/30 overflow-hidden';
+    sa(grpEl, 'data-ag-cs-split', '1');
+    let firstVis = true;
+    for (const sec of sections) {
+      let head = qs(grpEl, `[data-ag-cs-subsec="${sec.id}"]`), card = qs(grpEl, `[data-ag-cs-split-card="${sec.id}"]`);
+      if (!head) { head = mk(doc, 'div', 'ag-cs-settings-subhead ag-cs-split-head', sec.label || ''); sa(head, 'data-ag-cs-subsec', sec.id); sa(head, 'data-ag-cs-ext-owned', '1'); grpEl.appendChild(head); }
+      else if (sec.label && head.textContent !== sec.label) head.textContent = sec.label;
+      if (!card) { card = mk(doc, 'div', cardCls); sa(card, 'data-ag-cs-split-card', sec.id); sa(card, 'data-ag-cs-ext-owned', '1'); grpEl.appendChild(card); }
+      let moved = 0;
+      for (const k of sec.keys) { const r = qs(grpEl, `[data-ag-cs-row="${k}"]`); if (r) { if (r.parentElement !== card) { try { r.parentElement?.removeChild?.(r); } catch {} card.appendChild(r); } moved++; } }
+      if (moved > 0) { if (firstVis) { sa(head, 'data-first', '1'); firstVis = false; } else ra(head, 'data-first'); }
+    }
+    if (origCard && (!origCard.children || origCard.children.length === 0) && origCard.parentElement === grpEl) { try { grpEl.removeChild(origCard); } catch {} }
+  }
+
   function sync(rootEl, rawCtx) {
     if (!rootEl || ga(rootEl, 'data-body-built') !== '1') return false;
     const doc = (rawCtx && rawCtx.doc) || rootEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
@@ -551,6 +577,8 @@
     const ctx = Object.assign({}, rawCtx || {}, { doc, win, lang, ui: extUi });
     const runMut = typeof ctx.runGuardedMut === 'function' ? ctx.runGuardedMut : (fn) => fn();
 
+    const theme = String(ga(doc.documentElement, 'data-ag-cs-theme') || '').trim().toLowerCase();
+    const ambientOff = String(readLiveCfg(ctx, 'ambientIntensity', '100')) === '0';
     const perfMode = normPerfMode(readLiveCfg(ctx, 'performanceMode', 'balanced'));
     const ignoreRm = Boolean(readLiveCfg(ctx, 'ignoreReducedMotion', false));
     const motionOff = readLiveCfg(ctx, 'motionLevel', 'ultra') === 'off';
@@ -558,10 +586,11 @@
     const chatFontCustom = String(readLiveCfg(ctx, 'chatFontCustom', '') || '');
     const codeFont = String(readLiveCfg(ctx, 'codeFont', 'default') || 'default');
     const codeFontCustom = String(readLiveCfg(ctx, 'codeFontCustom', '') || '');
+    const sbOff = readLiveCfg(ctx, 'sidebarRestyle', true) === false;
     const telOff = readLiveCfg(ctx, 'telemetryModule', 'auto') === 'off';
     const telQuotaMode = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
 
-    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
+    const extSig = `${lang}|${theme}|${ambientOff ? 1 : 0}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${sbOff ? 1 : 0}|${telOff ? 1 : 0}|${telQuotaMode}`;
     if (
       rootEl.__extBeta4Sig === extSig &&
       qs(rootEl, '[data-ag-cs-row="performanceMode"]') &&
@@ -579,159 +608,109 @@
       ensureStyle(doc);
       ensureLocalFontDatalist(doc, rootEl);
 
-      // 0. 无损性能模式分段选择器（动效区顶部，不改写动效/波纹/宠物设置）
+      // 0. 无损性能模式分段选择器
       const perfRow = ensurePerformanceModeRow(rootEl, doc, ctx);
       if (perfRow) {
         perfRow.__extResync = resyncNow;
-        const tEl = qs(perfRow, '[data-k="t"]');
-        const dEl = qs(perfRow, '[data-k="d"]');
+        const tEl = qs(perfRow, '[data-k="t"]'), dEl = qs(perfRow, '[data-k="d"]');
         if (tEl && tEl.textContent !== extUi.setPerformanceModeTitle) tEl.textContent = extUi.setPerformanceModeTitle || 'Performance Mode';
         if (dEl && dEl.textContent !== extUi.setPerformanceModeDesc) dEl.textContent = extUi.setPerformanceModeDesc || '';
         const grp = qs(perfRow, '.ag-cs-seg-group');
-        if (grp) {
-          const btns = grp.querySelectorAll ? grp.querySelectorAll('button[data-ag-cs-ext-key="performanceMode"]') : [];
-          for (let i = 0; i < btns.length; i++) {
-            const b = btns[i];
-            const val = ga(b, 'data-ag-cs-ext-perf') || 'balanced';
-            const optKey = PERF_MODE_OPT_KEYS[val];
-            const lbl = (optKey && extUi[optKey]) || val;
-            if (b.textContent !== lbl) b.textContent = lbl;
-            const act = val === perfMode;
-            sa(b, 'aria-pressed', act ? 'true' : 'false');
-            if (act) sa(b, 'data-pressed');
-            else ra(b, 'data-pressed');
-          }
+        for (const b of grp?.querySelectorAll?.('button[data-ag-cs-ext-key="performanceMode"]') || []) {
+          const val = ga(b, 'data-ag-cs-ext-perf') || 'balanced', lbl = (PERF_MODE_OPT_KEYS[val] && extUi[PERF_MODE_OPT_KEYS[val]]) || val, act = val === perfMode;
+          if (b.textContent !== lbl) b.textContent = lbl;
+          sa(b, 'aria-pressed', act ? 'true' : 'false'); if (act) sa(b, 'data-pressed'); else ra(b, 'data-pressed');
         }
       }
-
-      // 1. 忽略系统减弱动效开关（动效区）
+      // 1. 忽略系统减弱动效开关
       const rmRow = ensureIgnoreRmRow(rootEl, doc, ctx);
       if (rmRow) {
         rmRow.__extResync = resyncNow;
-        const tEl = qs(rmRow, '[data-k="t"]');
-        const dEl = qs(rmRow, '[data-k="d"]');
+        const tEl = qs(rmRow, '[data-k="t"]'), dEl = qs(rmRow, '[data-k="d"]');
         if (tEl && tEl.textContent !== extUi.setIgnoreReducedMotionTitle) tEl.textContent = extUi.setIgnoreReducedMotionTitle || 'Ignore System Reduced Motion';
         if (dEl && dEl.textContent !== extUi.setIgnoreReducedMotionDesc) dEl.textContent = extUi.setIgnoreReducedMotionDesc || '';
-        if (rmRow.style) rmRow.style.opacity = motionOff ? '0.55' : '';
-        if (motionOff) sa(rmRow, 'data-ag-cs-dimmed', '1');
-        else ra(rmRow, 'data-ag-cs-dimmed');
-
+        setDimmed(rmRow, motionOff);
         const grp = qs(rmRow, '.ag-cs-seg-group');
         if (grp) {
           sa(grp, 'data-switch-on', ignoreRm ? '1' : '0');
-          const btns = grp.querySelectorAll ? grp.querySelectorAll('button[data-ag-cs-ext-key="ignoreReducedMotion"]') : [];
-          for (let i = 0; i < btns.length; i++) {
-            const b = btns[i];
-            const isOnBtn = ga(b, 'data-ag-cs-ext-role') === 'on';
-            const lbl = isOnBtn ? (extUi.onLabel || 'On') : (extUi.offLabel || 'Off');
+          for (const b of grp.querySelectorAll?.('button[data-ag-cs-ext-key="ignoreReducedMotion"]') || []) {
+            const isOnBtn = ga(b, 'data-ag-cs-ext-role') === 'on', lbl = isOnBtn ? (extUi.onLabel || 'On') : (extUi.offLabel || 'Off'), act = isOnBtn === ignoreRm;
             if (b.textContent !== lbl) b.textContent = lbl;
-            const act = isOnBtn === ignoreRm;
-            sa(b, 'aria-pressed', act ? 'true' : 'false');
-            if (act) sa(b, 'data-pressed');
-            else ra(b, 'data-pressed');
-            b.tabIndex = act ? -1 : 0;
-            sa(b, 'tabindex', act ? '-1' : '0');
+            sa(b, 'aria-pressed', act ? 'true' : 'false'); if (act) sa(b, 'data-pressed'); else ra(b, 'data-pressed');
+            b.tabIndex = act ? -1 : 0; sa(b, 'tabindex', act ? '-1' : '0');
           }
         }
       }
-
-      // 2. 会话正文字体（字体/排版区）
+      // 2. 会话正文字体
+      const syncCustomBox = (cUi, show, val, ph) => {
+        if (!cUi) return;
+        cUi.box.__extStrings = extUi; cUi.box.__extResync = resyncNow;
+        cUi.box.hidden = !show; if (show) ra(cUi.box, 'hidden'); else sa(cUi.box, 'hidden', '');
+        if (cUi.box.style) cUi.box.style.display = show ? 'flex' : 'none';
+        if (doc.activeElement !== cUi.inp && cUi.inp.value !== val) cUi.inp.value = val;
+        sa(cUi.inp, 'placeholder', ph);
+        cUi.loadBtn.textContent = extUi.btnLoadLocalFonts || 'Load Local Fonts';
+        cUi.resetBtn.textContent = extUi.btnResetFontDefault || 'Reset Default';
+      };
       const chatRow = ensureChatFontRow(rootEl, doc, ctx);
       if (chatRow) {
         chatRow.__extResync = resyncNow;
-        const tEl = qs(chatRow, '[data-k="t"]');
-        const dEl = qs(chatRow, '[data-k="d"]');
+        const tEl = qs(chatRow, '[data-k="t"]'), dEl = qs(chatRow, '[data-k="d"]');
         if (tEl && tEl.textContent !== extUi.setChatFontTitle) tEl.textContent = extUi.setChatFontTitle || 'Chat Body Font';
         if (dEl && dEl.textContent !== extUi.setChatFontDesc) dEl.textContent = extUi.setChatFontDesc || '';
-
         const sel = chatRow.__extSelect;
         if (sel) {
-          const opts = sel.children || [];
-          for (let i = 0; i < opts.length; i++) {
-            const opt = opts[i];
-            const key = CHAT_FONT_OPT_KEYS[opt.value];
-            const lbl = (key && extUi[key]) || opt.value;
-            if (opt.textContent !== lbl) opt.textContent = lbl;
-          }
-          const safeMode = CHAT_FONT_MODES.includes(chatFont) ? chatFont : 'default';
-          if (sel.value !== safeMode) sel.value = safeMode;
+          for (const opt of sel.children || []) { const lbl = (CHAT_FONT_OPT_KEYS[opt.value] && extUi[CHAT_FONT_OPT_KEYS[opt.value]]) || opt.value; if (opt.textContent !== lbl) opt.textContent = lbl; }
+          const safeMode = CHAT_FONT_MODES.includes(chatFont) ? chatFont : 'default'; if (sel.value !== safeMode) sel.value = safeMode;
         }
-
-        const cUi = chatRow.__extCustomUi;
-        if (cUi) {
-          cUi.box.__extStrings = extUi;
-          cUi.box.__extResync = resyncNow;
-          const showCustom = chatFont === 'custom';
-          cUi.box.hidden = !showCustom;
-          if (showCustom) ra(cUi.box, 'hidden');
-          else sa(cUi.box, 'hidden', '');
-          if (cUi.box.style) cUi.box.style.display = showCustom ? 'flex' : 'none';
-          if (doc.activeElement !== cUi.inp && cUi.inp.value !== chatFontCustom) {
-            cUi.inp.value = chatFontCustom;
-          }
-          sa(cUi.inp, 'placeholder', extUi.chatFontCustomPlaceholder || 'Font family names, comma-separated');
-          cUi.loadBtn.textContent = extUi.btnLoadLocalFonts || 'Load Local Fonts';
-          cUi.resetBtn.textContent = extUi.btnResetFontDefault || 'Reset Default';
-        }
+        syncCustomBox(chatRow.__extCustomUi, chatFont === 'custom', chatFontCustom, extUi.chatFontCustomPlaceholder || 'Font family names, comma-separated');
       }
-
       // 3. 代码等宽字体扩展「自定义」选项与输入框
       const codeExt = ensureCodeFontCustomExtension(rootEl, doc, ctx);
       if (codeExt) {
         codeExt.codeRow.__extResync = resyncNow;
         if (codeExt.customBtn) {
-          const lbl = extUi.optFontCustom || 'Custom';
+          const lbl = extUi.optFontCustom || 'Custom', act = codeFont === 'custom';
           if (codeExt.customBtn.textContent !== lbl) codeExt.customBtn.textContent = lbl;
-          const act = codeFont === 'custom';
-          sa(codeExt.customBtn, 'aria-pressed', act ? 'true' : 'false');
-          if (act) sa(codeExt.customBtn, 'data-pressed');
-          else ra(codeExt.customBtn, 'data-pressed');
+          sa(codeExt.customBtn, 'aria-pressed', act ? 'true' : 'false'); if (act) sa(codeExt.customBtn, 'data-pressed'); else ra(codeExt.customBtn, 'data-pressed');
         }
-        const cUi = codeExt.customUi;
-        if (cUi) {
-          cUi.box.__extStrings = extUi;
-          cUi.box.__extResync = resyncNow;
-          const showCustom = codeFont === 'custom';
-          cUi.box.hidden = !showCustom;
-          if (showCustom) ra(cUi.box, 'hidden');
-          else sa(cUi.box, 'hidden', '');
-          if (cUi.box.style) cUi.box.style.display = showCustom ? 'flex' : 'none';
-          if (doc.activeElement !== cUi.inp && cUi.inp.value !== codeFontCustom) {
-            cUi.inp.value = codeFontCustom;
-          }
-          sa(cUi.inp, 'placeholder', extUi.codeFontCustomPlaceholder || 'Monospace font families, comma-separated');
-          cUi.loadBtn.textContent = extUi.btnLoadLocalFonts || 'Load Local Fonts';
-          cUi.resetBtn.textContent = extUi.btnResetFontDefault || 'Reset Default';
-        }
+        syncCustomBox(codeExt.customUi, codeFont === 'custom', codeFontCustom, extUi.codeFontCustomPlaceholder || 'Monospace font families, comma-separated');
       }
-
-      // 4. 底栏配额显示模式（模块区，紧随 telemetryModule 下方）
+      // 4. 底栏配额显示模式
       const qmRow = ensureTelemetryQuotaModeRow(rootEl, doc, ctx);
       if (qmRow) {
         qmRow.__extResync = resyncNow;
-        const tEl = qs(qmRow, '[data-k="t"]');
-        const dEl = qs(qmRow, '[data-k="d"]');
+        const tEl = qs(qmRow, '[data-k="t"]'), dEl = qs(qmRow, '[data-k="d"]');
         if (tEl && tEl.textContent !== extUi.setTelemetryQuotaModeTitle) tEl.textContent = extUi.setTelemetryQuotaModeTitle || 'Footer Quota Display';
         if (dEl && dEl.textContent !== extUi.setTelemetryQuotaModeDesc) dEl.textContent = extUi.setTelemetryQuotaModeDesc || '';
-        if (qmRow.style) qmRow.style.opacity = telOff ? '0.55' : '';
-        if (telOff) sa(qmRow, 'data-ag-cs-dimmed', '1');
-        else ra(qmRow, 'data-ag-cs-dimmed');
+        setDimmed(qmRow, telOff);
         const grp = qs(qmRow, '.ag-cs-seg-group');
-        if (grp) {
-          const btns = grp.querySelectorAll ? grp.querySelectorAll('button[data-ag-cs-ext-key="telemetryQuotaMode"]') : [];
-          for (let i = 0; i < btns.length; i++) {
-            const b = btns[i];
-            const val = ga(b, 'data-ag-cs-ext-qmode') || 'compact';
-            const optKey = QUOTA_MODE_OPT_KEYS[val];
-            const lbl = (optKey && extUi[optKey]) || val;
-            if (b.textContent !== lbl) b.textContent = lbl;
-            const act = val === telQuotaMode;
-            sa(b, 'aria-pressed', act ? 'true' : 'false');
-            if (act) sa(b, 'data-pressed');
-            else ra(b, 'data-pressed');
-          }
+        for (const b of grp?.querySelectorAll?.('button[data-ag-cs-ext-key="telemetryQuotaMode"]') || []) {
+          const val = ga(b, 'data-ag-cs-ext-qmode') || 'compact', lbl = (QUOTA_MODE_OPT_KEYS[val] && extUi[QUOTA_MODE_OPT_KEYS[val]]) || val, act = val === telQuotaMode;
+          if (b.textContent !== lbl) b.textContent = lbl;
+          sa(b, 'aria-pressed', act ? 'true' : 'false'); if (act) sa(b, 'data-pressed'); else ra(b, 'data-pressed');
         }
       }
+      // 5. 多卡片分组 + 主题按需显隐 + 父开关关闭联动态
+      splitGroupIntoCards(rootEl, doc, 'appearance', [
+        { id: 'aura', label: extUi.subSecAura || 'Theme & Layout', keys: ['palette', 'lightPreset', 'accentTone', 'cornerStyle', 'homeLayout', 'logoInk'] },
+        { id: 'effects', label: extUi.subSecEffects || 'Background Glow & Ripple', keys: ['ambientIntensity', 'darkAuraStyle', 'darkAura', 'homeRipple', 'convRipple'] },
+        { id: 'motion', label: extUi.subSecMotion || 'Motion & Performance', keys: ['performanceMode', 'motionLevel', 'ignoreReducedMotion', 'targetFps'] },
+        { id: 'lang', label: extUi.subSecLang || 'Language', keys: ['language', 'hostLocalization'] },
+      ]);
+      splitGroupIntoCards(rootEl, doc, 'interaction', [
+        { id: 'editor', label: extUi.subSecEditor || 'Composer & Reading', keys: ['composerRestyle', 'placeholderStyle', 'smoothCaret', 'scrollBottomMotion', 'linkTarget'] },
+        { id: 'typo', label: extUi.subSecTypo || 'Typography', keys: ['chatFont', 'codeFont', 'codeLigatures'] },
+        { id: 'chrome', label: extUi.subSecChrome || 'Sidebar & Mascot', keys: ['sidebarRestyle', 'sidebarCompact', 'sidebarNavFold', 'contextMenu', 'mascot'] },
+      ]);
+      if (theme === 'dark' || theme === 'light') {
+        setRowHidden(qs(rootEl, '[data-ag-cs-row="lightPreset"]'), theme === 'dark');
+        setRowHidden(qs(rootEl, '[data-ag-cs-row="darkAuraStyle"]'), theme === 'light');
+        setRowHidden(qs(rootEl, '[data-ag-cs-row="darkAura"]'), theme === 'light');
+      }
+      for (const k of ['darkAuraStyle', 'darkAura']) setDimmed(qs(rootEl, `[data-ag-cs-row="${k}"]`), ambientOff);
+      for (const k of ['ignoreReducedMotion', 'targetFps', 'scrollBottomMotion']) setDimmed(qs(rootEl, `[data-ag-cs-row="${k}"]`), motionOff);
+      for (const k of ['sidebarCompact', 'sidebarNavFold']) setDimmed(qs(rootEl, `[data-ag-cs-row="${k}"]`), sbOff);
     });
 
     rootEl.__extBeta4Sig = extSig;

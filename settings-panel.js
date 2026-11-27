@@ -82,7 +82,7 @@
       `${RB}[data-active="1"]{border-color:color-mix(in srgb,var(--primary) 48%,var(--ag-cs-border-2));background:color-mix(in srgb,var(--primary) 18%,var(--ag-cs-pill-bg));color:var(--foreground);font-weight:600;}`,
       `${L1} :is(.ag-cs-repo-sync-btn,button[data-ag-cs-repo-sync])[data-tone="amber"],${L2} :is(.ag-cs-repo-sync-btn,button[data-ag-cs-repo-sync])[data-tone="amber"]{color:#92400E;}`,
       `${S} .ag-cs-about-credits-title{font-size:11.5px;font-weight:600;color:var(--muted-foreground);letter-spacing:.015em;}`,
-      `${S} .ag-cs-about-credits{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px;margin:0;padding:0;list-style:none;}`,
+      `${S} .ag-cs-about-credits{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0;padding:0;list-style:none;}`,
       `${S} .ag-cs-about-box a[href]{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;box-sizing:border-box;min-width:0;padding:5px 9px;border-radius:var(--ag-cs-r-md);border:1px solid var(--ag-cs-border-1);background:var(--ag-cs-pill-bg);color:var(--link) !important;font-size:11.5px;line-height:16px;font-weight:500;text-decoration:none !important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:var(--_t2);}`,
       `${S} .ag-cs-about-box a[href]:hover{background:var(--ag-cs-hover-wash);border-color:color-mix(in srgb,var(--primary) 38%,var(--ag-cs-border-2));color:var(--foreground) !important;}`,
       `${S} .ag-cs-about-credits a[href]{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:2px;padding:7px 10px;white-space:normal;}`,
@@ -2558,7 +2558,7 @@
               sa(rosterBox, 'data-ag-mascot-roster', '1');
               if (rosterBox.style) {
                 O.assign(rosterBox.style, {
-                  margin: '2px 0 10px',
+                  margin: '0 15px 12px',
                   padding: '8px 10px',
                   borderRadius: '10px',
                   border: '1px solid var(--ag-cs-border, rgba(148,163,184,0.22))',
@@ -2618,6 +2618,7 @@
           const groupElsById = new Map();
           const applySubTab = (sid) => {
             activeSubTab = sid;
+            sa(sec, 'data-ag-cs-active-subtab', sid);
             writeStore(STORAGE_SETTINGS_SUBTAB_KEY, sid);
             for (const sb of subTabBtns) sa(sb, 'aria-selected', ga(sb, 'data-ag-cs-subtab') === sid);
             for (const [gid, gel] of groupElsById.entries()) setVis(gel, sid === 'all' || sid === gid);
