@@ -325,6 +325,15 @@
       'Beide (5h + W)',
       'İkisi (5s + Hf)',
     ],
+    setTelemetryMetricsTitle: ['底栏显示指标', '底欄顯示指標', 'Footer Bar Metrics', 'フッター表示指標', '하단 표시 지표', 'Métricas inferiores', 'Indicateurs bas', 'Fußleisten-Daten', 'Alt Çubuk Verileri'],
+    setTelemetryMetricsDesc: ['勾选输入框底栏显示的指标；智能配额自动展示 5h/周中更紧的一项。', '勾選輸入框底欄顯示的指標；智慧額度自動展示 5h/週中較緊的一項。', 'Pick composer footer metrics. Smart Quota auto-shows the tighter 5h/Weekly window.', 'フッター表示項目を選択。スマート枠は 5h/週の厳しい方を自動表示。', '하단 표시 지표를 선택합니다. 스마트 할당은 5h/주간 중 더 빠듯한 창을 표시.', 'Elige métricas inferiores. Cuota auto muestra la ventana 5h/Sem más justa.', 'Choisissez les indicateurs. Quota auto affiche la fenêtre 5h/Hebdo la plus tendue.', 'Fußleisten-Daten wählen. Smart-Quota zeigt das knappere 5h/Woche-Fenster.', 'Alt çubuk metriklerini seçin. Akıllı Kota sıkışık 5s/Hf penceresini gösterir.'],
+    optMetricAuto: ['智能配额', '智慧額度', 'Smart Quota', 'スマート枠', '스마트 할당', 'Cuota auto', 'Quota auto', 'Smart-Quota', 'Akıllı Kota'],
+    optMetricFive: ['5h 配额', '5h 額度', '5h Quota', '5h 枠', '5h 할당', 'Cuota 5h', 'Quota 5h', '5h-Quota', '5s Kota'],
+    optMetricWeek: ['周配额', '週額度', 'Weekly', '週間枠', '주간 할당', 'Semanal', 'Hebdo', 'Woche', 'Haftalık'],
+    optMetricSpeed: ['速度 tok/s', '速度 tok/s', 'Speed', '速度', '속도', 'Velocidad', 'Débit', 'Tempo', 'Hız'],
+    optMetricCache: ['缓存命中', '快取命中', 'Cache %', 'キャッシュ', '캐시율', 'Caché %', 'Cache %', 'Cache %', 'Önbellek'],
+    optMetricTokens: ['Token 用量', 'Token 用量', 'Tokens', 'トークン', '토큰량', 'Tokens', 'Jetons', 'Tokens', 'Tokenler'],
+    optMetricContext: ['上下文 %', '上下文 %', 'Context %', 'コンテキスト', '컨텍스트', 'Contexto', 'Contexte', 'Kontext', 'Bağlam'],
   });
 
   function normalizeLocale(lang) {

@@ -785,7 +785,7 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
     cChip.dispatchEvent({ type: 'click' });
     assert.equal(xCard.hidden, true, 'second click on pinned chip closes card');
 
-    // 4) Settings panel telemetryQuotaMode switch updates html attr, persists & live-syncs bar to both mode
+    // 4) Settings panel footer metrics multi-chip sub-panel updates html attrs, persists & live-syncs bar to both 5h + weekly mode
     const sec = env.doc.createElement('div');
     sec.setAttribute('data-body-built', '1');
     const modGroup = env.doc.createElement('div');
@@ -796,7 +796,7 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
     env.body.appendChild(sec);
     env.win.__agPrismTelemetry = ctrl;
     const saved = [];
-    const cfgState = { telemetryModule: 'on', telemetryQuotaMode: 'compact' };
+    const cfgState = { telemetryModule: 'on', telemetryQuotaMode: 'compact', telemetryMetrics: '' };
     settingsExt.sync(sec, {
       doc: env.doc,
       win: env.win,
@@ -807,15 +807,19 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
       runGuardedMut: (fn) => fn(),
     });
     const qmRow = sec.querySelector('[data-ag-cs-row="telemetryQuotaMode"]');
-    assert.ok(qmRow, 'settings-ext-beta4 must mount telemetryQuotaMode row under telemetryModule');
-    const bothBtn = qmRow.querySelector('button[data-ag-cs-ext-qmode="both"]');
-    assert.ok(bothBtn);
-    bothBtn.dispatchEvent({ type: 'click' });
-    assert.deepEqual(saved, [['telemetryQuotaMode', 'both']]);
+    assert.ok(qmRow, 'settings-ext-beta4 must mount telemetry metrics row under telemetryModule');
+    const fiveBtn = qmRow.querySelector('button[data-ag-cs-ext-metric="five"]');
+    const weekBtn = qmRow.querySelector('button[data-ag-cs-ext-metric="week"]');
+    assert.ok(fiveBtn && weekBtn);
+    fiveBtn.dispatchEvent({ type: 'click' });
+    weekBtn.dispatchEvent({ type: 'click' });
+    assert.equal(cfgState.telemetryQuotaMode, 'both');
+    assert.equal(cfgState.telemetryMetrics, 'five,week,cache,context');
     assert.equal(env.html.getAttribute('data-ag-cs-telemetry-quota'), 'both');
+    assert.equal(env.html.getAttribute('data-ag-cs-telemetry-metrics'), 'five,week,cache,context');
     assert.equal(ctrl.getState().quotaMode, 'both');
-    assert.equal(fChip.hidden, false, 'live switch to both must immediately reveal 5h chip');
-    assert.equal(wChip.hidden, false, 'live switch to both must immediately keep weekly chip visible');
+    assert.equal(fChip.hidden, false, 'live switch to five+week must immediately reveal 5h chip');
+    assert.equal(wChip.hidden, false, 'live switch to five+week must immediately keep weekly chip visible');
 
     // Trigger pending hover timer right before destroy() -> verify 0 leak / 0 crash after timer elapses
     wChip.dispatchEvent({ type: 'pointerenter' });

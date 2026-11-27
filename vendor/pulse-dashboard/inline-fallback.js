@@ -22,8 +22,8 @@ const k='pqrstuvwxyz0123456789abcdefghijklmno',t=[':host([data-no-q="1"][data-t~
 for(let i=0;i<t.length;i++)s=s.split('$'+k[i]).join(t[i]);
 return s.replace(/!(?!important)/g,'!important');
 };
-const TIER_CSS=expCss('[hidden]{$n}:host{--e:cubic-bezier(.22,1,.36,1);--pt-c:var(--pv-tint,var(--pulse-ring,#3186ff))}.bar{$cgap .28s $0}.bar>:is(.chip,.dot){$4max-width:132px;$e1;transform-origin:right;$cmax-width .28s $0,opacity .17s ease-out,padding .28s $0,margin .28s $0,gap .28s $0,transform .28s $0,background .16s,border-color .22s,box-shadow .22s}.bar>[data-card="cache"]{max-width:240px}$q{$h136px}.bar>.dot{$h16px}:where(.bar>.chip>*:not(.context-ring):not(svg)){$4max-width:108px;flex-shrink:0;$e1;transform-origin:right;$cmax-width .28s $0,opacity .17s ease-out,margin .28s $0,padding .28s $0,transform .28s $0}.context-ring{$ctransform .28s $0}.context-ring[data-anim="1"]{will-change:transform}$11"]) :is(.cache-total,.sub-badge,$2cache"] .dim,.countdown),$14"]) $2context"] .context-label,$15"]) $2context"]>:not(.context-ring){max-width:0!important;flex-shrink:1!important;$e0!;$i0!;$j0!;$5}$11"]) .bar>:is($2speed"],.dot),$12"]) .bar>$2cache"],$13"]) .bar>:is($2week"],$2five"]){$h0!;min-width:0!;$g1!;$e0!;$j0!;$i0!;gap:0!;border:0!;$5}$11"]) .bar>$2speed"]$s,$12"]) .bar>$2cache"]$s,$13"]) .bar>$2week"]$s,$13"]) .bar>$2five"]$s,$13"]) $q$s,$p1"]) .bar>$2cache"]$s,$p2"]) $q$s{$e0!;content:none!}$13"]) $q,$p1"]) .bar>$2cache"],$p2"]) $q{margin-left:0!}$13"]) .bar{gap:0}$15"]) $2context"]{width:26px!;min-width:26px!;height:26px!;$j0!;gap:0!;$6999px!;$ycenter!;$7$39%,$t;border:1px solid $328%,$828))}$15"]) $2context"]$b{$7$317%,$t;border-color:$348%,$84));box-shadow:0 0 10px -2px $345%,$t}$15"]) .context-ring{transform:scale(1.27)}:host([data-pv-motion="off"]) $u,$9 $u{$cnone!}@media (prefers-reduced-motion:reduce){:host(:not([data-pv-ignore-rm="1"])) $u{$cnone!}}');
-const SHADOW_CSS=expCss(':host,*,::before,::after{box-sizing:border-box}:host,.bar,.chip{display:inline-flex;$z}:host{--ch:#dae2f0db;--mu:#94a0b6b8;--f:#eef1f7;--pv-tint:#3186ff;flex:0 0 auto;$w;font:11px/16px Inter,system-ui,-apple-system,"Segoe UI",sans-serif;$v;$rch);user-select:none;z-index:20}$a{--ch:#1e293b;--mu:#475569;--f:#0f172a;--pv-tint:#2563eb;--pv-w1:#d97706;--pv-w2:#dc2626}:host([hidden]),.sub-badge[hidden],:host(:not([data-wide="1"])) .sub-badge,.card[hidden],.footnote[hidden],.footnote:empty,:host([data-layout="blocked"])>.bar{$n}:host([data-layout="blocked"]){position:fixed!;left:-9999px!;top:-9999px!;width:0!;height:0!;$i0!;$j0!;overflow:hidden!;visibility:hidden!;$o!}.bar{gap:2px;$x}$k{$x;white-space:nowrap;gap:3.5px;height:24px;$j0 5px;border:0;$65px;$7transparent;$rch);font:inherit;line-height:16px;$d11px;cursor:pointer;overflow:visible;$v;$cbackground .15s,color .15s}$k$b{$7rgba(255,255,255,.05);$rf)}$a $k$b{$7rgba(15,23,42,.05)}$k strong{$m600}$k[data-warn="1"] strong,dd[data-warn="1"]{$rpv-w1,#f59e0b)}$k[data-warn="2"] strong,dd[data-warn="2"]{$rpv-w2,#f87171)}.chip svg{width:12px;height:12px;stroke:currentColor;stroke-width:1.5;fill:none;$e.75;$x}$k .dim{$rmu);$e.66;$d9.5px}$k :is([data-i18n="cache"],[data-i18n="five"],[data-i18n="week"]){$e.62}$k[data-card="speed"]>span:last-child{$e.66;$d10px}$l :is(.chip[data-card="speed"]>:is(svg,.rounds),.chip[data-card="cache"]>:is(svg:first-child,.cache-total,.dim),.chip[data-card="context"]>.context-label){$n}$l $k:not([hidden])~.chip:not([hidden]){$w;margin-left:6px}$l $k:not([hidden])~.chip:not([hidden])$s{content:"·";$fleft:-4px;top:50%;transform:translate(-50%,-50%);$rmu);$e.32;$o}.sub-badge{$d10px;$e.82;$rprimary,#38bdf8);$m500;margin-right:2px}.context-ring{width:11px;height:11px;$650%;$7conic-gradient(var(--pv-tint,#3186ff) var(--used-angle,36deg),$828) 0);display:inline-block;$w;$x}.context-ring::after{content:"";$finset:2.2px;$650%;$7var(--card,#141720)}$a .context-ring::after{$7var(--card,#f8fafc)}.card{$fright:0;left:auto;bottom:calc(100% + 10px);width:min(304px,calc(100vw - 24px));$j12px 13px;$610px;border:1px solid $822);$7var(--card,#12151ef5);$rforeground,#eef1f7);box-shadow:0 16px 40px rgba(0,0,0,.36);z-index:9999}.card::after{content:"";$fleft:0;right:0;top:100%;height:12px}$14"]) .card{right:-84px;width:min(296px,calc(100vw - 32px))}.heading{display:flex;$z;$yspace-between;gap:6px;$d11px;$m600;margin-bottom:6px}.heading>span:first-child{white-space:nowrap}#context-summary{display:block;$d13px;$m600;margin-bottom:2px}#context-tokens{$i0 0 8px;$d11px;$e.76}.track{height:5px;$6999px;$7$818);overflow:hidden;$i6px 0 10px}.track>i{display:block;height:100%;width:0%;$6999px;$7linear-gradient(90deg,#2563eb,#38bdf8)}dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;$i8px 0;$d11px}dt{$e.64}dd{$i0;text-align:right;$m500;$4text-overflow:ellipsis}.footnote{$i6px 0 0;$d10px;$e.58}')+TIER_CSS;
+const TIER_CSS=expCss('[hidden]{$n}:host{--e:cubic-bezier(.22,1,.36,1);--pt-c:var(--pv-tint,var(--pulse-ring,#3186ff))}.bar{$cgap .28s $0}.bar>:is(.chip,.dot){$4max-width:132px;$e1;transform-origin:right;$cmax-width .28s $0,opacity .17s ease-out,padding .28s $0,margin .28s $0,gap .28s $0,transform .28s $0,background .16s,border-color .22s,box-shadow .22s}.bar>[data-card="cache"]{max-width:240px}$q{$h136px}.bar>.dot{$h16px}:where(.bar>.chip>*:not(.context-ring):not(svg)){$4max-width:108px;flex-shrink:0;$e1;transform-origin:right;$cmax-width .28s $0,opacity .17s ease-out,margin .28s $0,padding .28s $0,transform .28s $0}.context-ring{$ctransform .28s $0}.context-ring[data-anim="1"]{will-change:transform}:host(:not([data-show-tok="1"])[data-t~="1"]) :is(.cache-total,.sub-badge,$2cache"] .dim,.countdown),$14"]) $2context"] .context-label,$15"]) $2context"]>:not(.context-ring){max-width:0!important;flex-shrink:1!important;$e0!;$i0!;$j0!;$5}:host(:not([data-show-speed="1"])[data-t~="1"]) .bar>:is($2speed"],.dot),$14"]) .bar>$2speed"],$12"]) .bar>$2cache"],$13"]) .bar>:is($2week"],$2five"]){$h0!;min-width:0!;$g1!;$e0!;$j0!;$i0!;gap:0!;border:0!;$5}:host(:not([data-show-speed="1"])[data-t~="1"]) .bar>$2speed"]$s,$14"]) .bar>$2speed"]$s,$12"]) .bar>$2cache"]$s,$13"]) .bar>$2week"]$s,$13"]) .bar>$2five"]$s,$13"]) $q$s,$p1"]) .bar>$2cache"]$s,$p2"]) $q$s{$e0!;content:none!}$13"]) $q,$p1"]) .bar>$2cache"],$p2"]) $q{margin-left:0!}$13"]) .bar{gap:0}$15"]) $2context"]{width:26px!;min-width:26px!;height:26px!;$j0!;gap:0!;$6999px!;$ycenter!;$7$39%,$t;border:1px solid $328%,$828))}$15"]) $2context"]$b{$7$317%,$t;border-color:$348%,$84));box-shadow:0 0 10px -2px $345%,$t}$15"]) .context-ring{transform:scale(1.27)}:host([data-pv-motion="off"]) $u,$9 $u{$cnone!}@media (prefers-reduced-motion:reduce){:host(:not([data-pv-ignore-rm="1"])) $u{$cnone!}}');
+const SHADOW_CSS=expCss(':host,*,::before,::after{box-sizing:border-box}:host,.bar,.chip{display:inline-flex;$z}:host{--ch:#dae2f0db;--mu:#94a0b6b8;--f:#eef1f7;--pv-tint:#3186ff;flex:0 0 auto;$w;font:11px/16px Inter,system-ui,-apple-system,"Segoe UI",sans-serif;$v;$rch);user-select:none;z-index:20}$a{--ch:#1e293b;--mu:#475569;--f:#0f172a;--pv-tint:#2563eb;--pv-w1:#d97706;--pv-w2:#dc2626}:host([hidden]),.sub-badge[hidden],:host(:not([data-wide="1"]):not([data-show-tok="1"])) .sub-badge,.card[hidden],.footnote[hidden],.footnote:empty,:host([data-layout="blocked"])>.bar{$n}:host([data-layout="blocked"]){position:fixed!;left:-9999px!;top:-9999px!;width:0!;height:0!;$i0!;$j0!;overflow:hidden!;visibility:hidden!;$o!}.bar{gap:2px;$x}$k{$x;white-space:nowrap;gap:3.5px;height:24px;$j0 5px;border:0;$65px;$7transparent;$rch);font:inherit;line-height:16px;$d11px;cursor:pointer;overflow:visible;$v;$cbackground .15s,color .15s}$k$b{$7rgba(255,255,255,.05);$rf)}$a $k$b{$7rgba(15,23,42,.05)}$k strong{$m600}$k[data-warn="1"] strong,dd[data-warn="1"]{$rpv-w1,#f59e0b)}$k[data-warn="2"] strong,dd[data-warn="2"]{$rpv-w2,#f87171)}.chip svg{width:12px;height:12px;stroke:currentColor;stroke-width:1.5;fill:none;$e.75;$x}$k .dim{$rmu);$e.66;$d9.5px}$k :is([data-i18n="cache"],[data-i18n="five"],[data-i18n="week"]){$e.62}$k$2speed"]>span:last-child{$e.66;$d10px}$l :is(.chip$2speed"]>:is(svg,.rounds),.chip$2cache"]>svg:first-child,.chip$2context"]>.context-label){$n}:host(:not(.icons-only):not([data-show-tok="1"])) .chip$2cache"]>:is(.cache-total,.dim){$n}:host([data-hide-cache="1"]) .chip$2cache"]>:is([data-i18n="cache"],#cache-rate,.dim){$n}$l $k:not([hidden])~.chip:not([hidden]){$w;margin-left:6px}$l $k:not([hidden])~.chip:not([hidden])$s{content:"·";$fleft:-4px;top:50%;transform:translate(-50%,-50%);$rmu);$e.32;$o}.sub-badge{$d10px;$e.82;$rprimary,#38bdf8);$m500;margin-right:2px}.context-ring{width:11px;height:11px;$650%;$7conic-gradient(var(--pv-tint,#3186ff) var(--used-angle,36deg),$828) 0);display:inline-block;$w;$x}.context-ring::after{content:"";$finset:2.2px;$650%;$7var(--card,#141720)}$a .context-ring::after{$7var(--card,#f8fafc)}.card{$fright:0;left:auto;bottom:calc(100% + 10px);width:min(304px,calc(100vw - 24px));$j12px 13px;$610px;border:1px solid $822);$7var(--card,#12151ef5);$rforeground,#eef1f7);box-shadow:0 16px 40px rgba(0,0,0,.36);z-index:9999}.card::after{content:"";$fleft:0;right:0;top:100%;height:12px}$14"]) .card{right:-84px;width:min(296px,calc(100vw - 32px))}.heading{display:flex;$z;$yspace-between;gap:6px;$d11px;$m600;margin-bottom:6px}.heading>span:first-child{white-space:nowrap}#context-summary{display:block;$d13px;$m600;margin-bottom:2px}#context-tokens{$i0 0 8px;$d11px;$e.76}.track{height:5px;$6999px;$7$818);overflow:hidden;$i6px 0 10px}.track>i{display:block;height:100%;width:0%;$6999px;$7linear-gradient(90deg,#2563eb,#38bdf8)}dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;$i8px 0;$d11px}dt{$e.64}dd{$i0;text-align:right;$m500;$4text-overflow:ellipsis}.footnote{$i6px 0 0;$d10px;$e.58}')+TIER_CSS;
 
 const FB_ROWS={
 'zh-CN':'缓存|吞吐速率|首字延迟|最近速率|上下文窗口|当前模型|已用|剩余|代理|5h|周|5h 配额|周配额',
@@ -119,7 +119,8 @@ return el;
 
 const HOST_ATTRS=Object.freeze({[FALLBACK_ATTR]:'1',[PRISM_BAR_ATTR]:'true','data-ag-owned':'1','data-ag-no-i18n':'',translate:'no','data-no-translate':'true','data-ag-localization-skip':'true','data-agy-no-translate':'true','data-antigravity-zh-skip':'1'});
 const HIDE_PROPS='position:fixed|left:-9999px|top:-9999px|width:1px|height:1px|opacity:0|pointer-events:none|visibility:hidden|overflow:hidden'.split('|').map(s=>s.split(':'));
-const FT_CUTS=[440,360],BAR_CUTS=[880,660,530,440,360],WIDE_CUT=1080,FT_SEL='.agy-composer-footer,'+TI('input-box-bottom-toolbar'),HC_A='data-hover-card-popup',QMODE_ATTR='data-ag-cs-telemetry-quota';
+const MET_ATTR=AG+'telemetry-metrics',MET_VALID=new Set('auto|five|week|speed|cache|tokens|context'.split('|')),parseMet=s=>{if(!isStr(s)||!s.trim())return null;const o=new Set();for(const k of s.toLowerCase().split(',')){const t=k.trim();if(MET_VALID.has(t))o.add(t);}return o.size?o:null;};
+const FT_CUTS=[440,360],BAR_CUTS=[880,660,530,440,360],WIDE_CUT=1080,FT_SEL='.agy-composer-footer,'+TI('input-box-bottom-toolbar'),HC_A='data-hover-card-popup',QMODE_ATTR=AG+'telemetry-quota';
 const stepTier=(cur,w,cuts)=>{let t=cur;while(t<cuts.length&&w<cuts[t])t++;while(t>0&&w>=cuts[t-1]+12)t--;return t;};
 const SB_SEL='aside,'+TI('sidebar-split')+'>div:first-child,'+TIs('conversation-row-sidebar|project-header')+',['+HC_A+']';
 const IGN_STREAM_SEL=TIs('autoscroll-viewport|planner-response-text|agent-response|background-task-command|running-items-card')+',[data-markdown-root],'+SB_SEL+',[data-op-thought="1"],.ag-prism-thought-overlay,.ag-cs-conv-aura-host,.ag-cs-crab,.ag-cs-prism-rim-cv,.ag-anim-icon,.ag-cs-thinking-spark,[data-agy-hans-ui],#agy-theme-switcher,#agy-theme-menu,#antigravity-quota-widget,#antigravity-translation-audit';
@@ -130,7 +131,7 @@ function createTelemetryController(envOpts){
 const gW=()=>(envOpts&&envOpts.window)||(typeof window!=='undefined'?window:globalRoot);
 const gD=()=>(envOpts&&envOpts.document)||gW()?.document||null;
 
-let mode='auto',quotaMode='compact',waitTm=null,rescTm=null,pollTm=null,swTm=null,burstTm=null,burstIdx=0,burstGen=0,burstBase=null,burstCid=null,cmpOff=null,pickCmpAt=0,wasBusy=false;
+let mode='auto',quotaMode='compact',metricsStr='',waitTm=null,rescTm=null,pollTm=null,swTm=null,burstTm=null,burstIdx=0,burstGen=0,burstBase=null,burstCid=null,cmpOff=null,pickCmpAt=0,wasBusy=false;
 let hasHost=false,yielded=false,lastSig='',detAt=0,lastHealAt=0;
 let docOff=null,popOff=null,winResOff=null,lastSnap=null,mApi=null,mRes=null,seatObs=null,healTm=null;
 let expLang='',activeHost=null,winBlur=false,pollSusp=false,blurOff=null,blurObs=null,extGuardHeld=false,lastHref='',lastUrlCid='';
@@ -139,144 +140,39 @@ const pend=new Map(),inFlight=new Map(),insts=new Map(),instByHost=new WeakMap()
 const readRouteKey=w=>{const l=w?.location;return l?`${l.href||''}|${l.pathname||''}|${l.hash||''}`:'';};
 const extractUrlCid=w=>{const l=w?.location,m=(isStr(l?.pathname)&&l.pathname.match(URL_CID_RE))||(isStr(l?.href)&&l.href.match(URL_CID_RE));return m?m[1]:null;};
 const ctxTs=s=>{const v=s?.speed?.context?.sampledAt;if(isFin(v))return v;const t=Date.parse(v||'');return isFin(t)?t:NaN;};
-const putCidSnap=(cid,snap)=>{
-if(!cid||!snap||typeof snap!=='object')return;
-const prev=snapByCid.get(cid);
-if(snap.connection===LE&&prev&&prev.connection!==LE)return;
-if(prev&&prev.connection!==LE&&snap.connection!==LE){const pt=ctxTs(prev),nt=ctxTs(snap);if(isFin(pt)&&isFin(nt)&&nt<pt)return;}
-snapByCid.delete(cid);snapByCid.set(cid,snap);
-if(snapByCid.size>LRU_MAX)snapByCid.delete(snapByCid.keys().next().value);
-};
-const getCidSnap=cid=>{
-if(!cid||!snapByCid.has(cid))return null;
-const v=snapByCid.get(cid);snapByCid.delete(cid);snapByCid.set(cid,v);return v;
-};
-const isConn=(doc,el)=>{
-if(!el||el.isConnected===false)return false;
-if(el.isConnected===true)return true;
-if(!el.parentNode&&!el.parentElement)return false;
-if(doc&&isFn(doc.getElementById)&&el.id&&!isFn(doc.querySelectorAll)){const b=doc.getElementById(el.id);if(b&&b!==el)return false;}
-return true;
-};
-const getPrimaryInst=()=>{
-const doc=gD();let first=null;
-for(const it of insts.values()){if(!isConn(doc,it.host))continue;if(!first)first=it;if(it.host.id===PRISM_BAR_ID)return it;}
-return first;
-};
+const putCidSnap=(c,s)=>{if(!c||!s||typeof s!=='object')return;const p=snapByCid.get(c);if(s.connection===LE&&p&&p.connection!==LE)return;if(p&&p.connection!==LE&&s.connection!==LE){const pt=ctxTs(p),nt=ctxTs(s);if(isFin(pt)&&isFin(nt)&&nt<pt)return;}snapByCid.delete(c);snapByCid.set(c,s);if(snapByCid.size>LRU_MAX)snapByCid.delete(snapByCid.keys().next().value);};
+const getCidSnap=c=>{if(!c||!snapByCid.has(c))return null;const v=snapByCid.get(c);snapByCid.delete(c);snapByCid.set(c,v);return v;};
+const isConn=(d,e)=>{if(!e||e.isConnected===false)return false;if(e.isConnected===true)return true;if(!e.parentNode&&!e.parentElement)return false;if(d&&isFn(d.getElementById)&&e.id&&!isFn(d.querySelectorAll)){const b=d.getElementById(e.id);if(b&&b!==e)return false;}return true;};
+const getPrimaryInst=()=>{const d=gD();let f=null;for(const it of insts.values()){if(!isConn(d,it.host))continue;if(!f)f=it;if(it.host.id===PRISM_BAR_ID)return it;}return f;};
 const isCardOpen=it=>!!(it&&((it.xCard&&!it.xCard.hidden)||(it.sCard&&!it.sCard.hidden)));
-const resolveActiveInst=()=>{
-const doc=gD();
-for(const it of insts.values())if(isConn(doc,it.host)&&isCardOpen(it))return it;
-if(activeHost&&isConn(doc,activeHost)){const hit=instByHost.get(activeHost);if(hit)return hit;}
-const actCv=doc?.activeElement?.closest?.(CV_S+','+IB_S);
-if(actCv)for(const it of insts.values())if(isConn(doc,it.host)&&(actCv===it.anc||actCv.contains?.(it.anc)))return it;
-return getPrimaryInst();
-};
-const syncPrimaryId=()=>{
-const doc=gD();let primary=null;
-for(const it of insts.values()){if(!isConn(doc,it.host))continue;if(!primary)primary=it;if(it.host.id===PRISM_BAR_ID){primary=it;break;}}
-for(const it of insts.values()){
-if(it===primary){if(it.host.id!==PRISM_BAR_ID)sA(it.host,'id',PRISM_BAR_ID);}
-else if(it.host.id){rA(it.host,'id');if(it.host.id)it.host.id='';}
-}
-};
-
-const syncHostAttrs=h=>{
-const de=gD()?.documentElement;if(!h||!de)return;
-const th=gA(de,AG+'theme');
-if(th==='light')setIf(h,PV+'light','1');else if(th==='dark'&&gA(h,PV+'light')==='1')rA(h,PV+'light');
-for(const k of['resizing','ignore-rm'])gA(de,AG+k)==='1'?setIf(h,PV+k,'1'):gA(h,PV+k)!==null&&rA(h,PV+k);
-};
+const resolveActiveInst=()=>{const d=gD();for(const it of insts.values())if(isConn(d,it.host)&&isCardOpen(it))return it;if(activeHost&&isConn(d,activeHost)){const h=instByHost.get(activeHost);if(h)return h;}const cv=d?.activeElement?.closest?.(CV_S+','+IB_S);if(cv)for(const it of insts.values())if(isConn(d,it.host)&&(cv===it.anc||cv.contains?.(it.anc)))return it;return getPrimaryInst();};
+const syncPrimaryId=()=>{const d=gD();let p=null;for(const it of insts.values()){if(!isConn(d,it.host))continue;if(!p)p=it;if(it.host.id===PRISM_BAR_ID){p=it;break;}}for(const it of insts.values()){if(it===p){if(it.host.id!==PRISM_BAR_ID)sA(it.host,'id',PRISM_BAR_ID);}else if(it.host.id){rA(it.host,'id');if(it.host.id)it.host.id='';}}};
+const syncHostAttrs=h=>{const de=gD()?.documentElement;if(!h||!de)return;const th=gA(de,AG+'theme');if(th==='light')setIf(h,PV+'light','1');else if(th==='dark'&&gA(h,PV+'light')==='1')rA(h,PV+'light');for(const k of['resizing','ignore-rm'])gA(de,AG+k)==='1'?setIf(h,PV+k,'1'):gA(h,PV+k)!==null&&rA(h,PV+k);};
 const syncAllHostAttrs=()=>{for(const it of insts.values())syncHostAttrs(it.host);for(const b of findExtBars(gD()))syncHostAttrs(b);};
-const pulseRingAnim=rec=>{const r=rec?.sr?.getElementById?.('context-ring');if(!r)return;rec.ringTm=cT(rec.ringTm);setIf(r,'data-anim','1');rec.ringTm=stTm(()=>{rec.ringTm=null;rA(r,'data-anim');},320);};
+const pulseRingAnim=r=>{const x=r?.sr?.getElementById?.('context-ring');if(!x)return;r.ringTm=cT(r.ringTm);setIf(x,'data-anim','1');r.ringTm=stTm(()=>{r.ringTm=null;rA(x,'data-anim');},320);};
 const applyTierRec=(rec,force=false)=>{
-rec.raf=0;
-const doc=gD(),ft=mode!=='off'&&rec.anc&&isConn(doc,rec.anc)?rec.anc:null,w=rec.hasPendW?rec.pendW:ft?.getBoundingClientRect?.().width;
-rec.pendW=0;rec.hasPendW=false;
-if(!ft||!isFin(w)||w<=0)return;
-const prevBarTv=rec.lastBarTv,ftTv=FT_VALS[(rec.curFtTier=stepTier(rec.curFtTier,w,FT_CUTS))]||'0',barTv=TIER_VALS[(rec.curBarTier=stepTier(rec.curBarTier,w,BAR_CUTS))]||'0',isWide=w>=WIDE_CUT;
-if(!force&&ftTv===rec.lastFtTv&&gA(ft,TIER_ATTR)===ftTv&&barTv===rec.lastBarTv&&isWide===rec.lastWide)return;
-rec.lastFtTv=ftTv;rec.lastBarTv=barTv;rec.lastWide=isWide;setIf(ft,TIER_ATTR,ftTv);
-if(rec.host){
-if(gA(rec.host,HID_ATTR)!=='1'){setIf(rec.host,TIER_ATTR,barTv);if(prevBarTv&&prevBarTv.includes('5')!==barTv.includes('5'))pulseRingAnim(rec);if(isWide)setIf(rec.host,'data-wide','1');else if(gA(rec.host,'data-wide')!==null)rA(rec.host,'data-wide');}
-return;
-}
-const exts=findExtBars(doc),loc=exts.filter(b=>b&&(ft.contains?.(b)||b.parentElement===ft));
-for(const b of(loc.length?loc:extTiers.size<=1?exts:[])){
-if(!b||gA(b,HID_ATTR)==='1')continue;
-setIf(b,TIER_ATTR,barTv);syncHostAttrs(b);
-if(b.shadowRoot&&!qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`))try{const st=doc.createElement('style');sA(st,TIER_STYLE_ATTR,'1');st.textContent=TIER_CSS;b.shadowRoot.appendChild(st);}catch{}
-}
+rec.raf=0;const d=gD(),ft=mode!=='off'&&rec.anc&&isConn(d,rec.anc)?rec.anc:null,w=rec.hasPendW?rec.pendW:ft?.getBoundingClientRect?.().width;
+rec.pendW=0;rec.hasPendW=false;if(!ft||!isFin(w)||w<=0)return;
+const prevB=rec.lastBarTv,ftTv=FT_VALS[(rec.curFtTier=stepTier(rec.curFtTier,w,FT_CUTS))]||'0',barTv=TIER_VALS[(rec.curBarTier=stepTier(rec.curBarTier,w,BAR_CUTS))]||'0',isW=w>=WIDE_CUT;
+if(!force&&ftTv===rec.lastFtTv&&gA(ft,TIER_ATTR)===ftTv&&barTv===rec.lastBarTv&&isW===rec.lastWide)return;
+rec.lastFtTv=ftTv;rec.lastBarTv=barTv;rec.lastWide=isW;setIf(ft,TIER_ATTR,ftTv);
+if(rec.host){if(gA(rec.host,HID_ATTR)!=='1'){setIf(rec.host,TIER_ATTR,barTv);if(prevB&&prevB.includes('5')!==barTv.includes('5'))pulseRingAnim(rec);if(isW)setIf(rec.host,'data-wide','1');else if(gA(rec.host,'data-wide')!==null)rA(rec.host,'data-wide');}return;}
+const exts=findExtBars(d),loc=exts.filter(b=>b&&(ft.contains?.(b)||b.parentElement===ft));
+for(const b of(loc.length?loc:extTiers.size<=1?exts:[])){if(!b||gA(b,HID_ATTR)==='1')continue;setIf(b,TIER_ATTR,barTv);syncHostAttrs(b);if(b.shadowRoot&&!qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`))try{const st=d.createElement('style');sA(st,TIER_STYLE_ATTR,'1');st.textContent=TIER_CSS;b.shadowRoot.appendChild(st);}catch{}}
 };
 const gBus=()=>{const w=gW();return w?.__agDomBus||w?.__agPrismDomBus||null;};
-const subMo=(id,root,opt,fn,pri)=>{
-const b=gBus(),w=gW();
-if(b?.subscribe)return{disconnect:b.subscribe(id,fn,{doc:gD(),win:w,priority:pri,observeOptions:opt})};
-if(!isFn(w?.MutationObserver)||!root)return null;
-const mo=new w.MutationObserver(fn);try{mo.observe(root,opt);}catch{}return mo;
-};
+const subMo=(id,root,opt,fn,pri)=>{const b=gBus(),w=gW();if(b?.subscribe)return{disconnect:b.subscribe(id,fn,{doc:gD(),win:w,priority:pri,observeOptions:opt})};if(!isFn(w?.MutationObserver)||!root)return null;const mo=new w.MutationObserver(fn);try{mo.observe(root,opt);}catch{}return mo;};
 const readEntryW=e=>(Array.isArray(e?.borderBoxSize)?e.borderBoxSize[0]:e?.borderBoxSize)?.inlineSize??(Array.isArray(e?.contentBoxSize)?e.contentBoxSize[0]:e?.contentBoxSize)?.inlineSize??e?.contentRect?.width;
-const schedTierRec=(rec,entries)=>{
-if(entries&&typeof entries.length==='number'){
-let rw=NaN;for(let i=entries.length-1;i>=0;i--){const w0=readEntryW(entries[i]);if(isFin(w0)&&w0>=0){rw=w0;break;}}
-if(isFin(rw)){rec.pendW=rw;rec.hasPendW=true;}
-}else rec.hasPendW=false;
-if(!rec.raf&&mode!=='off'){const w=gW();if(w?.requestAnimationFrame){let ran=false;const id=w.requestAnimationFrame(()=>{ran=true;applyTierRec(rec,false);});rec.raf=ran?0:id;}else applyTierRec(rec,false);}
-};
+const schedTierRec=(rec,es)=>{if(es&&typeof es.length==='number'){let rw=NaN;for(let i=es.length-1;i>=0;i--){const w0=readEntryW(es[i]);if(isFin(w0)&&w0>=0){rw=w0;break;}}if(isFin(rw)){rec.pendW=rw;rec.hasPendW=true;}}else rec.hasPendW=false;if(!rec.raf&&mode!=='off'){const w=gW();if(w?.requestAnimationFrame){let ran=false;const id=w.requestAnimationFrame(()=>{ran=true;applyTierRec(rec,false);});rec.raf=ran?0:id;}else applyTierRec(rec,false);}};
 const ensWinResize=()=>{const w=gW();if(!winResOff&&w&&isFn(w.addEventListener))winResOff=on(w,'resize',()=>{for(const it of insts.values())schedTierRec(it,null);for(const et of extTiers.values())schedTierRec(et,null);},{passive:true});};
-const attachTierRec=rec=>{
-const w=gW();if(!w||!rec?.anc||mode==='off')return;
-if(!rec.ro){
-const b=gBus();
-if(b?.observeSize)try{rec.ro={disconnect:b.observeSize(rec.anc,(sz,en)=>schedTierRec(rec,[en||{borderBoxSize:[{inlineSize:sz.width}]}]))};}catch{}
-else if(isFn(w.ResizeObserver))try{rec.ro=new w.ResizeObserver(es=>schedTierRec(rec,es));rec.ro.observe(rec.anc);}catch{}
-}
-ensWinResize();if(!rec.lastBarTv||!rec.ro)applyTierRec(rec,true);
-};
-const detachTierRec=rec=>{
-if(!rec)return;
-try{if(rec.raf)gW()?.cancelAnimationFrame?.(rec.raf);rec.ringTm=cT(rec.ringTm);rec.ro?.disconnect?.();rA(rec.anc,TIER_ATTR);if(rec.host)rA(rec.host,'data-wide');}catch{}
-Object.assign(rec,{raf:0,ro:null,curFtTier:0,curBarTier:0,pendW:0,hasPendW:false,lastFtTv:'',lastBarTv:'',lastWide:false});
-};
+const attachTierRec=rec=>{const w=gW();if(!w||!rec?.anc||mode==='off')return;if(!rec.ro){const b=gBus();if(b?.observeSize)try{rec.ro={disconnect:b.observeSize(rec.anc,(sz,en)=>schedTierRec(rec,[en||{borderBoxSize:[{inlineSize:sz.width}]}]))};}catch{}else if(isFn(w.ResizeObserver))try{rec.ro=new w.ResizeObserver(es=>schedTierRec(rec,es));rec.ro.observe(rec.anc);}catch{}}ensWinResize();if(!rec.lastBarTv||!rec.ro)applyTierRec(rec,true);};
+const detachTierRec=rec=>{if(!rec)return;try{if(rec.raf)gW()?.cancelAnimationFrame?.(rec.raf);rec.ringTm=cT(rec.ringTm);rec.ro?.disconnect?.();rA(rec.anc,TIER_ATTR);if(rec.host)rA(rec.host,'data-wide');}catch{}Object.assign(rec,{raf:0,ro:null,curFtTier:0,curBarTier:0,pendW:0,hasPendW:false,lastFtTv:'',lastBarTv:'',lastWide:false});};
 const clrExtTiers=()=>{for(const et of extTiers.values())detachTierRec(et);extTiers.clear();};
-const clrTier=()=>{
-for(const it of insts.values())detachTierRec(it);
-clrExtTiers();try{winResOff?.();}catch{}winResOff=null;
-for(const b of qA(gD(),`#${PRISM_BAR_ID},[${PRISM_BAR_ATTR}],#${BAR_ID},[id^="${BAR_ID}"],[data-ag-pulse-bar]`)||[])try{rA(b,TIER_ATTR);rA(b,'data-wide');qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`)?.remove?.();}catch{}
-};
-const ensTierObs=()=>{
-const doc=gD();if(!doc||mode==='off')return;
-if(insts.size>0){clrExtTiers();for(const it of insts.values())attachTierRec(it);return;}
-const fts=findAnchors(doc,true),ftSet=new Set(fts);
-for(const[anc,et]of extTiers)if(!ftSet.has(anc)||!isConn(doc,anc)){detachTierRec(et);extTiers.delete(anc);}
-for(const ft of fts){let et=extTiers.get(ft);if(!et)extTiers.set(ft,et=mkTier(ft,null));attachTierRec(et);}
-};
-
+const clrTier=()=>{for(const it of insts.values())detachTierRec(it);clrExtTiers();try{winResOff?.();}catch{}winResOff=null;for(const b of qA(gD(),`#${PRISM_BAR_ID},[${PRISM_BAR_ATTR}],#${BAR_ID},[id^="${BAR_ID}"],[data-ag-pulse-bar]`)||[])try{rA(b,TIER_ATTR);rA(b,'data-wide');qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`)?.remove?.();}catch{}};
+const ensTierObs=()=>{const d=gD();if(!d||mode==='off')return;if(insts.size>0){clrExtTiers();for(const it of insts.values())attachTierRec(it);return;}const fts=findAnchors(d,true),fs=new Set(fts);for(const[a,et]of extTiers)if(!fs.has(a)||!isConn(d,a)){detachTierRec(et);extTiers.delete(a);}for(const ft of fts){let et=extTiers.get(ft);if(!et)extTiers.set(ft,et=mkTier(ft,null));attachTierRec(et);}};
 const bindHook=()=>{
 const w=gW();if(!w)return;
-if(!mRes){
-mRes=(id,pl)=>{
-const it=pend.get(id);if(!it)return;
-cT(it.timer);pend.delete(id);
-let synced=pl;
-if(pl&&pl.connection!==LE&&pl.groups?.length>0){
-const prev=(it.cid&&snapByCid.get(it.cid))||(!it.cid?lastSnap:null);
-const ks=!pl.speed&&prev?.speed,kc=!pl.conversations?.length&&prev?.conversations?.length;
-synced=ks||kc?{...pl,...(ks?{speed:prev.speed}:{}),...(kc?{conversations:prev.conversations}:{})}:pl;
-if(it.cid)putCidSnap(it.cid,synced);
-if(!lastSnap||!it.cid||resolveActiveInst()?.cid===it.cid)lastSnap=synced;
-}
-if(it.syncUi&&synced&&synced.connection!==LE&&synced.speed?.context&&insts.size>0){
-const doc=gD(),multi=insts.size>1,nAt=String(synced.speed.context.sampledAt||'');
-for(const ins of insts.values()){
-if(!isConn(doc,ins.host))continue;
-const liveCid=detCid(ins.host,multi),oAt=String(ins.snap?.speed?.context?.sampledAt||'');
-if((it.cid?(ins.cid===it.cid&&(!liveCid||liveCid===it.cid)):(!multi&&!ins.cid))&&ins.snap!==synced&&(!oAt||!nAt||nAt>=oAt))applySnapToInst(ins,synced);
-}
-}
-it.onSettle?.();it.resolve(pl);
-};
-}
+if(!mRes){mRes=(id,pl)=>{const it=pend.get(id);if(!it)return;cT(it.timer);pend.delete(id);let synced=pl;if(pl&&pl.connection!==LE&&pl.groups?.length>0){const p=(it.cid&&snapByCid.get(it.cid))||(!it.cid?lastSnap:null),ks=!pl.speed&&p?.speed,kc=!pl.conversations?.length&&p?.conversations?.length;synced=ks||kc?{...pl,...(ks?{speed:p.speed}:{}),...(kc?{conversations:p.conversations}:{})}:pl;if(it.cid)putCidSnap(it.cid,synced);if(!lastSnap||!it.cid||resolveActiveInst()?.cid===it.cid)lastSnap=synced;}if(it.syncUi&&synced&&synced.connection!==LE&&synced.speed?.context&&insts.size>0){const d=gD(),m=insts.size>1,nAt=String(synced.speed.context.sampledAt||'');for(const ins of insts.values()){if(!isConn(d,ins.host))continue;const lc=detCid(ins.host,m),oAt=String(ins.snap?.speed?.context?.sampledAt||'');if((it.cid?(ins.cid===it.cid&&(!lc||lc===it.cid)):(!m&&!ins.cid))&&ins.snap!==synced&&(!oAt||!nAt||nAt>=oAt))applySnapToInst(ins,synced);}}it.onSettle?.();it.resolve(pl);};}
 if(w.__agPrismMetricsResolve!==mRes)w.__agPrismMetricsResolve=mRes;
 };
 const clrWait=()=>{waitTm=cT(waitTm);rescTm=cT(rescTm);};
@@ -286,24 +182,17 @@ const clrPoll=()=>{if(pollTm!==null){clearInterval(pollTm);pollTm=null;}};
 const clrCompactWatch=()=>{try{cmpOff?.();}catch{}cmpOff=null;pickCmpAt=0;wasBusy=false;};
 const isBlur=()=>{const d=gD();return!!(d?.hidden||gA(d?.documentElement,AG+'win-blur')==='1'||winBlur);};
 const readAttrQuotaMode=()=>{const a=gA(gD()?.documentElement,QMODE_ATTR);return a==='both'?'both':a==='compact'?'compact':'';};
+const readAttrMetrics=()=>String(gA(gD()?.documentElement,MET_ATTR)||'').trim();
 const clrBlur=()=>{try{blurOff?.();blurObs?.disconnect?.();}catch{}blurOff=blurObs=null;winBlur=pollSusp=false;};
-const startPoll=()=>{
-clrPoll();if(insts.size===0||mode==='off')return;
-if(isBlur()){pollSusp=true;return;}
-pollSusp=false;pollTm=setInterval(()=>{isBlur()?(pollSusp=true,clrPoll()):void refresh();},4000);pollTm?.unref?.();
-};
-const syncBlur=res=>{
-if(insts.size===0||mode==='off'){clrPoll();clrBurst();pollSusp=false;return;}
-if(isBlur()){pollSusp=true;clrPoll();clrBurst();return;}
-const was=pollSusp;pollSusp=false;if(pollTm===null)startPoll();if(was&&res)void refresh();
-};
+const startPoll=()=>{clrPoll();if(insts.size===0||mode==='off')return;if(isBlur()){pollSusp=true;return;}pollSusp=false;pollTm=setInterval(()=>{isBlur()?(pollSusp=true,clrPoll()):void refresh();},4000);pollTm?.unref?.();};
+const syncBlur=res=>{if(insts.size===0||mode==='off'){clrPoll();clrBurst();pollSusp=false;return;}if(isBlur()){pollSusp=true;clrPoll();clrBurst();return;}const was=pollSusp;pollSusp=false;if(pollTm===null)startPoll();if(was&&res)void refresh();};
 const ensBlur=()=>{
 const w=gW(),d=gD();if(!w||!d)return;
 if(!blurOff&&isFn(w.addEventListener)){
 const u=[on(w,'blur',()=>{winBlur=true;syncBlur(false);}),on(w,'focus',()=>{winBlur=false;syncBlur(true);}),on(d,'visibilitychange',()=>{if(!gD()?.hidden)winBlur=false;syncBlur(!gD()?.hidden);})];
 blurOff=()=>{for(const f of u)f();};
 }
-if(!blurObs&&d.documentElement)try{blurObs=subMo('pulse-blur',d.documentElement,{childList:false,subtree:false,attributes:true,attributeFilter:[AG+'win-blur',QMODE_ATTR,AG+'theme',AG+'resizing',AG+'ignore-rm']},()=>{const b=gA(gD()?.documentElement,AG+'win-blur')==='1';if(!b)winBlur=false;syncBlur(!b);syncAllHostAttrs();const qm=readAttrQuotaMode();if(qm&&qm!==quotaMode){quotaMode=qm;for(const it of insts.values())if(it.snap||lastSnap)applySnapToInst(it,it.snap||lastSnap);}},'high');}catch{}
+if(!blurObs&&d.documentElement)try{blurObs=subMo('pulse-blur',d.documentElement,{childList:false,subtree:false,attributes:true,attributeFilter:[AG+'win-blur',QMODE_ATTR,MET_ATTR,AG+'theme',AG+'resizing',AG+'ignore-rm']},()=>{const de=gD()?.documentElement,b=gA(de,AG+'win-blur')==='1';if(!b)winBlur=false;syncBlur(!b);syncAllHostAttrs();const qm=readAttrQuotaMode(),ms=readAttrMetrics();let chg=false;if(qm&&qm!==quotaMode){quotaMode=qm;chg=true;}if(ms!==metricsStr&&gA(de,MET_ATTR)!==null){metricsStr=ms;chg=true;}if(chg)for(const it of insts.values())if(it.snap||lastSnap)applySnapToInst(it,it.snap||lastSnap);},'high');}catch{}
 };
 const clrSeat=()=>{clrSw();healTm=cT(healTm);try{seatObs?.disconnect?.();popOff?.();}catch{}seatObs=popOff=null;clrTier();};
 const isConv=(doc,w,anc)=>{
@@ -463,15 +352,15 @@ const fl=gE('context-fill');if(fl?.style)fl.style.width=`${pct}%`;
 gE('context-ring')?.style?.setProperty?.('--used-angle',`${Math.round(uf*360)}deg`);
 const qGs=Array.isArray(snap?.groups)&&(snap.groups.length||snap.connection!==LE)?(it.lastGroups=snap.groups):it.lastGroups;
 const g=qGrp(qGs,model,gW()),gn=g?.name||g?.id||'',w5=qWin(g?.windows?.['5h']||g?.fiveHour),wW=qWin(g?.windows?.weekly||g?.weekly);
-let s5=!!w5,sW=!!wW;if(quotaMode!=='both'&&w5&&wW){if(wW.r<w5.r)s5=false;else sW=false;}
-const setQ=(chip,id,w0,lbl,vis)=>{
-if(!chip)return;
-if(!w0){chip.hidden=true;rA(chip,DW);rA(chip,'title');sT(id,'—');return;}
-const p=Math.round(w0.r*100),e=qEta(w0.t);
-chip.hidden=!vis;sT(id,`${p}%`);wLvl(chip,w0.r);sA(chip,'title',`${gn?gn+' · ':''}${lbl} ${p}%${e?` (${e})`:''}`);
-};
+const mSet=parseMet(metricsStr);
+let s5=!!w5,sW=!!wW;
+if(mSet){if(mSet.has('auto')&&!(mSet.has('five')&&mSet.has('week'))){if(w5&&wW){if(wW.r<w5.r)s5=false;else sW=false;}}else{s5=!!w5&&mSet.has('five');sW=!!wW&&mSet.has('week');}}
+else if(quotaMode!=='both'&&w5&&wW){if(wW.r<w5.r)s5=false;else sW=false;}
+const setQ=(c,id,w0,lb,v)=>{if(!c)return;if(!w0){c.hidden=true;rA(c,DW);rA(c,'title');sT(id,'—');return;}const p=Math.round(w0.r*100),e=qEta(w0.t);c.hidden=!v;sT(id,`${p}%`);wLvl(c,w0.r);sA(c,'title',`${gn?gn+' · ':''}${lb} ${p}%${e?` (${e})`:''}`);};
 setQ(it.fChip,'five-balance',w5,t.fiveShort,s5);setQ(it.wChip,'week-balance',wW,t.weekShort,sW);
-if(!s5&&!sW)sA(fbEl,'data-no-q','1');else rA(fbEl,'data-no-q');
+const shSpd=!mSet||mSet.has('speed'),shTok=!!(mSet&&mSet.has('tokens')),shCch=!mSet||mSet.has('cache'),shCtx=!mSet||mSet.has('context'),tA=(k,on)=>on?sA(fbEl,k,'1'):rA(fbEl,k);
+if(it.sChip)it.sChip.hidden=!shSpd;if(it.cChip)it.cChip.hidden=!shCch&&!shTok;if(it.xChip)it.xChip.hidden=!shCtx;
+tA('data-show-speed',mSet&&mSet.has('speed'));tA('data-show-tok',shTok);tA('data-hide-cache',mSet&&!shCch);tA('data-no-q',!s5&&!sW);
 sA(fbEl,'data-quota-mode',quotaMode);
 for(const[id,w0]of[['context-five-quota',w5],['context-week-quota',wW]]){
 const el=gE(id);if(!el)continue;
@@ -489,129 +378,62 @@ emitB(gW(),{event:'render',data:snap,host:fbEl,[CK]:it.cid});
 const HID_ANC_SEL='.agy-home,aside,'+TI('conversation-list-sidebar')+','+TI('conversation-row-sidebar')+',[hidden],[inert]';
 const isHidAnc=e=>!e||e.hidden===true||e.style?.display==='none'||!!e.closest?.(HID_ANC_SEL);
 const isTopWrap=p=>{if(!p)return true;const c=String(p.className||'').trim();return!!(c&&/\bmin-w-0\b/.test(c)&&!/\b(?:flex|inline-flex|agy-composer-footer)\b/.test(c));};
-const findAnchors=(doc,knownConv=false)=>{
-if(!doc)return[];const w=gW();if(!knownConv&&!isConv(doc,w))return[];
-const out=[],seen=new Set(),boxMap=new Map(),isFt=e=>/\bagy-composer-footer\b/.test(String(e.className||''));
-for(const ft of qAll(doc,FT_SEL)){
-if(!ft||seen.has(ft)||isHidAnc(ft)||(!knownConv&&!isConv(doc,w,ft)))continue;
-const box=ft.closest?.(IB_S)||null;
-if(box){const prev=boxMap.get(box);if(prev){if(isFt(ft)&&!isFt(prev)){const idx=out.indexOf(prev);if(idx>=0)out[idx]=ft;seen.delete(prev);seen.add(ft);boxMap.set(box,ft);}continue;}boxMap.set(box,ft);}
+const findAnchors=(d,kc=false)=>{
+if(!d)return[];const w=gW();if(!kc&&!isConv(d,w))return[];
+const out=[],seen=new Set(),bm=new Map(),isFt=e=>/\bagy-composer-footer\b/.test(String(e.className||''));
+for(const ft of qAll(d,FT_SEL)){
+if(!ft||seen.has(ft)||isHidAnc(ft)||(!kc&&!isConv(d,w,ft)))continue;
+const bx=ft.closest?.(IB_S)||null;
+if(bx){const p=bm.get(bx);if(p){if(isFt(ft)&&!isFt(p)){const i=out.indexOf(p);if(i>=0)out[i]=ft;seen.delete(p);seen.add(ft);bm.set(bx,ft);}continue;}bm.set(bx,ft);}
 seen.add(ft);out.push(ft);
 }
 if(out.length)return out;
-for(const mb of qAll(doc,MS_S)){const anc=mb?.parentElement;if(anc&&!seen.has(anc)&&!isHidAnc(mb)&&!isTopWrap(anc)&&(knownConv||isConv(doc,w,mb))){seen.add(anc);out.push(anc);}}
+for(const mb of qAll(d,MS_S)){const a=mb?.parentElement;if(a&&!seen.has(a)&&!isHidAnc(mb)&&!isTopWrap(a)&&(kc||isConv(d,w,mb))){seen.add(a);out.push(a);}}
 return out;
 };
-const hasAnyAnchor=(doc,knownConv=false)=>{
-if(!doc)return false;const w=gW();if(!knownConv&&!isConv(doc,w))return false;
-const ft=qS(doc,FT_SEL);if(ft&&!isHidAnc(ft)&&(knownConv||isConv(doc,w,ft)))return true;
-const mb=qS(doc,MS_S),anc=mb?.parentElement;return!!(anc&&!isHidAnc(mb)&&!isTopWrap(anc)&&(knownConv||isConv(doc,w,mb)));
-};
-const seatIn=(anc,el)=>{
-if(!anc||!el)return false;const k=anc.children||[];
-if(/\bagy-composer-footer\b/.test(String(anc.className||''))&&k.length>=2&&isFn(anc.insertBefore)){const l=k[k.length-1];if(l&&l!==el){anc.insertBefore(el,l);return true;}}
-anc.appendChild(el);return true;
-};
-
+const hasAnyAnchor=(d,kc=false)=>{if(!d)return false;const w=gW();if(!kc&&!isConv(d,w))return false;const ft=qS(d,FT_SEL);if(ft&&!isHidAnc(ft)&&(kc||isConv(d,w,ft)))return true;const mb=qS(d,MS_S),a=mb?.parentElement;return!!(a&&!isHidAnc(mb)&&!isTopWrap(a)&&(kc||isConv(d,w,mb)));};
+const seatIn=(a,el)=>{if(!a||!el)return false;const k=a.children||[];if(/\bagy-composer-footer\b/.test(String(a.className||''))&&k.length>=2&&isFn(a.insertBefore)){const l=k[k.length-1];if(l&&l!==el){a.insertBefore(el,l);return true;}}a.appendChild(el);return true;};
 const allChips=it=>[it.fChip,it.wChip,it.cChip,it.sChip,it.xChip];
-const closeCards=(it,notify=false)=>{
-if(!it)return false;clrHover(it);it.pinned=null;it.hoverOpen=false;
-if((!it.xCard||it.xCard.hidden)&&(!it.sCard||it.sCard.hidden))return false;
-if(it.xCard)it.xCard.hidden=true;if(it.sCard)it.sCard.hidden=true;
-for(const c of allChips(it))sA(c,AE_A,'false');
-if(notify)emitB(gW(),{event:'card',host:it.host,open:false});
-return true;
-};
-const openCard=(it,card,btn,pin)=>{
-if(!it||!card)return;clrHover(it);activeHost=it.host;
-for(const o of insts.values())if(o!==it)closeCards(o,false);
-it.sCard.hidden=it.xCard.hidden=true;
-for(const c of allChips(it))sA(c,AE_A,'false');
-card.hidden=false;if(btn)sA(btn,AE_A,'true');
-it.pinned=pin?card:null;it.hoverOpen=!pin;void refreshInst(it);
-emitB(gW(),{event:'card',host:it.host,open:true,data:it.snap||lastSnap});
-};
-const ensDocClick=doc=>{if(!docOff&&doc&&isFn(doc.addEventListener))docOff=on(doc,'click',ev=>{for(const it of insts.values())if(ev?.target!==it.host&&!it.host.contains?.(ev?.target))closeCards(it,true);});};
-const isStaleResult=(it,reqCid,reqGen,multi)=>{
-if(insts.get(it.anc)!==it||!isConn(gD(),it.host)||reqGen!==it.reqGen)return true;
-if(reqCid&&it.cid&&it.cid!==reqCid)return true;
-const liveCid=detCid(it.host,multi);return!!(reqCid&&liveCid&&liveCid!==reqCid);
-};
-const refreshInst=async it=>{
-const doc=gD();if(!it||!doc||!isConn(doc,it.host)||mode==='off')return null;
-const multi=insts.size>1,cid=detCid(it.host,multi);
-if(cid!==it.cid){it.cid=cid;it.reqGen++;}
-const reqGen=it.reqGen,snap=await reqSnapSF(cid||`__inst_${reqGen}`,{[CK]:cid,force:false,[IK]:isCardOpen(it)},it.host);
-if(!isStaleResult(it,cid,reqGen,multi))applySnapToInst(it,snap);
-return snap;
-};
-
-const createBarInst=(doc,anc)=>{
-const E=(t,a,k)=>mk(doc,t,a,k),host=E('div',HOST_ATTRS);
-if(!isFn(host.attachShadow))return null;
+const closeCards=(it,n=false)=>{if(!it)return false;clrHover(it);it.pinned=null;it.hoverOpen=false;if((!it.xCard||it.xCard.hidden)&&(!it.sCard||it.sCard.hidden))return false;if(it.xCard)it.xCard.hidden=true;if(it.sCard)it.sCard.hidden=true;for(const c of allChips(it))sA(c,AE_A,'false');if(n)emitB(gW(),{event:'card',host:it.host,open:false});return true;};
+const openCard=(it,card,btn,pin)=>{if(!it||!card)return;clrHover(it);activeHost=it.host;for(const o of insts.values())if(o!==it)closeCards(o,false);it.sCard.hidden=it.xCard.hidden=true;for(const c of allChips(it))sA(c,AE_A,'false');card.hidden=false;if(btn)sA(btn,AE_A,'true');it.pinned=pin?card:null;it.hoverOpen=!pin;void refreshInst(it);emitB(gW(),{event:'card',host:it.host,open:true,data:it.snap||lastSnap});};
+const ensDocClick=d=>{if(!docOff&&d&&isFn(d.addEventListener))docOff=on(d,'click',ev=>{for(const it of insts.values())if(ev?.target!==it.host&&!it.host.contains?.(ev?.target))closeCards(it,true);});};
+const isStale=(it,rc,rg,m)=>{if(insts.get(it.anc)!==it||!isConn(gD(),it.host)||rg!==it.reqGen)return true;if(rc&&it.cid&&it.cid!==rc)return true;const lc=detCid(it.host,m);return!!(rc&&lc&&lc!==rc);};
+const refreshInst=async it=>{const d=gD();if(!it||!d||!isConn(d,it.host)||mode==='off')return null;const m=insts.size>1,c=detCid(it.host,m);if(c!==it.cid){it.cid=c;it.reqGen++;}const rg=it.reqGen,s=await reqSnapSF(c||`__inst_${rg}`,{[CK]:c,force:false,[IK]:isCardOpen(it)},it.host);if(!isStale(it,c,rg,m))applySnapToInst(it,s);return s;};
+const createBarInst=(d,anc)=>{
+const E=(t,a,k)=>mk(d,t,a,k),host=E('div',HOST_ATTRS);if(!isFn(host.attachShadow))return null;
 const sr=host.attachShadow({mode:'open'});sr.appendChild(E('style',{text:SHADOW_CSS}));
-const t0=gStr(),btn=(c,k,ex)=>E('button',{type:'button',cls:'chip','data-card':c,...ex},k),dl=rows=>E('dl',null,rows.flatMap(([k,id])=>[E('dt',{'data-fb-i18n':k,text:t0[k]}),E('dd',{id,text:'—'})]));
-const qChip=(k,k2,id)=>btn(k,[E('span',{'data-i18n':k,'data-fb-i18n':k2,text:t0[k2]}),E('strong',{id,text:'—'})],{[AE_A]:'false',hidden:true});
-const fChip=qChip('five','fiveShort','five-balance'),wChip=qChip('week','weekShort','week-balance'),
-sChip=btn('speed',[E('span',{cls:'rounds dim',id:'rounds',text:'—'}),E('strong',{id:'tps',text:'—'}),E('span',{cls:'dim',text:'tok/s'})]),
-cChip=btn('cache',[E('span',{cls:'cache-total',id:'cache-total',text:'—'}),E('span',{cls:'sub-badge',id:'subagent-badge',hidden:true,text:''}),E('span',{cls:'dim',text:'·'}),E('span',{'data-i18n':'cache','data-fb-i18n':'cache',text:t0.cache}),E('strong',{id:'cache-rate',text:'—'})],{[AE_A]:'false'}),
-xChip=btn('context',[E('span',{cls:'context-ring',id:'context-ring'}),E('span',{cls:'context-label dim','data-i18n':'contextShort',text:'Ctx'}),E('strong',{id:'context-percent',text:'0%'})],{[AE_A]:'false'}),
-sCard=E('section',{cls:'card',id:'speed-card',hidden:true},[E('div',{cls:'heading'},[E('span',{'data-fb-i18n':'speedHeading',text:t0.speedHeading})]),dl([['ttft','ttft'],['latestRate','latest-rate']])]),
-xCard=E('section',{cls:'card context-card',id:'context-card',hidden:true},[E('div',{cls:'heading'},[E('span',{'data-fb-i18n':'ctxHeading',text:t0.ctxHeading})]),E('strong',{id:'context-summary',text:t0.summary(0,100)}),E('p',{id:'context-tokens',text:'— / 512K tok'}),E('div',{cls:'track',id:'context-track'},[E('i',{id:'context-fill'})]),dl([['curModel','context-model'],['fiveQuota','context-five-quota'],['weekQuota','context-week-quota'],['speedHeading','context-speed'],['cache','context-cache']]),E('p',{cls:'footnote',id:'context-note',hidden:true,text:''})]);
+const t0=gStr(),btn=(c,k,ex)=>E('button',{type:'button',cls:'chip','data-card':c,...ex},k),dl=rs=>E('dl',null,rs.flatMap(([k,id])=>[E('dt',{'data-fb-i18n':k,text:t0[k]}),E('dd',{id,text:'—'})]));
+const qC=(k,k2,id)=>btn(k,[E('span',{'data-i18n':k,'data-fb-i18n':k2,text:t0[k2]}),E('strong',{id,text:'—'})],{[AE_A]:'false',hidden:true});
+const fChip=qC('five','fiveShort','five-balance'),wChip=qC('week','weekShort','week-balance'),sChip=btn('speed',[E('span',{cls:'rounds dim',id:'rounds',text:'—'}),E('strong',{id:'tps',text:'—'}),E('span',{cls:'dim',text:'tok/s'})]),cChip=btn('cache',[E('span',{cls:'cache-total',id:'cache-total',text:'—'}),E('span',{cls:'sub-badge',id:'subagent-badge',hidden:true,text:''}),E('span',{cls:'dim',text:'·'}),E('span',{'data-i18n':'cache','data-fb-i18n':'cache',text:t0.cache}),E('strong',{id:'cache-rate',text:'—'})],{[AE_A]:'false'}),xChip=btn('context',[E('span',{cls:'context-ring',id:'context-ring'}),E('span',{cls:'context-label dim','data-i18n':'contextShort',text:'Ctx'}),E('strong',{id:'context-percent',text:'0%'})],{[AE_A]:'false'}),sCard=E('section',{cls:'card',id:'speed-card',hidden:true},[E('div',{cls:'heading'},[E('span',{'data-fb-i18n':'speedHeading',text:t0.speedHeading})]),dl([['ttft','ttft'],['latestRate','latest-rate']])]),xCard=E('section',{cls:'card context-card',id:'context-card',hidden:true},[E('div',{cls:'heading'},[E('span',{'data-fb-i18n':'ctxHeading',text:t0.ctxHeading})]),E('strong',{id:'context-summary',text:t0.summary(0,100)}),E('p',{id:'context-tokens',text:'— / 512K tok'}),E('div',{cls:'track',id:'context-track'},[E('i',{id:'context-fill'})]),dl([['curModel','context-model'],['fiveQuota','context-five-quota'],['weekQuota','context-week-quota'],['speedHeading','context-speed'],['cache','context-cache']]),E('p',{cls:'footnote',id:'context-note',hidden:true,text:''})]);
 sr.appendChild(E('div',{cls:'bar'},[fChip,wChip,sChip,cChip,xChip]));sr.appendChild(sCard);sr.appendChild(xCard);
-
 const it={...mkTier(anc,host),sr,fChip,wChip,sChip,cChip,xChip,sCard,xCard,pinned:null,hoverOpen:false,hOpenTm:null,hCloseTm:null,cid:null,snap:null,lastGroups:null,reqGen:0};
 const markAct=()=>{activeHost=host;};on(host,'pointerdown',markAct);on(host,'focusin',markAct);
 const tog=(card,b)=>{if(!card.hidden&&it.pinned===card)closeCards(it,true);else openCard(it,card,b,true);};
 const onEnter=b=>{it.hCloseTm=cT(it.hCloseTm);if(!it.pinned&&xCard.hidden&&it.hOpenTm===null&&mode!=='off')it.hOpenTm=stTm(()=>{it.hOpenTm=null;if(mode!=='off'&&isConn(gD(),it.host)&&!it.pinned&&xCard.hidden)openCard(it,xCard,b,false);},HOVER_OPEN_MS);};
 const onLeave=()=>{it.hOpenTm=cT(it.hOpenTm);if(!it.pinned&&it.hoverOpen&&!xCard.hidden&&it.hCloseTm===null)it.hCloseTm=stTm(()=>{it.hCloseTm=null;if(!it.pinned&&it.hoverOpen&&!xCard.hidden)closeCards(it,true);},HOVER_CLOSE_MS);};
-const onCardEnter=()=>{it.hCloseTm=cT(it.hCloseTm);};
-const onCardDown=()=>{if(it.hoverOpen&&!xCard.hidden){clrHover(it);it.pinned=xCard;it.hoverOpen=false;}};
 for(const c of allChips(it)){for(const ev of['pointerenter','mouseenter'])on(c,ev,()=>onEnter(c));for(const ev of['pointerleave','mouseleave'])on(c,ev,onLeave);on(c,'click',e=>{e?.stopPropagation?.();tog(c===sChip?sCard:xCard,c);});}
-for(const ev of['pointerenter','mouseenter'])on(xCard,ev,onCardEnter);for(const ev of['pointerleave','mouseleave'])on(xCard,ev,onLeave);on(xCard,'pointerdown',onCardDown);
-
+for(const ev of['pointerenter','mouseenter'])on(xCard,ev,()=>{it.hCloseTm=cT(it.hCloseTm);});for(const ev of['pointerleave','mouseleave'])on(xCard,ev,onLeave);on(xCard,'pointerdown',()=>{if(it.hoverOpen&&!xCard.hidden){clrHover(it);it.pinned=xCard;it.hoverOpen=false;}});
 seatIn(anc,host);insts.set(anc,it);instByHost.set(host,it);syncHostAttrs(host);attachTierRec(it);
-const initCid=detCid(host,insts.size>1);
-if(initCid){it.cid=initCid;const cached=getCidSnap(initCid);if(cached)applySnapToInst(it,cached);}
+const ic=detCid(host,insts.size>1);if(ic){it.cid=ic;const cs=getCidSnap(ic);if(cs)applySnapToInst(it,cs);}
 return it;
 };
-
-const reconcileBars=doc=>{
-const w=gW();if(!doc||!w)return{mounted:false,added:[],reseated:[]};
-const anchors=findAnchors(doc,true),ancSet=new Set(anchors);
-for(const[anc,it]of[...insts.entries()])if(!ancSet.has(anc)||!isConn(doc,anc))disposeInst(it,true);
+const reconcileBars=d=>{
+const w=gW();if(!d||!w)return{mounted:false,added:[],reseated:[]};
+const ancs=findAnchors(d,true),as=new Set(ancs);
+for(const[a,it]of[...insts.entries()])if(!as.has(a)||!isConn(d,a))disposeInst(it,true);
 const added=[],reseated=[];
-for(const anc of anchors){
-const ex=insts.get(anc);
-if(ex){if(!isConn(doc,ex.host)||ex.host.parentElement!==anc)try{seatIn(anc,ex.host);reseated.push(ex);}catch{}attachTierRec(ex);}
-else{const cr=createBarInst(doc,anc);if(cr)added.push(cr);}
-}
-syncPrimaryId();purgeOrphans(doc);
-if(insts.size){clrExtTiers();ensDocClick(doc);ensCompactWatch(doc);yielded=false;}else{if(docOff){try{docOff();}catch{}docOff=null;}clrCompactWatch();clrBurst();clrPoll();}
-for(const x of added)emitB(w,{event:'mount',host:x.host});
-for(const x of reseated)emitB(w,{event:'mount',host:x.host});
+for(const a of ancs){const ex=insts.get(a);if(ex){if(!isConn(d,ex.host)||ex.host.parentElement!==a)try{seatIn(a,ex.host);reseated.push(ex);}catch{}attachTierRec(ex);}else{const cr=createBarInst(d,a);if(cr)added.push(cr);}}
+syncPrimaryId();purgeOrphans(d);
+if(insts.size){clrExtTiers();ensDocClick(d);ensCompactWatch(d);yielded=false;}else{if(docOff){try{docOff();}catch{}docOff=null;}clrCompactWatch();clrBurst();clrPoll();}
+for(const x of added)emitB(w,{event:'mount',host:x.host});for(const x of reseated)emitB(w,{event:'mount',host:x.host});
 return{mounted:insts.size>0,added,reseated};
 };
-
-const isHcPortal=el=>{
-if(!el||el.tagName==='BODY'||el.tagName==='HTML')return false;
-const h=(n,k)=>!!n?.hasAttribute?.(k),f=el.firstElementChild;
-return h(el,HC_A)||h(f,HC_A)||h(f?.firstElementChild,HC_A)||(h(el,'data-base-ui-portal')&&!!qS(el,'['+HC_A+']'));
-};
-const isIgnoredStreamNode=t=>{const el=t?.nodeType===1?t:t?.parentElement;return!!(el&&(isHcPortal(el)||(el.closest&&!el.closest(FT_SEL)&&el.closest(IGN_STREAM_SEL))));};
-const anchorsChanged=doc=>{
-const ancs=findAnchors(doc,true);if(ancs.length!==insts.size)return true;
-for(const a of ancs){const it=insts.get(a);if(!it||!isConn(doc,it.host)||it.host.parentElement!==a)return true;}
-return false;
-};
-
+const isHcPortal=el=>{if(!el||el.tagName==='BODY'||el.tagName==='HTML')return false;const h=(n,k)=>!!n?.hasAttribute?.(k),f=el.firstElementChild;return h(el,HC_A)||h(f,HC_A)||h(f?.firstElementChild,HC_A)||(h(el,'data-base-ui-portal')&&!!qS(el,'['+HC_A+']'));};
+const isIgnNode=t=>{const el=t?.nodeType===1?t:t?.parentElement;return!!(el&&(isHcPortal(el)||(el.closest&&!el.closest(FT_SEL)&&el.closest(IGN_STREAM_SEL))));};
+const anchorsChg=d=>{const ancs=findAnchors(d,true);if(ancs.length!==insts.size)return true;for(const a of ancs){const it=insts.get(a);if(!it||!isConn(d,it.host)||it.host.parentElement!==a)return true;}return false;};
 const readBoxText=n=>{const b=n?.closest?.(IB_S),ed=(b&&qS(b,'[contenteditable="true"],textarea,input'))||n;return String(ed?.value??ed?.innerText??ed?.textContent??'').replace(/\u200B/g,'').trim();};
-const hasBusyBtn=doc=>{const e=qS(doc,BUSY_SEL);return!!(e&&e.hidden!==true&&e.style?.display!=='none');};
-const isCompactedDrop=(b,s)=>{
-const x=s?.speed?.context;if(!x||s?.connection===LE)return false;
-const u=isFin(x.usedTokens)?x.usedTokens:null,f=isFin(x.usedFraction)?x.usedFraction:null,c=!!(x.compacted||x.estimatedAfterCompaction);
-return(c&&(!b||!b.c||(u!==null&&b.u!==null&&u<b.u*.85)))||(b&&b.u>0&&u!==null&&u<b.u*.72)||!!(b&&b.f>.15&&f!==null&&f<b.f-.12);
-};
+const hasBusyBtn=d=>{const e=qS(d,BUSY_SEL);return!!(e&&e.hidden!==true&&e.style?.display!=='none');};
+const isCmpDrop=(b,s)=>{const x=s?.speed?.context;if(!x||s?.connection===LE)return false;const u=isFin(x.usedTokens)?x.usedTokens:null,f=isFin(x.usedFraction)?x.usedFraction:null,c=!!(x.compacted||x.estimatedAfterCompaction);return(c&&(!b||!b.c||(u!==null&&b.u!==null&&u<b.u*.85)))||(b&&b.u>0&&u!==null&&u<b.u*.72)||!!(b&&b.f>.15&&f!==null&&f<b.f-.12);};
 const armCompactBurst=(sc=null,cidH=null,ds=null)=>{
 if(mode==='off'||isBlur()||!insts.size)return false;
 const bar=sc?getBarForView(sc):null,ins=(bar&&instByHost.get(bar))||resolveActiveInst();
@@ -619,195 +441,107 @@ const cid=(isStr(cidH)&&GUID_RE.test(cidH)?cidH:null)||detCid(sc||ins?.host,inst
 const p=ins?.snap?.speed?.context||(cid&&snapByCid.get(cid)?.speed?.context)||lastSnap?.speed?.context,seq=ds?.length?ds:BURST_STEPS;
 clrBurst();const gen=burstGen;burstCid=cid;
 burstBase=p?{u:isFin(p.usedTokens)?p.usedTokens:null,f:isFin(p.usedFraction)?p.usedFraction:null,c:!!(p.compacted||p.estimatedAfterCompaction)}:null;
-const tick=()=>{
-if(gen!==burstGen)return;
-burstTm=null;if(mode==='off'||isBlur()||!insts.size)return clrBurst();
-const tg=burstCid;
-void refresh({immediate:true,freshContext:true,cascadeId:tg}).then(s=>{
-if(gen!==burstGen||burstCid!==tg)return;
-if(isCompactedDrop(burstBase,s)||burstIdx>=seq.length)return clrBurst();
-burstTm=stTm(tick,seq[burstIdx++]);
-}).catch(()=>{if(gen===burstGen)clrBurst();});
-};
+const tick=()=>{if(gen!==burstGen)return;burstTm=null;if(mode==='off'||isBlur()||!insts.size)return clrBurst();const tg=burstCid;void refresh({immediate:true,freshContext:true,cascadeId:tg}).then(s=>{if(gen!==burstGen||burstCid!==tg)return;if(isCmpDrop(burstBase,s)||burstIdx>=seq.length)return clrBurst();burstTm=stTm(tick,seq[burstIdx++]);}).catch(()=>{if(gen===burstGen)clrBurst();});};
 burstTm=stTm(tick,seq[burstIdx++]);return true;
 };
-const ensCompactWatch=doc=>{
-const w=gW();if(cmpOff||!doc||mode==='off')return;
-wasBusy=hasBusyBtn(doc);
-const hitPick=()=>pickCmpAt&&Date.now()-pickCmpAt<4000;
+const ensCompactWatch=d=>{
+const w=gW();if(cmpOff||!d||mode==='off')return;
+wasBusy=hasBusyBtn(d);const hitPick=()=>pickCmpAt&&Date.now()-pickCmpAt<4000;
 const u=[
-on(doc,'keydown',ev=>{if(mode!=='off'&&ev?.key==='Enter'&&!ev.shiftKey&&!ev.ctrlKey&&!ev.altKey&&!ev.metaKey&&!ev.isComposing){const t=ev.target;if(t?.closest?.(IB_S+',[contenteditable="true"],textarea')){const x=readBoxText(t);if(CMP_RE.test(x)||(hitPick()&&(!x||CMP_RE.test(x)))){pickCmpAt=0;armCompactBurst(t);}}}},true),
-on(doc,'click',ev=>{const t=ev?.target;if(mode==='off'||!t?.closest)return;const o=t.closest(SLASH_OPT_SEL);if(o&&/^\s*\/?compact(?:\s|$)/i.test(String(o.textContent||''))){pickCmpAt=Date.now();armCompactBurst(t,null,[700,1100,1500,2000]);return;}const b=t.closest(SEND_SEL);if(b&&(CMP_RE.test(readBoxText(b))||hitPick())){pickCmpAt=0;armCompactBurst(b);}},true),
+on(d,'keydown',ev=>{if(mode!=='off'&&ev?.key==='Enter'&&!ev.shiftKey&&!ev.ctrlKey&&!ev.altKey&&!ev.metaKey&&!ev.isComposing){const t=ev.target;if(t?.closest?.(IB_S+',[contenteditable="true"],textarea')){const x=readBoxText(t);if(CMP_RE.test(x)||(hitPick()&&(!x||CMP_RE.test(x)))){pickCmpAt=0;armCompactBurst(t);}}}},true),
+on(d,'click',ev=>{const t=ev?.target;if(mode==='off'||!t?.closest)return;const o=t.closest(SLASH_OPT_SEL);if(o&&/^\s*\/?compact(?:\s|$)/i.test(String(o.textContent||''))){pickCmpAt=Date.now();armCompactBurst(t,null,[700,1100,1500,2000]);return;}const b=t.closest(SEND_SEL);if(b&&(CMP_RE.test(readBoxText(b))||hitPick())){pickCmpAt=0;armCompactBurst(b);}},true),
 on(w,'ag-prism:compact',ev=>{if(mode!=='off')armCompactBurst(null,ev?.detail?.conversationId||null,ev?.detail?.delays||null);}),
-];
-cmpOff=()=>{for(const f of u)f();};
+];cmpOff=()=>{for(const f of u)f();};
 };
-
-const schedSwitchRefresh=tCid=>{clrPoll();clrSw();clrBurst();swTm=stTm(()=>{swTm=null;if(mode!=='off'&&insts.size)void refresh({immediate:true,cascadeId:tCid}).finally(()=>{if(insts.size&&mode!=='off'&&!isBlur())startPoll();});},SW_DEBOUNCE_MS);};
-const checkConvSwitch=(doc,w,fromRoute=false)=>{
+const schedSw=tCid=>{clrPoll();clrSw();clrBurst();swTm=stTm(()=>{swTm=null;if(mode!=='off'&&insts.size)void refresh({immediate:true,cascadeId:tCid}).finally(()=>{if(insts.size&&mode!=='off'&&!isBlur())startPoll();});},SW_DEBOUNCE_MS);};
+const chkSw=(d,w,fr=false)=>{
 const cH=readRouteKey(w),uCh=cH!==lastHref,cUc=extractUrlCid(w),ucCh=!!(cUc&&cUc!==lastUrlCid);
-if(uCh)lastHref=cH;if(cUc)lastUrlCid=cUc;
-if(!insts.size)return false;
-const multi=insts.size>1;let sw=false,tCid=null;
-for(const it of insts.values()){
-if(!isConn(doc,it.host))continue;
-const nCid=!multi&&(fromRoute||ucCh)&&cUc?cUc:detCid(it.host,multi);
-if(nCid!==it.cid){sw=true;tCid=nCid;it.cid=nCid;it.reqGen++;const c=nCid?getCidSnap(nCid):null;if(c)applySnapToInst(it,c);}
-else if(fromRoute&&uCh){sw=true;tCid=nCid;it.reqGen++;}
-}
-if(sw)schedSwitchRefresh(tCid);
-return sw;
+if(uCh)lastHref=cH;if(cUc)lastUrlCid=cUc;if(!insts.size)return false;
+const m=insts.size>1;let sw=false,tCid=null;
+for(const it of insts.values()){if(!isConn(d,it.host))continue;const nc=!m&&(fr||ucCh)&&cUc?cUc:detCid(it.host,m);if(nc!==it.cid){sw=true;tCid=nc;it.cid=nc;it.reqGen++;const c=nc?getCidSnap(nc):null;if(c)applySnapToInst(it,c);}else if(fr&&uCh){sw=true;tCid=nc;it.reqGen++;}}
+if(sw)schedSw(tCid);return sw;
 };
-
 const ensSeatObs=()=>{
-const w=gW(),doc=gD();if(!w||!doc||mode==='off')return;
+const w=gW(),d=gD();if(!w||!d||mode==='off')return;
 if(!lastHref)lastHref=readRouteKey(w);if(!lastUrlCid)lastUrlCid=extractUrlCid(w)||'';
 const runHeal=()=>{
 healTm=null;lastHealAt=Date.now();if(mode==='off')return;
-const d=gD(),wn=gW();if(!d||!wn)return;
-if(!isConv(d,wn)){yielded=false;if(insts.size)unmountFb(true);hideExt(false);return;}
+const d0=gD(),wn=gW();if(!d0||!wn)return;
+if(!isConv(d0,wn)){yielded=false;if(insts.size)unmountFb(true);hideExt(false);return;}
 if(mode==='on')hideExt(true);else{showExt();if(hasExt(null,true)){yielded=true;if(insts.size)unmountFb(true);ensTierObs();return;}}
-if(insts.size){const res=reconcileBars(d),sw=checkConvSwitch(d,wn,false);if(res.added.length&&!sw)void refresh();else if(insts.size)ensTierObs();}
-else if((mode==='on'||waitTm===null)&&findAnchors(d,true).length)mountFb();
+if(insts.size){const r=reconcileBars(d0),sw=chkSw(d0,wn,false);if(r.added.length&&!sw)void refresh();else if(insts.size)ensTierObs();}
+else if((mode==='on'||waitTm===null)&&findAnchors(d0,true).length)mountFb();
 };
-const schedHeal=(fast=false)=>{if(mode!=='off'&&healTm===null)healTm=stTm(runHeal,fast||Date.now()-lastHealAt>=180?45:180);};
-if(!seatObs&&(doc.body||doc.documentElement)){
-seatObs=subMo('pulse-seat',doc.body||doc.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:[CID_A]},recs=>{
+const schedHeal=(f=false)=>{if(mode!=='off'&&healTm===null)healTm=stTm(runHeal,f||Date.now()-lastHealAt>=180?45:180);};
+if(!seatObs&&(d.body||d.documentElement)){
+seatObs=subMo('pulse-seat',d.body||d.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:[CID_A]},recs=>{
 if(mode==='off')return;
-if(Array.isArray(recs)&&recs.length){
-const ignAll=l=>{if(l)for(let j=0;j<l.length;j++)if(!isIgnoredStreamNode(l[j]))return false;return true;};
-let rel=false;
-for(const r of recs){const a=r?.addedNodes,rm=r?.removedNodes;if(r?.type==='attributes'&&r?.attributeName===CID_A){rel=true;break;}if(isIgnoredStreamNode(r?.target)||(((a?.length||0)+(rm?.length||0))&&ignAll(a)&&ignAll(rm)))continue;rel=true;break;}
-if(!rel)return;
-}
-const inC=isConv(doc,w);let bars=null;
-const gB=()=>bars||(bars=findExtBars(doc)),visB=b=>b&&gA(b,HID_ATTR)!=='1';
+if(Array.isArray(recs)&&recs.length){const ig=l=>{if(l)for(let j=0;j<l.length;j++)if(!isIgnNode(l[j]))return false;return true;};let rel=false;for(const r of recs){const a=r?.addedNodes,rm=r?.removedNodes;if(r?.type==='attributes'&&r?.attributeName===CID_A){rel=true;break;}if(isIgnNode(r?.target)||(((a?.length||0)+(rm?.length||0))&&ig(a)&&ig(rm)))continue;rel=true;break;}if(!rel)return;}
+const inC=isConv(d,w);let bars=null;const gB=()=>bars||(bars=findExtBars(d)),visB=b=>b&&gA(b,HID_ATTR)!=='1';
 if(!inC){if(insts.size||gB().some(visB))schedHeal(true);return;}
-if(insts.size){
-if(mode==='auto'&&hasExt(gB(),true)){schedHeal(true);return;}
-const nowB=hasBusyBtn(doc);
-if(wasBusy&&!nowB){wasBusy=false;armCompactBurst(null,null,[180,650,1100]);}else wasBusy=nowB;
-const sw=checkConvSwitch(doc,w,false);if(anchorsChanged(doc)){schedHeal(sw);return;}if(sw)return;
-}else if(waitTm===null&&!hasExt(gB(),true)&&hasAnyAnchor(doc,true)){schedHeal(true);return;}
+if(insts.size){if(mode==='auto'&&hasExt(gB(),true)){schedHeal(true);return;}const nb=hasBusyBtn(d);if(wasBusy&&!nb){wasBusy=false;armCompactBurst(null,null,[180,650,1100]);}else wasBusy=nb;const sw=chkSw(d,w,false);if(anchorsChg(d)){schedHeal(sw);return;}if(sw)return;}
+else if(waitTm===null&&!hasExt(gB(),true)&&hasAnyAnchor(d,true)){schedHeal(true);return;}
 if(healTm!==null)return;
-const extMissingTier=gB().some(b=>visB(b)&&b.shadowRoot&&!qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`));
-let deadExt=false;for(const anc of extTiers.keys())if(!isConn(doc,anc)){deadExt=true;break;}
-if(deadExt||extMissingTier||(mode==='on'&&gB().some(b=>visB(b)&&gA(b,FALLBACK_ATTR)!=='1')))schedHeal(false);
+const extM=gB().some(b=>visB(b)&&b.shadowRoot&&!qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`));
+let dead=false;for(const a of extTiers.keys())if(!isConn(d,a)){dead=true;break;}
+if(dead||extM||(mode==='on'&&gB().some(b=>visB(b)&&gA(b,FALLBACK_ATTR)!=='1')))schedHeal(false);
 },'low');
 }
-if(!popOff){
-const onRoute=()=>{if(mode==='off')return;const d=gD(),wn=gW();if(!d||!wn)return;if(!isConv(d,wn)||!insts.size){schedHeal(true);return;}checkConvSwitch(d,wn,true);if(anchorsChanged(d))schedHeal(true);};
-const offs=[isFn(w.addEventListener)?on(w,'popstate',onRoute):null,isFn(w.addEventListener)?on(w,'hashchange',onRoute):null,subHistory(w,onRoute)].filter(Boolean);
-if(offs.length)popOff=()=>{for(const f of offs)try{f();}catch{}};
-}
+if(!popOff){const onR=()=>{if(mode==='off')return;const d0=gD(),wn=gW();if(!d0||!wn)return;if(!isConv(d0,wn)||!insts.size){schedHeal(true);return;}chkSw(d0,wn,true);if(anchorsChg(d0))schedHeal(true);};const offs=[isFn(w.addEventListener)?on(w,'popstate',onR):null,isFn(w.addEventListener)?on(w,'hashchange',onR):null,subHistory(w,onR)].filter(Boolean);if(offs.length)popOff=()=>{for(const f of offs)try{f();}catch{}};}
 };
-
 async function refresh(opts){
-const w=gW(),doc=gD();
+const w=gW(),d=gD();
 if(!envOpts&&w?.__agPrismTelemetry&&w.__agPrismTelemetry!==api){unmountFb();return null;}
-if(!isConv(doc,w)){yielded=false;unmountFb(true);if(mode!=='off')hideExt();return null;}
+if(!isConv(d,w)){yielded=false;unmountFb(true);if(mode!=='off')hideExt();return null;}
 if(mode==='on')hideExt(true);else{showExt();if(hasExt(null,true)){yielded=true;unmountFb(true);ensTierObs();return null;}}
-if(mode!=='off'&&(insts.size||((mode==='on'||!hasExt(null,true))&&waitTm===null&&findAnchors(doc,true).length)))reconcileBars(doc);
+if(mode!=='off'&&(insts.size||((mode==='on'||!hasExt(null,true))&&waitTm===null&&findAnchors(d,true).length)))reconcileBars(d);
 if(!insts.size)return null;
-if(opts?.immediate)clrSw();
-ensTierObs();
-const live=[...insts.values()].filter(it=>isConn(doc,it.host));if(!live.length)return null;
-wasBusy=hasBusyBtn(doc);
-const multi=live.length>1,force=!!opts?.force,fc=!!opts?.freshContext,hCid=!multi&&isStr(opts?.cascadeId)&&GUID_RE.test(opts.cascadeId)?opts.cascadeId:null;
-const reqByKey=new Map(),plan=[];
-for(let i=0;i<live.length;i++){
-const it=live[i],nCid=hCid||detCid(it.host,multi);
-if(nCid!==it.cid){it.cid=nCid;it.reqGen++;const c=nCid?getCidSnap(nCid):null;if(c)applySnapToInst(it,c);}
-else if(fc)it.reqGen++;
-const key=it.cid||`__pane_${i}`;
-plan.push({it,reqCid:it.cid,reqGen:it.reqGen,key});
-if(!reqByKey.has(key))reqByKey.set(key,reqSnapSF(key,{[CK]:it.cid,force,[IK]:isCardOpen(it),...(fc?{freshContext:true}:{})},it.host));
-}
-const snaps=new Map();
-await Promise.all([...reqByKey.entries()].map(async([k,p])=>{snaps.set(k,await p);}));
+if(opts?.immediate)clrSw();ensTierObs();
+const live=[...insts.values()].filter(it=>isConn(d,it.host));if(!live.length)return null;
+wasBusy=hasBusyBtn(d);const m=live.length>1,force=!!opts?.force,fc=!!opts?.freshContext,hCid=!m&&isStr(opts?.cascadeId)&&GUID_RE.test(opts.cascadeId)?opts.cascadeId:null;
+const rbk=new Map(),plan=[];
+for(let i=0;i<live.length;i++){const it=live[i],nc=hCid||detCid(it.host,m);if(nc!==it.cid){it.cid=nc;it.reqGen++;const c=nc?getCidSnap(nc):null;if(c)applySnapToInst(it,c);}else if(fc)it.reqGen++;const k=it.cid||`__pane_${i}`;plan.push({it,rc:it.cid,rg:it.reqGen,k});if(!rbk.has(k))rbk.set(k,reqSnapSF(k,{[CK]:it.cid,force,[IK]:isCardOpen(it),...(fc?{freshContext:true}:{})},it.host));}
+const snaps=new Map();await Promise.all([...rbk.entries()].map(async([k,p])=>{snaps.set(k,await p);}));
 let actSnap=null;const act=resolveActiveInst();
-for(let i=0;i<plan.length;i++){
-const{it,reqCid,reqGen,key}=plan[i],snap=snaps.get(key)||null;
-if(isStaleResult(it,reqCid,reqGen,multi))continue;
-applySnapToInst(it,snap);if(it===act||(!act&&i===0))actSnap=snap;
-}
+for(let i=0;i<plan.length;i++){const{it,rc,rg,k}=plan[i],s=snaps.get(k)||null;if(isStale(it,rc,rg,m))continue;applySnapToInst(it,s);if(it===act||(!act&&i===0))actSnap=s;}
 return actSnap??lastSnap;
 }
-
 function mountFb(){
-const w=gW(),doc=gD();
-if(!w||!doc||(typeof doc.attachShadow==='undefined'&&!isFn(doc.createElement)))return false;
+const w=gW(),d=gD();if(!w||!d||(typeof d.attachShadow==='undefined'&&!isFn(d.createElement)))return false;
 if(!envOpts&&w.__agPrismTelemetry&&w.__agPrismTelemetry!==api){unmountFb();return false;}
 if(mode==='off')return false;
-if(!isConv(doc,w)){yielded=false;unmountFb(true);hideExt();ensSeatObs();return false;}
+if(!isConv(d,w)){yielded=false;unmountFb(true);hideExt();ensSeatObs();return false;}
 if(mode==='on')hideExt(true);else if(hasExt(null,true)){yielded=true;unmountFb(true);ensSeatObs();return false;}
-const res=reconcileBars(doc);ensSeatObs();if(!res.mounted)return false;
+const r=reconcileBars(d);ensSeatObs();if(!r.mounted)return false;
 ensHost();ensTierObs();ensBlur();lastHref=readRouteKey(w);lastUrlCid=extractUrlCid(w)||'';
-if(res.added.length||pollTm===null){void refresh();startPoll();}
-return true;
+if(r.added.length||pollTm===null){void refresh();startPoll();}return true;
 }
-
-const getBars=()=>{const doc=gD(),out=[];for(const it of insts.values())if(isConn(doc,it.host))out.push(it.host);return out;};
-const getBarForView=node=>{
-const doc=gD();if(!node||!doc)return null;
-const d=instByHost.get(node);if(d&&isConn(doc,d.host))return d.host;
-const sel=CV_S+','+IB_S+',.agy-composer-footer',cv=node.matches?.(sel)?node:node.closest?.(sel);
-if(cv){
-for(const it of insts.values())if(isConn(doc,it.host)&&(cv===it.anc||cv.contains?.(it.anc)||it.anc.contains?.(cv)))return it.host;
-const ext=qS(cv,`#${BAR_ID},[data-ag-pulse-bar="true"]`);if(ext&&usableExt(doc,ext))return ext;
-}
-return null;
-};
-const setActiveBar=target=>{
-const doc=gD();if(!target){activeHost=null;return null;}
-const h=instByHost.has(target)?target:getBarForView(target);if(!h||!isConn(doc,h))return null;
-activeHost=h;emitB(gW(),{event:'focus',host:h,data:instByHost.get(h)?.snap||lastSnap});return h;
-};
-const getSnapshotForBar=x=>{
-if(!x)return resolveActiveInst()?.snap||lastSnap;
-if(isStr(x))return snapByCid.get(x)||lastSnap;
-const it=instByHost.get(x)||instByHost.get(getBarForView(x));
-return it?.snap||(it?.cid&&snapByCid.get(it.cid))||lastSnap;
-};
-const getState=()=>{
-const doc=gD();let n=0;for(const it of insts.values())if(isConn(doc,it.host))n++;
-const m=n>0,bl=isBlur();if(m&&bl&&pollTm!==null){pollSusp=true;clrPoll();}
-return{mode,quotaMode,mountedFallback:m,mountedCount:n,waitingForExternal:waitTm!==null,yieldedToExternal:!!(mode==='auto'&&(yielded||hasExt())),hasExternal:hasExt(),pollSuspended:!!(m&&(pollSusp||bl))};
-};
-
+const getBars=()=>{const d=gD(),o=[];for(const it of insts.values())if(isConn(d,it.host))o.push(it.host);return o;};
+const getBarForView=n=>{const d=gD();if(!n||!d)return null;const x=instByHost.get(n);if(x&&isConn(d,x.host))return x.host;const s=CV_S+','+IB_S+',.agy-composer-footer',cv=n.matches?.(s)?n:n.closest?.(s);if(cv){for(const it of insts.values())if(isConn(d,it.host)&&(cv===it.anc||cv.contains?.(it.anc)||it.anc.contains?.(cv)))return it.host;const ex=qS(cv,`#${BAR_ID},[data-ag-pulse-bar="true"]`);if(ex&&usableExt(d,ex))return ex;}return null;};
+const setActiveBar=t=>{const d=gD();if(!t){activeHost=null;return null;}const h=instByHost.has(t)?t:getBarForView(t);if(!h||!isConn(d,h))return null;activeHost=h;emitB(gW(),{event:'focus',host:h,data:instByHost.get(h)?.snap||lastSnap});return h;};
+const getSnapshotForBar=x=>{if(!x)return resolveActiveInst()?.snap||lastSnap;if(isStr(x))return snapByCid.get(x)||lastSnap;const it=instByHost.get(x)||instByHost.get(getBarForView(x));return it?.snap||(it?.cid&&snapByCid.get(it.cid))||lastSnap;};
+const getState=()=>{const d=gD();let n=0;for(const it of insts.values())if(isConn(d,it.host))n++;const m=n>0,bl=isBlur();if(m&&bl&&pollTm!==null){pollSusp=true;clrPoll();}return{mode,quotaMode,telemetryMetrics:metricsStr,mountedFallback:m,mountedCount:n,waitingForExternal:waitTm!==null,yieldedToExternal:!!(mode==='auto'&&(yielded||hasExt())),hasExternal:hasExt(),pollSuspended:!!(m&&(pollSusp||bl))};};
 function sync(cfg){
 if(cfg&&isStr(cfg.language)&&cfg.language)expLang=cfg.language.trim().toLowerCase()==='auto'?'':normFbLang(cfg.language,gW());
 if(cfg&&Object.hasOwn(cfg,'telemetryQuotaMode'))quotaMode=cfg.telemetryQuotaMode==='both'?'both':'compact';
 else{const aQm=readAttrQuotaMode();if(aQm)quotaMode=aQm;}
+if(cfg&&Object.hasOwn(cfg,'telemetryMetrics'))metricsStr=String(cfg.telemetryMetrics||'').trim();
+else if(gA(gD()?.documentElement,MET_ATTR)!==null)metricsStr=readAttrMetrics();
 const raw=cfg?.telemetryModule;mode=raw==='on'||raw==='off'?raw:'auto';
 if(insts.size&&mode!=='off')for(const it of insts.values()){syncLblsFor(it.sr);if(it.snap||lastSnap)applySnapToInst(it,it.snap||lastSnap);}
 if(mode==='off'){yielded=false;unmountFb();hideExt();return getState();}
-ensBridge();ensSeatObs();
-const doc=gD(),w=gW();
+ensBridge();ensSeatObs();const doc=gD(),w=gW();
 if(!isConv(doc,w)){yielded=false;unmountFb(true);hideExt();ensHost();return getState();}
 if(mode==='on'){yielded=false;clrWait();hideExt(true);ensHost();mountFb();return getState();}
 showExt();
-if(hasExt()){
-yielded=true;unmountFb(true);ensHost();ensTierObs();
-if(detAt>0&&rescTm===null)rescTm=stTm(()=>{rescTm=null;if(mode!=='off'&&!hasExt())mountFb();},GRACE_MS+60);
-return getState();
-}
+if(hasExt()){yielded=true;unmountFb(true);ensHost();ensTierObs();if(detAt>0&&rescTm===null)rescTm=stTm(()=>{rescTm=null;if(mode!=='off'&&!hasExt())mountFb();},GRACE_MS+60);return getState();}
 if(insts.size){reconcileBars(doc);if(insts.size)return getState();}
 if(findExtBars(doc).some(b=>b&&gA(b,FALLBACK_ATTR)!=='1'&&isConn(doc,b)&&!usableExt(doc,b))){clrWait();mountFb();return getState();}
 if(waitTm===null)waitTm=stTm(waitTimerDone,isFin(cfg?.__fallbackDelayMs)&&cfg.__fallbackDelayMs>=0?cfg.__fallbackDelayMs:WAIT_MS);
 return getState();
 }
-function waitTimerDone(){
-waitTm=null;if(mode!=='auto')return;
-if(!isConv(gD(),gW())){unmountFb(true);hideExt();return;}
-if(hasExt()){yielded=true;unmountFb(true);ensHost();ensTierObs();return;}
-mountFb();
-}
-function destroy(){
-clrWait();clrSw();clrBurst();clrCompactWatch();clrSeat();unmountFb();showExt();snapByCid.clear();inFlight.clear();
-const w=gW();if(w){if(mApi&&w.__agPrismMetricsBridge===mApi)delete w.__agPrismMetricsBridge;if(mRes&&w.__agPrismMetricsResolve===mRes)delete w.__agPrismMetricsResolve;}
-yielded=false;lastSig='';detAt=0;lastSnap=null;lastHref='';lastUrlCid='';
-}
+function waitTimerDone(){waitTm=null;if(mode!=='auto')return;if(!isConv(gD(),gW())){unmountFb(true);hideExt();return;}if(hasExt()){yielded=true;unmountFb(true);ensHost();ensTierObs();return;}mountFb();}
+function destroy(){clrWait();clrSw();clrBurst();clrCompactWatch();clrSeat();unmountFb();showExt();snapByCid.clear();inFlight.clear();const w=gW();if(w){if(mApi&&w.__agPrismMetricsBridge===mApi)delete w.__agPrismMetricsBridge;if(mRes&&w.__agPrismMetricsResolve===mRes)delete w.__agPrismMetricsResolve;}yielded=false;lastSig='';detAt=0;lastSnap=null;lastHref='';lastUrlCid='';}
 
 const notifyCompact=(cid=null,delays=null)=>armCompactBurst(null,cid,delays);
 const api={BAR_ID,PRISM_BAR_ID,PRISM_BAR_ATTR,FALLBACK_ATTR,METRICS_BINDING,sync,destroy,refresh,notifyCompact,chooseQuotaGroupFallback,getLatestSnapshot:()=>resolveActiveInst()?.snap||lastSnap,getSnapshotForBar,getBars,getPrimaryBar:()=>getPrimaryInst()?.host||null,getActiveBar:()=>resolveActiveInst()?.host||null,setActiveBar,getBarForView,getState,createTelemetryController};

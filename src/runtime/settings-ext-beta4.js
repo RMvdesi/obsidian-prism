@@ -21,10 +21,8 @@
     quality: 'optPerfQuality',
   });
   const QUOTA_MODES = Object.freeze(['compact', 'both']);
-  const QUOTA_MODE_OPT_KEYS = Object.freeze({
-    compact: 'optQuotaCompact',
-    both: 'optQuotaBoth',
-  });
+  const TELEMETRY_METRICS = Object.freeze(['auto', 'five', 'week', 'speed', 'cache', 'tokens', 'context']);
+  const METRIC_OPT_KEYS = Object.freeze({ auto: 'optMetricAuto', five: 'optMetricFive', week: 'optMetricWeek', speed: 'optMetricSpeed', cache: 'optMetricCache', tokens: 'optMetricTokens', context: 'optMetricContext' });
   const CHAT_FONT_MODES = Object.freeze(['default', 'system-sans', 'noto-sans', 'inter', 'harmony', 'custom']);
   const CHAT_FONT_OPT_KEYS = Object.freeze({
     default: 'optChatFontDefault',
@@ -49,6 +47,14 @@
     '.ag-cs-font-act-btn:hover{border-color:var(--primary,#669DF6);}',
     '.ag-cs-font-hint{font-size:11px;line-height:1.4;color:var(--muted-foreground,#94A3B8);}',
     '.ag-cs-font-hint[data-tone="warn"]{color:var(--warning,#F2B84B);}',
+    '#ag-cs-settings-sec .divide-y>:not([hidden])~[data-ag-cs-row="telemetryQuotaMode"]::before{display:none!important;}',
+    '#ag-cs-settings-sec .divide-y>[data-ag-cs-row="telemetryQuotaMode"]:hover{background-color:transparent!important;}',
+    '.ag-cs-metric-wrap{padding:0 15px 13px;}.ag-cs-metric-panel{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:9px;border:1px solid var(--_kb,var(--ag-cs-border-1));background:var(--_k1,var(--ag-cs-tonal-1));box-shadow:var(--_kw,none);}',
+    '.ag-cs-metric-head{display:flex;flex-direction:column;gap:2px;}#ag-cs-settings-sec .ag-cs-metric-head [data-k="t"]{font-size:12px;font-weight:600;color:var(--secondary-foreground);}#ag-cs-settings-sec .ag-cs-metric-head [data-k="d"]{font-size:11px;color:var(--muted-foreground);line-height:1.4;}',
+    '.ag-cs-metric-chips{display:flex;flex-wrap:wrap;gap:6px;}.ag-cs-metric-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;border:1px solid var(--_kb,var(--ag-cs-border-1));background:var(--_k0,var(--ag-cs-tonal-1));color:var(--muted-foreground);font-size:11.5px;font-weight:500;cursor:pointer;transition:background .14s,border-color .14s,color .14s;font-variant-numeric:tabular-nums;}',
+    '.ag-cs-metric-chip::before{content:"";width:6px;height:6px;border-radius:999px;background:currentColor;opacity:.28;transition:opacity .14s,background .14s;}.ag-cs-metric-chip:hover{color:var(--foreground);border-color:var(--ag-cs-border-2);}',
+    '.ag-cs-metric-chip[aria-pressed="true"]{background:color-mix(in srgb,var(--primary,#669DF6) 16%,var(--_k2,#22232A));border-color:color-mix(in srgb,var(--primary,#669DF6) 52%,transparent);color:var(--foreground);font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.1);}.ag-cs-metric-chip[aria-pressed="true"]::before{background:var(--primary,#669DF6);opacity:1;box-shadow:0 0 6px color-mix(in srgb,var(--primary,#669DF6) 65%,transparent);}',
+    'html[data-ag-cs-theme="light"] .ag-cs-metric-chip{background:#fff;color:#475569;border-color:rgba(15,23,42,.13);}html[data-ag-cs-theme="light"] .ag-cs-metric-chip[aria-pressed="true"]{background:color-mix(in srgb,var(--primary,#2563EB) 12%,#fff);border-color:color-mix(in srgb,var(--primary,#2563EB) 48%,transparent);color:#0F172A;}',
   ].join('\n');
 
   const sa = (el, k, v = '') => el && el.setAttribute && el.setAttribute(k, String(v));
@@ -478,66 +484,62 @@
     return { codeRow, customBtn, customUi };
   }
 
+  function resolveEffectiveMetrics(rawMetrics, quotaMode) {
+    const out = new Set();
+    if (typeof rawMetrics === 'string' && rawMetrics.trim()) {
+      for (const tok of rawMetrics.toLowerCase().split(',')) { const k = tok.trim(); if (TELEMETRY_METRICS.includes(k)) out.add(k); }
+    }
+    if (!out.size) {
+      if (quotaMode === 'both') { out.add('five'); out.add('week'); } else out.add('auto');
+      out.add('cache'); out.add('context');
+    }
+    return out;
+  }
+  const serializeMetrics = (set) => TELEMETRY_METRICS.filter((k) => set.has(k)).join(',');
+
   function ensureTelemetryQuotaModeRow(rootEl, doc, ctx) {
     let row = qs(rootEl, '[data-ag-cs-row="telemetryQuotaMode"]');
     if (row) return row;
     const telRow = qs(rootEl, '[data-ag-cs-row="telemetryModule"]');
     if (!telRow || !telRow.parentElement) return null;
-
-    row = mk(doc, 'div');
-    sa(row, 'data-ag-cs-row', 'telemetryQuotaMode');
-    sa(row, 'data-ag-cs-ext-owned', '1');
-
-    const inner = mk(doc, 'div', 'py-2');
-    const textCol = mk(doc, 'div', 'flex-1');
-    const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
-    const tSpan = mk(doc, 'span');
-    sa(tSpan, 'data-k', 't');
-    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
-    sa(dSpan, 'data-k', 'd');
-    titleLine.appendChild(tSpan);
-    textCol.appendChild(titleLine);
-    textCol.appendChild(dSpan);
-
-    const ctrlWrap = mk(doc, 'div', 'shrink-0');
-    const grp = mk(doc, 'div', 'ag-cs-seg-group');
-    sa(grp, 'role', 'group');
-
-    const BTN_CLS = 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
-    for (let i = 0; i < QUOTA_MODES.length; i++) {
-      const val = QUOTA_MODES[i];
-      const btn = mk(doc, 'button', BTN_CLS);
-      btn.type = 'button';
-      sa(btn, 'type', 'button');
-      sa(btn, 'data-ag-cs-ext-key', 'telemetryQuotaMode');
-      sa(btn, 'data-ag-cs-ext-val', JSON.stringify(val));
-      sa(btn, 'data-ag-cs-ext-qmode', val);
+    row = mk(doc, 'div'); sa(row, 'data-ag-cs-row', 'telemetryQuotaMode'); sa(row, 'data-ag-cs-ext-owned', '1');
+    const wrap = mk(doc, 'div', 'ag-cs-metric-wrap'), panel = mk(doc, 'div', 'ag-cs-metric-panel'), head = mk(doc, 'div', 'ag-cs-metric-head');
+    const tSpan = mk(doc, 'span'), dSpan = mk(doc, 'span', 'whitespace-pre-wrap'); sa(tSpan, 'data-k', 't'); sa(dSpan, 'data-k', 'd');
+    head.appendChild(tSpan); head.appendChild(dSpan);
+    const chips = mk(doc, 'div', 'ag-cs-metric-chips'); sa(chips, 'data-ag-cs-metric-chips', '1');
+    for (const mid of TELEMETRY_METRICS) {
+      const btn = mk(doc, 'button', 'ag-cs-metric-chip'); btn.type = 'button'; sa(btn, 'type', 'button');
+      sa(btn, 'data-ag-cs-ext-key', 'telemetryMetrics'); sa(btn, 'data-ag-cs-ext-metric', mid); sa(btn, 'aria-pressed', 'false');
       btn.addEventListener('click', (ev) => {
         ev?.stopPropagation?.();
-        if (doc && doc.documentElement) sa(doc.documentElement, 'data-ag-cs-telemetry-quota', val);
+        const curRaw = String(readLiveCfg(ctx, 'telemetryMetrics', '') || ''), curQm = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
+        const nextSet = resolveEffectiveMetrics(curRaw, curQm), wasOn = nextSet.has(mid);
+        if (mid === 'auto') {
+          if (wasOn) { nextSet.delete('auto'); if (!nextSet.size) nextSet.add('context'); }
+          else { nextSet.add('auto'); nextSet.delete('five'); nextSet.delete('week'); }
+        } else if (mid === 'five' || mid === 'week') {
+          nextSet.delete('auto'); if (wasOn) nextSet.delete(mid); else nextSet.add(mid); if (!nextSet.size) nextSet.add('context');
+        } else {
+          if (wasOn) { if (nextSet.size <= 1) return; nextSet.delete(mid); } else nextSet.add(mid);
+        }
+        const nextMetrics = serializeMetrics(nextSet), nextQm = !nextSet.has('auto') && nextSet.has('five') && nextSet.has('week') ? 'both' : 'compact';
+        if (doc && doc.documentElement) { sa(doc.documentElement, 'data-ag-cs-telemetry-metrics', nextMetrics); sa(doc.documentElement, 'data-ag-cs-telemetry-quota', nextQm); }
         const tel = (ctx.win && ctx.win.__agPrismTelemetry) || G.__agPrismTelemetry;
         if (tel && typeof tel.sync === 'function') {
-          let curCfg = {};
-          try { curCfg = (ctx.win || G).__agPrism?.getState?.()?.cfg || {}; } catch {}
-          try { tel.sync(Object.assign({}, curCfg, { telemetryQuotaMode: val })); } catch {}
+          const curCfg = { telemetryModule: readLiveCfg(ctx, 'telemetryModule', 'auto') };
+          try { Object.assign(curCfg, (ctx.win || G).__agPrism?.getState?.()?.cfg || {}); } catch {}
+          try { tel.sync(Object.assign({}, curCfg, { telemetryMetrics: nextMetrics, telemetryQuotaMode: nextQm })); } catch {}
         }
-        if (typeof ctx.saveSetting === 'function') ctx.saveSetting('telemetryQuotaMode', val);
+        if (typeof ctx.saveSettingsBatch === 'function') ctx.saveSettingsBatch({ telemetryMetrics: nextMetrics, telemetryQuotaMode: nextQm });
+        else if (typeof ctx.saveSetting === 'function') { ctx.saveSetting('telemetryMetrics', nextMetrics); ctx.saveSetting('telemetryQuotaMode', nextQm); }
         if (typeof row.__extResync === 'function') row.__extResync();
       });
-      grp.appendChild(btn);
+      chips.appendChild(btn);
     }
-
-    ctrlWrap.appendChild(grp);
-    inner.appendChild(textCol);
-    inner.appendChild(ctrlWrap);
-    row.appendChild(inner);
-
+    panel.appendChild(head); panel.appendChild(chips); wrap.appendChild(panel); row.appendChild(wrap);
     const parent = telRow.parentElement;
-    if (telRow.nextSibling && typeof parent.insertBefore === 'function') {
-      parent.insertBefore(row, telRow.nextSibling);
-    } else {
-      parent.appendChild(row);
-    }
+    if (telRow.nextSibling && typeof parent.insertBefore === 'function') parent.insertBefore(row, telRow.nextSibling);
+    else parent.appendChild(row);
     return row;
   }
 
@@ -560,8 +562,9 @@
     const codeFontCustom = String(readLiveCfg(ctx, 'codeFontCustom', '') || '');
     const telOff = readLiveCfg(ctx, 'telemetryModule', 'auto') === 'off';
     const telQuotaMode = readLiveCfg(ctx, 'telemetryQuotaMode', 'compact') === 'both' ? 'both' : 'compact';
+    const telMetrics = String(readLiveCfg(ctx, 'telemetryMetrics', '') || '').trim();
 
-    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}`;
+    const extSig = `${lang}|${perfMode}|${ignoreRm ? 1 : 0}|${motionOff ? 1 : 0}|${chatFont}|${chatFontCustom}|${codeFont}|${codeFontCustom}|${telOff ? 1 : 0}|${telQuotaMode}|${telMetrics}`;
     if (
       rootEl.__extBeta4Sig === extSig &&
       qs(rootEl, '[data-ag-cs-row="performanceMode"]') &&
@@ -705,31 +708,27 @@
         }
       }
 
-      // 4. 底栏配额显示模式（模块区，紧随 telemetryModule 下方）
+      // 4. 底栏显示指标自由定制（紧随 telemetryModule 下方，关闭时自动隐藏）
       const qmRow = ensureTelemetryQuotaModeRow(rootEl, doc, ctx);
       if (qmRow) {
         qmRow.__extResync = resyncNow;
-        const tEl = qs(qmRow, '[data-k="t"]');
-        const dEl = qs(qmRow, '[data-k="d"]');
-        if (tEl && tEl.textContent !== extUi.setTelemetryQuotaModeTitle) tEl.textContent = extUi.setTelemetryQuotaModeTitle || 'Footer Quota Display';
-        if (dEl && dEl.textContent !== extUi.setTelemetryQuotaModeDesc) dEl.textContent = extUi.setTelemetryQuotaModeDesc || '';
-        if (qmRow.style) qmRow.style.opacity = telOff ? '0.55' : '';
-        if (telOff) sa(qmRow, 'data-ag-cs-dimmed', '1');
-        else ra(qmRow, 'data-ag-cs-dimmed');
-        const grp = qs(qmRow, '.ag-cs-seg-group');
-        if (grp) {
-          const btns = grp.querySelectorAll ? grp.querySelectorAll('button[data-ag-cs-ext-key="telemetryQuotaMode"]') : [];
-          for (let i = 0; i < btns.length; i++) {
-            const b = btns[i];
-            const val = ga(b, 'data-ag-cs-ext-qmode') || 'compact';
-            const optKey = QUOTA_MODE_OPT_KEYS[val];
-            const lbl = (optKey && extUi[optKey]) || val;
-            if (b.textContent !== lbl) b.textContent = lbl;
-            const act = val === telQuotaMode;
-            sa(b, 'aria-pressed', act ? 'true' : 'false');
-            if (act) sa(b, 'data-pressed');
-            else ra(b, 'data-pressed');
-          }
+        const tEl = qs(qmRow, '[data-k="t"]'), dEl = qs(qmRow, '[data-k="d"]');
+        const title = extUi.setTelemetryMetricsTitle || 'Footer Bar Metrics';
+        const desc = extUi.setTelemetryMetricsDesc || '';
+        if (tEl && tEl.textContent !== title) tEl.textContent = title;
+        if (dEl && dEl.textContent !== desc) dEl.textContent = desc;
+        qmRow.hidden = telOff;
+        if (telOff) { sa(qmRow, 'hidden', ''); sa(qmRow, 'data-ag-cs-dimmed', '1'); } else { ra(qmRow, 'hidden'); ra(qmRow, 'data-ag-cs-dimmed'); }
+        if (qmRow.style) qmRow.style.display = telOff ? 'none' : '';
+        const effSet = resolveEffectiveMetrics(telMetrics, telQuotaMode);
+        const btns = qmRow.querySelectorAll ? qmRow.querySelectorAll('button[data-ag-cs-ext-metric]') : [];
+        for (let i = 0; i < btns.length; i++) {
+          const b = btns[i], mid = ga(b, 'data-ag-cs-ext-metric');
+          const lbl = (METRIC_OPT_KEYS[mid] && extUi[METRIC_OPT_KEYS[mid]]) || mid;
+          if (b.textContent !== lbl) b.textContent = lbl;
+          const act = effSet.has(mid);
+          sa(b, 'aria-pressed', act ? 'true' : 'false');
+          if (act) sa(b, 'data-pressed'); else ra(b, 'data-pressed');
         }
       }
     });
@@ -751,6 +750,7 @@
     DATALIST_ID,
     PERF_MODES,
     QUOTA_MODES,
+    TELEMETRY_METRICS,
     CHAT_FONT_MODES,
     sync,
     dispose,

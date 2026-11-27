@@ -105,7 +105,7 @@ out.accentTone = pickOf(out.accentTone, 'follow|cobalt|iris|amber|mono', 'follow
 out.cornerStyle = pickOf(out.cornerStyle, 'sharp|balanced|soft', 'balanced');
 out.chatFont = pickOf(out.chatFont, 'default|system-sans|noto-sans|inter|harmony|custom', 'default');
 out.codeFont = pickOf(out.codeFont, 'default|jetbrains|cascadia|sfmono|custom', 'default');
-for (const k of ['chatFontCustom', 'codeFontCustom']) out[k] = typeof out[k] === 'string' ? out[k].replace(/[\0\r\n]/g, '').slice(0, 160) : '';
+for (const k of ['telemetryMetrics', 'chatFontCustom', 'codeFontCustom']) out[k] = typeof out[k] === 'string' ? out[k].replace(/[\0\r\n]/g, '').slice(0, 160) : '';
 out.ambientIntensity = pickOf(String(out.ambientIntensity ?? '100'), '0|35|70|100', '100');
 out.darkAura = pickOf(out.darkAura, 'subtle|balanced|vivid', 'balanced');
 for (const k of ['omniModule', 'effortMemory', 'periodicModelPicker']) out[k] = out[k] === 'off' || out[k] === false ? 'off' : 'on';
@@ -767,7 +767,7 @@ const omni = W.__agPrismOmni, meta = W.__agPrismOmniServerMeta || null, sb = W._
 const ctxMenu = getCtx(), hiInst = W.__agPrismHostI18n;
 ownedCtxMenu = ctxMenu || null;
 const motionLv = getMotionLevel(), ctxEnabled = cfg.contextMenu !== false && cfg.contextMenu !== 'off' && !destroyed, hiMode = aoMode('hostLocalization'), curLang = getLang();
-const key = [VERSION, curLang, motionLv, getTelemetryMode(), cfg.telemetryQuotaMode, aoMode('effortSliderModule'), onOffMode('effortMemory'), hiMode, getThoughtTranslateMode(), cfg.thoughtTrigger === 'expand' ? 'expand' : 'preload', getThoughtView(), onOffMode('omniModule'), getLinkTarget(), +(cfg.sidebarStudio === 'on'), +ctxEnabled, meta?.baseUrl || '', sbMeta?.version || '', +!!sbMeta?.serviceReady, +!!tel, +!!eff, +!!hiInst, +!!th, +!!thUi, +!!omni, +!!sb, +!!ctxMenu].join('|');
+const key = [VERSION, curLang, motionLv, getTelemetryMode(), cfg.telemetryQuotaMode, cfg.telemetryMetrics, aoMode('effortSliderModule'), onOffMode('effortMemory'), hiMode, getThoughtTranslateMode(), cfg.thoughtTrigger === 'expand' ? 'expand' : 'preload', getThoughtView(), onOffMode('omniModule'), getLinkTarget(), +(cfg.sidebarStudio === 'on'), +ctxEnabled, meta?.baseUrl || '', sbMeta?.version || '', +!!sbMeta?.serviceReady, +!!tel, +!!eff, +!!hiInst, +!!th, +!!thUi, +!!omni, +!!sb, +!!ctxMenu].join('|');
 if (!force && key === lastAbsorbedSyncKey) return;
 lastAbsorbedSyncKey = key;
 safe(() => tel?.sync?.(cfg)); safe(() => eff?.sync?.(cfg));
@@ -786,7 +786,7 @@ const targetFps = getTargetFps(), telemetryMod = getTelemetryMode(), effortSlide
 runGuardedMut(() => {
 const csA = {
 style: '1', theme: dark ? 'dark' : 'light', palette, 'light-preset': lightPreset, motion: motionLv,
-'perf-mode': perfMode, 'target-fps': targetFps, telemetry: telemetryMod, 'telemetry-quota': cfg.telemetryQuotaMode, 'effort-slider': effortSliderMod,
+'perf-mode': perfMode, 'target-fps': targetFps, telemetry: telemetryMod, 'telemetry-quota': cfg.telemetryQuotaMode, 'telemetry-metrics': cfg.telemetryMetrics || '', 'effort-slider': effortSliderMod,
 'thought-translate': getThoughtTranslateMode(), accent: getAccentTone(), corners: getCornerStyle(),
 'scroll-bottom': cfg.scrollBottomMotion, 'code-font': getCodeFont(), ligatures: isCodeLigaturesEnabled() ? '1' : '0',
 ambient: String(getAmbientFloat()), 'dark-aura': cfg.darkAura, 'dark-aura-style': cfg.darkAuraStyle, home: cfg.homeLayout,

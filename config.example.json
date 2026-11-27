@@ -10,6 +10,7 @@
   "targetFps": "180",
   "telemetryModule": "auto",
   "telemetryQuotaMode": "compact",
+  "telemetryMetrics": "",
   "effortSliderModule": "auto",
   "effortMemory": "on",
   "periodicModelPicker": "on",

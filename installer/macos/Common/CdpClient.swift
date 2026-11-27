@@ -612,7 +612,7 @@ enum CdpHelper {
     ]
     private static let boolSchemaDefaultTrueKeys = ["homeRipple", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu"]
     private static let boolSchemaDefaultFalseKeys = ["ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit"]
-    private static let stringSchemaKeys = ["chatFontCustom", "codeFontCustom"]
+    private static let stringSchemaKeys = ["telemetryMetrics", "chatFontCustom", "codeFontCustom"]
 
     private static func expandEnumSpec(_ spec: String) -> JsonValue {
         let items: [String]

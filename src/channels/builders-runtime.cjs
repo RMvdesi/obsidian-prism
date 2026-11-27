@@ -85,7 +85,7 @@ function createRuntimeChannelBuilders({ rootDir, readConfig, bundleCache }) {
   }
 
   function buildTelemetryChannelExpression(config = null, opts = null) {
-    const { resolvedCfg, resolvedOpts } = unwrapConfigAndOpts(config, opts, ['telemetryModule', 'telemetryQuotaMode', 'language', 'lang']);
+    const { resolvedCfg, resolvedOpts } = unwrapConfigAndOpts(config, opts, ['telemetryModule', 'telemetryQuotaMode', 'telemetryMetrics', 'language', 'lang']);
     const cfg = resolvedCfg && typeof resolvedCfg === 'object' ? reconcileConfigAliases(resolvedCfg) : readConfig();
     if (!shouldEnableTelemetry(cfg)) return '';
     const { minRuntime, codeHash } = readCompiledTelemetryAssets(resolvedOpts);

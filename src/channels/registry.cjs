@@ -228,7 +228,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'settings', channelNumber: 9, order: 90, tier: 'addon', injectMode: 'on-demand-rpc', precompileOnBoot: false,
     label: 'Settings Panel & Full Locales',
-    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode'],
+    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode', 'telemetryMetrics'],
     files: [
       'src/runtime/i18n-tr-locale.js', 'i18n-locales.js', 'assets/brand-mark-svg.js', 'vendor/clawd-mascot/tavern-atlas-data.js',
       'vendor/clawd-mascot/octopath-stage-webgl.js', 'src/runtime/i18n-ext-beta4.js',
@@ -302,7 +302,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
   }),
   defineSpec({
     id: 'telemetry', channelNumber: 13, order: 130, tier: 'runtime', topLevelPack: true, staticRuntimePack: true,
-    label: 'Telemetry Bar & Physical Vial', configKeys: ['telemetryModule', 'telemetryQuotaMode', 'language'],
+    label: 'Telemetry Bar & Physical Vial', configKeys: ['telemetryModule', 'telemetryQuotaMode', 'telemetryMetrics', 'language'],
     files: ['vial-core.js', 'pulse-vial-bridge.js', 'vendor/pulse-dashboard/inline-fallback.js'],
     mountGlobal: '__agPrismTelemetry', respectSkippedByLiveCfg: true, budgetBytes: 128 * 1024,
     probeLines: [

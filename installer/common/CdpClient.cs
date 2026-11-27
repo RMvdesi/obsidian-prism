@@ -863,7 +863,7 @@ namespace AgyClaudeStyle
         };
         private static readonly string[] BoolSchemaDefaultTrueKeys = new string[] { "homeRipple", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu" };
         private static readonly string[] BoolSchemaDefaultFalseKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
-        private static readonly string[] StringSchemaKeys = new string[] { "chatFontCustom", "codeFontCustom" };
+        private static readonly string[] StringSchemaKeys = new string[] { "telemetryMetrics", "chatFontCustom", "codeFontCustom" };
 
         private static List<object> ExpandEnumSpec(string spec)
         {
