@@ -1050,6 +1050,7 @@ void main() {
     return {
       step,
       isIdle,
+      isMotionHot: () => wakeT >= 0 || fillSettleSec > 0 || currentProximity > 0.001 || targetProximity > 0.001 || wasProximityActive || wasWaking || wasLiquidFlow,
       setReduceMotion(flag) {
         const next = Boolean(flag);
         if (reduceMotion !== next) {

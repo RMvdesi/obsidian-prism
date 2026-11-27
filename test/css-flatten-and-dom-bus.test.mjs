@@ -150,6 +150,13 @@ test('Compile-time css-flatten.cjs: semantic equivalence across @media/@supports
   assert.ok(flatGuarded.includes('html[x] .card [data-x=":is(p,q)&{;}"]{content:"& { ; }";background:url(https://cdn.example/x;y&z.png);}'));
   assert.ok(flatGuarded.includes('html[x] .card :is(.ok,::-moz-bad){opacity:.5;}'), 'forgiving :is() with vendor pseudo must not expand');
 
+  // 6b) P2-10: computeSelectorSpecificity handles :is([a],[b]) & :where([a]) without double-counting, and foldDescendantList preserves cascade order across interleaved specificities
+  assert.equal(cssFlatten.computeSelectorSpecificity(':is([data-a="1"],[data-b="2"])'), 1000);
+  assert.equal(cssFlatten.computeSelectorSpecificity(':where([data-a="1"],[data-b="2"])'), 0);
+  const cascadeCss = '.box{& .a{color:red}& #mid{color:blue}& .b{color:green}}';
+  const flatCascade = flattenNestedCss(cascadeCss);
+  assert.ok(flatCascade.indexOf('.box .a') < flatCascade.indexOf('.box #mid') && flatCascade.indexOf('.box #mid') < flatCascade.indexOf('.box .b'), 'Interleaved specificities must preserve source cascade order');
+
   // 7) Real repository style.css compile-time flattening via packCssJsExpr: single-block flat CSS, 0 bucket markers, 0 bare &, smaller LZSS than bucketed
   const rawStyleCss = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
   const minStyleCss = cssPack.minifyCss(rawStyleCss);
@@ -479,6 +486,32 @@ test('Lossless performanceMode: schema aliases, __agPrismPerfCaps() caps, zero m
     if (prevSet === undefined) delete globalThis.__agPrismSettingsExtBeta4; else globalThis.__agPrismSettingsExtBeta4 = prevSet;
   }
 
+  // 4b) B1: applyPerformanceMode is idempotent and skips redundant attribute/dataset writes when unchanged
+  {
+    let setAttrCalls = 0;
+    let datasetWrites = 0;
+    let curAttr = null;
+    let curDataset = undefined;
+    const mockHtml = {
+      dataset: Object.defineProperty({}, 'agCsPerfMode', {
+        get: () => curDataset,
+        set: (v) => { datasetWrites += 1; curDataset = v; },
+      }),
+      getAttribute: (k) => (k === 'data-ag-cs-perf-mode' ? curAttr : null),
+      setAttribute: (k, v) => { if (k === 'data-ag-cs-perf-mode') { setAttrCalls += 1; curAttr = String(v); curDataset = String(v); } },
+    };
+    const mockDoc = { documentElement: mockHtml, hidden: false };
+    const idempBus = domBusMod.createInstance(mockDoc, {});
+    idempBus.applyPerformanceMode('balanced', mockDoc, {});
+    assert.equal(setAttrCalls, 1);
+    assert.equal(datasetWrites, 0, 'real-DOM dataset already synced by setAttribute must not be redundantly rewritten');
+    idempBus.applyPerformanceMode('balanced', mockDoc, {});
+    idempBus.applyPerformanceMode('balanced', mockDoc, {});
+    assert.equal(setAttrCalls, 1, 'unchanged performanceMode must trigger 0 extra attribute writes');
+    assert.equal(datasetWrites, 0);
+    idempBus.dispose(mockDoc, {});
+  }
+
   // 5) Full REMOVE_EXPRESSION teardown cleans __agPrismDomBus, __agPrismPerfCaps, data-ag-perf-busy, data-ag-cs-perf-mode & data-ag-cs-stream-active
   html.setAttribute('data-ag-perf-busy', '1');
   html.setAttribute('data-ag-cs-perf-mode', 'performance');
@@ -522,9 +555,10 @@ test('Issue #97 flexible model selector width, Blink CSS pruning, scoped motion=
   // Narrow collapse guard still intact so telemetry/right buttons never break
   assert.ok(css.includes('&[data-t~="1"] [data-testid="model-selector-trigger"]>span:not(.ag-cs-model-glyph):not(.ag-pp-mini-keycap)'));
 
-  // Blink content-visibility legacy guards + bleed exemption + non-flickering performance/motion=off blur suppression
+  // Blink content-visibility legacy guards + bleed exemption + sticky-safe pre/turn exclusion + non-flickering performance/motion=off blur suppression
   assert.ok(css.includes('[data-testid="conversation-row-history"]:not([data-ag-cs-bleed="1"]){content-visibility:auto;contain-intrinsic-size:auto 44px;'));
-  assert.ok(/pre:not\(:last-child\):not\(\[data-ag-cs-bleed="1"\]\)\{content-visibility:auto;contain-intrinsic-size:auto 180px;?\}/.test(css));
+  assert.equal(/\[data-markdown-root\]\s*pre[^\n{]*\{[^}]*content-visibility:\s*auto/.test(css), false, 'style.css must not apply content-visibility:auto on markdown pre blocks (preserves sticky headers)');
+  assert.equal(/div\.flex\.items-start[^\n{]*\{[^}]*content-visibility:\s*auto/.test(css), false, 'style.css must not apply content-visibility:auto on whole turn items');
   assert.ok(css.includes(':is([data-ag-cs-perf-mode="performance"],[data-ag-cs-motion="off"])'));
   assert.equal(css.includes('data-ag-perf-busy="1"'), false, 'style.css must not toggle backdrop-filter on transient perf-busy');
   assert.equal(css.includes('data-ag-cs-stream-active="1"'), false, 'style.css must not toggle backdrop-filter on transient stream-active');

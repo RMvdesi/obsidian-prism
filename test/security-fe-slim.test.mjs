@@ -223,13 +223,25 @@ test('GLSL minifyGlsl preserves preprocessor directives, interfaces, structs, sw
     });
   }
   assert.ok(totalRawBytes - totalMinBytes > 12000, `Expected significant GLSL size reduction, got ${totalRawBytes} -> ${totalMinBytes}`);
+
+  // P2-9: 全局函数与局部变量同名时，阻止冲突重命名
+  const shadowShader = `#version 300 es
+    float helperShadow(float x) { return x * 2.0; }
+    out vec4 fragColor;
+    void main() {
+      float helperShadow = helperShadow(0.5);
+      fragColor = vec4(helperShadow);
+    }
+  `;
+  const minShadow = cdp.minifyGlsl(shadowShader);
+  assert.ok(/\bhelperShadow\(/.test(minShadow) && /\bfloat helperShadow=helperShadow\(/.test(minShadow), 'Global fn shadowed by local var must stay protected');
 });
 
 test('CSS minifyCss safely shortens 6-digit hex colors in declarations while preserving ID selectors, 8-digit hex, strings, and url()', () => {
   const input = [
     '#aabbcc { color: #ffffff; background: #AABBCC !important; border: 1px solid #334455; }',
     '#aabbcc-box { content: "keep #ffffff here"; background: url(/a/b.png#ffffff); fill: #aabbccdd; }',
-    '.grad { background: linear-gradient(90deg, #000000 0%, #ffeedd 100%); }',
+    '.grad { background: linear-gradient(90deg, #000000 0%, #ffeedd 100%); --list-tokens: a , b , c; }',
   ].join('\n');
   const out = cdp.minifyCss(input);
   assert.ok(out.includes('#aabbcc{color:#fff;background:#ABC!important;border:1px solid #345}'), `Unexpected decl minify: ${out}`);
@@ -238,6 +250,7 @@ test('CSS minifyCss safely shortens 6-digit hex colors in declarations while pre
   assert.ok(out.includes('url(/a/b.png#ffffff)'), 'Must preserve url() hash fragment');
   assert.ok(out.includes('fill:#aabbccdd'), 'Must preserve 8-digit RGBA hex');
   assert.ok(out.includes('linear-gradient(90deg,#000 0%,#fed 100%)'), `Must shorten hex inside functions: ${out}`);
+  assert.ok(out.includes('--list-tokens:a , b , c'), `Custom property comma whitespace must be preserved: ${out}`);
 });
 
 test('host-workbench-enhancer enforces iframe postMessage protocol/origin allowlist and short-circuits sealed <pre> scans', () => {

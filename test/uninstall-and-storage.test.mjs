@@ -273,6 +273,8 @@ test('tools/install-plugin.cjs default uninstall backs up & restores config.json
     // 4) Purge uninstall (--purge-data) -> clears telemetry/thought/sidebar/backup, NEVER touches redline dirs
     assert.deepEqual(installTool.parseCliArgs(['node', 'install-plugin.cjs', '--uninstall', '--purge-data']).purgeData, true);
     assert.deepEqual(installTool.parseCliArgs(['node', 'install-plugin.cjs', '--uninstall']).purgeData, false);
+    assert.equal(installTool.parseCliArgs(['node', 'install-plugin.cjs', '--help']).action, 'help');
+    assert.equal(installTool.parseCliArgs(['node', 'install-plugin.cjs', '--bogus-flag']).action, 'unknown');
 
     const un2 = await installTool.uninstallPlugin({
       targetDir,

@@ -425,7 +425,7 @@
       const nm = normalizePerformanceMode(mode), d = getDoc(dO), w = getWin(wO, d), h = getHtml(d);
       const pv = curPerf || h?.getAttribute?.(PERF_MODE_ATTR) || '';
       curPerf = nm;
-      if (h) { T(() => { if (h.dataset) h.dataset.agCsPerfMode = nm; }); setA(h, PERF_MODE_ATTR, nm); }
+      if (h) { setA(h, PERF_MODE_ATTR, nm); T(() => { if (h.dataset && h.dataset.agCsPerfMode !== nm) h.dataset.agCsPerfMode = nm; }); }
       if (pv && pv !== nm && isF(w?.dispatchEvent)) T(() => {
         const CE = gFn('CustomEvent', w), detail = { mode: nm, caps: PERF_CAPS_TABLE[nm] };
         w.dispatchEvent(CE ? new CE(PERF_CHANGE_EVENT, { detail }) : { type: PERF_CHANGE_EVENT, detail });

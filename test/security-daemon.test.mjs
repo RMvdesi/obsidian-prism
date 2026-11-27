@@ -507,6 +507,11 @@ test('security-daemon 6: writeFileAtomicSync rejects symlink parent directory an
         /symbolic link/i,
         '符号链接/junction 父目录必须被 writeFileAtomicSync 拒绝'
       );
+      assert.throws(
+        () => writeFileAtomicSync(path.join(linkedParent, 'sub', 'config.json'), 'OVERWRITTEN'),
+        /symbolic link/i,
+        '中间祖先路径段包含符号链接时必须被 writeFileAtomicSync 拒绝'
+      );
       assert.equal(fs.readFileSync(victimInOutside, 'utf8'), 'ORIGINAL_SECRET');
     }
 

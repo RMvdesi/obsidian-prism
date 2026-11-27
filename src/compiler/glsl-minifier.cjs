@@ -116,7 +116,7 @@ function minifyGlsl(glsl) {
     i++;
   }
 
-  // Pass 2: Collect protected identifiers (interface qualifiers, struct blocks/fields, dot members, reserved/gl_)
+  // Pass 2: Collect protected identifiers (interface qualifiers, struct blocks/fields, dot members, reserved/gl_, and global fn / local var collisions)
   let braceDepth = 0;
   let parenDepth = 0;
   let stmtIds = [];
@@ -124,6 +124,18 @@ function minifyGlsl(glsl) {
   let structPending = false;
   let protectedBlockDepth = -1;
   let prevSig = null;
+  const topLevelFnNames = new Set();
+  const localNonCallIds = new Set();
+
+  const nextSigToken = (fromIdx) => {
+    for (let k = fromIdx + 1; k < tokens.length; k++) {
+      const ntk = tokens[k];
+      if (ntk.t === 'pre') continue;
+      if (ntk.t === 'ch' && (ntk.v === ' ' || ntk.v === '\n')) continue;
+      return ntk;
+    }
+    return null;
+  };
 
   for (let i = 0; i < tokens.length; i++) {
     const tk = tokens[i];
@@ -132,7 +144,9 @@ function minifyGlsl(glsl) {
 
     if (tk.t === 'id') {
       const v = tk.v;
-      if (prevSig && prevSig.t === 'ch' && prevSig.v === '.') {
+      const nextSig = nextSigToken(i);
+      const isDotMember = Boolean(prevSig && prevSig.t === 'ch' && prevSig.v === '.');
+      if (isDotMember) {
         protectedIds.add(v);
       }
       if (GLSL_RESERVED_IDS.has(v) || v.startsWith('gl_') || v.startsWith('__')) {
@@ -148,7 +162,12 @@ function minifyGlsl(glsl) {
         if (parenDepth === 0 && GLSL_INTERFACE_QUALS.has(v)) {
           stmtHasInterface = true;
         }
+        if (parenDepth === 0 && prevSig && prevSig.t === 'id' && nextSig && nextSig.t === 'ch' && nextSig.v === '(' && !GLSL_RESERVED_IDS.has(v)) {
+          topLevelFnNames.add(v);
+        }
         stmtIds.push(v);
+      } else if (!isDotMember && !(nextSig && nextSig.t === 'ch' && nextSig.v === '(') && !GLSL_RESERVED_IDS.has(v)) {
+        localNonCallIds.add(v);
       }
     } else if (tk.t === 'ch') {
       if (tk.v === '{') {
@@ -188,6 +207,12 @@ function minifyGlsl(glsl) {
       }
     }
     prevSig = tk;
+  }
+
+  for (const fnName of topLevelFnNames) {
+    if (localNonCallIds.has(fnName)) {
+      protectedIds.add(fnName);
+    }
   }
 
   // Pass 3: Count local renameable identifiers and assign shortest collision-free names by savings

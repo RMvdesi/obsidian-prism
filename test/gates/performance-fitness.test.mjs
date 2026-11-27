@@ -682,10 +682,11 @@ test('Performance Fitness 4: ripple-worker 1x1 probe cache, 120ms timeout & CSP 
     assert.equal(h.api.getPerfProfile(h.doc).msaa, true);
   }
 
-  // 4e) 首屏探针超时调优（PROBE_TIMEOUT_MS >= 500, INIT_TIMEOUT_MS >= 800）+ timeout 首次允许延迟重试 1 次（最多 1 次）
+  // 4e) 首屏探针超时调优（PROBE_TIMEOUT_MS >= 500 && <= 2000, INIT_TIMEOUT_MS >= 800）+ timeout 首次允许延迟重试 1 次（最多 1 次）
   {
     const h = makeWorkerHarness({ mode: 'timeout' });
     assert.ok(h.api.PROBE_TIMEOUT_MS >= 500, `PROBE_TIMEOUT_MS must be >= 500 to avoid Ch1 startup false timeout (got ${h.api.PROBE_TIMEOUT_MS})`);
+    assert.ok(h.api.PROBE_TIMEOUT_MS <= 2000, `PROBE_TIMEOUT_MS must be <= 2000 to bound probe stall (got ${h.api.PROBE_TIMEOUT_MS})`);
     assert.ok(h.api.INIT_TIMEOUT_MS >= 800, `INIT_TIMEOUT_MS must be >= 800 (got ${h.api.INIT_TIMEOUT_MS})`);
 
     const first = await h.api.probeWorkerWebGL2({ timeoutMs: 25, retryDelayMs: 20 });

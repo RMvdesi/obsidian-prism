@@ -344,7 +344,6 @@ export function flushUsageDiskCache(tel) {
     tel._usageCacheTimer = null;
   }
   if (!tel._usageCacheDirty || !(tel._usageDiskCache instanceof Map)) return;
-  tel._usageCacheDirty = false;
   try {
     const cacheFile = resolveActiveUsageCachePath(tel);
     const dir = path.dirname(cacheFile);
@@ -430,10 +429,14 @@ export function flushUsageDiskCache(tel) {
     }
     if (Buffer.byteLength(serialized, 'utf8') <= USAGE_CACHE_MAX_BYTES) {
       if (tel._lastFlushedUsageJson === serialized && fs.existsSync(cacheFile)) {
+        tel._usageCacheDirty = false;
         return;
       }
       writeFileAtomicSync(cacheFile, serialized, { mode: 0o600 });
       tel._lastFlushedUsageJson = serialized;
+      tel._usageCacheDirty = false;
+    } else {
+      tel._usageCacheDirty = false;
     }
   } catch {}
 }

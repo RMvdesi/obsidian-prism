@@ -40,8 +40,9 @@ const DEFAULT_OBSOLETE_PATHS = Object.freeze([
   'vendor/wallpaper/studio-ui/studio.js',
   'vendor/wallpaper/wallpaper-hud.js',
   'vendor/wallpaper/wallpaper-procedural.js',
-  // 已彻底退役的旧版 app.asar 补丁脚本
+  // 已彻底退役的旧版 app.asar 补丁与旧多通道注入文件
   'tools/patch-asar.cjs',
+  'src/channels/inject-runtime-channels.cjs',
 ]);
 const ATOMIC_UPGRADE_RETRY_BACKOFFS_MS = Object.freeze([100, 250, 500]);
 

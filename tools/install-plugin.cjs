@@ -37,7 +37,7 @@ function resolveDefaultPluginVersion(sourceDir = ROOT_DIR) {
     const pkg = JSON.parse(fs.readFileSync(path.join(sourceDir || ROOT_DIR, "package.json"), "utf8"));
     if (pkg && typeof pkg.version === "string" && pkg.version.trim()) return pkg.version.trim();
   } catch {}
-  return PLUGIN_VERSION || "1.0.8-beta.3";
+  return PLUGIN_VERSION || "1.0.8-beta.4";
 }
 
 function isAutomatedTestRuntime() {
@@ -2210,9 +2210,13 @@ function parseCliArgs(argv) {
   let createLauncher = undefined;
   let launcherDir = null;
   let targetExe = null;
+  const unknownArgs = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === "--install") action = "install";
+    if (a === "--help" || a === "-h") {
+      action = "help";
+      break;
+    } else if (a === "--install") action = "install";
     else if (a === "--uninstall") action = "uninstall";
     else if (a === "--status") action = "status";
     else if (a === "--no-daemon") noDaemon = true;
@@ -2227,9 +2231,12 @@ function parseCliArgs(argv) {
     else if (a === "--target-exe" && args[i + 1]) targetExe = args[++i];
     else if (a === "--target" && args[i + 1]) targetDir = args[++i];
     else if (a === "--cdp-port" && args[i + 1]) cdpPort = parseInt(args[++i], 10);
+    else unknownArgs.push(a);
   }
+  if (action !== "help" && unknownArgs.length > 0) action = "unknown";
   return {
     action,
+    unknownArgs,
     targetDir,
     noDaemon,
     noCdp,
@@ -2243,8 +2250,20 @@ function parseCliArgs(argv) {
   };
 }
 
+const CLI_USAGE =
+  "Usage: node tools/install-plugin.cjs [--install | --uninstall | --status | --help]\n" +
+  "Options: --target <dir> --no-daemon --no-cdp --cdp-port <port> --no-shortcuts --purge-data --create-launcher|--no-launcher";
+
 if (require.main === module) {
   const cli = parseCliArgs(process.argv);
+  if (cli.action === "help") {
+    console.log(CLI_USAGE);
+    process.exit(0);
+  }
+  if (cli.action === "unknown") {
+    console.error(`Unknown or incomplete argument(s): ${cli.unknownArgs.join(" ")}\n${CLI_USAGE}`);
+    process.exit(1);
+  }
   (async () => {
     if (cli.action === "status") {
       console.log(JSON.stringify(getPluginInstallStatus({ targetDir: cli.targetDir }), null, 2));

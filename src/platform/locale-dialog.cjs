@@ -32,6 +32,8 @@ function parseRegMultiSzFirstLocale(output) {
   return '';
 }
 
+const WIN_UI_LOCALE_CACHE_SYM = Symbol.for('obsidianPrism.winUiLocaleCache');
+
 function createLocaleDialog() {
   let _cachedWinUiLocale = undefined;
   let _winUiLocaleReaderOverride = null;
@@ -39,6 +41,7 @@ function createLocaleDialog() {
   function _setWindowsUiLocaleReaderForTest(fn) {
     _winUiLocaleReaderOverride = typeof fn === 'function' ? fn : null;
     _cachedWinUiLocale = undefined;
+    delete globalThis[WIN_UI_LOCALE_CACHE_SYM];
   }
 
   function readWindowsPreferredUiLanguage() {
@@ -49,8 +52,14 @@ function createLocaleDialog() {
         return '';
       }
     }
+    const envLang = String(process.env.AG_PRISM_UI_LANG || '').trim();
+    if (envLang) return envLang;
     if (!IS_WIN) return '';
     if (_cachedWinUiLocale !== undefined) return _cachedWinUiLocale;
+    if (globalThis[WIN_UI_LOCALE_CACHE_SYM] !== undefined) {
+      _cachedWinUiLocale = globalThis[WIN_UI_LOCALE_CACHE_SYM];
+      return _cachedWinUiLocale;
+    }
     const keys = [
       ['HKCU\\Control Panel\\Desktop', 'PreferredUILanguages'],
       ['HKCU\\Control Panel\\Desktop\\MuiCached', 'MachinePreferredUILanguages'],
@@ -61,7 +70,8 @@ function createLocaleDialog() {
         const out = execFileSync('reg.exe', ['query', keys[i][0], '/v', keys[i][1]], {
           encoding: 'utf8',
           windowsHide: true,
-          timeout: 1500,
+          timeout: 300,
+          stdio: ['ignore', 'pipe', 'ignore'],
         });
         const parsed = parseRegMultiSzFirstLocale(out);
         if (parsed) {
@@ -71,6 +81,7 @@ function createLocaleDialog() {
       } catch {}
     }
     _cachedWinUiLocale = found;
+    globalThis[WIN_UI_LOCALE_CACHE_SYM] = found;
     return found;
   }
 

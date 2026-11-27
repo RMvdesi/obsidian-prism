@@ -5,7 +5,7 @@
   if (root) root.__agPrismRippleWorker = api;
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this, function (G) {
   'use strict';
-  const M = Math, F = Object.freeze, PROBE_TIMEOUT_MS = 600, INIT_TIMEOUT_MS = 800, PROBE_RETRY_DELAY_MS = 1500, IDLE_SLEEP_MS = 1200;
+  const M = Math, F = Object.freeze, PROBE_TIMEOUT_MS = 1500, INIT_TIMEOUT_MS = 800, PROBE_RETRY_DELAY_MS = 2500, IDLE_SLEEP_MS = 1200;
   const mkP = (mode, g, r, c, v, f, ms, m) => F({ mode, glowDprScale: g, rippleMaxDpr: r, crystalMaxDpr: c, vialMaxDpr: v, maxFps: f, minGapMs: ms, msaa: m });
   const PERF_PROFILES = F({
     balanced: mkP('balanced', 0.7, 1.5, 1.5, 1.5, 0, 0, false),
@@ -36,7 +36,7 @@
     return Boolean(d && (d.hidden === true || ga(h, 'data-ag-cs-win-blur') === '1' || (ga(h, 'data-ag-pp-open') === '1' && /^(performance|eco)$/.test(rawPerf(d)))));
   }
 
-  const PROBE_WORKER_SRC = "'use strict';self.onmessage=e=>{var d=e?.data;if(d?.type!=='probe'||!d.canvas)return;try{var g=d.canvas.getContext('webgl2',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false}),ok=Boolean(g&&!g.isContextLost?.());g&&g.getExtension('WEBGL_lose_context')?.loseContext();self.postMessage({type:'probe',ok,reason:ok?'ok':'webgl2-null'})}catch(x){self.postMessage({type:'probe',ok:false,reason:String(x?.message||x||'probe-err')})}};";
+  const PROBE_WORKER_SRC = "'use strict';self.postMessage({type:'probe-ready'});self.onmessage=e=>{var d=e?.data;if(d?.type!=='probe'||!d.canvas){self.postMessage({type:'probe',ok:false,reason:'bad-probe-msg'});return}self.postMessage({type:'probe-ack'});try{var g=d.canvas.getContext('webgl2',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false}),ok=Boolean(g&&!g.isContextLost?.());g&&g.getExtension('WEBGL_lose_context')?.loseContext();self.postMessage({type:'probe',ok,reason:ok?'ok':'webgl2-null'})}catch(x){self.postMessage({type:'probe',ok:false,reason:String(x?.message||x||'probe-err')})}};";
 
   const RENDER_WORKER_SRC = [
     "'use strict';var mode='glow',cv,gl,P,u={},raf=0,pa=0,dd=0,rd=0,dpr=1,fS=0,lC=0,lD=0,lA=0,iMs=1200,mF=0,fc=0,fr=0,fw=7,fh=15,fz=10,fg='',cT,aT,aC,aX,aK='';",
@@ -89,20 +89,26 @@
     if (!hasOff()) return Promise.resolve((pCache = F({ ok: false, reason: 'unsupported', retryable: false, checkedAt: Date.now() })));
     const tMs = M.max(10, Number(o.timeoutMs) || PROBE_TIMEOUT_MS), rMs = M.max(0, o.retryDelayMs !== undefined ? Number(o.retryDelayMs) : PROBE_RETRY_DELAY_MS);
     pPend = new Promise((res) => {
-      let done = false, tm = 0, w = null, url = '';
+      let done = false, tm = 0, w = null, url = '', sawReady = false, sawAck = false;
       const fin = (ok, reason) => {
         if (done) return; done = true;
         if (tm) { clearTimeout(tm); tm = 0; }
         if (w) { try { w.onmessage = w.onerror = null; w.terminate(); } catch {} if (pW === w) pW = null; w = null; }
         if (url) { revoke(url); if (pUrl === url) pUrl = ''; url = ''; }
         const r = String(reason || (ok ? 'ok' : 'failed')), retryable = !ok && r === 'timeout' && pRetries < 1;
-        if (retryable) { pRetries += 1; pRetryAt = Date.now() + rMs; } else { if (ok) pRetries = 0; pRetryAt = 0; }
-        pCache = F({ ok: Boolean(ok), reason: r, retryable, checkedAt: Date.now() }); pPend = null; res(pCache);
+        const detail = !ok && r === 'timeout' ? (sawAck ? 'gpu-hang' : sawReady ? 'no-ack' : 'no-ready') : r;
+        if (retryable) { pRetries += 1; pRetryAt = Date.now() + rMs; } else { if (ok) pRetries = 0; else fallbacks += 1; pRetryAt = 0; }
+        pCache = F({ ok: Boolean(ok), reason: r, detail, retryable, checkedAt: Date.now() }); pPend = null; res(pCache);
       };
       try {
         const Off = gApi('OffscreenCanvas'), cv = new Off(1, 1), cr = mkBlobW(PROBE_WORKER_SRC);
         w = pW = cr.worker; url = pUrl = cr.url;
-        w.onmessage = (e) => { const d = e?.data; if (d?.type === 'probe') fin(Boolean(d.ok), d.reason || (d.ok ? 'ok' : 'webgl2-null')); };
+        w.onmessage = (e) => {
+          const d = e?.data;
+          if (d?.type === 'probe-ready') { sawReady = true; return; }
+          if (d?.type === 'probe-ack') { sawAck = true; return; }
+          if (d?.type === 'probe') fin(Boolean(d.ok), d.reason || (d.ok ? 'ok' : 'webgl2-null'));
+        };
         w.onerror = (e) => fin(false, e?.message || 'worker-error');
         tm = setTimeout(() => fin(false, 'timeout'), tMs);
         w.postMessage({ type: 'probe', canvas: cv }, [cv]);
@@ -111,7 +117,7 @@
     return pPend;
   }
   const warmProbe = (o) => { try { probeWorkerWebGL2(o).catch(() => {}); } catch {} };
-  const getProbeStatus = () => (pCache ? { probed: true, ok: pCache.ok, reason: pCache.reason } : { probed: false, ok: false, reason: pPend ? 'probing' : 'unprobed' });
+  const getProbeStatus = () => (pCache ? { probed: true, ok: pCache.ok, reason: pCache.reason, detail: pCache.detail || pCache.reason } : { probed: false, ok: false, reason: pPend ? 'probing' : 'unprobed', detail: pPend ? 'probing' : 'unprobed' });
   function resetProbeCache() {
     clrRetry();
     if (pW) { try { pW.terminate(); } catch {} pW = null; }
@@ -216,7 +222,7 @@
 
   async function mountGlowWorkerWithProbe(cv, o = {}) {
     const r = await probeWorkerWebGL2({ timeoutMs: o.probeTimeoutMs, force: o.forceProbe });
-    if (!r?.ok) { fallbacks += 1; try { o.onFallback?.(r ? r.reason : 'probe-failed'); } catch {} return null; }
+    if (!r?.ok) { if (r?.retryable) fallbacks += 1; try { o.onFallback?.(r ? r.reason : 'probe-failed'); } catch {} return null; }
     return mountGlowWorker(cv, o);
   }
 

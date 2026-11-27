@@ -200,7 +200,7 @@ async function readResponseBufferWithLimit(res, maxBytes) {
   throw new Error('unsupported_response_body');
 }
 
-function readPackageVersion(fallback = '1.0.8-beta.3') {
+function readPackageVersion(fallback = '1.0.8-beta.4') {
   try {
     const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) return pkg.version.trim();

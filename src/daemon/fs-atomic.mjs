@@ -67,9 +67,19 @@ export function assertNotSymlinkSync(targetPath, label = 'path') {
   }
 }
 
+export function assertNoSymlinkAncestorsSync(dirPath, label = 'target directory') {
+  const resolved = path.resolve(dirPath);
+  const root = path.parse(resolved).root;
+  if (resolved === root) return;
+  if (hasSymlinkSegment(root, resolved)) {
+    throw new Error(`Refusing symbolic link ancestor in ${label}: ${resolved}`);
+  }
+}
+
 export function writeFileAtomicSync(targetPath, content, { mode = 0o600 } = {}) {
   const resolvedTarget = path.resolve(targetPath);
   const dir = path.dirname(resolvedTarget);
+  assertNoSymlinkAncestorsSync(dir, 'target directory');
   const dirStat = assertNotSymlinkSync(dir, 'target directory');
   if (dirStat && !dirStat.isDirectory()) {
     throw new Error(`Target parent is not a directory: ${dir}`);

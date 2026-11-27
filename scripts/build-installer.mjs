@@ -50,7 +50,7 @@ function resolveBuildVersion(overrideVersion = null) {
       }
     } catch {}
   }
-  const parsed = parseSemver(raw || cdp.PLUGIN_VERSION || '1.0.8-beta.3');
+  const parsed = parseSemver(raw || cdp.PLUGIN_VERSION || '1.0.8-beta.4');
   if (!parsed) {
     throw new Error(`Invalid package version for PE metadata: "${raw}"`);
   }

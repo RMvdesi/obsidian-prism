@@ -498,13 +498,24 @@ function resolveCliShardedBundleCachePath(rootDir, gitRepoDir) {
   return undefined;
 }
 
+export function readCliPollIntervalMs(rootDir) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(rootDir || DEFAULT_ROOT_DIR, 'config.json'), 'utf8'));
+    const v = raw && typeof raw === 'object' ? raw.pollIntervalMs : undefined;
+    if (typeof v === 'number' && Number.isInteger(v) && v >= 500 && v <= 60000) return v;
+  } catch {}
+  return undefined;
+}
+
 export function runDaemonCli(argv = process.argv) {
   const cli = parseArgs(argv);
   const shardedCachePath = resolveCliShardedBundleCachePath(cli.rootDir, cli.gitRepoDir);
+  const cfgPollMs = readCliPollIntervalMs(cli.rootDir);
   const daemon = new PrismDaemon({
     rootDir: cli.rootDir,
     gitRepoDir: cli.gitRepoDir,
     overridePort: cli.port,
+    ...(cfgPollMs !== undefined ? { pollIntervalMs: cfgPollMs } : {}),
     ...(shardedCachePath ? { bundleCachePath: shardedCachePath } : {}),
   });
 

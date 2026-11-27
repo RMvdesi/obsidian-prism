@@ -19,7 +19,7 @@ const APP_DATA = IS_MAC
 const PORT_FILE = path.join(APP_DATA, 'Antigravity', 'DevToolsActivePort');
 const DEFAULT_MAX_SAFE_FILE_BYTES = 1024 * 1024;
 
-function readPkgVersionSafe(rootDir, fallback = '1.0.8-beta.3') {
+function readPkgVersionSafe(rootDir, fallback = '1.0.8-beta.4') {
   try {
     const pkgPath = path.join(rootDir || path.resolve(__dirname, '..', '..'), 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));

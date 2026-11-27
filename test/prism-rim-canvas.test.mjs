@@ -179,6 +179,9 @@ test('interaction-takeover-card 与 .agy-takeover-frame 使用全周 prism rim�
     assert.ok(qStroke, '排队卡应正常绘制底边反射 stroke');
     assert.equal(qStroke[1], 1.15, '排队卡底边反射线宽应保持 1.15');
     assert.equal(qCv._ctx.ops.some((op) => op[0] === 'linear'), true, '排队卡应保留底边反射 destination-in 线性裁切');
+    // 动画结束事件仅检查 closest，不扫描无关子树 querySelector
+    const docSrc = fs.readFileSync(path.join(ROOT, 'prism-rim-canvas.js'), 'utf8');
+    assert.equal(docSrc.includes('t.querySelector?.(ANIM_SEL)'), false, 'onAnimEnd must not perform subtree querySelector scan on unrelated transitions');
   } finally {
     ctl.teardown();
     globalThis.document = prevDoc;

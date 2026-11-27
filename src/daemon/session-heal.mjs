@@ -53,6 +53,9 @@ export async function verifyAndHealEntryUnlocked(orch, entry, force = false) {
   if (!entry || entry.session.closed) return { alive: false, ready: false, isHostDom: false };
   ensureEntryFsm(entry);
   const now = Date.now();
+  if (!force && entry.probeTimeoutBackoffUntil > now) {
+    return { alive: true, ready: false, isHostDom: true, timedOut: true, skipped: true };
+  }
   const cdp = orch.getCdp();
   const reg = orch.sessionRegistry;
   const cfg = typeof cdp?.readConfig === 'function' ? cdp.readConfig() : null;
@@ -96,6 +99,8 @@ export async function verifyAndHealEntryUnlocked(orch, entry, force = false) {
 
     const probe = await entry.session.evaluate(PAGE_HEALTH_PROBE_EXPRESSION, false, 2600);
     if (!probe || !probe.ready) return { alive: true, ready: false, isHostDom: true };
+    entry.probeTimeoutStreak = 0;
+    entry.probeTimeoutBackoffUntil = 0;
     if (probe.href) entry.url = probe.href;
     if (probe.title) entry.title = probe.title;
     if (probe.scopeAttr) {
@@ -200,7 +205,22 @@ export async function verifyAndHealEntryUnlocked(orch, entry, force = false) {
       href: probe.href || '',
       ...(deferredThisPass ? { awaitingDom: true } : {}),
     };
-  } catch {
+  } catch (err) {
+    const errMsg = String(err?.message || err || '');
+    const isTimeout = /\btimeout\b/i.test(errMsg);
+    if (!entry.session.closed && isTimeout) {
+      const nextStreak = (Number(entry.probeTimeoutStreak) || 0) + 1;
+      entry.probeTimeoutStreak = nextStreak;
+      if (nextStreak < 3) {
+        const backoffMs = Math.min(30000, 3000 * Math.pow(2, nextStreak - 1));
+        entry.probeTimeoutBackoffUntil = Date.now() + backoffMs;
+        orch.log(`[!] Health probe timeout (${nextStreak}/3) on ${orch.redact(entry.title)}; backing off ${backoffMs}ms`);
+        return { alive: true, ready: false, isHostDom: true, timedOut: true };
+      }
+    }
+    orch.log(
+      `[!] Session closed after ${isTimeout ? 'repeated probe timeouts' : 'probe error'}: ${orch.redact(entry.title)}`
+    );
     entry.session.close();
     reg.sessions.delete(entry.wsUrl);
     return { alive: false, ready: false, isHostDom: false };

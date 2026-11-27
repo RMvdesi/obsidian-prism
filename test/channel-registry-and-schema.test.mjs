@@ -162,6 +162,11 @@ test('CONFIG_SCHEMA is the single source of truth for DEFAULT_CONFIG, VALIDATORS
   assert.equal(reconciled.convRipple, 'medium');
   assert.equal(reconciled.sidebarRestyle, false);
   assert.equal(reconciled.sidebar, 'off');
+
+  const strFalse = cdp.reconcileConfigAliases({ homeRipple: 'false', sidebarRestyle: 'FALSE', sidebar: 'FALSE' });
+  assert.equal(strFalse.homeRipple, false);
+  assert.equal(strFalse.sidebarRestyle, false);
+  assert.equal(strFalse.sidebar, 'off');
 });
 
 test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with valid metadata and gating', () => {

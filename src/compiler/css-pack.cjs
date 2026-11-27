@@ -7,29 +7,22 @@ function minifyCss(css) {
   const n = css.length;
   const out = [];
   let i = 0;
-  let pendingWS = false;
+  let pendingWS = false, sawCustomPropName = false, inCustomPropVal = false, customParenDepth = 0;
   const NO_SPACE_AFTER = new Set(['{', '}', ';', ',', '>', '~', '(', ':']);
   const NO_SPACE_BEFORE = new Set(['{', '}', ';', ',', '>', '~', ')']);
+  const noAfter = (tok) => Boolean(tok) && NO_SPACE_AFTER.has(tok) && !(inCustomPropVal && tok === ',');
   const isHex = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102);
   const isIdCont = (c) =>
     (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 45;
   while (i < n) {
     const ch = css[i];
     if (ch === "'" || ch === '"') {
-      if (pendingWS && out.length > 0 && !NO_SPACE_AFTER.has(out[out.length - 1])) {
-        out.push(' ');
-      }
+      if (pendingWS && out.length > 0 && !noAfter(out[out.length - 1])) out.push(' ');
       pendingWS = false;
       let j = i + 1;
       while (j < n) {
-        if (css[j] === '\\') {
-          j += 2;
-          continue;
-        }
-        if (css[j] === ch) {
-          j++;
-          break;
-        }
+        if (css[j] === '\\') { j += 2; continue; }
+        if (css[j] === ch) { j++; break; }
         j++;
       }
       out.push(css.slice(i, j));
@@ -49,44 +42,37 @@ function minifyCss(css) {
       (css[i + 2] === 'l' || css[i + 2] === 'L') &&
       css[i + 3] === '('
     ) {
-      if (pendingWS && out.length > 0 && !NO_SPACE_AFTER.has(out[out.length - 1])) {
-        out.push(' ');
-      }
+      if (pendingWS && out.length > 0 && !noAfter(out[out.length - 1])) out.push(' ');
       pendingWS = false;
-      let j = i + 4;
-      let q = '';
+      let j = i + 4, q = '';
       while (j < n) {
         const c = css[j];
-        if (q) {
-          if (c === '\\') { j += 2; continue; }
-          if (c === q) q = '';
-        } else {
-          if (c === "'" || c === '"') q = c;
-          else if (c === ')') { j++; break; }
-        }
+        if (q) { if (c === '\\') { j += 2; continue; } if (c === q) q = ''; }
+        else { if (c === "'" || c === '"') q = c; else if (c === ')') { j++; break; } }
         j++;
       }
       out.push(css.slice(i, j));
       i = j;
       continue;
     }
-    if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
-      pendingWS = true;
-      i++;
-      continue;
+    if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') { pendingWS = true; i++; continue; }
+    if (ch === '}' && out.length > 0 && out[out.length - 1] === ';') out.pop();
+    if (inCustomPropVal) {
+      if (ch === '(') customParenDepth++;
+      else if (ch === ')' && customParenDepth > 0) customParenDepth--;
+      else if ((ch === ';' || ch === '}') && customParenDepth === 0) { inCustomPropVal = false; sawCustomPropName = false; }
+    } else if (ch === '-' && css[i + 1] === '-') {
+      const pt = out.length > 0 ? out[out.length - 1] : '';
+      if (!pt || pt === '{' || pt === ';') sawCustomPropName = true;
+    } else if (ch === ':' && sawCustomPropName) {
+      inCustomPropVal = true; sawCustomPropName = false; customParenDepth = 0;
+    } else if (ch === '{' || ch === ';' || ch === '}') {
+      sawCustomPropName = false;
     }
-    if (ch === '}' && out.length > 0 && out[out.length - 1] === ';') {
-      out.pop();
+    if ((NO_SPACE_BEFORE.has(ch) && !(inCustomPropVal && ch === ',')) || (ch === '!' && css.startsWith('!important', i))) {
+      pendingWS = false; out.push(ch); i++; continue;
     }
-    if (NO_SPACE_BEFORE.has(ch) || (ch === '!' && css.startsWith('!important', i))) {
-      pendingWS = false;
-      out.push(ch);
-      i++;
-      continue;
-    }
-    if (pendingWS && out.length > 0 && !NO_SPACE_AFTER.has(out[out.length - 1])) {
-      out.push(' ');
-    }
+    if (pendingWS && out.length > 0 && !noAfter(out[out.length - 1])) out.push(' ');
     pendingWS = false;
     if (
       ch === '#' &&

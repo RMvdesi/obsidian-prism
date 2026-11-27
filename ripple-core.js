@@ -205,8 +205,7 @@
     let baseSpeedPrimed = false;
     let actC0 = columns;
     let actC1 = -1;
-    let actR0 = rows;
-    let actR1 = -1;
+    let actR0=rows,actR1=-1,rowExpBuf=new Float64Array(32),colExpBuf=new Float64Array(64);
     if (columns >= 32 && rows >= 16) {
       const gCols = M.ceil(columns / 2) + 1;
       const gRows = M.ceil(rows / 2) + 1;
@@ -345,17 +344,17 @@
         if (r1 > actR1) actR1 = r1;
         if (c0 < actC0) actC0 = c0;
         if (c1 > actC1) actC1 = c1;
-        for (let r = r0; r <= r1; r++) {
-          const dy = (r - source.row) * cellHeight;
-          const dy2 = dy * dy;
-          const rowBase = r * columns;
-          for (let c = c0; c <= c1; c++) {
-            const dx = (c - source.column) * cellWidth;
-            const i = rowBase + c;
-            let v = height[i] + gain * M.exp(-(dx * dx + dy2) * inv2r2);
-            const av = v < 0 ? -v : v;
-            if (av > knee) v = (v < 0 ? -1 : 1) * (knee + span * M.tanh((av - knee) / span));
-            height[i] = v;
+        const rLen=r1-r0+1,cLen=c1-c0+1;
+        if(rLen>rowExpBuf.length)rowExpBuf=new Float64Array(rLen);
+        if(cLen>colExpBuf.length)colExpBuf=new Float64Array(cLen);
+        for(let r=r0;r<=r1;r++){const dy=(r-source.row)*cellHeight;rowExpBuf[r-r0]=M.exp(-(dy*dy)*inv2r2);}
+        for(let c=c0;c<=c1;c++){const dx=(c-source.column)*cellWidth;colExpBuf[c-c0]=M.exp(-(dx*dx)*inv2r2);}
+        for(let r=r0;r<=r1;r++){
+          const rowGain=gain*rowExpBuf[r-r0],rowBase=r*columns;
+          for(let c=c0;c<=c1;c++){
+            const i=rowBase+c;let v=height[i]+rowGain*colExpBuf[c-c0],av=v<0?-v:v;
+            if(av>knee)v=(v<0?-1:1)*(knee+span*M.tanh((av-knee)/span));
+            height[i]=v;
           }
         }
         source.time += WAVE_STEP;
@@ -531,13 +530,7 @@
         wakeLoad = M.min(2.4, wakeLoad + 0.28);
         moving = true;
       },
-      advance(seconds) {
-        behind += M.min(seconds, MAX_ADVANCE);
-        while (behind >= WAVE_STEP) {
-          step();
-          behind -= WAVE_STEP;
-        }
-      },
+      advance(s,m=0){const d=M.min(s,MAX_ADVANCE);behind=m>0?M.min(behind+d,MAX_ADVANCE*2):behind+d;let n=0;while(behind>=WAVE_STEP&&(!(m>0)||n<m)){step();behind-=WAVE_STEP;n+=1;}},
     };
   }
   function parseCssColorToRgb(cssColor) {
@@ -723,23 +716,16 @@ color = vec4(rgb * a, a);
       strength: cfg ? M.max(0, M.min(1, Number(cfg.strength ?? 1))) : 0,
     };
   }
-  function packFieldDrawParams(pal, rd) {
-    const amb = clampFinite(pal.ambientIntensity, 1, 0, 1), sc = Number(pal.spectrumCode ?? 0);
-    const st = getGlyphSpectrumStops(pal.dark, sc), au = pal.aura?.active ? pal.aura : null;
-    const neb = pal.nebula, nL = pal.nebulaLiftScale ?? 1;
-    const mkN = (b) => (b ? [b.x * rd, b.y * rd, b.radius * rd, b.strength * amb] : [0, 0, 1, 0]);
-    const n255 = (c) => [c[0] / 255, c[1] / 255, c[2] / 255];
-    return {
-      font: pal.fontFamily || 'monospace', dpr: rd, lightMode: pal.dark === false ? 1 : 0, ink: n255(pal.ink), wave: n255(pal.wave),
-      aura: au ? [Number(au.x || 0) * rd, Number(au.y || 0) * rd, M.max(1, Number(au.radius || 230)) * rd, clampFinite(au.strength, 1, 0, 1) * amb] : [0, 0, 230 * rd, 0],
-      optics: [RIPPLE.auraTint * (sc === 5 ? 0.55 : 1), RIPPLE.prismTint * (sc === 5 ? 0.45 : 1), RIPPLE.prismCap, pal.prismStrength],
-      auraLift: RIPPLE.auraLift * amb * (pal.auraLiftScale ?? 1), auraPhase: pal.auraPhase || 0,
-      sp0: n255(st[0]), sp1: n255(st[1]), sp2: n255(st[2]), sp3: n255(st[3]),
-      idle: [pal.cloudDriftPx || 0, pal.breathSinW || 0, pal.breathCosW ?? 1, 1],
-      n0: mkN(neb?.[0]), n1: mkN(neb?.[1]), n2: mkN(neb?.[2]),
-      nOpt: [neb?.[0]?.hue || 0, neb?.[1]?.hue || 0, neb?.[2]?.hue || 0, RIPPLE.nebulaTint * amb * (sc === 5 ? 0.45 : 1) * (0.35 + 0.65 * nL)],
-      nLift: RIPPLE.nebulaLift * amb * nL,
-    };
+  const _FDP={font:'monospace',dpr:1,lightMode:0,ink:[0,0,0],wave:[0,0,0],aura:[0,0,230,0],optics:[0,0,0,0],auraLift:0,auraPhase:0,sp0:[0,0,0],sp1:[0,0,0],sp2:[0,0,0],sp3:[0,0,0],idle:[0,0,1,1],n0:[0,0,1,0],n1:[0,0,1,0],n2:[0,0,1,0],nOpt:[0,0,0,0],nLift:0};
+  const _s3=(d,s)=>{d[0]=s[0]/255;d[1]=s[1]/255;d[2]=s[2]/255;},_sN=(d,b,r,a)=>{if(b){d[0]=b.x*r;d[1]=b.y*r;d[2]=b.radius*r;d[3]=b.strength*a;}else{d[0]=0;d[1]=0;d[2]=1;d[3]=0;}};
+  function packFieldDrawParams(pal,rd){
+    const amb=clampFinite(pal.ambientIntensity,1,0,1),sc=Number(pal.spectrumCode??0),st=getGlyphSpectrumStops(pal.dark,sc),au=pal.aura?.active?pal.aura:null,neb=pal.nebula,nL=pal.nebulaLiftScale??1,p=_FDP;
+    p.font=pal.fontFamily||'monospace';p.dpr=rd;p.lightMode=pal.dark===false?1:0;_s3(p.ink,pal.ink);_s3(p.wave,pal.wave);
+    if(au){p.aura[0]=Number(au.x||0)*rd;p.aura[1]=Number(au.y||0)*rd;p.aura[2]=M.max(1,Number(au.radius||230))*rd;p.aura[3]=clampFinite(au.strength,1,0,1)*amb;}else{p.aura[0]=0;p.aura[1]=0;p.aura[2]=230*rd;p.aura[3]=0;}
+    p.optics[0]=RIPPLE.auraTint*(sc===5?.55:1);p.optics[1]=RIPPLE.prismTint*(sc===5?.45:1);p.optics[2]=RIPPLE.prismCap;p.optics[3]=pal.prismStrength;p.auraLift=RIPPLE.auraLift*amb*(pal.auraLiftScale??1);p.auraPhase=pal.auraPhase||0;
+    _s3(p.sp0,st[0]);_s3(p.sp1,st[1]);_s3(p.sp2,st[2]);_s3(p.sp3,st[3]);p.idle[0]=pal.cloudDriftPx||0;p.idle[1]=pal.breathSinW||0;p.idle[2]=pal.breathCosW??1;p.idle[3]=1;
+    _sN(p.n0,neb?.[0],rd,amb);_sN(p.n1,neb?.[1],rd,amb);_sN(p.n2,neb?.[2],rd,amb);p.nOpt[0]=neb?.[0]?.hue||0;p.nOpt[1]=neb?.[1]?.hue||0;p.nOpt[2]=neb?.[2]?.hue||0;
+    p.nOpt[3]=RIPPLE.nebulaTint*amb*(sc===5?.45:1)*(.35+.65*nL);p.nLift=RIPPLE.nebulaLift*amb*nL;return p;
   }
   function linkGlProgram(gl, vsSrc, fsSrc, uniformNames) {
     const comp = (t, s) => {
@@ -1862,30 +1848,17 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
     2: [[0.863, 0.149, 0.149], [0.77795, 0.13535, 0.13885]],
     3: [[0.02, 0.588, 0.412], [0.01496, 0.5586, 0.56656]],
   };
-  function computeHorizonUniforms(dark, presence, prism, surge, speed, spectrumCode, semanticCode) {
-    const sp = surge > 0.0001 ? M.min(1, M.max(0, surge)) : 0;
-    const cp = surge < -0.0001 ? M.min(1, M.max(0, -surge)) : 0;
-    const p1m = sp > 0 ? M.pow(1 - sp, 1.45) : cp > 0 ? M.pow(1 - cp, 1.35) : 1;
-    const env = sp > 0 ? M.sin(sp * M.PI) * (1 - 0.32 * sp) : cp > 0 ? M.sin(cp * M.PI) * (1 - 0.28 * cp) : 0;
-    const fyOrR = sp > 0 ? 1.15 * (1 - p1m) : cp > 0 ? 0.04 + 0.43 * (1 - p1m) : 0;
-    const setY = cp > 0 ? 0.7 * p1m + 0.04 : 0;
-    const effPres = M.pow(M.max(0, M.min(1, presence)), 0.68);
-    const sc = M.max(0, M.min(6, M.round(Number(spectrumCode) || 0)));
-    const semId = M.floor((Number(semanticCode) || 0) + 0.001);
-    const semW = semId > 0.5 ? M.max(0, M.min(1, 1 - (semanticCode - semId) / 0.98)) : 0;
-    const bd = _H_BASE_D[sc] || _H_BASE_D[0], pd = _H_PRISM_D[sc] || _H_PRISM_D[0], ld = _H_LIGHT[sc] || _H_LIGHT[0];
-    const semKey = semId < 1.5 ? 1 : semId < 2.5 ? 2 : 3;
-    const semPair = (dark ? _H_SEM_D : _H_SEM_L)[semKey];
-    return {
-      pre0: [env, fyOrR, setY, effPres],
-      pre1: [semId, semW, sc === 5 ? prism * 0.28 : prism, 0.6 * (1 + 0.08 * (speed - 1))],
-      modes: [bd[0], pd[0], ld[0], sc === 0 ? 1 : 0],
-      baseA: bd[1], baseB: bd[2], prismA: pd[1], prismB: pd[2], lightA: ld[1], lightB: ld[2],
-      surgeLead: sc === 5 ? [0.847, 0.878, 0.929] : sc === 1 ? [0.933, 0.682, 0.365] : [0.361, 0.776, 0.988],
-      chimeLead: sc === 5 ? [0.847, 0.878, 0.929] : sc === 1 ? [0.933, 0.682, 0.365] : [0.839, 0.933, 1.0],
-      hotAnchor: sc === 5 ? [0.267, 0.318, 0.4] : sc === 1 ? [0.635, 0.247, 0.141] : [0.19956, 0.36224, 0.92312],
-      semA: semPair[0], semB: semPair[1],
-    };
+  const _HSL={0:[.361,.776,.988],1:[.933,.682,.365],5:[.847,.878,.929]},_HCL={0:[.839,.933,1],1:[.933,.682,.365],5:[.847,.878,.929]},_HHA={0:[.19956,.36224,.92312],1:[.635,.247,.141],5:[.267,.318,.4]};
+  const _HU={pre0:[0,0,0,1],pre1:[0,0,0,.6],modes:[0,0,0,1],baseA:_H_BASE_D[0][1],baseB:_H_BASE_D[0][2],prismA:_H_PRISM_D[0][1],prismB:_H_PRISM_D[0][2],lightA:_H_LIGHT[0][1],lightB:_H_LIGHT[0][2],surgeLead:_HSL[0],chimeLead:_HCL[0],hotAnchor:_HHA[0],semA:_H_SEM_D[1][0],semB:_H_SEM_D[1][1]};
+  function computeHorizonUniforms(dark,presence,prism,surge,speed,spectrumCode,semanticCode){
+    const sp=surge>1e-4?M.min(1,M.max(0,surge)):0,cp=surge<-1e-4?M.min(1,M.max(0,-surge)):0,p1m=sp>0?M.pow(1-sp,1.45):cp>0?M.pow(1-cp,1.35):1;
+    const env=sp>0?M.sin(sp*M.PI)*(1-.32*sp):cp>0?M.sin(cp*M.PI)*(1-.28*cp):0,fyOrR=sp>0?1.15*(1-p1m):cp>0?.04+.43*(1-p1m):0,setY=cp>0?.7*p1m+.04:0;
+    const effPres=M.pow(M.max(0,M.min(1,presence)),.68),sc=M.max(0,M.min(6,M.round(Number(spectrumCode)||0))),semId=M.floor((Number(semanticCode)||0)+.001);
+    const semW=semId>.5?M.max(0,M.min(1,1-(semanticCode-semId)/.98)):0,bd=_H_BASE_D[sc]||_H_BASE_D[0],pd=_H_PRISM_D[sc]||_H_PRISM_D[0],ld=_H_LIGHT[sc]||_H_LIGHT[0];
+    const semPair=(dark?_H_SEM_D:_H_SEM_L)[semId<1.5?1:semId<2.5?2:3],h=_HU;
+    h.pre0[0]=env;h.pre0[1]=fyOrR;h.pre0[2]=setY;h.pre0[3]=effPres;h.pre1[0]=semId;h.pre1[1]=semW;h.pre1[2]=sc===5?prism*.28:prism;h.pre1[3]=.6*(1+.08*(speed-1));
+    h.modes[0]=bd[0];h.modes[1]=pd[0];h.modes[2]=ld[0];h.modes[3]=sc===0?1:0;h.baseA=bd[1];h.baseB=bd[2];h.prismA=pd[1];h.prismB=pd[2];h.lightA=ld[1];h.lightB=ld[2];
+    h.surgeLead=_HSL[sc]||_HSL[0];h.chimeLead=_HCL[sc]||_HCL[0];h.hotAnchor=_HHA[sc]||_HHA[0];h.semA=semPair[0];h.semB=semPair[1];return h;
   }
   function createBrandHorizonGLRenderer(canvas) {
     const gl = canvas?.getContext?.('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: false }) || null;

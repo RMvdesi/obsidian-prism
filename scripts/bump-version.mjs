@@ -224,6 +224,55 @@ function buildAnchorSpecs(parsed) {
       expected: version,
       replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
     },
+    {
+      rel: 'src/utils/fs-safe.cjs',
+      label: 'fs-safe.cjs readPkgVersionSafe fallback',
+      pattern: /(function readPkgVersionSafe\(rootDir,\s*fallback\s*=\s*')([^']+)('\))/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
+    {
+      rel: 'src/daemon/constants.mjs',
+      label: 'constants.mjs PKG_VERSION fallback',
+      pattern: /(PKG_VERSION\s*=\s*\(\(\)\s*=>\s*\{[\s\S]*?return ')([^']+)(';)/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
+    {
+      rel: 'sidecars/daemon/update-service.mjs',
+      label: 'update-service.mjs readPackageVersion fallback',
+      pattern: /(function readPackageVersion\(fallback\s*=\s*')([^']+)('\))/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
+    {
+      rel: 'vendor/omni-viewer/omni-server.mjs',
+      label: 'omni-server.mjs readPackageVersion fallback',
+      pattern: /(function readPackageVersion\(fallback\s*=\s*')([^']+)('\))/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
+    {
+      rel: 'workbench/server.cjs',
+      label: 'workbench/server.cjs PKG_VERSION fallback',
+      pattern: /(PKG_VERSION\s*=\s*\(\(\)\s*=>\s*\{[\s\S]*?return ')([^']+)(';)/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
+    {
+      rel: 'tools/install-plugin.cjs',
+      label: 'install-plugin.cjs resolveDefaultPluginVersion fallback',
+      pattern: /(return PLUGIN_VERSION \|\| ")([^"]+)(";)/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
+    {
+      rel: 'scripts/build-installer.mjs',
+      label: 'build-installer.mjs resolveBuildVersion fallback',
+      pattern: /(parseSemver\(raw \|\| cdp\.PLUGIN_VERSION \|\| ')([^']+)('\))/,
+      expected: version,
+      replace: (_, pre, _cur, post) => `${pre}${version}${post}`,
+    },
   ];
 }
 

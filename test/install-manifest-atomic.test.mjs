@@ -763,6 +763,7 @@ test('DEFAULT_OBSOLETE_PATHS covers retired dead files safely and copyDirRecursi
     'vendor/wallpaper/wallpaper-hud.js',
     'vendor/wallpaper/wallpaper-procedural.js',
     'tools/patch-asar.cjs',
+    'src/channels/inject-runtime-channels.cjs',
   ];
 
   for (const rel of expectedRetired) {

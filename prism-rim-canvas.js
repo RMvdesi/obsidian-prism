@@ -576,7 +576,7 @@
     const onAnimEnd = (ev) => {
       const t = !isDestroyed() && ev?.target;
       if (!t || (t.nodeType !== undefined && t.nodeType !== 1)) return;
-      try { if (!t.closest?.(ANIM_SEL) && !t.querySelector?.(ANIM_SEL)) return; } catch { return; }
+      try { if (!t.closest?.(ANIM_SEL) && !pBoxes.some((e) => t.contains?.(e.box)) && !(orchE && t.contains?.(orchE.box))) return; } catch { return; }
       rectAt = 0; pDirty = true; wake();
     };
     const bindEv = (m) => {

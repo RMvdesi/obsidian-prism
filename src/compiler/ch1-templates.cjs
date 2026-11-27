@@ -355,6 +355,7 @@ function createCh1Templates({
       });
 
       const destroyMods = (extra) => {
+        T(() => (W.__agPrismRippleWorker || G.__agPrismRippleWorker)?.disposeAll?.());
         const ks = sp('__agPrismTelemetry,__agPrismEffortSlider,__agPrismThought,__agPrismOmni,__agPrismContextMenu');
         if (extra) ks.push(...sp(extra));
         for (const k of ks) T(() => W[k]?.destroy?.());

@@ -190,13 +190,15 @@ function reconcileConfigAliases(raw) {
     }
   }
 
+  const isFalseLike = (v) =>
+    v === false || (typeof v === 'string' && /^(?:off|false)$/i.test(v.trim()));
   for (const [boolKey, onOffKey] of BOOL_ON_OFF_ALIAS_PAIRS) {
     if (has(boolKey)) {
-      const on = out[boolKey] !== false && out[boolKey] !== 'off';
+      const on = !isFalseLike(out[boolKey]);
       out[boolKey] = on;
       out[onOffKey] = on ? 'on' : 'off';
     } else if (has(onOffKey)) {
-      const on = out[onOffKey] !== 'off' && out[onOffKey] !== false;
+      const on = !isFalseLike(out[onOffKey]);
       out[boolKey] = on;
       out[onOffKey] = on ? 'on' : 'off';
     }

@@ -2534,3 +2534,51 @@ test('HORIZON_FRAGMENT_SHADER eliminates direct AMBER->SKY_BLUE mixing, decouple
   assert.equal(rippleCore.resolveHorizonSpectrumCode(6), 6);
   assert.equal(rippleCore.resolveHorizonSpectrumCode('neon'), 6);
 });
+
+test('wave field separable drive matches 2D Gaussian, caps substeps per frame, and uniforms reuse buffers', () => {
+  const wf = rippleCore.createWaveField(60, 40, () => 0.5);
+  wf.disturb(30, 20, { amplitudeScale: 1, radiusScale: 1 });
+  // Step 1 starts at source.time=0 (sin=0); advancing 2/600s runs step 2 with non-zero drive
+  wf.advance(2 / 600);
+  const center = wf.height[20 * 60 + 30];
+  assert.ok(center !== 0, 'center height should move after 2 steps');
+  assert.ok(Math.abs(wf.height[20 * 60 + 29] - wf.height[20 * 60 + 31]) < 1e-6, 'horizontal Gaussian symmetry');
+  assert.ok(Math.abs(wf.height[19 * 60 + 30] - wf.height[21 * 60 + 30]) < 1e-6, 'vertical Gaussian symmetry');
+
+  // Verify optional substep cap: advance(0.05, 12) runs at most 12 substeps, while uncapped advance(0.05) runs all 30
+  const wfCap = rippleCore.createWaveField(40, 30, () => 0.5);
+  wfCap.disturb(20, 15, { amplitudeScale: 1, radiusScale: 1 });
+  wfCap.advance(0.05, 12);
+  const hAfterOne = wfCap.height[15 * 40 + 20];
+  const wfRef = rippleCore.createWaveField(40, 30, () => 0.5);
+  wfRef.disturb(20, 15, { amplitudeScale: 1, radiusScale: 1 });
+  for (let i = 0; i < 12; i++) wfRef.advance(1 / 600);
+  assert.ok(Math.abs(hAfterOne - wfRef.height[15 * 40 + 20]) < 1e-6, 'optional maxSteps=12 must run at most 12 substeps');
+
+  // Zero-allocation reuse for packFieldDrawParams & computeHorizonUniforms
+  const pal = {
+    dark: true,
+    ink: [100, 110, 120],
+    wave: [200, 210, 220],
+    prismStrength: 0.7,
+    aura: { active: true, x: 10, y: 20, radius: 180, strength: 0.8 },
+    nebula: [{ x: 1, y: 2, radius: 50, strength: 0.5, hue: 0.2 }],
+  };
+  const p1 = rippleCore.packFieldDrawParams(pal, 1.5);
+  const p2 = rippleCore.packFieldDrawParams(pal, 2.0);
+  assert.equal(p1, p2);
+  assert.equal(p1.ink, p2.ink);
+  assert.equal(p1.n0, p2.n0);
+  assert.equal(p2.dpr, 2.0);
+
+  const u1 = rippleCore.computeHorizonUniforms(true, 1, 0.5, 0.2, 1, 0, 0);
+  const u2 = rippleCore.computeHorizonUniforms(false, 0.8, 0.4, -0.3, 1.2, 1, 1);
+  assert.equal(u1, u2);
+  assert.equal(u1.pre0, u2.pre0);
+  assert.equal(u1.pre1, u2.pre1);
+  assert.equal(u1.modes, u2.modes);
+
+  // P0-5: ch1-templates destroyMods disposes __agPrismRippleWorker to avoid orphan threads on reinject
+  const ch1TplSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'compiler', 'ch1-templates.cjs'), 'utf8');
+  assert.ok(ch1TplSrc.includes('__agPrismRippleWorker?.disposeAll?.()') || ch1TplSrc.includes('__agPrismRippleWorker)?.disposeAll?.()'));
+});

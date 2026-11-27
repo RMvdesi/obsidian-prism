@@ -125,7 +125,8 @@
     return out;
   }
 
-  const gDa = (d, a) => (d ? (a === 'vivid' ? [0.62, 0.76, 0.88, 0.68, 0.9, 0.24, 0.28] : a === 'balanced' ? [0.46, 0.6, 0.74, 0.5, 0.8, 0.2, 0.25] : 0) : 0);
+  const DA_V=Object.freeze([.62,.76,.88,.68,.9,.24,.28]),DA_B=Object.freeze([.46,.6,.74,.5,.8,.2,.25]),DA_FD=Object.freeze([0,.31,0,0,.7,0,.22]),DA_FL=Object.freeze([0,.64,0,0,.7,0,.22]);
+  const gDa=(d,a)=>(d?(a==='vivid'?DA_V:a==='balanced'?DA_B:0):0);
 
   function computeConvAuraOptics(phase, phaseAt, now, dark, wasRunning, out = {}, da = 'subtle') {
     const dt = gDa(dark, da);
@@ -634,7 +635,7 @@
         if (inLiftoffEbb) {
           const p = M.max(0, M.min(1, liftElapsed / 520));
           const ease = 1 - M.pow(1 - p, 2.25);
-          const dt = gDa(dark, da) || [0, dark ? 0.31 : 0.64, 0, 0, 0.7, 0, 0.22];
+          const dt = gDa(dark, da) || (dark ? DA_FD : DA_FL);
           opt = fillOptics(
             OPTICS_BUF,
             0.92 + (dt[1] - 0.92) * ease, scaleConvReach(0.31 + (dt[6] - 0.31) * ease),

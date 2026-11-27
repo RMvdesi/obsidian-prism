@@ -18,7 +18,7 @@ export const PKG_VERSION = (() => {
     const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
     if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) return pkg.version.trim();
   } catch {}
-  return '1.0.8-beta.3';
+  return '1.0.8-beta.4';
 })();
 
 export const METRICS_BINDING = '__agPrismMetricsCall';

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-function readPackageVersion(fallback = '1.0.8-beta.3') {
+function readPackageVersion(fallback = '1.0.8-beta.4') {
   try {
     const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));

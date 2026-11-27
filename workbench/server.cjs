@@ -9,7 +9,7 @@ const WORKBENCH_DIR = __dirname;
 const REPO_ROOT = path.resolve(__dirname, '..');
 const PKG_VERSION = (() => {
   try { const v = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))?.version?.trim(); if (v) return v; } catch {}
-  return '1.0.8-beta.3';
+  return '1.0.8-beta.4';
 })();
 const DEFAULT_TOKENS_PATH = path.join(WORKBENCH_DIR, 'design-tokens.json');
 const SIDEBAR_STATE_MACHINE_PATH = path.join(REPO_ROOT, 'vendor', 'sidebar-studio', 'state-machine.mjs');
