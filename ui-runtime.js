@@ -1600,9 +1600,11 @@ if (tid === 'status-loading-spinner' || tid.includes('stop') || tid.includes('ca
 } else { df.s = true; if (ia) tb = true; }
 }
 if (COMP_TIDS.has(tid) || cls.includes('surface-composer-card') || cls.includes('agy-takeover-') || tid === 'ask-question-option' || aComp || q(`${S_IB}, [data-testid="input-cancel-button"], ${TK_SUB_SEL}, .surface-composer-card`)) { df.c = df.r = true; if (ia) tb = true; }
-const isMP = tid === 'model-selector-panel' || el.id === 'ag-pulse-status-bar' || el.id === 'ag-prism-pulse-bar' || ha(el, 'data-ag-prism-pulse-bar') || ga(el, 'data-ag-prism-fallback') === '1' || ga(el, 'data-ag-pulse-bar') === 'true' || el.id === 'context-card' || aMdl || q(MODEL_PANEL_SEL + ', #context-card');
+const isModelMenuNode = tid === 'model-selector-panel' || aMdl || q(MODEL_PANEL_SEL);
+const isPulseNode = el.id === 'ag-pulse-status-bar' || el.id === 'ag-prism-pulse-bar' || ha(el, 'data-ag-prism-pulse-bar') || ga(el, 'data-ag-prism-fallback') === '1' || ga(el, 'data-ag-pulse-bar') === 'true' || el.id === 'context-card' || q('#context-card');
 const isDR = role === 'dialog' || q('[role="dialog"]');
-if (isMP) { df.c = true; if (!aMdl) { df.o = true; if (ia) tb = true; } }
+if (isModelMenuNode) { if (!aMdl) { df.o = true; if (ia) tb = true; } }
+else if (isPulseNode) { df.c = df.o = true; if (ia) tb = true; }
 else if (isDR || aDlg) chkDlg(isDR);
 else if (tid === 'overview-panel' || cls.includes('agy-overlay') || q('[data-testid="overview-panel"]') || (q('.agy-overlay') && !q(HC_S))) df.o = true;
 } else {
@@ -1656,15 +1658,15 @@ if (hb) dirtyAddedRoots.add(el);
     const isAsyncConvEntry = !isFullSync && !inHome && !!formalConv && (!hs.wasInFormalConv || isConvSwap);
     const homeComposerSampled = inHome && (flags.f || flags.r || flags.c) ? (sc.sampleHomeComposerRect(), true) : false;
     const convInputRect = hs.routeInitialized && hs.wasInHome && !inHome && formalConv && isMotionUltra() && !sc.isEntryMotionSuppressed?.() ? rc(qs(formalConv, S_IB) || qs(D, S_IB)) : null;
-    const sidebarSnap = flags.f || flags.s || flags.r ? sc.measureSidebarSelectionSnapshot() : null;
-    const visibleChangedHeaders = !isAsyncConvEntry && (flags.f || flags.cf || flags.r) ? sc.measureVisibleChangedHeaders() : [];
+    const sidebarSnap = cfg.sidebarRestyle !== false && (flags.f || flags.s || flags.r) ? sc.measureSidebarSelectionSnapshot() : null;
+    const visibleChangedHeaders = isMotionStandardOrUltra() && !isAsyncConvEntry && (flags.f || flags.cf || flags.r) ? sc.measureVisibleChangedHeaders() : [];
     const lensOverlays = (flags.f || flags.o) && isMotionStandardOrUltra() ? sc.measureNewLensOverlays() : [];
     const caretList = !isAsyncConvEntry && (flags.f || flags.c) && isCaretOn() ? smoothCaretCtl.measureSnapshot(false, false) : null;
     const modelPanelNow = isFullSync || flags.c || flags.o ? qs(D, MODEL_PANEL_SEL) : null;
     const modelOverlayChanged = !!(flags.o) && (!!modelPanelNow || hadModelPanelOpen);
-    const cPlan = isFullSync || flags.c || modelOverlayChanged ? measureCrabClearanceAll() : null;
+    const cPlan = isFullSync || flags.c ? measureCrabClearanceAll() : null;
     if (flags.f || flags.r || flags.c || flags.t) convAuraCtl.prime?.();
-    return { inHome, inHero, formalConv, curCascadeId, isConvSwap, isAsyncConvEntry, homeComposerSampled, convInputRect, sidebarSnap, visibleChangedHeaders, lensOverlays, caretList, modelPanelNow, modelOverlayChanged, cPlan, checkCaustics: !!(flags.f || flags.cf || flags.r) };
+    return { inHome, inHero, formalConv, curCascadeId, isConvSwap, isAsyncConvEntry, homeComposerSampled, convInputRect, sidebarSnap, visibleChangedHeaders, lensOverlays, caretList, modelPanelNow, modelOverlayChanged, cPlan, checkCaustics: isMotionStandardOrUltra() && !!(flags.f || flags.cf || flags.r) };
   };
 
   let enhancerSyncTimer = 0, enhancerSyncRaf = 0, lastEnhancerSyncAt = 0, enhConv = null;
@@ -1741,7 +1743,7 @@ if (hb) dirtyAddedRoots.add(el);
       if (frc || flags.t) safe(() => convAuraCtl.sync(true));
       const modelPanelNow = measured.modelPanelNow, modelOverlayChanged = measured.modelOverlayChanged;
       if (effectiveFull || flags.c || flags.o) { hadModelPanelOpen = !!(modelPanelNow); syncModelMenuRootAttrs(modelPanelNow); }
-      if (flags.f || flags.c || modelOverlayChanged) syncComposers(measured, deferHeavyConvWork);
+      if (flags.f || flags.c) syncComposers(measured, deferHeavyConvWork);
       else if (!deferHeavyConvWork && flags.tk) sc.syncThinkingSparks(latestPrimaryModelInfo, latestPaneModelMap);
       if (frc) sc.syncHeroRouteChoreography(measured);
       else {
