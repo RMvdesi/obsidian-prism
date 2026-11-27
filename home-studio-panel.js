@@ -15,7 +15,7 @@
 
   const STUDIO_HEAD_CSS = '.ag-cs-home-panel-head{flex-wrap:wrap;row-gap:8px}';
   const STUDIO_MODEL_COLOR_CSS = 'html :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc]{background-color:var(--_mc-d);}html[data-ag-cs-theme="light"] :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc],html>body:is(.theme-light,.light-theme,.light) :is(.ag-cs-home-chart-seg,.ag-cs-home-model-swatch)[data-ag-mc]{background-color:var(--_mc-l);}';
-  const STUDIO_EXTRA_CSS = STUDIO_HEAD_CSS + '.ag-cs-home-tab,.ag-cs-home-range{white-space:nowrap}.ag-cs-home-ws-select{color-scheme:inherit}.ag-cs-home-ws-select option{background:var(--card,#141418);color:var(--foreground,#F2F2F5);}.agy-home{--_a:var(--ag-cs-accent);--_b:1px solid var(--_kb)}.ag-cs-hs-tg,.ag-cs-home-local-note{font-size:11px}.ag-cs-hs-tg{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:var(--_b);border-radius:6px;background:var(--_tb);color:var(--foreground);font-family:inherit;font-weight:500;white-space:nowrap;cursor:pointer;&:hover{background:var(--ag-cs-hover-wash)}&[aria-pressed="true"]{color:var(--_a);border-color:color-mix(in srgb,currentColor 32%,#0000);background:color-mix(in srgb,currentColor 11%,#0000)}& svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}}:is(.ag-cs-home-ws-select,.ag-cs-hs-tg,.ag-cs-quota-refresh):focus-visible{outline:2px solid var(--_a);outline-offset:1px}.ag-cs-home-local-note{line-height:1.4;color:var(--muted-foreground);opacity:.86;padding-top:8px;border-top:var(--_b)}' + STUDIO_MODEL_COLOR_CSS;
+  const STUDIO_EXTRA_CSS = STUDIO_HEAD_CSS + '.ag-cs-home-tab,.ag-cs-home-range{white-space:nowrap}.ag-cs-home-ws-select{color-scheme:inherit}.ag-cs-home-ws-select option{background:var(--card,#141418);color:var(--foreground,#F2F2F5);}.ag-cs-home-ws-wrap{position:relative;display:inline-flex;align-items:center}.ag-cs-home-ws-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:210px;max-height:260px;overflow-y:auto;z-index:9999;background:var(--ag-cs-popover-bg,var(--card,#141418));color:var(--foreground,#F2F2F5);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--ag-cs-menu-bd,var(--card-border,rgba(128,128,128,.22)));border-radius:10px;padding:4px;box-shadow:var(--_gs,0 12px 32px rgba(0,0,0,.35));flex-direction:column;gap:2px}.ag-cs-home-ws-opt{display:flex;align-items:center;width:100%;text-align:left;padding:7px 10px;border:none;border-radius:7px;font-family:inherit;font-size:12px;line-height:16px;cursor:pointer;background:transparent;color:var(--secondary-foreground,var(--foreground));transition:background .15s,color .15s}.ag-cs-home-ws-opt:hover,.ag-cs-home-ws-opt:focus-visible{background:var(--ag-cs-hover-wash,rgba(128,128,128,.12));color:var(--foreground);outline:none}.ag-cs-home-ws-opt[aria-selected="true"]{background:color-mix(in srgb,var(--ag-cs-accent,#6366f1) 16%,transparent);color:var(--foreground);font-weight:600}.agy-home{--_a:var(--ag-cs-accent);--_b:1px solid var(--_kb)}.ag-cs-hs-tg,.ag-cs-home-local-note{font-size:11px}.ag-cs-hs-tg{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:var(--_b);border-radius:6px;background:var(--_tb);color:var(--foreground);font-family:inherit;font-weight:500;white-space:nowrap;cursor:pointer;&:hover{background:var(--ag-cs-hover-wash)}&[aria-pressed="true"]{color:var(--_a);border-color:color-mix(in srgb,currentColor 32%,#0000);background:color-mix(in srgb,currentColor 11%,#0000)}& svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}}:is(.ag-cs-home-ws-select,.ag-cs-hs-tg,.ag-cs-quota-refresh):focus-visible{outline:2px solid var(--_a);outline-offset:1px}.ag-cs-home-local-note{line-height:1.4;color:var(--muted-foreground);opacity:.86;padding-top:8px;border-top:var(--_b)}' + STUDIO_MODEL_COLOR_CSS;
 
   // 高区分度双主题模型阵营子色板（每项为 [深色hex, 浅色hex]），避免同阵营模型落入近似蓝/重复索引
   const MODEL_CAMP_PALETTES = {
@@ -260,6 +260,43 @@ de|Subagenten|Token||Ein|Aus|Wenig Kontingent|Wird knapp|Reichlich|Was steht als
     let lastPanelRenderKey = '';
     let cachedAggKey = '';
     let curScope = 'local';
+    let activeWsMenu = null;
+    let wsMenuDoc = null;
+    const closeWsMenu = (restoreFocus = false) => {
+      if (!activeWsMenu) return;
+      const { btn, menu } = activeWsMenu;
+      const wasOpen = menu.style.display === 'flex';
+      menu.style.display = 'none';
+      btn.setAttribute('aria-expanded', 'false');
+      if (restoreFocus && wasOpen) btn.focus?.();
+    };
+    const onWsDocClick = (ev) => {
+      if (!activeWsMenu) return;
+      if (activeWsMenu.wrap?.contains?.(ev?.target)) return;
+      closeWsMenu(false);
+    };
+    const onWsDocKeydown = (ev) => {
+      if (ev?.key === 'Escape' && activeWsMenu && activeWsMenu.menu.style.display === 'flex') {
+        ev.preventDefault?.();
+        ev.stopPropagation?.();
+        closeWsMenu(true);
+      }
+    };
+    const detachWsDocListeners = () => {
+      if (wsMenuDoc && typeof wsMenuDoc.removeEventListener === 'function') {
+        wsMenuDoc.removeEventListener('click', onWsDocClick);
+        wsMenuDoc.removeEventListener('keydown', onWsDocKeydown);
+      }
+      wsMenuDoc = null;
+    };
+    const ensureWsDocListeners = (d) => {
+      if (typeof d?.addEventListener !== 'function') return;
+      if (wsMenuDoc === d) return;
+      detachWsDocListeners();
+      d.addEventListener('click', onWsDocClick);
+      d.addEventListener('keydown', onWsDocKeydown);
+      wsMenuDoc = d;
+    };
     const modelColours = usageCore?.createHomeModelColours ? usageCore.createHomeModelColours() : () => ({});
     const mk = (tag, cls, txt, attrs) => {
       if (txt && typeof txt === 'object') { attrs = txt; txt = null; }
@@ -870,6 +907,7 @@ de|Subagenten|Token||Ein|Aus|Wenig Kontingent|Wird knapp|Reichlich|Was steht als
       }
 
       runGuardedMut(() => {
+        activeWsMenu = null;
         panel.innerHTML = '';
 
         const headLeft = dv(HC + 'head-left');
@@ -896,13 +934,43 @@ de|Subagenten|Token||Ein|Aus|Wenig Kontingent|Wird knapp|Reichlich|Was steht als
         const headRight = dv(HC + 'head-right');
         if (!isQuotasTab) {
           if (wsList.length > 0) {
-            const sel = mk('select', HC + 'ws-select', { 'data-ag-cs-ws-filter': '1', 'aria-label': ui.workspaceFilterAria || 'Workspace filter' });
-            const addOpt = (v, t) => { const o = mk('option', '', t); o.value = v; ap(sel, o); };
-            addOpt('all', ui.workspaceAll || 'All Projects');
-            for (const ws of wsList) addOpt(ws.id, `${detectedCurrentWorkspace && ws.id === detectedCurrentWorkspace ? '● ' : ''}${ws.id} (${fmtTok(ws.tokens)})`);
-            sel.value = activeWorkspace;
-            sel.addEventListener('change', () => { activeWorkspace = sel.value || 'all'; renderHomePanel(); });
-            ap(headRight, sel);
+            const items = [{ value: 'all', label: ui.workspaceAll || 'All Projects' }];
+            for (const ws of wsList) {
+              items.push({ value: ws.id, label: `${detectedCurrentWorkspace && ws.id === detectedCurrentWorkspace ? '● ' : ''}${ws.id} (${fmtTok(ws.tokens)})` });
+            }
+            const curItem = items.find((it) => it.value === activeWorkspace) || items[0];
+            const wsAria = ui.workspaceFilterAria || 'Workspace filter';
+            const wrap = dv(HC + 'ws-wrap');
+            const menu = dv(HC + 'ws-menu', { role: 'listbox', 'aria-label': wsAria });
+            const btn = bt(HC + 'ws-select', curItem.label, (ev) => {
+              ev?.stopPropagation?.();
+              const open = menu.style.display === 'flex';
+              menu.style.display = open ? 'none' : 'flex';
+              btn.setAttribute('aria-expanded', String(!open));
+            }, { 'data-ag-cs-ws-filter': '1', 'aria-label': wsAria, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' });
+            for (const it of items) {
+              const isAct = it.value === activeWorkspace;
+              const opt = bt(HC + 'ws-opt', it.label, (ev) => {
+                ev?.stopPropagation?.();
+                closeWsMenu(false);
+                activeWorkspace = it.value || 'all';
+                renderHomePanel();
+              }, { role: 'option', 'aria-selected': String(isAct) });
+              ap(menu, opt);
+            }
+            activeWsMenu = { wrap, btn, menu };
+            if (isFn(wrap.addEventListener)) {
+              wrap.addEventListener('keydown', (ev) => {
+                if (ev?.key === 'Escape' && menu.style.display === 'flex') {
+                  ev.preventDefault?.();
+                  ev.stopPropagation?.();
+                  closeWsMenu(true);
+                }
+              });
+            }
+            ensureWsDocListeners(d);
+            ap(wrap, btn, menu);
+            ap(headRight, wrap);
           }
           if (!skeleton && (hasArch || !includeArchived)) {
             const tTip = `${allLbl} / ${actLbl}`;
@@ -1078,6 +1146,8 @@ de|Subagenten|Token||Ein|Aus|Wenig Kontingent|Wird knapp|Reichlich|Was steht als
       if (disposed) return;
       flushUsageCacheNow();
       disposed = true;
+      detachWsDocListeners();
+      activeWsMenu = null;
       unmountPanelSeat();
       restoreGreetings();
       usageRecords.clear();

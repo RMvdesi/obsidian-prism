@@ -72,6 +72,7 @@ const DEFAULT_CONFIG = {
   omniModule: 'on',
   linkTarget: 'builtin',
   sidebarStudio: 'off',
+  sidebarModeOrder: 'chat-left',
   hostLocalization: 'auto',
   autoUpdate: 'off',
   updateChannel: 'stable',
@@ -102,7 +103,7 @@ const VALIDATORS = {
   composer: ['on', 'off'],
   placeholderStyle: ['studio', 'host'],
   promptStyle: ['studio', 'host'],
-  mascot: ['crab', 'minis', 'quad', 'quad-minis', 'dual', 'off'],
+  mascot: ['crab', 'swarm-team', 'minis', 'quad', 'quad-minis', 'dual', 'off'],
   logoInk: ['accent', 'foreground'],
   sidebarRestyle: 'boolean',
   sidebar: ['on', 'off'],
@@ -121,6 +122,7 @@ const VALIDATORS = {
   omniModule: ['on', 'off'],
   linkTarget: ['builtin', 'external'],
   sidebarStudio: ['on', 'off'],
+  sidebarModeOrder: ['chat-left', 'code-left'],
   hostLocalization: ['auto', 'on', 'off'],
   autoUpdate: ['on', 'off'],
   updateChannel: ['stable', 'beta'],
@@ -130,7 +132,7 @@ const VALIDATORS = {
 function normalizeMascotConfigValue(raw) {
   if (typeof raw !== 'string') return null;
   if (raw === 'dual') return 'crab';
-  if (raw === 'off' || raw === 'crab' || raw === 'minis' || raw === 'quad' || raw === 'quad-minis') return raw;
+  if (raw === 'off' || raw === 'crab' || raw === 'swarm-team' || raw === 'minis' || raw === 'quad' || raw === 'quad-minis') return raw;
   if (!raw.startsWith('r:') || raw.length <= 2) return null;
   const m = /^r:(?:([ckdw][0-4](?:,[ckdw][0-4])*)?(\+m)?)$/.exec(raw);
   if (!m) return null;

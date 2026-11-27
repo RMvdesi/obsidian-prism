@@ -171,7 +171,7 @@
     contextMenu: S_T,
     codeFont: mkSp(['default', 'jetbrains', 'cascadia', 'sfmono']),
     codeLigatures: S_F,
-    mascot: mkSp(['crab', 'quad', 'quad-minis', 'off'], null, { dual: 'crab' }),
+    mascot: mkSp(['crab', 'swarm-team', 'quad', 'quad-minis', 'off'], null, { dual: 'crab' }),
     sidebarRestyle: S_T,
     sidebarCompact: S_F,
     sidebarNavFold: mkSp(['off', 'on']),
@@ -213,6 +213,7 @@
   const MASCOT_PRESETS = O.freeze({
     off: O.freeze({ c: 0, k: 0, d: 0, w: 0, minis: false }),
     crab: O.freeze({ c: 1, k: 1, d: 0, w: 0, minis: false }),
+    'swarm-team': O.freeze({ c: 1, k: 1, d: 0, w: 0, minis: false }),
     dual: O.freeze({ c: 1, k: 1, d: 0, w: 0, minis: false }),
     minis: O.freeze({ c: 1, k: 1, d: 0, w: 0, minis: true }),
     quad: O.freeze({ c: 1, k: 1, d: 1, w: 1, minis: false }),
@@ -669,10 +670,10 @@
       }
     };
 
-    const applyRosterChange = (nextRoster, ev) => {
+    const applyRosterChange = (nextRoster, ev, rawOverride = null) => {
       if (ev && typeof ev === 'object' && handledGroupClicks) handledGroupClicks.add(ev);
       const prevR = readRoster();
-      const encoded = encodeMascotSpec(nextRoster);
+      const encoded = rawOverride || encodeMascotSpec(nextRoster);
       const cleanNext = parseMascotSpec(encoded) || { c: 0, k: 0, d: 0, w: 0, minis: false };
       const now = nowMs();
       STAGE_SLOTS.forEach((sl, idx) => {
@@ -780,6 +781,7 @@
     // 构建底部 4 枚快捷预设胶囊（双宠经典 / 四宠同台 / 全员上场 / 全员休息）
     const STAGE_PRESETS = [
       ['crab', 'mascotStagePresetDual', 'Classic Dual'],
+      ['swarm-team', 'optMascotSwarmTeam', 'Swarm Team'],
       ['quad', 'mascotStagePresetQuad', 'All Four'],
       ['quad-minis', 'optMascotQuadMinis', 'Quad + Crabs'],
       ['off', 'mascotStagePresetOff', 'All Resting'],
@@ -803,7 +805,7 @@
       pb.addEventListener('click', (ev) => {
         ev?.stopPropagation?.();
         const nextR = parseMascotSpec(val) || { c: 0, k: 0, d: 0, w: 0, minis: false };
-        applyRosterChange(nextR, ev);
+        applyRosterChange(nextR, ev, val === 'swarm-team' ? 'swarm-team' : null);
       });
       presetBtns.push({ btn: pb, val, i18nKey, fb });
       ap(presetRow, pb);
@@ -814,7 +816,8 @@
       const l = getLang();
       const u = uiText(l) || {};
       const r = readRoster();
-      const encoded = encodeMascotSpec(r);
+      const curRaw = typeof getCurMascot === 'function' ? getCurMascot() : '';
+      const encoded = curRaw === 'swarm-team' ? 'swarm-team' : encodeMascotSpec(r);
       const total = r.c + r.k + r.d + r.w;
       sa(view, 'data-mascot-val', encoded);
       backBtn.textContent = `← ${u.mascotStageBackBtn || 'Back to Settings'}`;
@@ -1542,6 +1545,7 @@
     const spec = PRISM_SETTINGS_SCHEMA[key];
     if (key === 'mascot') {
       if (typeof rawVal !== 'string') return { valid: false };
+      if (rawVal === 'swarm-team') return { valid: true, value: 'swarm-team' };
       const parsed = parseMascotSpec(rawVal);
       return parsed ? { valid: true, value: encodeMascotSpec(parsed) } : { valid: false };
     }
@@ -1917,6 +1921,7 @@
     const effVal = (k, l) => {
       const v = isFn(resolveSettingRowActiveValue) ? resolveSettingRowActiveValue(k, l) : undefined;
       if (k === 'mascot' && v !== undefined && v !== null && v !== '') {
+        if (v === 'swarm-team') return 'swarm-team';
         const p = parseMascotSpec(v);
         return p ? encodeMascotSpec(p) : PRISM_SETTINGS_SCHEMA.mascot.default;
       }
@@ -2084,7 +2089,7 @@
         const mCur = effVal('mascot', l);
         const r = parseMascotSpec(mCur) || { c: 1, k: 1, d: 0, w: 0, minis: false };
         const total = r.c + r.k + r.d + r.w;
-        sa(mRosterEl, 'data-mascot-val', encodeMascotSpec(r));
+        sa(mRosterEl, 'data-mascot-val', mCur === 'swarm-team' ? 'swarm-team' : encodeMascotSpec(r));
         const rCntEl = qs(mRosterEl, '[data-ag-mascot-summary-count]');
         if (rCntEl) {
           const ct = String(u.mascotRosterCount || 'Main {n}/4').replace('{n}', String(total));
@@ -2516,6 +2521,7 @@
             RS('codeLigatures', onOff),
             RS('mascot', [
               ['crab', U('optMascotCrab', 'Dual')],
+              ['swarm-team', U('optMascotSwarmTeam', 'Swarm Team')],
               ['quad', U('optMascotQuad', 'Quad')],
               ['quad-minis', U('optMascotQuadMinis', 'Quad + Crabs')],
               ['off', U('optMascotOff', U('offLabel', 'Off'))],
@@ -2533,6 +2539,7 @@
             RS('omniModule', onOffStr, 'Omni'),
             RS('linkTarget', [['builtin', U('optLinkBuiltin')], ['external', U('optLinkExternal')]]),
             RS('sidebarStudio', onOffStr),
+            R('sidebarModeOrder', 'setSidebarModeOrderTitle', 'setSidebarModeOrderDesc', [['chat-left', 'Chat | Code'], ['code-left', 'Code | Chat']]),
             RS('autoUpdate', onOffStr),
             RS('updateChannel', [['stable', U('optChannelStable', 'Stable')], ['beta', U('optChannelBeta', 'Beta')]]),
             R('darkAuraStyle', 'setDarkAuraStyleLabel', 'setDarkAuraStyleDesc', [
@@ -2551,7 +2558,7 @@
             { id: 'interaction', title: U('grpInteraction'), keys: ['composerRestyle', 'placeholderStyle', 'smoothCaret', 'scrollBottomMotion', 'contextMenu', 'codeFont', 'codeLigatures', 'mascot', 'sidebarRestyle', 'sidebarCompact', 'sidebarNavFold'] },
             { id: 'thought', title: U('grpThought'), keys: ['thoughtTranslate', 'thoughtTrigger', 'thoughtView'] },
             { id: 'modules', title: U('groupModules'), keys: ['telemetryModule', 'effortSliderModule', 'effortMemory', 'periodicModelPicker', 'omniModule', 'linkTarget'] },
-            { id: 'beta', title: U('grpBeta'), keys: ['sidebarStudio'] },
+            { id: 'beta', title: U('grpBeta'), keys: ['sidebarStudio', 'sidebarModeOrder'] },
           ];
 
           const buildRow = (r) => {

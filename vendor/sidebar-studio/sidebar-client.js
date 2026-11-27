@@ -86,16 +86,16 @@
 
   const CHAT_STARTER_CHIPS = {
     pure: [
-      { label: '润色文字', prompt: '请帮我把下面这段文字润色得更自然清晰：\n' },
-      { label: '联网查资料', prompt: '请帮我联网检索一下最新资料并总结要点：' },
-      { label: '讲懂概念', prompt: '请用通俗易懂的日常比喻，帮我讲清楚：' },
-      { label: '生成配图', prompt: '请帮我生成一张配图，画面内容与风格要求是：' },
+      { label: 'Polish Text', prompt: 'Please polish the following text to make it clearer and more natural:\n' },
+      { label: 'Web Research', prompt: 'Please search the web for the latest information and summarize key points on: ' },
+      { label: 'Explain Concept', prompt: 'Please explain this concept clearly using everyday analogies: ' },
+      { label: 'Generate Image', prompt: 'Please generate an image with the following content and style: ' },
     ],
     spark: [
-      { label: '整理工作文件夹', prompt: '请先查看当前工作文件夹里的文件，帮我整理一份清晰目录清单和归类建议。' },
-      { label: '汇总文档要点', prompt: '请读取当前文件夹中的主要文档，帮我提炼核心结论与待办清单。' },
-      { label: '安排日程提醒', prompt: '请帮我安排一个日程或定时提醒：' },
-      { label: '起草结构化文档', prompt: '请在当前工作文件夹里帮我起草一份文档，主题是：' },
+      { label: 'Organize Workspace', prompt: 'Please inspect the files in the current Workspace and help me organize a clear directory list and categorization.' },
+      { label: 'Summarize Docs', prompt: 'Please read the main documents in the current folder and extract key conclusions and action items.' },
+      { label: 'Schedule & Remind', prompt: 'Please help me schedule a task or reminder: ' },
+      { label: 'Draft Structured Doc', prompt: 'Please draft a structured document in the current Workspace on the topic: ' },
     ],
   };
 
@@ -206,7 +206,10 @@
     '.ag-prism-chat-row-hidden{display:none!important}',
     '.ag-prism-sb-seg{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1 1 auto;min-width:0;padding:3px;border-radius:999px;background:var(--ag-sb-pill-track)}',
     '.ag-prism-sb-slider{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:999px;background:var(--ag-sb-pill-thumb);box-shadow:inset 0 1px 0 var(--ag-sb-specular),0 2px 10px rgba(0,0,0,.18);transform:translate3d(0,0,0);transition:transform 300ms var(--ag-sb-spring-spatial);pointer-events:none;z-index:0;will-change:transform}',
-    '.ag-prism-sb-seg[data-mode="chat"] .ag-prism-sb-slider{transform:translate3d(100%,0,0)}',
+    '.ag-prism-sb-seg[data-order="chat-left"] .ag-prism-sb-mode-btn[data-mode-btn="chat"]{order:-1}',
+    '.ag-prism-sb-seg[data-order="chat-left"] .ag-prism-sb-mode-btn[data-mode-btn="code"]{order:1}',
+    '.ag-prism-sb-seg[data-order="chat-left"][data-mode="code"] .ag-prism-sb-slider{transform:translate3d(100%,0,0)}',
+    '.ag-prism-sb-seg[data-order="code-left"][data-mode="chat"] .ag-prism-sb-slider{transform:translate3d(100%,0,0)}',
     '.ag-prism-sb-mode-btn{position:relative;z-index:1;appearance:none;border:none;background:transparent;color:var(--ag-sb-dim);height:25px;padding:0 6px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-size:11.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;transition:color 180ms var(--ag-sb-spring-effect),transform 160ms var(--ag-sb-spring-spatial)}',
     '.ag-prism-sb-mode-btn:hover,.ag-prism-sb-mode-btn[data-active="1"]{color:var(--ag-sb-fg)}',
     '.ag-prism-sb-mode-btn:active{transform:scale(.94)}',
@@ -396,10 +399,10 @@
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] #antigravity\\.agentSidePanelInputBox .surface-composer-card:focus-within{border-color:color-mix(in srgb,var(--ag-sb-active-anchor) 42%,transparent)!important;box-shadow:var(--ag-sb-focus-shadow),0 0 0 1px color-mix(in srgb,var(--ag-sb-active-anchor) 20%,transparent),inset 0 1px 0 var(--ag-sb-specular)!important}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] #antigravity\\.agentSidePanelInputBox .surface-composer-card [data-lexical-editor="true"]{min-height:44px!important;font-size:15px!important;line-height:1.56!important;padding-top:2px!important}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p[data-ag-cs-placeholder]::before{content:"问点什么…"!important;color:var(--ag-sb-dim)!important;font-size:15px!important;font-family:var(--ag-sb-font-display)!important}',
-    'html[data-ag-cs-style][data-ag-prism-mode="chat"][data-ag-prism-chat-kind="spark"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p[data-ag-cs-placeholder]::before{content:"交给我一件要处理的事务…"!important}',
+    'html[data-ag-cs-style][data-ag-prism-mode="chat"][data-ag-prism-chat-kind="spark"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p[data-ag-cs-placeholder]::before{content:"Give me a task to handle…"!important}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p.pointer-events-none.absolute:not([data-ag-cs-placeholder]){color:transparent!important}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p.pointer-events-none.absolute:not([data-ag-cs-placeholder])::before{content:"问点什么…";color:var(--ag-sb-dim);font-size:15px;font-family:var(--ag-sb-font-display)}',
-    'html[data-ag-cs-style][data-ag-prism-mode="chat"][data-ag-prism-chat-kind="spark"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p.pointer-events-none.absolute:not([data-ag-cs-placeholder])::before{content:"交给我一件要处理的事务…"}',
+    'html[data-ag-cs-style][data-ag-prism-mode="chat"][data-ag-prism-chat-kind="spark"] #antigravity\\.agentSidePanelInputBox .surface-composer-card p.pointer-events-none.absolute:not([data-ag-cs-placeholder])::before{content:"Give me a task to handle…"}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] .z-10[data-ag-cs-input-layer="1"]{z-index:60!important}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"] [data-testid="toggle-overview-panel"],html[data-ag-cs-style][data-ag-prism-mode="chat"] [data-testid="titlebar-more-actions"]{display:none!important}',
     'html[data-ag-cs-style][data-ag-prism-mode="chat"][data-ag-prism-chat-kind="pure"] [data-testid="conversation-view"] button.tabular-nums{font-size:12.5px!important;min-height:26px!important;padding:2px 8px!important;color:var(--ag-sb-dim)!important;opacity:.84!important;border-radius:999px!important;transition:opacity 160ms ease,color 160ms ease,background-color 160ms ease!important}',
@@ -1025,7 +1028,7 @@
       const tt = summary.trajectoryType;
       if (tt === 'SIDE_QUESTION' || tt === 'COMMIT_MESSAGE_GENERATION' || tt === 2 || tt === 3) return false;
       if (summary.annotations && summary.annotations.archived === true) {
-        // 仅对明确归属于 Chat 的会话保留归档项，以便 Chat 侧栏“已归档”抽屉展示与恢复；Code 列表仍严格隐藏归档项
+        // 仅对明确归属于 Chat 的会话保留Archive项，以便 Chat 侧栏“已Archive”抽屉展示与恢复；Code 列表仍严格隐藏Archive项
         return Boolean(cascadeId && snapshot && snapshot.assignments && Object.prototype.hasOwnProperty.call(snapshot.assignments, cascadeId));
       }
       return true;
@@ -2540,10 +2543,19 @@
       for (let i = 0; i < models.length; i++) {
         const m = models[i];
         const isSel = currentModelId === m.id;
+        const eff = m.defaultEffort || (m.id.includes('3.8') ? 'Medium' : 'High');
+        const resolvedEnum = resolveModelEnum(m.id, eff);
+        const isAvailable = typeof resolvedEnum === 'number';
         const opt = el('button', 'ag-prism-model-opt');
         opt.type = 'button';
         opt.setAttribute('data-selected', isSel ? '1' : '0');
         opt.setAttribute('data-model-id', m.id);
+        if (!isAvailable) {
+          opt.disabled = true;
+          opt.style.opacity = '0.45';
+          opt.style.cursor = 'not-allowed';
+          opt.title = isEn ? 'Unavailable' : '不可用';
+        }
 
         const lead = el('span', 'ag-prism-model-lead');
         const ic = el('span', 'ag-prism-model-icon');
@@ -2581,7 +2593,7 @@
               }
             }
             closePopover();
-            showToast(`已切换为 ${m.id}`);
+            showToast(isEn ? `Switched to ${m.id}` : `已切换为 ${m.id}`);
           } else {
             selectedModel = m.id;
             const allowed = Array.isArray(m.efforts) && m.efforts.length ? m.efforts : ['Low', 'Medium', 'High'];
@@ -2631,7 +2643,7 @@
         const btn = el('button', 'ag-prism-menu-btn');
         btn.type = 'button';
         btn.appendChild(el('span', '', p.name));
-        if (snapshot.chatDraft?.sparkProjectId === p.id) btn.appendChild(el('span', 'ag-prism-sb-row-tag', '当前'));
+        if (snapshot.chatDraft?.sparkProjectId === p.id) btn.appendChild(el('span', 'ag-prism-sb-row-tag', 'Current'));
         else if (p.sharedWithCode) btn.appendChild(el('span', 'ag-prism-sb-row-tag', '共享'));
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -2645,7 +2657,7 @@
         pop.appendChild(btn);
       }
       if (projects.length) pop.appendChild(el('div', 'ag-prism-menu-sep'));
-      const pickBtn = el('button', 'ag-prism-menu-btn', '选择本地目录…');
+      const pickBtn = el('button', 'ag-prism-menu-btn', 'Select local directory…');
       pickBtn.type = 'button';
       pickBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -2660,7 +2672,7 @@
         }
       });
       pop.appendChild(pickBtn);
-      const boxBtn = el('button', 'ag-prism-menu-btn', '新建工作文件夹');
+      const boxBtn = el('button', 'ag-prism-menu-btn', 'New Workspace Folder');
       boxBtn.type = 'button';
       boxBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2691,20 +2703,20 @@
       const mp = isSpark ? policy.spark : policy.pure;
       const parts = [];
       if (!isSpark && mp.zeroTools) {
-        parts.push('纯文本零工具');
+        parts.push('Text only');
       } else {
-        if (isSpark && mp.fileAccess) parts.push('受控文件');
-        if (isSpark && mp.schedule) parts.push('日程定时');
-        if (mp.webSearch) parts.push('联网搜索');
-        if (mp.imageAndFiles) parts.push('生图/附件');
+        if (isSpark && mp.fileAccess) parts.push('Workspace files');
+        if (isSpark && mp.schedule) parts.push('Schedule');
+        if (mp.webSearch) parts.push('Web search');
+        if (mp.imageAndFiles) parts.push('Images & attachments');
         const pCnt = (mp.allowedPlugins || []).length;
         const mCnt = (mp.allowedMcps || []).length;
-        if (pCnt > 0) parts.push(`${pCnt} 项插件`);
-        if (mCnt > 0) parts.push(`${mCnt} 项工具服务`);
-        if (parts.length === 0) parts.push('无外部工具');
+        if (pCnt > 0) parts.push(`${pCnt} plugins`);
+        if (mCnt > 0) parts.push(`${mCnt} tool servers`);
+        if (parts.length === 0) parts.push('No external tools');
       }
-      if (mp.keepUserRules) parts.push('通用规则');
-      return `${isSpark ? 'Spark 文件整理' : 'Pure 日常对话'} · ${parts.join(' / ')}（点击管理能力与扩展）`;
+      if (mp.keepUserRules) parts.push('User rules');
+      return `${isSpark ? 'Spark Workspace' : 'Pure Daily Chat'} · ${parts.join(' / ')} (Click to manage Capabilities & Extensions)`;
     }
 
     function countPolicyWhitelistTotal() {
@@ -2819,7 +2831,7 @@
         expBtn.appendChild(makeMonoSvg('download', 13.5));
         const newBtn = el('button', 'ag-prism-chat-topbar-btn');
         newBtn.type = 'button';
-        newBtn.title = '新建对话';
+        newBtn.title = 'New Chat';
         newBtn.appendChild(makeMonoSvg('plus', 14.5));
 
         bar._refs = { pinBtn, renameBtn, expBtn, newBtn };
@@ -2859,7 +2871,7 @@
       bar._cid = activeCid;
       const item = findSidebarChatItemById(activeCid);
       bar._refs.pinBtn.setAttribute('data-active', item && item.pinned ? '1' : '0');
-      bar._refs.pinBtn.title = item && item.pinned ? '取消置顶' : '置顶对话';
+      bar._refs.pinBtn.title = item && item.pinned ? 'Unpin chat' : 'Pin chat';
     }
 
     function syncChatComposerChrome(scheduleRetry) {
@@ -3005,11 +3017,11 @@
         const head = el('div', 'ag-prism-modal-head');
         const headText = el('div', '');
         const titleWrap = el('div', 'ag-prism-switch-label');
-        titleWrap.appendChild(el('h3', 'ag-prism-modal-title', 'Chat 能力与扩展'));
+        titleWrap.appendChild(el('h3', 'ag-prism-modal-title', 'Chat Capabilities & Extensions'));
         titleWrap.appendChild(el('span', 'ag-prism-sb-beta-pill', 'Beta'));
         headText.appendChild(titleWrap);
         headText.appendChild(
-          el('p', 'ag-prism-modal-sub', 'Pure 与 Spark 独立配置；仅影响 Chat 对话，不会修改你的 Code 编程环境。')
+          el('p', 'ag-prism-modal-sub', 'Pure & Spark are configured independently; only affects Chat, never modifies your Code environment.')
         );
         const closeBtn = el('button', 'ag-prism-sb-icon-btn');
         closeBtn.type = 'button';
@@ -3021,9 +3033,9 @@
         box.appendChild(head);
 
         const tabs = el('div', 'ag-prism-policy-tabs');
-        const pureTabBtn = el('button', 'ag-prism-policy-tab', 'Pure（日常对话）');
+        const pureTabBtn = el('button', 'ag-prism-policy-tab', 'Pure (Daily Chat)');
         pureTabBtn.type = 'button';
-        const sparkTabBtn = el('button', 'ag-prism-policy-tab', 'Spark（文件整理）');
+        const sparkTabBtn = el('button', 'ag-prism-policy-tab', 'Spark (Workspace)');
         sparkTabBtn.type = 'button';
         tabs.appendChild(pureTabBtn);
         tabs.appendChild(sparkTabBtn);
@@ -3043,14 +3055,14 @@
 
           const secCore = el('div', 'ag-prism-policy-sec');
           secCore.appendChild(
-            el('div', 'ag-prism-policy-sec-title', isSpark ? 'Spark 文件与事务能力' : 'Pure 日常对话能力')
+            el('div', 'ag-prism-policy-sec-title', isSpark ? 'Spark Workspace & Task Capabilities' : 'Pure Daily Chat Capabilities')
           );
 
           if (!isSpark) {
             secCore.appendChild(
               makeSwitchRow(
-                '联网搜索与读取网页',
-                '允许按需联网检索最新资料并读取网页内容',
+                'Web Search & Page Reading',
+                'Allow on-demand web search and reading web pages',
                 cur.webSearch,
                 (v) => { cur.webSearch = v; renderBody(); },
                 null,
@@ -3059,8 +3071,8 @@
             );
             secCore.appendChild(
               makeSwitchRow(
-                '图片生成与附件分析',
-                '支持生成配图及理解你上传的图片和文件',
+                'Image Generation & Attachment Analysis',
+                'Support image generation and understanding uploaded images/files',
                 cur.imageAndFiles,
                 (v) => { cur.imageAndFiles = v; renderBody(); },
                 null,
@@ -3069,8 +3081,8 @@
             );
             secCore.appendChild(
               makeSwitchRow(
-                '保留我的语言与沟通偏好',
-                '沿用你的通用中文表达与交流习惯，同时保持纯净对话环境',
+                'Remember My Language & Style',
+                'Keep your language & communication habits in a clean chat environment',
                 cur.keepUserRules,
                 (v) => { cur.keepUserRules = v; renderBody(); }
               )
@@ -3078,7 +3090,7 @@
             secCore.appendChild(
               makeSwitchRow(
                 '纯文字对话模式',
-                '关闭所有外部工具与扩展，仅进行纯粹的文字聊天问答',
+                'Disable all external tools & extensions for pure text chat only',
                 cur.zeroTools,
                 (v) => { cur.zeroTools = v; renderBody(); }
               )
@@ -3086,48 +3098,48 @@
           } else {
             secCore.appendChild(
               makeSwitchRow(
-                '读写当前工作文件夹',
-                '允许在当前选定的 Spark 文件夹内整理、编辑与归档文档',
+                'Read & Write Current Workspace',
+                'Allow organizing, editing, and archiving docs in the selected Spark folder',
                 cur.fileAccess,
                 (v) => { cur.fileAccess = v; renderBody(); }
               )
             );
             secCore.appendChild(
               makeSwitchRow(
-                '日程与定时提醒',
-                '支持协助安排提醒、周期日程与待办定时任务',
+                'Schedule & Reminders',
+                'Assist with scheduling reminders, recurring events, and to-do tasks',
                 cur.schedule,
                 (v) => { cur.schedule = v; renderBody(); }
               )
             );
             secCore.appendChild(
               makeSwitchRow(
-                '联网搜索与读取网页',
-                '协助查资料、核对最新网页信息与整理摘要',
+                'Web Search & Page Reading',
+                'Help research, verify latest web info, and summarize',
                 cur.webSearch,
                 (v) => { cur.webSearch = v; renderBody(); }
               )
             );
             secCore.appendChild(
               makeSwitchRow(
-                '图片生成与附件分析',
-                '支持生成配图及解析上传的文档、表格与截图',
+                'Image Generation & Attachment Analysis',
+                'Support image generation and analyzing uploaded docs, tables, and screenshots',
                 cur.imageAndFiles,
                 (v) => { cur.imageAndFiles = v; renderBody(); }
               )
             );
             secCore.appendChild(
               makeSwitchRow(
-                '保留我的语言与沟通偏好',
-                '沿用你的交流风格偏好，同时屏蔽无关开发扩展',
+                'Remember My Language & Style',
+                'Keep your communication style while hiding unrelated dev extensions',
                 cur.keepUserRules,
                 (v) => { cur.keepUserRules = v; renderBody(); }
               )
             );
             secCore.appendChild(
               makeSwitchRow(
-                '安全确认保护',
-                '限制在选定文件夹内工作，高风险操作前须由你确认（推荐开启）',
+                'Safety Confirmation Guard',
+                'Restrict to selected folder; high-risk actions require confirmation (Recommended)',
                 cur.sandbox,
                 (v) => { cur.sandbox = v; renderBody(); }
               )
@@ -3137,9 +3149,9 @@
 
           const secPlugins = el('div', 'ag-prism-policy-sec');
           const pHead = el('div', 'ag-prism-policy-sec-title');
-          pHead.appendChild(el('span', '', '允许的扩展插件（默认全部关闭）'));
+          pHead.appendChild(el('span', '', 'Allowed Extensions (All Off by Default)'));
           pHead.appendChild(
-            el('span', 'ag-prism-policy-sec-cnt', `已开启 ${cur.allowedPlugins.length} / ${hostCapabilities.plugins.length}`)
+            el('span', 'ag-prism-policy-sec-cnt', `Enabled ${cur.allowedPlugins.length} / ${hostCapabilities.plugins.length}`)
           );
           secPlugins.appendChild(pHead);
           if (catalogLoading) {
@@ -3151,12 +3163,12 @@
             for (let i = 0; i < hostCapabilities.plugins.length; i++) {
               const p = hostCapabilities.plugins[i];
               const tags = [];
-              if (p.isBuiltin) tags.push({ text: '内置' });
+              if (p.isBuiltin) tags.push({ text: 'Built-in' });
               if (p.disabled) tags.push({ text: '已停用' });
               if (p.hasRules) tags.push({ text: '规则' });
-              if (p.hasSkills) tags.push({ text: '技能' });
-              if (p.hasMcp) tags.push({ text: '含工具' });
-              if (p.hasHooks) tags.push({ text: '自动触发已拦截', tone: 'warn' });
+              if (p.hasSkills) tags.push({ text: 'Skill' });
+              if (p.hasMcp) tags.push({ text: 'Tools' });
+              if (p.hasHooks) tags.push({ text: 'Auto-trigger blocked', tone: 'warn' });
               secPlugins.appendChild(
                 makeSwitchRow(
                   p.displayName,
@@ -3176,9 +3188,9 @@
 
           const secMcp = el('div', 'ag-prism-policy-sec');
           const mHead = el('div', 'ag-prism-policy-sec-title');
-          mHead.appendChild(el('span', '', '允许的外部工具服务（MCP，默认关闭）'));
+          mHead.appendChild(el('span', '', 'Allowed External Tool Servers (MCP, Off by Default)'));
           mHead.appendChild(
-            el('span', 'ag-prism-policy-sec-cnt', `已开启 ${cur.allowedMcps.length} / ${hostCapabilities.mcps.length}`)
+            el('span', 'ag-prism-policy-sec-cnt', `Enabled ${cur.allowedMcps.length} / ${hostCapabilities.mcps.length}`)
           );
           secMcp.appendChild(mHead);
           if (catalogLoading) {
@@ -3189,12 +3201,12 @@
             const mSet = new Set(cur.allowedMcps.map((x) => x.toLowerCase()));
             for (let i = 0; i < hostCapabilities.mcps.length; i++) {
               const m = hostCapabilities.mcps[i];
-              const tags = [{ text: `${m.toolCount} 个工具` }];
+              const tags = [{ text: `${m.toolCount}  tools` }];
               if (m.pluginName) tags.push({ text: m.pluginName });
               secMcp.appendChild(
                 makeSwitchRow(
                   m.serverName,
-                  m.status === 2 ? '已就绪 · 勾选后仅在本模式对话中可用' : '按需启用',
+                  m.status === 2 ? 'Ready · Available in this mode when checked' : 'Enable on demand',
                   mSet.has(m.serverName.toLowerCase()),
                   (v) => {
                     cur.allowedMcps = toggleInList(cur.allowedMcps, m.serverName, v);
@@ -3209,19 +3221,19 @@
           scrollBody.appendChild(secMcp);
 
           const secUi = el('div', 'ag-prism-policy-sec');
-          secUi.appendChild(el('div', 'ag-prism-policy-sec-title', '界面显示'));
+          secUi.appendChild(el('div', 'ag-prism-policy-sec-title', 'Interface Display'));
           secUi.appendChild(
             makeSwitchRow(
-              '输入框上方显示状态小条',
-              '简洁显示生成速度与上下文占用，关闭后界面更干净',
+              'Show Status Bar Above Input',
+              'Compactly show generation speed & context usage; turn off for a cleaner UI',
               draft.showTelemetryAboveComposer,
               (v) => { draft.showTelemetryAboveComposer = v; renderBody(); }
             )
           );
           secUi.appendChild(
             makeSwitchRow(
-              '首页显示快捷建议',
-              '在新建对话输入框下方提供常用起手建议，关闭后保持纯留白',
+              'Show Starter Chips on Home',
+              'Show starter chips below New Chat input; turn off for a blank canvas',
               draft.showStarterChips,
               (v) => { draft.showStarterChips = v; renderBody(); }
             )
@@ -3233,7 +3245,7 @@
         sparkTabBtn.addEventListener('click', () => { activeTab = 'spark'; renderBody(); });
 
         const foot = el('div', 'ag-prism-modal-actions-row');
-        const resetBtn = el('button', 'ag-prism-modal-btn', '恢复默认');
+        const resetBtn = el('button', 'ag-prism-modal-btn', 'Reset Defaults');
         resetBtn.type = 'button';
         resetBtn.setAttribute('data-variant', 'ghost');
         resetBtn.addEventListener('click', () => {
@@ -3243,11 +3255,11 @@
           draft.showStarterChips = true;
           renderBody();
         });
-        const cancelBtn = el('button', 'ag-prism-modal-btn', '取消');
+        const cancelBtn = el('button', 'ag-prism-modal-btn', 'Cancel');
         cancelBtn.type = 'button';
         cancelBtn.setAttribute('data-variant', 'ghost');
         cancelBtn.addEventListener('click', () => close());
-        const saveBtn = el('button', 'ag-prism-modal-btn', '保存并生效');
+        const saveBtn = el('button', 'ag-prism-modal-btn', 'Save & Apply');
         saveBtn.type = 'button';
         saveBtn.setAttribute('data-variant', 'primary');
         saveBtn.addEventListener('click', async () => {
@@ -3256,7 +3268,7 @@
           close();
           if (r && r.ok) {
             syncChatComposerChrome(false);
-            showToast('已保存设置，将在新建与后续对话中生效');
+            showToast('Settings saved. Will take effect in new and subsequent chats.');
           }
         });
         foot.appendChild(resetBtn);
@@ -3281,12 +3293,12 @@
           'ag-prism-menu-note',
           proj && proj.sharedWithCode
             ? '共享目录 · 已保护：该文件夹与当前编程项目共用，已自动采用兼容保护，不会影响正在进行的编程任务。'
-            : 'Spark 安全保护：仅在选定的工作文件夹内协助整理文档与日程，高风险操作前需经你确认。'
+            : 'Spark Safety Guard: Assists only within the selected Workspace; high-risk actions require your confirmation.'
         )
       );
       pop.appendChild(el('div', 'ag-prism-menu-sep'));
       pop.appendChild(
-        makeMenuItem('sliders', '管理 Spark 能力与扩展…', () => {
+        makeMenuItem('sliders', 'Manage Spark Capabilities & Extensions…', () => {
           openChatPolicyModal('spark');
         })
       );
@@ -3486,23 +3498,23 @@
 
     function openSparkFilesPopover(anchorEl, sparkProjectId) {
       if (!sparkProjectId) {
-        showToast('请先选择一个 Spark 工作文件夹');
+        showToast('Please select a Spark Workspace first');
         return;
       }
       const pop = el('div', 'ag-prism-sidebar-popover ag-prism-spark-files-pop');
       const proj = (snapshot?.sparkProjects || []).find((p) => p.id === sparkProjectId);
-      pop.appendChild(el('div', 'ag-prism-menu-note', `工作文件夹 · ${proj ? proj.name : 'Spark'}`));
+      pop.appendChild(el('div', 'ag-prism-menu-note', `Workspace · ${proj ? proj.name : 'Spark'}`));
       const listWrap = el('div', 'ag-prism-spark-files-list');
-      listWrap.appendChild(el('div', 'ag-prism-policy-empty', '正在读取目录文件…'));
+      listWrap.appendChild(el('div', 'ag-prism-policy-empty', 'Loading Folder Files…'));
       pop.appendChild(listWrap);
       pop.appendChild(el('div', 'ag-prism-menu-sep'));
       pop.appendChild(
-        makeMenuItem('upload', '导入本地文件到此文件夹…', () => {
+        makeMenuItem('upload', 'Import local files to this folder…', () => {
           openChatFilePicker(sparkProjectId);
         })
       );
       pop.appendChild(
-        makeMenuItem('external', '在系统文件夹中打开', () => {
+        makeMenuItem('external', 'Open in System Explorer', () => {
           void callDaemonRpc('reveal-spark-project', { sparkProjectId });
         })
       );
@@ -3517,7 +3529,7 @@
         }
         const files = Array.isArray(res.result.files) ? res.result.files : [];
         if (files.length === 0) {
-          listWrap.appendChild(el('div', 'ag-prism-policy-empty', '文件夹目前为空，可直接拖文件进输入框导入'));
+          listWrap.appendChild(el('div', 'ag-prism-policy-empty', 'Folder is empty. Drag files into the input box to import.'));
           return;
         }
         for (let i = 0; i < files.length; i++) {
@@ -3565,7 +3577,7 @@
       }
       pop.appendChild(el('div', 'ag-prism-menu-sep'));
       pop.appendChild(
-        makeMenuItem('sliders', 'Chat 能力与扩展…', () => {
+        makeMenuItem('sliders', 'Chat Capabilities & Extensions…', () => {
           openChatPolicyModal(resolveActiveChatKind());
         })
       );
@@ -3671,6 +3683,33 @@
         chatPair.btn.appendChild(el('span', 'ag-prism-sb-beta-pill', 'Beta'));
         seg.appendChild(codePair.btn);
         seg.appendChild(chatPair.btn);
+        if (!W.__agPrismCtxMenuPatched) {
+          W.__agPrismCtxMenuPatched = true;
+          document.addEventListener('contextmenu', (ev) => {
+            if (ev.clientX > 340) return;
+            const target = ev.target;
+            if (!target || !target.closest) return;
+            if (target.closest('[contenteditable="true"], textarea, input')) return;
+            const row = target.closest('[role="listitem"], .monaco-list-row, [data-testid*="conversation"]');
+            if (!row) return;
+            const moreBtn = row.querySelector('button[aria-label*="More" i], button[title*="More" i], button[aria-haspopup="menu"]');
+            if (moreBtn) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              ev.stopImmediatePropagation();
+              moreBtn.click();
+            }
+          }, true);
+          document.addEventListener('contextmenu', (ev) => {
+            const target = ev.target;
+            if (!target || !target.closest) return;
+            if (target.closest('[contenteditable="true"], textarea, input')) return;
+            const sel = W.getSelection ? W.getSelection().toString().trim() : '';
+            if (!sel) {
+              ev.preventDefault();
+            }
+          }, true);
+        }
         dock.appendChild(seg);
 
         nav.insertBefore(dock, insertBeforeNode);
@@ -3680,6 +3719,8 @@
 
       const r = host.modeDockRefs;
       const mode = snapshot.activeMode === 'chat' ? 'chat' : 'code';
+      const modeOrder = W.__agPrism?.config?.sidebarModeOrder === 'code-left' ? 'code-left' : 'chat-left';
+      r.seg.setAttribute('data-order', modeOrder);
       r.seg.setAttribute('data-mode', mode);
       r.codeBtn.setAttribute('data-active', mode === 'code' ? '1' : '0');
       r.chatBtn.setAttribute('data-active', mode === 'chat' ? '1' : '0');
@@ -3712,7 +3753,7 @@
         const newBtn = el('button', 'ag-prism-sb-new-btn');
         newBtn.type = 'button';
         newBtn.appendChild(makeMonoSvg('plus', 14));
-        newBtn.appendChild(el('span', '', '新建对话'));
+        newBtn.appendChild(el('span', '', 'New Chat'));
         newBtn.addEventListener('click', () => {
           greetingSeed = Math.floor(Math.random() * 100);
           void callDaemonRpc('navigate', { mode: 'chat', view: '/', navRev: snapshot.navRev });
@@ -3760,7 +3801,7 @@
         searchBox.appendChild(makeMonoSvg('search', 12.5));
         const searchInput = el('input', 'ag-prism-sb-search-input');
         searchInput.type = 'text';
-        searchInput.placeholder = '搜索 Chat 对话…';
+        searchInput.placeholder = 'Search Chat conversations…';
         searchInput.addEventListener('compositionstart', () => { searchComposing = true; });
         searchInput.addEventListener('compositionend', () => {
           searchComposing = false;
@@ -3783,7 +3824,7 @@
         batchBar.setAttribute('data-testid', 'prism-sb-batch-bar');
         batchBar.style.display = 'none';
         const batchTop = el('div', 'ag-prism-sb-batch-top');
-        const batchCountLbl = el('span', '', '已选 0 项');
+        const batchCountLbl = el('span', '', 'Selected 0 items');
         const batchExitBtn = el('button', 'ag-prism-sb-act-btn');
         batchExitBtn.type = 'button';
         batchExitBtn.title = '退出多选';
@@ -3799,11 +3840,11 @@
         batchBar.appendChild(batchTop);
 
         const batchBtns = el('div', 'ag-prism-sb-batch-btns');
-        const bMove = el('button', 'ag-prism-sb-batch-btn', '移入');
+        const bMove = el('button', 'ag-prism-sb-batch-btn', 'Move');
         bMove.type = 'button';
-        const bArch = el('button', 'ag-prism-sb-batch-btn', '归档');
+        const bArch = el('button', 'ag-prism-sb-batch-btn', 'Archive');
         bArch.type = 'button';
-        const bDel = el('button', 'ag-prism-sb-batch-btn', '删除');
+        const bDel = el('button', 'ag-prism-sb-batch-btn', 'Delete');
         bDel.type = 'button';
         bDel.setAttribute('data-danger', '1');
 
@@ -3838,16 +3879,16 @@
           const ids = Array.from(selectedBatchIds);
           if (ids.length === 0) return;
           openModal((box, close) => {
-            box.appendChild(el('h3', 'ag-prism-modal-title', `批量永久删除 ${ids.length} 条对话`));
+            box.appendChild(el('h3', 'ag-prism-modal-title', `Delete ${ids.length} chats permanently?`));
             box.appendChild(
-              el('p', 'ag-prism-modal-body', '将彻底删除所选对话及其消息记录（运行中的对话会自动跳过保护），删除后不可恢复。')
+              el('p', 'ag-prism-modal-body', 'This will permanently delete the selected chats and their message history (running chats are automatically skipped). This cannot be undone.')
             );
             const row = el('div', 'ag-prism-modal-actions-row');
-            const cBtn = el('button', 'ag-prism-modal-btn', '取消');
+            const cBtn = el('button', 'ag-prism-modal-btn', 'Cancel');
             cBtn.type = 'button';
             cBtn.setAttribute('data-variant', 'ghost');
             cBtn.addEventListener('click', () => close());
-            const dBtn = el('button', 'ag-prism-modal-btn', `永久删除 (${ids.length})`);
+            const dBtn = el('button', 'ag-prism-modal-btn', `Delete Permanently (${ids.length})`);
             dBtn.type = 'button';
             dBtn.setAttribute('data-variant', 'danger');
             dBtn.addEventListener('click', () => {
@@ -3871,7 +3912,7 @@
         policyBtn.type = 'button';
         policyBtn.setAttribute('data-testid', 'prism-sb-policy-btn');
         policyBtn.appendChild(makeMonoSvg('sliders', 13.5));
-        policyBtn.appendChild(el('span', 'ag-prism-sb-row-title', '能力与扩展'));
+        policyBtn.appendChild(el('span', 'ag-prism-sb-row-title', 'Capabilities & Extensions'));
         const policyCnt = el('span', 'ag-prism-sb-cnt', '');
         policyBtn.appendChild(policyCnt);
         policyBtn.addEventListener('click', () => {
@@ -3908,7 +3949,7 @@
         const inp = el('input', 'ag-prism-modal-input');
         inp.type = 'text';
         inp.value = initialValue || '';
-        inp.placeholder = placeholder || '输入新名称…';
+        inp.placeholder = placeholder || 'Enter new name…';
         box.appendChild(inp);
         const submit = () => {
           const v = inp.value.trim();
@@ -3921,7 +3962,7 @@
           else if (e.key === 'Escape') { e.preventDefault(); close(); }
         });
         const row = el('div', 'ag-prism-modal-actions-row');
-        const cancelBtn = el('button', 'ag-prism-modal-btn', '取消');
+        const cancelBtn = el('button', 'ag-prism-modal-btn', 'Cancel');
         cancelBtn.type = 'button';
         cancelBtn.setAttribute('data-variant', 'ghost');
         cancelBtn.addEventListener('click', () => close());
@@ -3952,18 +3993,18 @@
 
     function openDeleteSessionModal(item) {
       openModal((box, close) => {
-        box.appendChild(el('h3', 'ag-prism-modal-title', '永久删除对话？'));
+        box.appendChild(el('h3', 'ag-prism-modal-title', 'Delete chat permanently?'));
         box.appendChild(
           el(
             'p',
             'ag-prism-modal-body',
-            `确认彻底删除「${item.title || item.cascadeId}」吗？删除后无法恢复；若只是暂时收起，建议改为“归档”。`
+            `Permanently delete "${item.title || item.cascadeId}"? This cannot be undone. If you only want to hide it for now, consider archiving it instead.`
           )
         );
         const actions = el('div', 'ag-prism-modal-actions');
         if (!item.archived) {
           actions.appendChild(
-            buildModalBtn('改为归档（可随时恢复）', {
+            buildModalBtn('Archive instead (restorable anytime)', {
               variant: 'primary',
               icon: 'archive',
               onClick: async () => {
@@ -3971,14 +4012,14 @@
                 const r = await callDaemonRpc('archive-chat-session', { cascadeId: item.cascadeId, archived: true });
                 if (r && r.ok) {
                   if (r.result?.navigatedFallback) navigateHostRoute('/');
-                  showToast('已归档该对话');
+                  showToast('Chat archived');
                 }
               },
             })
           );
         }
         actions.appendChild(
-          buildModalBtn('永久删除对话', {
+          buildModalBtn('Delete chat permanently', {
             variant: 'danger',
             icon: 'trash',
             onClick: async () => {
@@ -3986,13 +4027,13 @@
               const r = await callDaemonRpc('delete-chat-session', { cascadeId: item.cascadeId });
               if (r && r.ok) {
                 if (r.result?.navigatedFallback) navigateHostRoute('/');
-                showToast('已永久删除对话');
+                showToast('Chat permanently deleted');
                 scheduleCatalogSync();
               }
             },
           })
         );
-        actions.appendChild(buildModalBtn('取消', { variant: 'ghost', onClick: () => close() }));
+        actions.appendChild(buildModalBtn('Cancel', { variant: 'ghost', onClick: () => close() }));
         box.appendChild(actions);
       });
     }
@@ -4005,22 +4046,22 @@
           if (r.result?.navigatedFallback) navigateHostRoute('/');
           showToast(
             childAction === 'delete'
-              ? `已删除文件夹及 ${count} 条对话`
+              ? `Deleted folder and ${count} chats`
               : childAction === 'archive'
-              ? `已归档 ${count} 条对话并删除文件夹`
-              : '已删除文件夹'
+              ? `Archived ${count} chats and deleted folder`
+              : 'Folder deleted'
           );
           scheduleCatalogSync();
         }
       };
       openModal((box, close) => {
-        box.appendChild(el('h3', 'ag-prism-modal-title', `删除文件夹「${folder.name}」`));
+        box.appendChild(el('h3', 'ag-prism-modal-title', `Delete folder "${folder.name}"`));
         if (count === 0) {
-          box.appendChild(el('p', 'ag-prism-modal-body', '该文件夹目前为空，确认删除吗？'));
+          box.appendChild(el('p', 'ag-prism-modal-body', 'This folder is currently empty. Delete it?'));
           const row = el('div', 'ag-prism-modal-actions-row');
-          row.appendChild(buildModalBtn('取消', { variant: 'ghost', onClick: () => close() }));
+          row.appendChild(buildModalBtn('Cancel', { variant: 'ghost', onClick: () => close() }));
           row.appendChild(
-            buildModalBtn('删除文件夹', {
+            buildModalBtn('Delete folder', {
               variant: 'danger',
               onClick: () => {
                 close();
@@ -4032,11 +4073,11 @@
           return;
         }
         box.appendChild(
-          el('p', 'ag-prism-modal-body', `该文件夹内包含 ${count} 条对话，请选择如何处理这些对话：`)
+          el('p', 'ag-prism-modal-body', `This folder contains ${count} chats. How should they be handled?`)
         );
         const actions = el('div', 'ag-prism-modal-actions');
         actions.appendChild(
-          buildModalBtn(`仅删文件夹（${count} 条对话移回 Pure）`, {
+          buildModalBtn(`Delete folder only (move ${count} chats to Pure)`, {
             variant: 'primary',
             icon: 'folderMove',
             onClick: () => {
@@ -4046,7 +4087,7 @@
           })
         );
         actions.appendChild(
-          buildModalBtn(`归档全部 ${count} 条对话并删除文件夹`, {
+          buildModalBtn(`Archive all ${count} chats & delete folder`, {
             icon: 'archive',
             onClick: () => {
               close();
@@ -4055,7 +4096,7 @@
           })
         );
         actions.appendChild(
-          buildModalBtn(`永久删除全部 ${count} 条对话与文件夹`, {
+          buildModalBtn(`Permanently delete all ${count} chats & folder`, {
             variant: 'danger',
             icon: 'trash',
             onClick: () => {
@@ -4064,7 +4105,7 @@
             },
           })
         );
-        actions.appendChild(buildModalBtn('取消', { variant: 'ghost', onClick: () => close() }));
+        actions.appendChild(buildModalBtn('Cancel', { variant: 'ghost', onClick: () => close() }));
         box.appendChild(actions);
       });
     }
@@ -4077,23 +4118,23 @@
           if (r.result?.navigatedFallback) navigateHostRoute('/');
           showToast(
             childAction === 'delete'
-              ? `已移除工作区并永久删除 ${count} 条对话`
+              ? `Removed workspace and permanently deleted ${count} chats`
               : childAction === 'archive'
-              ? `已归档 ${count} 条对话并移除工作区`
-              : '已移除 Spark 工作区'
+              ? `Archived ${count} chats and removed workspace`
+              : 'Spark workspace removed'
           );
           scheduleCatalogSync();
         }
       };
       openModal((box, close) => {
-        box.appendChild(el('h3', 'ag-prism-modal-title', `删除 Spark 工作区「${project.name}」`));
+        box.appendChild(el('h3', 'ag-prism-modal-title', `Remove Spark workspace "${project.name}"`));
         if (count === 0) {
-          box.appendChild(el('p', 'ag-prism-modal-body', '该工作区目前没有关联对话，确认从 Spark 移除吗？'));
-          box.appendChild(el('div', 'ag-prism-modal-note', '安全提示：仅解除工作区绑定，绝不会删除你本地磁盘上的原始文件。'));
+          box.appendChild(el('p', 'ag-prism-modal-body', 'This workspace has no linked chats. Remove it from Spark?'));
+          box.appendChild(el('div', 'ag-prism-modal-note', 'Safety note: Only unlinks the workspace; local files on disk will never be deleted.'));
           const row = el('div', 'ag-prism-modal-actions-row');
-          row.appendChild(buildModalBtn('取消', { variant: 'ghost', onClick: () => close() }));
+          row.appendChild(buildModalBtn('Cancel', { variant: 'ghost', onClick: () => close() }));
           row.appendChild(
-            buildModalBtn('确认移除', {
+            buildModalBtn('Confirm Remove', {
               variant: 'danger',
               onClick: () => {
                 close();
@@ -4105,12 +4146,12 @@
           return;
         }
         box.appendChild(
-          el('p', 'ag-prism-modal-body', `该工作区内包含 ${count} 条对话，请选择如何处理这些对话：`)
+          el('p', 'ag-prism-modal-body', `This workspace contains ${count} chats. How should they be handled?`)
         );
-        box.appendChild(el('div', 'ag-prism-modal-note', '安全提示：所有选项均仅处理对话记录与绑定关系，绝不会删除本地磁盘文件夹中的文件。'));
+        box.appendChild(el('div', 'ag-prism-modal-note', 'Safety note: All options only affect chat history and workspace links; local files on disk will never be deleted.'));
         const actions = el('div', 'ag-prism-modal-actions');
         actions.appendChild(
-          buildModalBtn(`解绑工作区（${count} 条对话移回 Pure）`, {
+          buildModalBtn(`Unlink workspace (move ${count} chats to Pure)`, {
             variant: 'primary',
             icon: 'folderMove',
             onClick: () => {
@@ -4120,7 +4161,7 @@
           })
         );
         actions.appendChild(
-          buildModalBtn(`归档全部 ${count} 条对话并移除工作区`, {
+          buildModalBtn(`Archive all ${count} chats & remove workspace`, {
             icon: 'archive',
             onClick: () => {
               close();
@@ -4129,7 +4170,7 @@
           })
         );
         actions.appendChild(
-          buildModalBtn(`永久删除全部 ${count} 条对话并移除工作区`, {
+          buildModalBtn(`Permanently delete all ${count} chats & remove workspace`, {
             variant: 'danger',
             icon: 'trash',
             onClick: () => {
@@ -4138,7 +4179,7 @@
             },
           })
         );
-        actions.appendChild(buildModalBtn('取消', { variant: 'ghost', onClick: () => close() }));
+        actions.appendChild(buildModalBtn('Cancel', { variant: 'ghost', onClick: () => close() }));
         box.appendChild(actions);
       });
     }
@@ -4191,14 +4232,14 @@
       }
       if (!item.archived) {
         pop.appendChild(
-          makeMenuItem('pin', item.pinned ? '取消置顶' : '置顶对话', () => {
+          makeMenuItem('pin', item.pinned ? 'Unpin chat' : 'Pin chat', () => {
             void callDaemonRpc('pin-chat-session', { cascadeId: item.cascadeId, pinned: !item.pinned });
           })
         );
       }
       pop.appendChild(
-        makeMenuItem('edit', '重命名对话', () => {
-          openRenameModal('重命名对话', item.title || '', '输入新对话标题…', (newTitle) => {
+        makeMenuItem('edit', 'Rename chat', () => {
+          openRenameModal('Rename chat', item.title || '', 'Enter new chat title…', (newTitle) => {
             void callDaemonRpc('rename-chat-session', { cascadeId: item.cascadeId, title: newTitle });
           });
         })
@@ -4209,7 +4250,7 @@
           pop.appendChild(el('div', 'ag-prism-menu-sep'));
           if (item.placement?.folderId) {
             pop.appendChild(
-              makeMenuItem('folderMove', '移回 Pure 根目录', () => {
+              makeMenuItem('folderMove', 'Move to Pure root', () => {
                 void callDaemonRpc('move-chat-session', {
                   cascadeId: item.cascadeId,
                   placement: { kind: 'knowledge', folderId: null },
@@ -4221,7 +4262,7 @@
             const f = folders[i];
             if (item.placement?.folderId === f.id) continue;
             pop.appendChild(
-              makeMenuItem('folder', `移入：${f.name}`, () => {
+              makeMenuItem('folder', `Move: ${f.name}`, () => {
                 void callDaemonRpc('move-chat-session', {
                   cascadeId: item.cascadeId,
                   placement: { kind: 'knowledge', folderId: f.id },
@@ -4233,25 +4274,25 @@
       }
       pop.appendChild(el('div', 'ag-prism-menu-sep'));
       pop.appendChild(
-        makeMenuItem('download', '导出为 Markdown', () => {
+        makeMenuItem('download', 'Export as Markdown', () => {
           void exportChatMarkdown(item);
         })
       );
       pop.appendChild(
-        makeMenuItem(item.archived ? 'restore' : 'archive', item.archived ? '从归档恢复' : '归档对话', () => {
+        makeMenuItem(item.archived ? 'restore' : 'archive', item.archived ? 'Restore from Archive' : 'Archive chat', () => {
           void callDaemonRpc('archive-chat-session', {
             cascadeId: item.cascadeId,
             archived: !item.archived,
           }).then((r) => {
             if (r && r.ok) {
               if (r.result?.navigatedFallback) navigateHostRoute('/');
-              showToast(item.archived ? '已恢复该对话' : '已归档该对话');
+              showToast(item.archived ? 'Chat restored' : 'Chat archived');
             }
           });
         })
       );
       pop.appendChild(
-        makeMenuItem('trash', '永久删除', () => {
+        makeMenuItem('trash', 'Delete permanently', () => {
           openDeleteSessionModal(item);
         }, true)
       );
@@ -4261,7 +4302,7 @@
     function openKnowledgeFolderMenu(folder, anchorEl) {
       const pop = el('div', 'ag-prism-sidebar-popover');
       pop.appendChild(
-        makeMenuItem('plus', '在此文件夹新建对话', () => {
+        makeMenuItem('plus', 'New Chat in this folder', () => {
           greetingSeed = Math.floor(Math.random() * 100);
           void callDaemonRpc('navigate', { mode: 'chat', view: '/', navRev: snapshot.navRev }).then(() => {
             void callDaemonRpc('set-chat-draft', {
@@ -4274,15 +4315,15 @@
         })
       );
       pop.appendChild(
-        makeMenuItem('edit', '重命名文件夹', () => {
-          openRenameModal('重命名文件夹', folder.name, '输入新文件夹名…', (newName) => {
+        makeMenuItem('edit', 'Rename folder', () => {
+          openRenameModal('Rename folder', folder.name, 'Enter new folder name…', (newName) => {
             void callDaemonRpc('rename-knowledge-folder', { folderId: folder.id, name: newName });
           });
         })
       );
       pop.appendChild(el('div', 'ag-prism-menu-sep'));
       pop.appendChild(
-        makeMenuItem('trash', '删除文件夹…', () => {
+        makeMenuItem('trash', 'Delete folder…', () => {
           openDeleteFolderModal(folder);
         }, true)
       );
@@ -4292,7 +4333,7 @@
     function openSparkWorkspaceMenu(project, anchorEl) {
       const pop = el('div', 'ag-prism-sidebar-popover');
       pop.appendChild(
-        makeMenuItem('plus', '在此工作区新建对话', () => {
+        makeMenuItem('plus', 'New Chat in this workspace', () => {
           greetingSeed = Math.floor(Math.random() * 100);
           void callDaemonRpc('navigate', { mode: 'chat', view: '/', navRev: snapshot.navRev }).then(() => {
             void callDaemonRpc('set-chat-draft', {
@@ -4305,25 +4346,25 @@
         })
       );
       pop.appendChild(
-        makeMenuItem('edit', '重命名工作区', () => {
-          openRenameModal('重命名工作区显示名', project.name, '输入工作区显示名…', (newName) => {
+        makeMenuItem('edit', 'Rename workspace', () => {
+          openRenameModal('Rename workspace', project.name, 'Enter workspace display name…', (newName) => {
             void callDaemonRpc('rename-spark-project', { sparkProjectId: project.id, name: newName });
           });
         })
       );
       pop.appendChild(
-        makeMenuItem('file', '预览 / 导入目录文件…', () => {
+        makeMenuItem('file', 'Preview / Import Folder Files…', () => {
           openSparkFilesPopover(anchorEl, project.id);
         })
       );
       pop.appendChild(
-        makeMenuItem('external', '在文件夹中打开', () => {
+        makeMenuItem('external', 'Open in folder', () => {
           void callDaemonRpc('reveal-spark-project', { sparkProjectId: project.id });
         })
       );
       pop.appendChild(el('div', 'ag-prism-menu-sep'));
       pop.appendChild(
-        makeMenuItem('trash', '删除 / 解绑工作区…', () => {
+        makeMenuItem('trash', 'Delete / Unlink workspace…', () => {
           openDeleteSparkModal(project);
         }, true)
       );
@@ -4343,8 +4384,8 @@
         selectedBatchIds.clear();
         multiSelectMode = false;
         if (host.chatPaneRefs && host.chatPaneRefs.batchBtn) host.chatPaneRefs.batchBtn.style.color = '';
-        const verb = op === 'delete' ? '删除' : op === 'archive' ? '归档' : '移动';
-        showToast(skN > 0 ? `已批量${verb} ${okN} 条对话（跳过 ${skN} 条运行中或受限项）` : `已批量${verb} ${okN} 条对话`);
+        const verb = op === 'delete' ? 'deleted' : op === 'archive' ? 'archived' : 'moved';
+        showToast(skN > 0 ? `Batch ${verb} ${okN} chats (${skN} running or restricted skipped)` : `Batch ${verb} ${okN} chats`);
         scheduleCatalogSync();
         renderChatSidebarList();
       }
@@ -4393,7 +4434,7 @@
       const refs = host.chatPaneRefs;
       refs.batchBar.style.display = multiSelectMode ? 'flex' : 'none';
       const n = selectedBatchIds.size;
-      refs.batchCountLbl.textContent = `已选 ${n} 项`;
+      refs.batchCountLbl.textContent = `Selected ${n} items`;
       refs.bMove.disabled = n === 0;
       refs.bArch.disabled = n === 0;
       refs.bDel.disabled = n === 0;
@@ -4459,6 +4500,8 @@
       });
       btn.addEventListener('contextmenu', (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
         openChatSessionMenu(item, btn);
       });
 
@@ -4466,7 +4509,7 @@
       if (!multiSelectMode) {
         const moreBtn = el('button', 'ag-prism-sb-act-btn');
         moreBtn.type = 'button';
-        moreBtn.title = '更多操作';
+        moreBtn.title = 'More actions';
         moreBtn.appendChild(makeMonoSvg('more', 13));
         moreBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -4568,7 +4611,7 @@
           const box = el('div', 'ag-prism-sb-inline-box');
           const inp = el('input', 'ag-prism-sb-inline-input');
           inp.type = 'text';
-          inp.placeholder = '输入文件夹名回车创建…';
+          inp.placeholder = 'Enter folder name and press Enter…';
           inp.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && inp.value.trim()) {
               inlineFolderOpen = false;
@@ -4587,11 +4630,11 @@
         if (kRoot.length > 0) {
           const nowMs = Date.now();
           const groupMeta = [
-            { key: 'pinned', label: '置顶' },
-            { key: 'today', label: '今天' },
-            { key: 'yesterday', label: '昨天' },
-            { key: 'week', label: '7 天内' },
-            { key: 'earlier', label: '更早' },
+            { key: 'pinned', label: 'Pinned' },
+            { key: 'today', label: 'Today' },
+            { key: 'yesterday', label: 'Yesterday' },
+            { key: 'week', label: 'Last 7 Days' },
+            { key: 'earlier', label: 'Earlier' },
           ];
           const buckets = { pinned: [], today: [], yesterday: [], week: [], earlier: [] };
           for (let i = 0; i < kRoot.length; i++) {
@@ -4624,7 +4667,7 @@
           const gw = el('div', 'ag-prism-sb-group-wrap');
           bindChatDropZone(gw, (cid) => {
             void callDaemonRpc('move-chat-session', { cascadeId: cid, placement: { kind: 'knowledge', folderId: f.id } });
-            showToast(`已移入文件夹「${f.name}」`);
+            showToast(`Moved to folder "${f.name}"`);
           });
           const gh = el('button', 'ag-prism-sb-group-head');
           gh.type = 'button';
@@ -4653,13 +4696,15 @@
           });
           gh.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation?.();
             openKnowledgeFolderMenu(f, gh);
           });
 
           const fActs = el('div', 'ag-prism-sb-row-actions');
           const fNew = el('button', 'ag-prism-sb-act-btn');
           fNew.type = 'button';
-          fNew.title = '在此文件夹新建对话';
+          fNew.title = 'New Chat in this folder';
           fNew.appendChild(makeMonoSvg('plus', 12));
           fNew.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -4690,7 +4735,7 @@
           list.appendChild(fGrid);
         }
         if (kRoot.length === 0 && kFolders.length === 0) {
-          list.appendChild(el('div', 'ag-prism-sb-empty', '暂无对话'));
+          list.appendChild(el('div', 'ag-prism-sb-empty', 'No conversations yet'));
         }
 
         const sProjects = proj.spark.projects || [];
@@ -4703,7 +4748,7 @@
         sRight.appendChild(el('span', 'ag-prism-sb-cnt', String(sProjects.length)));
         const addBox = el('button', 'ag-prism-sb-icon-btn');
         addBox.type = 'button';
-        addBox.title = '新建工作文件夹';
+        addBox.title = 'New Workspace Folder';
         addBox.appendChild(makeMonoSvg('plus', 12));
         addBox.addEventListener('click', () => {
           inlineBoxOpen = !inlineBoxOpen;
@@ -4717,7 +4762,7 @@
           const box = el('div', 'ag-prism-sb-inline-box');
           const inp = el('input', 'ag-prism-sb-inline-input');
           inp.type = 'text';
-          inp.placeholder = '输入工作文件夹名回车创建…';
+          inp.placeholder = 'Enter workspace name and press Enter…';
           inp.addEventListener('keydown', async (e) => {
             if (e.key === 'Enter' && inp.value.trim()) {
               const nm = inp.value.trim();
@@ -4741,7 +4786,7 @@
         }
 
         if (sProjects.length === 0) {
-          list.appendChild(el('div', 'ag-prism-sb-empty', '切至 Spark 选择本地目录或新建工作文件夹'));
+          list.appendChild(el('div', 'ag-prism-sb-empty', 'Switch to Spark to select a local directory or create a workspace folder'));
         } else {
           for (let i = 0; i < sProjects.length; i++) {
             const p = sProjects[i];
@@ -4775,13 +4820,15 @@
             });
             gh.addEventListener('contextmenu', (e) => {
               e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation?.();
               openSparkWorkspaceMenu(p, gh);
             });
 
             const pActs = el('div', 'ag-prism-sb-row-actions');
             const pNew = el('button', 'ag-prism-sb-act-btn');
             pNew.type = 'button';
-            pNew.title = '在此工作区新建对话';
+            pNew.title = 'New Chat in this workspace';
             pNew.appendChild(makeMonoSvg('plus', 12));
             pNew.addEventListener('click', (e) => {
               e.stopPropagation();
@@ -4825,7 +4872,7 @@
           ach.appendChild(makeMonoSvg('chevron', 11));
           ah.appendChild(ach);
           ah.appendChild(makeMonoSvg('archive', 12));
-          ah.appendChild(el('span', 'ag-prism-sb-row-title', '已归档'));
+          ah.appendChild(el('span', 'ag-prism-sb-row-title', 'Archived'));
           ah.appendChild(el('span', 'ag-prism-sb-cnt', String(archivedItems.length)));
 
           const aGrid = el('div', 'ag-prism-sb-folder-grid');
@@ -5068,7 +5115,7 @@
           const projBtn = el('button', 'ag-prism-ghost-btn');
           projBtn.type = 'button';
           projBtn.appendChild(makeMonoSvg('folder', 13));
-          const projLbl = el('span', '', '工作文件夹');
+          const projLbl = el('span', '', 'Workspace');
           projBtn.appendChild(projLbl);
           projBtn.appendChild(makeMonoSvg('chevronDown', 11));
           projBtn.addEventListener('click', (e) => {
@@ -5079,9 +5126,9 @@
 
           const filesBtn = el('button', 'ag-prism-ghost-btn');
           filesBtn.type = 'button';
-          filesBtn.title = '预览或导入工作文件夹内的文件';
+          filesBtn.title = 'Preview or import files in Workspace';
           filesBtn.appendChild(makeMonoSvg('file', 13));
-          filesBtn.appendChild(el('span', '', '目录文件'));
+          filesBtn.appendChild(el('span', '', 'Folder Files'));
           filesBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             openSparkFilesPopover(filesBtn, snapshot?.chatDraft?.sparkProjectId);
@@ -5091,7 +5138,7 @@
           const fenceBtn = el('button', 'ag-prism-ghost-btn');
           fenceBtn.type = 'button';
           fenceBtn.appendChild(makeMonoSvg('shield', 13));
-          const fenceLbl = el('span', '', '安全保护');
+          const fenceLbl = el('span', '', 'Safety Guard');
           fenceBtn.appendChild(fenceLbl);
           fenceBtn.appendChild(makeMonoSvg('chevronDown', 11));
           fenceBtn.addEventListener('click', (e) => {
@@ -5171,7 +5218,7 @@
         if (refs.eyeTxt.textContent !== hero.eyebrow) refs.eyeTxt.textContent = hero.eyebrow;
         if (refs.h1.textContent !== hero.headline) refs.h1.textContent = hero.headline;
 
-        refs.input.setAttribute('data-placeholder', isSpark ? '交给我一件要处理的事务…' : '问点什么，或整理一份想法…');
+        refs.input.setAttribute('data-placeholder', isSpark ? 'Give me a task to handle…' : 'Ask anything, or organize an idea…');
         if (document.activeElement !== refs.input && refs.input.textContent !== composerText) {
           refs.input.textContent = composerText;
         }
@@ -5186,8 +5233,8 @@
         refs.sendBtn.disabled = !ready;
 
         const proj = (snapshot.sparkProjects || []).find((p) => p.id === snapshot.chatDraft?.sparkProjectId) || null;
-        refs.projLbl.textContent = proj ? proj.name : '工作文件夹';
-        refs.fenceLbl.textContent = proj && proj.sharedWithCode ? '共享目录 · 已保护' : '安全保护';
+        refs.projLbl.textContent = proj ? proj.name : 'Workspace';
+        refs.fenceLbl.textContent = proj && proj.sharedWithCode ? 'Shared · Protected' : 'Safety Guard';
 
         // 淡雅起手灵感胶囊（按 Pure / Spark 切换，可一键关闭持久化）
         const policy = getEffectiveChatPolicy();
@@ -5222,7 +5269,7 @@
           }
           const dismissBtn = el('button', 'ag-prism-starter-dismiss');
           dismissBtn.type = 'button';
-          dismissBtn.title = '隐藏快捷建议（可在「能力与扩展」中重新开启）';
+          dismissBtn.title = 'Hide starter chips (re-enable in Capabilities & Extensions)';
           dismissBtn.appendChild(makeMonoSvg('x', 11.5));
           dismissBtn.addEventListener('click', () => {
             void callDaemonRpc('set-prefs', { patch: { chatPolicy: { showStarterChips: false } } });

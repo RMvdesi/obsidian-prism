@@ -32,6 +32,23 @@ function findCsc() {
   throw new Error('csc.exe (.NET Framework 4.x) not found');
 }
 
+const RETRYABLE_COPY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+function copyFileWithRetrySync(src, dest, maxAttempts = 8) {
+  const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      fs.copyFileSync(src, dest);
+      return;
+    } catch (err) {
+      if (!RETRYABLE_COPY_CODES.has(err?.code) || attempt === maxAttempts) {
+        throw err;
+      }
+      Atomics.wait(sleepBuf, 0, 0, Math.min(300, 150 + (attempt - 1) * 25));
+    }
+  }
+}
+
 function buildInstaller({ outputPath = path.join(ROOT_DIR, 'installer.exe'), configPath } = {}) {
   const csc = findCsc();
   const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-build-'));
@@ -112,7 +129,7 @@ function buildInstaller({ outputPath = path.join(ROOT_DIR, 'installer.exe'), con
     ], { stdio: 'inherit' });
 
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.copyFileSync(tempOut, outputPath);
+    copyFileWithRetrySync(tempOut, outputPath);
     const stat = fs.statSync(outputPath);
     return {
       outputPath,
