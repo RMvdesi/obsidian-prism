@@ -46,7 +46,6 @@
   "omniModule": "on",
   "linkTarget": "builtin",
   "sidebarStudio": "off",
-  "sidebarModeOrder": "chat-left",
   "hostLocalization": "auto",
   "autoUpdate": "off",
   "updateChannel": "stable",
