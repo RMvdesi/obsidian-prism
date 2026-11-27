@@ -13,7 +13,7 @@
   const STORAGE_CACHE_LIMIT = 80;
   const MAX_STORAGE_TOTAL_CHARS = 120000;
   const MAX_STORAGE_ENTRY_CHARS = 32000;
-  const STREAM_FLUSH_MS = 48;
+  const STREAM_FLUSH_MS = 60;
   const CHUNK_FADE_TTL_MS = 350;
   const MAX_LIVE_CHUNKS = 10;
   const FINISH_GATE_MS = 450;
@@ -2441,6 +2441,7 @@ trackedWaitPanels.delete(panel);
       sh: '',
       cy: 0,
       pa: 0,
+      pSk: 0,
       pRaf: null,
       dn: false,
       fn: null,
@@ -2539,41 +2540,51 @@ trackedWaitPanels.delete(panel);
           return;
         }
 
-        const rem = 30 - (now - entry.pa);
+        // High-throughput adaptive flush: backlog > 128 (e.g. 500+ tok/s) commits the whole buffered delta
+        // every STREAM_FLUSH_MS; normal bursts keep velvet pacing. pSk is a dedicated skip counter so the
+        // pacer never clobbers entry.sk (the panel signature checked by verifyPanel / final commit).
+        const highThroughput = backlog > 128;
+        const rem = (highThroughput ? STREAM_FLUSH_MS : 30) - (now - entry.pa);
         if (entry.pa > 0 && !entry.dn && rem > 0) {
-          entry.sk = (entry.sk || 0) + 1;
-          if (entry.sk >= 2 && typeof setTimeout === 'function' && rem > 6) {
-            entry.sk = 0;
+          entry.pSk = (entry.pSk || 0) + 1;
+          if ((highThroughput || entry.pSk >= 2) && typeof setTimeout === 'function' && rem > 6) {
+            entry.pSk = 0;
             entry.pTm = setTimeout(() => {
               entry.pTm = null;
               if (!entry.x && currentMode !== 'off') ensurePacerLoop();
-            }, Math.ceil(rem - 2));
+            }, Math.ceil(highThroughput ? rem : rem - 2));
             entry.pTm?.unref?.();
           } else {
             entry.pRaf = raf(stepPacer);
           }
           return;
         }
-        entry.sk = 0;
+        entry.pSk = 0;
 
-        const dt = entry.pa > 0 ? Math.min(80, Math.max(8, now - entry.pa)) : 16.67;
-        const basePerFrame = entry.dn
-          ? Math.max(3.2, backlog / 6.2)
-          : backlog > 48
-          ? Math.max(3.0, backlog / 9.5)
-          : Math.max(1.25, backlog / 11.5);
+        if (highThroughput) {
+          entry.cy = 0;
+          entry.pa = now;
+          entry.sh = target;
+        } else {
+          const dt = entry.pa > 0 ? Math.min(80, Math.max(8, now - entry.pa)) : 16.67;
+          const basePerFrame = entry.dn
+            ? Math.max(3.2, backlog / 6.2)
+            : backlog > 48
+            ? Math.max(3.0, backlog / 9.5)
+            : Math.max(1.25, backlog / 11.5);
 
-        entry.cy += basePerFrame * (dt / 16.67);
-        const minChunk = backlog === 1 || entry.dn || now - entry.pa >= 26 ? 1 : 2;
-        if (entry.cy < minChunk) {
-          entry.pRaf = raf(stepPacer);
-          return;
+          entry.cy += basePerFrame * (dt / 16.67);
+          const minChunk = backlog === 1 || entry.dn || now - entry.pa >= 26 ? 1 : 2;
+          if (entry.cy < minChunk) {
+            entry.pRaf = raf(stepPacer);
+            return;
+          }
+
+          const nextIdx = advanceSafeChunkEnd(target, entry.sh.length, Math.min(backlog, Math.floor(entry.cy)));
+          entry.cy = Math.max(0, entry.cy - (nextIdx - entry.sh.length));
+          entry.pa = now;
+          entry.sh = target.slice(0, nextIdx);
         }
-
-        const nextIdx = advanceSafeChunkEnd(target, entry.sh.length, Math.min(backlog, Math.floor(entry.cy)));
-        entry.cy = Math.max(0, entry.cy - (nextIdx - entry.sh.length));
-        entry.pa = now;
-        entry.sh = target.slice(0, nextIdx);
 
         flushPartialToPanels(entry.sh, { inc: true, anim: true, now });
 

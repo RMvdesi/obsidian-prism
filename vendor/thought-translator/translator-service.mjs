@@ -28,6 +28,7 @@ import {
   atomicWriteFileExclusiveAsync,
 } from '../../src/security/net-guard.mjs';
 import { MachineTranslateClient } from './machine-translate-client.mjs';
+import { createSseDeltaScanner } from './sse-delta-scanner.mjs';
 
 export const SYSTEM_PROMPTS = Object.freeze({
   technical:
@@ -1227,6 +1228,8 @@ export class ThoughtTranslatorService {
     this._hasDiskFile = false;
     this._cacheEpoch = 0;
     this._config = null;
+    // `${baseUrl}|${model}` endpoints that rejected noThink (400/422)
+    this._noThinkRejectedKeys = new Set();
     this._machineTransport = typeof opts.machineTransport === 'function' ? opts.machineTransport : null;
     this._mtClient = new MachineTranslateClient({
       getProxyMode: (overrideOpts) => {
@@ -3710,11 +3713,17 @@ export class ThoughtTranslatorService {
       });
     };
 
+    const noThinkKey = noThinkParams ? `${baseUrl}|${model}` : '';
+    const shouldTryNoThink = Boolean(noThinkParams && !this._noThinkRejectedKeys?.has(noThinkKey));
     try {
-      let res = await sendCompletion(Boolean(noThinkParams));
-      if (!res.ok && noThinkParams && (res.status === 400 || res.status === 422)) {
+      let res = await sendCompletion(shouldTryNoThink);
+      if (!res.ok && shouldTryNoThink && (res.status === 400 || res.status === 422)) {
         try { await res.body?.cancel?.(); } catch {}
         res = await sendCompletion(false);
+        if (res.ok && this._noThinkRejectedKeys) {
+          if (this._noThinkRejectedKeys.size >= 64) this._noThinkRejectedKeys.clear();
+          this._noThinkRejectedKeys.add(noThinkKey);
+        }
       }
 
       if (!res.ok) {
@@ -3731,84 +3740,25 @@ export class ThoughtTranslatorService {
         return { text: full, engine: 'ai', fallback: false };
       }
 
-      const decoder = new TextDecoder();
-      let buf = '';
-      let acc = '';
+      const sse = createSseDeltaScanner({ maxBytes: MAX_STREAM_BYTES, maxChars: MAX_STREAM_CHARS });
+      const cleanAcc = () => (sse.sawAngleTag ? stripThinkTagsAndQuotes(sse.acc) : sse.acc.trim());
       let lastEmitAt = 0;
-      let totalBytes = 0;
-
-      const processChunk = async (chunk, cancelStream) => {
-        if (abortSignal?.aborted) {
-          try {
-            await cancelStream();
-          } catch {}
-          throw new Error('Translation aborted');
-        }
-        const chunkBytes =
-          typeof chunk === 'string'
-            ? Buffer.byteLength(chunk, 'utf8')
-            : chunk?.byteLength ?? chunk?.length ?? 0;
-        totalBytes += chunkBytes;
-        if (totalBytes > MAX_STREAM_BYTES) {
-          try {
-            await cancelStream();
-          } catch {}
-          throw new Error(`AI stream exceeded size limit (${MAX_STREAM_BYTES} bytes)`);
-        }
-        buf += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
-        if (buf.length > MAX_STREAM_CHARS) {
-          buf = buf.slice(0, MAX_STREAM_CHARS);
-        }
-        const lines = buf.split(/\r?\n/);
-        buf = lines.pop() || '';
-        let appended = false;
-        let reachedDone = false;
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line || !line.startsWith('data:')) continue;
-          const payload = line.slice(5).trim();
-          if (payload === '[DONE]') {
-            reachedDone = true;
-            break;
-          }
-          try {
-            const obj = JSON.parse(payload);
-            const delta = obj?.choices?.[0]?.delta?.content ?? obj?.choices?.[0]?.message?.content ?? '';
-            if (delta) {
-              acc += delta;
-              appended = true;
-            }
-          } catch {}
-        }
-        if (acc.length >= MAX_STREAM_CHARS) {
-          acc = acc.slice(0, MAX_STREAM_CHARS);
-          try {
-            await cancelStream();
-          } catch {}
-          return true;
-        }
-        if (appended && onPartial) {
-          const now = Date.now();
-          if (now - lastEmitAt >= 48) {
-            const cleaned = stripThinkTagsAndQuotes(acc);
-            if (cleaned) {
-              lastEmitAt = now;
-              onPartial(cleaned);
-            }
+      const processChunkSync = (chunk, isFinalFlush = false) => {
+        if (abortSignal?.aborted) return { stop: true, error: new Error('Translation aborted') };
+        const r = sse.push(chunk, isFinalFlush);
+        if (r.error || r.full) return { stop: true, error: r.error };
+        if (r.appended && onPartial && !isFinalFlush && Date.now() - lastEmitAt >= 56) {
+          const cleaned = cleanAcc();
+          if (cleaned) {
+            lastEmitAt = Date.now();
+            onPartial(cleaned);
           }
         }
-        if (reachedDone) {
-          try {
-            await cancelStream();
-          } catch {}
-          return true;
-        }
-        return false;
+        return { stop: r.done, error: null };
       };
 
       if (typeof res.body.getReader === 'function') {
         const reader = res.body.getReader();
-        const cancelReader = () => reader.cancel();
         const onStreamAbort = () => {
           try {
             void reader.cancel().catch(() => {});
@@ -3829,10 +3779,18 @@ export class ThoughtTranslatorService {
             const { done, value } = await reader.read();
             if (done) {
               if (abortSignal?.aborted) throw new Error('Translation aborted');
+              const flushRes = processChunkSync(null, true);
+              if (flushRes.error) throw flushRes.error;
               break;
             }
-            const shouldStop = await processChunk(value, cancelReader);
-            if (shouldStop) break;
+            const stepRes = processChunkSync(value, false);
+            if (stepRes.stop) {
+              try {
+                await reader.cancel();
+              } catch {}
+              if (stepRes.error) throw stepRes.error;
+              break;
+            }
           }
         } finally {
           if (abortSignal && typeof abortSignal.removeEventListener === 'function') {
@@ -3845,14 +3803,25 @@ export class ThoughtTranslatorService {
           } catch {}
         }
       } else {
-        const cancelBody = () => res.body.cancel?.();
+        let stopped = false;
         for await (const chunk of res.body) {
-          const shouldStop = await processChunk(chunk, cancelBody);
-          if (shouldStop) break;
+          const stepRes = processChunkSync(chunk, false);
+          if (stepRes.stop) {
+            stopped = true;
+            try {
+              await res.body.cancel?.();
+            } catch {}
+            if (stepRes.error) throw stepRes.error;
+            break;
+          }
+        }
+        if (!stopped) {
+          const flushRes = processChunkSync(null, true);
+          if (flushRes.error) throw flushRes.error;
         }
       }
 
-      const finalClean = stripThinkTagsAndQuotes(acc).slice(0, MAX_STREAM_CHARS);
+      const finalClean = cleanAcc().slice(0, MAX_STREAM_CHARS);
       if (finalClean && onPartial) onPartial(finalClean);
       return { text: finalClean, engine: 'ai', fallback: false };
     } finally {

@@ -4115,3 +4115,182 @@ test('Issue #99: thought-client + tool-step-verbs translates v2.35 tool steps be
   assert.equal(groupTitle.textContent, 'Running inspect Antigravity browser documentation section');
   assert.equal(sumSearched.textContent, 'marketplace for "computer use"');
 });
+
+test('SSE sync scanner: lossless split-UTF8, EOF trailing line, async-iterable body, <think> strip, plain-string prompt & 9 locales', async () => {
+  const { createSseDeltaScanner } = await import('../vendor/thought-translator/sse-delta-scanner.mjs');
+  const tmpDir = mkRealTempDir('prism-sse-sync-');
+  try {
+    // Direct scanner unit check: EOF [DONE] without trailing newline
+    const scanner = createSseDeltaScanner({ maxBytes: 1024 * 1024, maxChars: 64000 });
+    assert.equal(scanner.push('data: {"choices":[{"delta":{"content":"Hi"}}]}\n', false).appended, true);
+    assert.equal(scanner.push('data: [DONE]', false).done, false);
+    const eofDone = scanner.push(null, true);
+    assert.equal(eofDone.done, true);
+    assert.equal(scanner.acc, 'Hi');
+
+    const encoder = new TextEncoder();
+    const seenPayloads = [];
+    let bodyMode = 'reader';
+
+    const svc = new ThoughtTranslatorService({
+      configDir: tmpDir,
+      fetchImpl: async (_url, init) => {
+        const parsed = JSON.parse(String(init?.body || '{}'));
+        seenPayloads.push(parsed);
+
+        if (bodyMode === 'reader') {
+          // Multi-byte UTF-8 (ü, 中, 文) split mid-codepoint AND final data: line without trailing \n or [DONE]
+          const fullBytes = encoder.encode(
+            'data: {"choices":[{"delta":{"content":"Merhaba "}}]}\n\n' +
+              'data: {"choices":[{"delta":{"content":"Türkçe "}}]}\n\n' +
+              'data: {"choices":[{"delta":{"content":"中文测试"}}]}'
+          );
+          const idxTurk = fullBytes.indexOf(0xc3); // first byte of 'ü' (C3 BC)
+          const idxHan = fullBytes.indexOf(0xe4); // first byte of '中' (E4 B8 AD)
+          const chunks = [
+            fullBytes.subarray(0, idxTurk + 1),
+            fullBytes.subarray(idxTurk + 1, idxHan + 2),
+            fullBytes.subarray(idxHan + 2),
+          ];
+          let i = 0;
+          const stream = new ReadableStream({
+            pull(controller) {
+              if (i < chunks.length) controller.enqueue(chunks[i++]);
+              else controller.close();
+            },
+          });
+          return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+        }
+
+        // Non-getReader async-iterable body with <think>...</think> + trailing data: line at EOF
+        const asyncBytes = encoder.encode(
+          'data: {"choices":[{"delta":{"content":"<think>internal "}}]}\n\n' +
+            'data: {"choices":[{"delta":{"content":"reasoning</think>"}}]}\n\n' +
+            'data: {"choices":[{"delta":{"content":"Final Türkçe 结论"}}]}'
+        );
+        const splitPos = asyncBytes.indexOf(0xe7); // split inside '结' (E7 BB 93)
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'text/event-stream' : '') },
+          body: {
+            async *[Symbol.asyncIterator]() {
+              yield asyncBytes.subarray(0, splitPos + 1);
+              yield asyncBytes.subarray(splitPos + 1);
+            },
+          },
+        };
+      },
+    });
+    svc.saveConfig({
+      activeProfileId: 'sse',
+      proxyMode: 'direct',
+      profiles: [{ id: 'sse', name: 'SSE', apiKey: 'sk-test-sse', baseUrl: 'https://api.example.com/v1', model: 'gpt-4o-mini' }],
+    });
+
+    const partials = [];
+    const r1 = await svc.translateAiStream('Raw thought', (p) => partials.push(p), null, 'tr');
+    assert.equal(r1.text, 'Merhaba Türkçe 中文测试');
+    assert.ok(partials.length >= 1 && partials[partials.length - 1] === 'Merhaba Türkçe 中文测试');
+
+    assert.equal(typeof seenPayloads[0].messages[0].content, 'string', 'System prompt must remain a plain string');
+    assert.equal(Array.isArray(seenPayloads[0].messages[0].content), false);
+
+    bodyMode = 'async-iterable';
+    const r2 = await svc.translateAiStream('Thought with think tag', null, null, 'zh-CN');
+    assert.equal(r2.text, 'Final Türkçe 结论');
+
+    const store = svc.loadStore();
+    for (const loc of ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr']) {
+      assert.ok(SYSTEM_PROMPTS_BY_LANG[loc]?.technical?.length > 40, `Missing technical prompt for ${loc}`);
+      assert.ok(SYSTEM_PROMPTS_BY_LANG[loc]?.concise?.length > 40, `Missing concise prompt for ${loc}`);
+      const sys = svc._resolveSystemPrompt(store, loc);
+      const boundary = svc._buildBoundaryNote(loc);
+      assert.equal(typeof sys, 'string');
+      assert.equal(typeof boundary, 'string');
+      assert.ok(sys.length > 40 && boundary.length > 40, `Empty prompt/boundary for ${loc}`);
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('_noThinkRejectedKeys caches confirmed 400 rejection and prevents pollution when retry also fails', async () => {
+  const tmpDir = mkRealTempDir('prism-nothink-cache-');
+  try {
+    let calls = [];
+    let failBoth = false;
+    const encoder = new TextEncoder();
+
+    const svc = new ThoughtTranslatorService({
+      configDir: tmpDir,
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body || '{}'));
+        calls.push(body);
+        if (failBoth || body.enable_thinking === false) {
+          return new Response(JSON.stringify({ error: 'unsupported param' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        const stream = new ReadableStream({
+          start(c) {
+            c.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n'));
+            c.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      },
+    });
+
+    svc.saveConfig({
+      activeProfileId: 'p1',
+      proxyMode: 'direct',
+      profiles: [
+        { id: 'p1', name: 'P1', apiKey: 'sk-1', baseUrl: 'https://api1.example.com/v1', model: 'qwen3-32b' },
+        { id: 'p2', name: 'P2', apiKey: 'sk-2', baseUrl: 'https://api2.example.com/v1', model: 'qwen3-14b' },
+      ],
+    });
+
+    const res1 = await svc.translateAiStream('First request');
+    assert.equal(res1.text, 'OK');
+    assert.equal(calls.length, 2, 'Initial call sends noThink then retries without it');
+    assert.equal(calls[0].enable_thinking, false);
+    assert.equal(calls[1].enable_thinking, undefined);
+    assert.equal(svc._noThinkRejectedKeys.has('https://api1.example.com/v1|qwen3-32b'), true);
+
+    calls = [];
+    const res2 = await svc.translateAiStream('Second request');
+    assert.equal(res2.text, 'OK');
+    assert.equal(calls.length, 1, 'Subsequent call skips noThink via _noThinkRejectedKeys cache');
+    assert.equal(calls[0].enable_thinking, undefined);
+
+    // Unrelated 400 (both initial and retry fail): must NOT pollute _noThinkRejectedKeys
+    svc.saveConfig({ activeProfileId: 'p2' });
+    failBoth = true;
+    calls = [];
+    await assert.rejects(() => svc.translateAiStream('Third request'), /AI HTTP 400/);
+    assert.equal(calls.length, 2);
+    assert.equal(svc._noThinkRejectedKeys.has('https://api2.example.com/v1|qwen3-14b'), false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('repo-sync deploys vendor/thought-translator/sse-delta-scanner.mjs', async () => {
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const { copyUpdatedRuntimeFromRepo } = req(path.join(ROOT_DIR, 'src', 'platform', 'repo-sync.cjs'));
+  const destDir = mkRealTempDir('prism-sse-sync-deploy-');
+  try {
+    const copied = copyUpdatedRuntimeFromRepo(ROOT_DIR, destDir);
+    assert.ok(copied > 0);
+    assert.equal(
+      fs.existsSync(path.join(destDir, 'vendor', 'thought-translator', 'sse-delta-scanner.mjs')),
+      true,
+      'repo-sync must recursively deploy sse-delta-scanner.mjs'
+    );
+  } finally {
+    fs.rmSync(destDir, { recursive: true, force: true });
+  }
+});

@@ -264,6 +264,14 @@
       }
     }
 
+    const hasNonWhitespace = (s, i, e) => {
+      for (; i < e; i++) {
+        const c = s.charCodeAt(i);
+        if (c > 32 && c !== 160 && c !== 8203 && c !== 65279) return true;
+      }
+      return false;
+    };
+
     const enqueueFadeRange = (tn, sOff, eOff, now) => {
       if (!tn || eOff <= sOff) return false;
       const d = docOf();
@@ -271,7 +279,7 @@
       const buckets = getHlBuckets();
       if (!buckets) return false;
       const raw = tn.data ?? tn.nodeValue ?? '';
-      if (eOff > raw.length || !/\S/.test(raw.slice(sOff, eOff))) return false;
+      if (eOff > raw.length || !hasNonWhitespace(raw, sOff, eOff)) return false;
 
       const prev = fadeItems.length > 0 ? fadeItems[fadeItems.length - 1] : null;
       if (prev && prev.n === tn && prev.e === sOff && now - prev.t <= 64) {
@@ -1229,22 +1237,26 @@ states.push([r, run]);
       if (isDestroyed() || streamMutating || !canStreamMotion()) return;
       const now = nowOf();
       let newBlocks = 0;
+      // Last-parent memo: a token burst mutates the same parent N times in a row; resolve its ancestors once.
+      let lastBaseEl = null, baseExcluded, baseThoughtBody, baseProseRoot, baseInAnim;
 
       for (const m of mutations) {
         if (!m || isThoughtMutationRecord(m)) continue;
         const target = m.target;
         if (!target || isThoughtIsolatedNode(target)) continue;
         const baseEl = isEl(target) ? target : peOf(target);
-        if (
-          !baseEl ||
-          getBus()?.isSkipped?.(baseEl) ||
-          closestOf(
-            baseEl,
-            '.ag-prism-thought-overlay, .ag-cs-smooth-caret, .ag-cs-crab, .ag-cs-conv-aura-host, [data-testid="agent-input-box"], script, style'
-          )
-        ) {
-          continue;
+        if (!baseEl || getBus()?.isSkipped?.(baseEl)) continue;
+        if (baseEl !== lastBaseEl) {
+          lastBaseEl = baseEl;
+          baseExcluded = closestOf(baseEl, '.ag-prism-thought-overlay, .ag-cs-smooth-caret, .ag-cs-crab, .ag-cs-conv-aura-host, [data-testid="agent-input-box"], script, style');
+          if (!baseExcluded) {
+            baseThoughtBody = findStreamingThoughtBody(baseEl);
+            baseProseRoot = baseThoughtBody ? null : closestOf(baseEl, PROSE_SEL);
+            if (baseThoughtBody && isManagedThoughtPanel(baseThoughtBody)) baseThoughtBody = null;
+            baseInAnim = (baseThoughtBody || baseProseRoot) && closestOf(baseEl, '.ag-cs-stream-chunk, .ag-cs-thought-chunk');
+          }
         }
+        if (baseExcluded) continue;
 
         if (m.type === 'characterData') {
           if (target.nodeType !== 3) continue;
@@ -1252,27 +1264,19 @@ states.push([r, run]);
           const pLen = textLenMap.get(target);
           textLenMap.set(target, nLen);
           if (pLen !== undefined ? nLen <= pLen : nLen <= 0 || nLen > 28) continue;
-          const tb = findStreamingThoughtBody(baseEl);
-          if (tb) {
-            if (isManagedThoughtPanel(tb)) continue;
-          } else if (!closestOf(baseEl, PROSE_SEL)) continue;
-          if (pLen !== undefined) enqueueFadeRange(target, pLen, nLen, now);
-          else enqueueFadeRange(target, 0, nLen, now);
+          if (!baseThoughtBody && !baseProseRoot) continue;
+          enqueueFadeRange(target, pLen ?? 0, nLen, now);
           continue;
         }
 
         if (m.type !== 'childList' || !m.addedNodes?.length) continue;
 
-        const inAnimBlock = Boolean(closestOf(baseEl, '.ag-cs-stream-chunk, .ag-cs-thought-chunk'));
-        const thoughtBody = findStreamingThoughtBody(target);
-        if (thoughtBody) {
-          if (isManagedThoughtPanel(thoughtBody)) continue;
+        if (baseThoughtBody) {
           for (const added of m.addedNodes) {
             if (isThoughtIsolatedNode(added)) continue;
-            if (added.nodeType === 3) {
-              fadeLeafTexts(added, now, 1);
-            } else if (isEl(added)) {
-              if (inAnimBlock || INLINE_TAGS.has(tagOf(added))) fadeLeafTexts(added, now, 4);
+            if (added.nodeType === 3) fadeLeafTexts(added, now, 1);
+            else if (isEl(added)) {
+              if (baseInAnim || INLINE_TAGS.has(tagOf(added))) fadeLeafTexts(added, now, 4);
               else if (!seenBlocks.has(added) && newBlocks < 4) {
                 seenBlocks.add(added);
                 newBlocks++;
@@ -1280,21 +1284,20 @@ states.push([r, run]);
                 markStreamClass(added, 'ag-cs-thought-chunk', 290);
               }
             }
-          };
+          }
           continue;
         }
 
-        const proseRoot = closestOf(baseEl, PROSE_SEL);
-        if (!proseRoot) continue;
+        if (!baseProseRoot) continue;
 
         const markCode = (el, lim) => { scannedNodes.add(el); lastCodeAt = now; snapTextLens(el, lim); markStreamClass(el, 'ag-cs-code-scan', 240); };
-        const codeCtx = insideCodeOrTable(target, proseRoot);
+        const codeCtx = insideCodeOrTable(target, baseProseRoot);
         if (codeCtx) {
           if (TABLE_TAGS.has(tagOf(codeCtx))) {
             for (const added of m.addedNodes) {
               if (added.nodeType === 3) { fadeLeafTexts(added, now, 1); continue; }
               if (!isEl(added)) continue;
-              const tr = tagOf(added) === 'TR' ? added : findRowAnc(added, proseRoot) || findRowAnc(codeCtx, proseRoot);
+              const tr = tagOf(added) === 'TR' ? added : findRowAnc(added, baseProseRoot) || findRowAnc(codeCtx, baseProseRoot);
               if (tr && !scannedNodes.has(tr) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(tr, 12);
               else fadeLeafTexts(added, now, 3);
             }
@@ -1305,7 +1308,7 @@ states.push([r, run]);
             if (!isEl(added)) continue;
             if (tagOf(added) === 'PRE' || clHas(added, 'code-block')) { if (!scannedNodes.has(added)) markCode(added, 16); continue; }
             const lineEl = clHas(added, 'code-line') ? added : closestOf(added, '.code-line') || added;
-            if (lineEl && lineEl !== proseRoot && tagOf(lineEl) !== 'PRE' && !clHas(lineEl, 'code-block') && !scannedNodes.has(lineEl) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(lineEl, 8);
+            if (lineEl && lineEl !== baseProseRoot && tagOf(lineEl) !== 'PRE' && !clHas(lineEl, 'code-block') && !scannedNodes.has(lineEl) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(lineEl, 8);
             else fadeLeafTexts(added, now, 3);
           }
           continue;
@@ -1316,7 +1319,7 @@ states.push([r, run]);
           const tag = tagOf(added);
           const isCodeOrTbl = tag === 'PRE' || tag === 'TABLE' || clHas(added, 'code-block') || clHas(added, 'md-table-host') || clHas(added, 'md-table-frame') || Boolean(qs(added, 'pre, table, .code-block, .md-table-frame'));
           if (isCodeOrTbl) { if (!scannedNodes.has(added) && now - lastCodeAt >= STREAM_BATCH_MS) markCode(added, 16); }
-          else if (inAnimBlock || (INLINE_TAGS.has(tag) && baseEl !== proseRoot)) fadeLeafTexts(added, now, 4);
+          else if (baseInAnim || (INLINE_TAGS.has(tag) && baseEl !== baseProseRoot)) fadeLeafTexts(added, now, 4);
           else if (!seenBlocks.has(added) && newBlocks < 4) { seenBlocks.add(added); newBlocks++; snapTextLens(added, 12); markStreamClass(added, 'ag-cs-stream-chunk', 310); }
           else fadeLeafTexts(added, now, 4);
         }

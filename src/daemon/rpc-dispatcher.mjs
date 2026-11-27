@@ -279,7 +279,7 @@ async function handleThoughtBinding(rpc, entry, payload, executionContextId) {
     } else if (action === 'diagnose') {
       result = typeof svc.diagnose === 'function' ? await svc.diagnose(input) : { ok: false, error: 'diagnose_not_supported' };
     } else if (action === 'translate-stream') {
-      const THOUGHT_STREAM_FRAME_MS = 72;
+      const THOUGHT_STREAM_FRAME_MS = 56;
       let lastSent = '';
       let pendingPartial = null;
       let sendingPartial = false;

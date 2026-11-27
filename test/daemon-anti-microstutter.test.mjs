@@ -852,7 +852,7 @@ test('6. inline-diff-service caches LRU up to 128, deduplicates repo git status 
   }
 });
 
-test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer without dropping logs & 72ms thought-stream frame coalescing', async () => {
+test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer without dropping logs & 56ms thought-stream frame coalescing', async () => {
   // 7a. telemetry-cache avoids JSON.stringify while detecting deep nested changes accurately
   const tmpDir = makeTempDir('prism-microstutter-misc-');
   const origStringify = JSON.stringify;
@@ -921,7 +921,7 @@ test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer 
     assert.ok(fs.readFileSync(logFile, 'utf8').includes('fatal crash line'));
     fs.appendFileSync = origAppendSync;
 
-    // 7c. RpcDispatcher translate-stream 72ms frame coalescing
+    // 7c. RpcDispatcher translate-stream 56ms frame coalescing
     const chunkExprs = [];
     const entry = {
       mainFrameId: 'F1',
@@ -943,9 +943,9 @@ test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer 
               const tokens = ['A', 'AB', 'ABC', 'ABCD', 'ABCDE', 'ABCDEF', 'ABCDEFG', 'ABCDEFGH'];
               for (const tok of tokens) {
                 onPartial(tok);
-                await new Promise((r) => setTimeout(r, 6));
+                await new Promise((r) => setImmediate(r));
               }
-              await new Promise((r) => setTimeout(r, 90));
+              await new Promise((r) => setTimeout(r, 130));
               onPartial('ABCDEFGHIJ');
               await new Promise((r) => setTimeout(r, 20));
               return { ok: true, translated: 'ABCDEFGHIJ' };
@@ -960,7 +960,7 @@ test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer 
       executionContextId: 1,
     });
     const onChunkExprs = chunkExprs.filter((e) => e.includes('__agPrismThoughtOnChunk'));
-    assert.ok(onChunkExprs.length >= 2 && onChunkExprs.length <= 4, `Expected 72ms coalescing to compress 9 partials into 2..4 CDP frames, got ${onChunkExprs.length}`);
+    assert.ok(onChunkExprs.length >= 2 && onChunkExprs.length <= 4, `Expected 56ms coalescing to compress 9 partials into 2..4 CDP frames, got ${onChunkExprs.length}`);
     // Reconstruct streamed text from delta frames
     let acc = '';
     for (const expr of onChunkExprs) {
