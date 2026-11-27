@@ -1663,42 +1663,9 @@
     };
   }
 
-  function isDialogOrPortalWrappingDialog(el) {
-    if (!el || el.nodeType !== 1) return false;
-    var role = getAttr(el, 'role');
-    if (role === 'dialog') return true;
-    if (hasAttr(el, 'data-floating-ui-portal') && typeof el.querySelector === 'function') {
-      if (el.querySelector('[role="dialog"]')) return true;
-    }
-    return false;
-  }
-
-  function isFloatingElement(el, doc) {
-    if (!el || el.nodeType !== 1) return false;
-    if (doc && (el === doc.body || el === doc.documentElement)) return false;
-    if (el.id === 'workbench' || el.id === 'root' || el.id === 'app') return false;
-    var cls = typeof el.className === 'string' ? el.className : '';
-    if (cls && cls.indexOf('monaco-workbench') !== -1) return false;
-
-    var role = getAttr(el, 'role') || '';
-    if (role === 'dialog') return false;
-    if (role === 'tooltip' || role === 'menu' || role === 'listbox') return true;
-    if (hasAttr(el, 'data-floating-ui-portal')) {
-      return !isDialogOrPortalWrappingDialog(el);
-    }
-    if (hasAttr(el, 'data-radix-popper-content-wrapper')) return true;
-    if (cls) {
-      if (
-        cls.indexOf('popover') !== -1 ||
-        cls.indexOf('tooltip') !== -1 ||
-        cls.indexOf('context-view') !== -1 ||
-        cls.indexOf('monaco-hover') !== -1
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
+function isPortalAttr(e){return hasAttr(e,'data-floating-ui-portal')||hasAttr(e,'data-base-ui-portal');}
+function isDialogOrPortalWrappingDialog(e){if(!e||e.nodeType!==1)return false;if(getAttr(e,'role')==='dialog')return true;return Boolean(isPortalAttr(e)&&typeof e.querySelector==='function'&&e.querySelector('[role="dialog"]'));}
+function isFloatingElement(e,d){if(!e||e.nodeType!==1)return false;if(d&&(e===d.body||e===d.documentElement))return false;if(e.id==='workbench'||e.id==='root'||e.id==='app')return false;var c=typeof e.className==='string'?e.className:'';if(c&&c.indexOf('monaco-workbench')!==-1)return false;var r=getAttr(e,'role')||'';if(r==='dialog')return false;if(r==='tooltip'||r==='menu'||r==='listbox')return true;if(isPortalAttr(e))return !isDialogOrPortalWrappingDialog(e);if(hasAttr(e,'data-radix-popper-content-wrapper'))return true;return Boolean(c&&(c.indexOf('popover')!==-1||c.indexOf('tooltip')!==-1||c.indexOf('context-view')!==-1||c.indexOf('monaco-hover')!==-1));}
 
   function isWorkbenchOrRoot(el, doc) {
     if (!el || el.nodeType !== 1) return true;
@@ -2396,6 +2363,7 @@
         if (hoverHandler) {
           doc.removeEventListener('pointerenter', hoverHandler, { capture: true });
           doc.removeEventListener('contextmenu', hoverHandler, { capture: true });
+          doc.removeEventListener('click', hoverHandler, { capture: true });
         }
         if (visibilityHandler) doc.removeEventListener('visibilitychange', visibilityHandler);
       }
@@ -3187,79 +3155,47 @@
       }
     }
 
-    // 在 off（强制还原原生英文）模式下，定点还原侧栏固定 UI 壳子（置顶会话/项目列表/收起/查看全部），同时绝对跳过会话标题行与项目名
-    function scanOffSidebarChrome() {
-      if (state.mode !== 'off' || !state.active || state.destroyed || !doc || typeof doc.querySelectorAll !== 'function') return;
-      var safeWalkSubtree = function (rootEl) {
-        if (!rootEl || rootEl.nodeType !== 1 || rootEl.isConnected === false) return;
-        if (isPrismOwnedElement(rootEl) || isExternalOwnedElement(rootEl) || exemptElements.has(rootEl)) return;
-        var tid = getAttr(rootEl, 'data-testid');
-        if (tid === 'conversation-row-sidebar' || tid === 'project-header' || tid === 'workspace-switcher') return;
-        translateAttributes(rootEl);
-        var ch = rootEl.firstChild;
-        while (ch) {
-          if (!state.active || state.destroyed) return;
-          if (ch.nodeType === 3) {
-            translateTextNode(ch, true);
-          } else if (ch.nodeType === 1) {
-            safeWalkSubtree(ch);
-          }
-          ch = ch.nextSibling;
-        }
-      };
-      try {
-        var headers = doc.querySelectorAll('[data-testid="pinned-section-header"], [data-testid="section-header"]');
-        for (var i = 0; i < headers.length; i++) safeWalkSubtree(headers[i]);
-      } catch (e) {}
-      try {
-        var listRoots = doc.querySelectorAll('[data-testid="conversation-list-sidebar"]');
-        for (var l = 0; l < listRoots.length; l++) {
-          var btns = listRoots[l] && typeof listRoots[l].querySelectorAll === 'function' ? listRoots[l].querySelectorAll('button') : [];
-          for (var b = 0; b < btns.length; b++) {
-            var btn = btns[b];
-            if (!btn || btn.isConnected === false) continue;
-            var insideUserRow = false;
-            var cur = btn;
-            while (cur && cur !== listRoots[l]) {
-              var cTid = getAttr(cur, 'data-testid');
-              if (cTid === 'conversation-row-sidebar' || cTid === 'project-header' || cTid === 'workspace-switcher') {
-                insideUserRow = true;
-                break;
-              }
-              cur = cur.parentElement;
-            }
-            if (!insideUserRow) safeWalkSubtree(btn);
-          }
-        }
-      } catch (e) {}
-    }
-
-    function safeFullScan() {
-      if (!state.active || state.destroyed || !doc || !doc.documentElement) return;
-      var visitedSet = new WeakSet();
-      disconnectObserver();
-      try {
-        translateElement(doc.documentElement, visitedSet, null, null);
-        if (state.mode === 'off') scanOffSidebarChrome();
-      } catch (e) {}
-      reconnectObserver();
-    }
-
-    function safeBudgetedScan() {
-      if (!state.active || state.destroyed || !doc || !doc.documentElement) return;
-      if (!hasRafSupport) {
-        safeFullScan();
-        return;
-      }
-      var visitedSet = new WeakSet();
-      var budget = createScanBudget(INITIAL_SYNC_MAX_NODES, INITIAL_SYNC_BUDGET_MS);
-      disconnectObserver();
-      try {
-        translateElement(doc.documentElement, visitedSet, null, budget);
-if (state.mode === 'off') scanOffSidebarChrome();
-} catch (e) {}
+var SB_LIST='[data-testid="conversation-list-sidebar"]',SB_ROW='[data-testid="conversation-row-sidebar"]',SB_CTL='button,[role="button"],h1,h2,h3';
+var SB_HDR='[data-testid="pinned-section-header"],[data-testid="section-header"],[data-testid="coordinator-section-header"]';
+var SB_USER=SB_ROW+',[data-testid="project-header"],[data-testid="workspace-switcher"]';
+function isSbUserTid(t){return t==='conversation-row-sidebar'||t==='project-header'||t==='workspace-switcher';}
+function scanSidebarChrome(scope){
+if(!state.active||state.destroyed||!doc||typeof doc.querySelectorAll!=='function')return;
+var r=scope&&scope.nodeType===1?scope:doc;
+var walk=function(el){
+if(!el||el.nodeType!==1||el.isConnected===false||exemptElements.has(el))return;
+if(IGNORED_TAGS[String(el.tagName||'').toUpperCase()]||isPrismOwnedSelf(el)||isExternalPluginOwnedSelf(el))return;
+if(isSbUserTid(getAttr(el,'data-testid'))||hasAttr(el,'data-resource-name')||hasAttr(el,'data-uri')||hasAttr(el,'data-file-path'))return;
+translateAttributes(el);
+for(var c=el.firstChild;c;c=c.nextSibling){if(!state.active||state.destroyed)return;if(c.nodeType===3)translateTextNode(c,true);else if(c.nodeType===1)walk(c);}
+};
+var scanList=function(lr){
+if(!lr||typeof lr.querySelectorAll!=='function')return;
+for(var items=lr.querySelectorAll(SB_CTL),b=0;b<items.length;b++){
+var it=items[b],u=false;if(!it||it.isConnected===false)continue;
+for(var cur=it;cur&&cur!==lr;cur=cur.parentElement){if(isSbUserTid(getAttr(cur,'data-testid'))){u=true;break;}}
+if(!u)walk(it);
+}
+};
+try{var rt=r!==doc?getAttr(r,'data-testid'):'';if(rt==='pinned-section-header'||rt==='section-header'||rt==='coordinator-section-header')walk(r);for(var h=r.querySelectorAll(SB_HDR),i=0;i<h.length;i++)walk(h[i]);}catch(e){}
+try{
+if(r!==doc){if(rt==='conversation-list-sidebar'||(typeof r.closest==='function'&&r.closest(SB_LIST)&&!r.closest(SB_USER))){var rg=String(r.tagName||'').toUpperCase();if(rg==='BUTTON'||rg==='H1'||rg==='H2'||rg==='H3'||getAttr(r,'role')==='button')walk(r);scanList(r);}}
+else{for(var lrs=doc.querySelectorAll(SB_LIST),l=0;l<lrs.length;l++)scanList(lrs[l]);}
+}catch(e){}
+}
+function safeFullScan(){
+if(!state.active||state.destroyed||!doc||!doc.documentElement)return;
+var v=new WeakSet();disconnectObserver();
+try{translateElement(doc.documentElement,v,null,null);scanSidebarChrome();}catch(e){}
 reconnectObserver();
-if (state.active && !state.destroyed && pendingNodes.length > 0) scheduleFlush();
+}
+function safeBudgetedScan(){
+if(!state.active||state.destroyed||!doc||!doc.documentElement)return;
+if(!hasRafSupport){safeFullScan();return;}
+var v=new WeakSet(),b=createScanBudget(INITIAL_SYNC_MAX_NODES,INITIAL_SYNC_BUDGET_MS);disconnectObserver();
+try{translateElement(doc.documentElement,v,null,b);scanSidebarChrome();}catch(e){}
+reconnectObserver();
+if(state.active&&!state.destroyed&&pendingNodes.length>0)scheduleFlush();
 }
 function flushPendingNodes() {
 rafId = null;
@@ -3381,12 +3317,12 @@ return true;
 return false;
 }
 var FLOATING_CONTAINER_SEL =
-'[role="tooltip"], [role="menu"], [role="listbox"], [data-floating-ui-portal], [data-radix-popper-content-wrapper], .popover, .tooltip, .context-view, .monaco-hover';
+'[role="tooltip"], [role="menu"], [role="listbox"], [data-floating-ui-portal], [data-base-ui-portal], [data-radix-popper-content-wrapper], .popover, .tooltip, .context-view, .monaco-hover';
 function hasFloatingShellHint(el) {
 if (!el || el.nodeType !== 1) return false;
 if (isDialogOrPortalWrappingDialog(el) || isDirectIgnoredSelf(el)) return false;
 if (isFloatingElement(el, doc)) return true;
-if (hasAttr(el, 'data-radix-portal') || hasAttr(el, 'data-floating-ui-focus-guard')) return true;
+if (hasAttr(el, 'data-radix-portal') || hasAttr(el, 'data-floating-ui-focus-guard') || hasAttr(el, 'data-base-ui-focus-guard')) return true;
 var idStr = typeof el.id === 'string' ? el.id.toLowerCase() : '';
 return Boolean(idStr && (idStr.indexOf('portal') !== -1 || idStr.indexOf('tooltip') !== -1 || idStr.indexOf('popover') !== -1));
 }
@@ -3652,89 +3588,64 @@ if (!hibernating) enterHibernation(true);
 else missedWhilePaused = true;
 if (!inLayer2b) return;
 }
-var batchBoundaryCache = new WeakMap();
-function getCachedBoundary(el) {
-var hit = batchBoundaryCache.get(el);
-if (hit !== undefined) return hit;
-var res = measureSafeBoundaryDepth(el);
-batchBoundaryCache.set(el, res);
-return res;
+var batchBoundaryCache=new WeakMap(),immFloats=[],sbNodes=[];
+function getCachedBoundary(el){var h=batchBoundaryCache.get(el);if(h!==undefined)return h;var r=measureSafeBoundaryDepth(el);batchBoundaryCache.set(el,r);return r;}
+function isImmFloat(el,p){if(isDialogOrPortalWrappingDialog(el))return false;if(isFloatingElement(el,doc)||hasAttr(el,'data-radix-portal'))return true;return Boolean((p===doc.body||hasFloatingShellHint(el))&&typeof el.querySelector==='function'&&el.querySelector('[role="menu"],[role="listbox"]'));}
+for(var i=0;i<mutations.length;i++){
+if(!state.active||state.destroyed)return;
+var m=mutations[i];
+if(m.type==='childList'){
+var tEl=m.target,added=m.addedNodes;
+if(tEl&&tEl.nodeType===1){
+if(tEl.isConnected===false||exemptElements.has(tEl))continue;
+if(isHoverCardPortalOrSelf(tEl)){if(!pausedNow&&added&&added.length>0)scheduleHoverCardNode(tEl);continue;}
+var tb=getCachedBoundary(tEl);
+if(tb.blocked&&!tb.canDescendConv){
+if(!pausedNow&&added&&added.length>0&&typeof tEl.closest==='function'&&tEl.closest(SB_LIST)&&!tEl.closest(SB_USER)){
+for(var sj=0;sj<added.length;sj++){var sn=added[sj];if(sn&&sn.nodeType===1&&sn.isConnected!==false&&!isSbUserTid(getAttr(sn,'data-testid')))sbNodes.push(sn);}
 }
-for (var i = 0; i < mutations.length; i++) {
-if (!state.active || state.destroyed) return;
-var mutation = mutations[i];
-if (mutation.type === 'childList') {
-var targetEl = mutation.target;
-var added = mutation.addedNodes;
-if (targetEl && targetEl.nodeType === 1) {
-if (targetEl.isConnected === false || exemptElements.has(targetEl)) continue;
-var targetIsHoverCard = isHoverCardPortalOrSelf(targetEl);
-if (targetIsHoverCard) {
-if (!pausedNow && added && added.length > 0) scheduleHoverCardNode(targetEl);
 continue;
 }
-var targetBound = getCachedBoundary(targetEl);
-if (targetBound.blocked && !targetBound.canDescendConv) continue;
-if (!pausedNow && !targetBound.blocked && checkChildListConflict(targetEl)) {
-continue;
+if(!pausedNow&&!tb.blocked&&checkChildListConflict(tEl))continue;
+if(!state.active||state.destroyed)return;
+if(!added||added.length===0)continue;
+for(var j=0;j<added.length;j++){
+var n=added[j];if(!n||n.isConnected===false)continue;
+if(n.nodeType===3){if(tb.blocked||exemptNodes.has(n))continue;}
+else if(n.nodeType===1){
+if(exemptElements.has(n)||isDirectIgnoredSelf(n)||isFocusGuard(n))continue;
+if(isHoverCardPortalOrSelf(n)){if(!pausedNow)scheduleHoverCardNode(n);continue;}
+if(tb.canDescendConv&&!isInteractiveChatChromeSelf(n,true)&&!hasElementChild(n))continue;
+if(!pausedNow&&!tb.blocked&&isImmFloat(n,tEl)){if(inLayer2b&&inspectExternalDelayedMutation(n))return;immFloats.push(n);continue;}
+}else continue;
+if(inLayer2b&&inspectExternalDelayedMutation(n))return;
+if(!pausedNow)enqueueNode(n);
 }
-if (!state.active || state.destroyed) return;
-if (!added || added.length === 0) continue;
-for (var j = 0; j < added.length; j++) {
-var addedNode = added[j];
-if (!addedNode || addedNode.isConnected === false) continue;
-if (addedNode.nodeType === 3) {
-if (targetBound.blocked || exemptNodes.has(addedNode)) continue;
-} else if (addedNode.nodeType === 1) {
-if (exemptElements.has(addedNode) || isDirectIgnoredSelf(addedNode) || isFocusGuard(addedNode)) continue;
-if (isHoverCardPortalOrSelf(addedNode)) {
-if (!pausedNow) scheduleHoverCardNode(addedNode);
-continue;
+}else if(added&&added.length>0){
+for(var k=0;k<added.length;k++){var ra=added[k];if(!ra||ra.isConnected===false)continue;if(inLayer2b&&inspectExternalDelayedMutation(ra))return;if(!pausedNow)enqueueNode(ra);}
 }
-if (
-targetBound.canDescendConv &&
-!isInteractiveChatChromeSelf(addedNode, true) &&
-!hasElementChild(addedNode)
-) {
-continue;
-}
-} else {
-continue;
-}
-if (inLayer2b && inspectExternalDelayedMutation(addedNode)) return;
-if (!pausedNow) enqueueNode(addedNode);
-}
-} else if (added && added.length > 0) {
-for (var k = 0; k < added.length; k++) {
-var rootAdded = added[k];
-if (!rootAdded || rootAdded.isConnected === false) continue;
-if (inLayer2b && inspectExternalDelayedMutation(rootAdded)) return;
-if (!pausedNow) enqueueNode(rootAdded);
+}else if(m.type==='characterData'&&m.target){
+var t=m.target;if(t.isConnected===false||exemptNodes.has(t))continue;
+var p=t.parentElement||t.parentNode;
+if(!p||p.nodeType!==1||p.isConnected===false||exemptElements.has(p))continue;
+if(isHoverCardPortalOrSelf(p)){if(!pausedNow)scheduleHoverCardNode(p);continue;}
+var snap=textSnapshots.get(t);if(snap&&snap.expected===t.nodeValue)continue;
+if(getCachedBoundary(p).blocked)continue;
+if(inLayer2b&&inspectExternalDelayedMutation(t))return;
+if(pausedNow||checkNodeConflict(t))continue;
+if(!state.active||state.destroyed)return;
+enqueueNode(t);
 }
 }
-} else if (mutation.type === 'characterData' && mutation.target) {
-var target = mutation.target;
-if (target.isConnected === false || exemptNodes.has(target)) continue;
-var parent = target.parentElement || target.parentNode;
-if (!parent || parent.nodeType !== 1 || parent.isConnected === false || exemptElements.has(parent)) {
-continue;
+if(!pausedNow&&(immFloats.length>0||sbNodes.length>0)){
+var immVis=new WeakSet();disconnectObserver();
+try{
+for(var fi=0;fi<immFloats.length;fi++){if(!state.active||state.destroyed)break;translateElement(immFloats[fi],immVis,null,null);}
+for(var si=0;si<sbNodes.length;si++){if(!state.active||state.destroyed)break;scanSidebarChrome(sbNodes[si]);}
+}catch(e){}
+reconnectObserver();
 }
-if (isHoverCardPortalOrSelf(parent)) {
-if (!pausedNow) scheduleHoverCardNode(parent);
-continue;
-}
-var snap = textSnapshots.get(target);
-if (snap && snap.expected === target.nodeValue) continue;
-var parentBound = getCachedBoundary(parent);
-if (parentBound.blocked) continue;
-if (inLayer2b && inspectExternalDelayedMutation(target)) return;
-if (pausedNow) continue;
-if (checkNodeConflict(target)) continue;
-if (!state.active || state.destroyed) return;
-enqueueNode(target);
-}
-}
-if (!pausedNow && pendingNodes.length > 0) scheduleFlush();
+if(!pausedNow&&pendingNodes.length>0)scheduleFlush();
 };
 if (domBusInst && typeof domBusInst.subscribe === 'function') {
 observer = {
@@ -3815,45 +3726,46 @@ layer2bTimers.push(tid);
 })(checkDelays[d]);
 }
 }
-// Hover & ContextMenu targeted floating scan (leading + trailing 120ms throttle)
-hoverHandler = function (e) {
-if (!state.active || state.destroyed) return;
-if (isPaused()) {
-if (!hibernating) enterHibernation();
-return;
+hoverHandler=function(e){
+if(!state.active||state.destroyed)return;
+if(isPaused()){if(!hibernating)enterHibernation();return;}
+if(hibernating)wakeFromHibernation();
+var rt=e&&e.target,target=rt&&rt.nodeType===3?rt.parentElement||rt.parentNode:rt;
+if(!target||target.nodeType!==1||target.isConnected===false)return;
+var now=nowFn(),evType=e&&e.type,isCtx=evType==='contextmenu',isClick=evType==='click',hoverBound=null,cRow=false,cSb=false;
+if(isCtx){pendingFullFloatScan=true;}
+else if(isClick){
+cRow=Boolean(target.closest&&target.closest(SB_ROW));
+cSb=Boolean(cRow||(target.closest&&target.closest(SB_LIST)));
+if(!cSb&&!(target.closest&&target.closest('button,[role="button"],[aria-haspopup],[aria-expanded],[data-state]')))return;
+pendingFullFloatScan=true;
+}else if(evType==='pointerenter'){
+var tg=String(target.tagName||'').toUpperCase();
+if(IGNORED_TAGS[tg]||tg==='PATH'||tg==='CIRCLE'||tg==='RECT'||tg==='LINE'||tg==='POLYLINE'||tg==='POLYGON'||tg==='ELLIPSE'||tg==='G'||tg==='DEFS'||tg==='USE'||tg==='STOP')return;
+if(exemptElements.has(target)||hasAttr(target,'data-ag-owned')||hasAttr(target,'data-ag-no-i18n')||isDialogOrPortalWrappingDialog(target))return;
+if(target.closest?.(SB_USER+','+SB_LIST+',[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup]'))return;
+hoverBound=getHoverBoundary(target,now);if(hoverBound.blocked)return;
+if(isInsideDialog(target)&&!isSmallHoverControl(target))return;
 }
-if (hibernating) wakeFromHibernation();
-var rawTarget = e && e.target;
-var target = rawTarget && rawTarget.nodeType === 3 ? rawTarget.parentElement || rawTarget.parentNode : rawTarget;
-if (!target || target.nodeType !== 1 || target.isConnected === false) return;
-var now = nowFn(), isContextMenu = Boolean(e && e.type === 'contextmenu'), hoverBound = null;
-if (isContextMenu) {
-pendingFullFloatScan = true;
-} else if (e && e.type === 'pointerenter') {
-var tg = String(target.tagName || '').toUpperCase();
-if (IGNORED_TAGS[tg] || tg === 'PATH' || tg === 'CIRCLE' || tg === 'RECT' || tg === 'LINE' || tg === 'POLYLINE' || tg === 'POLYGON' || tg === 'ELLIPSE' || tg === 'G' || tg === 'DEFS' || tg === 'USE' || tg === 'STOP') return;
-if (exemptElements.has(target) || hasAttr(target, 'data-ag-owned') || hasAttr(target, 'data-ag-no-i18n') || isDialogOrPortalWrappingDialog(target)) return;
-if (target.closest?.('[data-testid="conversation-row-sidebar"],[data-testid="project-header"],[data-testid="conversation-list-sidebar"],[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup]')) return;
-hoverBound = getHoverBoundary(target, now);
-if (hoverBound.blocked) return;
-if (isInsideDialog(target) && !isSmallHoverControl(target)) return;
+var elapsed=now-lastHoverTime,ranImm=false;
+if(!isClick&&elapsed>=120){lastHoverTime=now;ranImm=true;runHoverTargetScan(target,hoverBound);}
+if(hoverScanTimer!==null)clearTimeoutFn(hoverScanTimer);
+hoverScanTimer=setTimeoutFn(function(){
+hoverScanTimer=null;lastHoverTime=nowFn();
+if(!isClick&&!ranImm)runHoverTargetScan(target,hoverBound);
+var doFull=pendingFullFloatScan;pendingFullFloatScan=false;
+scanFloatingContainers(doFull,target);
+if(cSb&&state.active&&!state.destroyed&&!isPaused()){disconnectObserver();try{scanSidebarChrome();}catch(err){}reconnectObserver();}
+if(cRow&&state.active&&!state.destroyed&&!isPaused()&&typeof doc.querySelectorAll==='function'){
+for(var cvs=doc.querySelectorAll('[data-testid="conversation-view"]'),ci=0;ci<cvs.length;ci++)enqueueNode(cvs[ci]);
+if(cvs.length>0)scheduleFlush();
 }
-var elapsed = now - lastHoverTime, ranImmediate = false;
-if (elapsed >= 120) { lastHoverTime = now; ranImmediate = true; runHoverTargetScan(target, hoverBound); }
-if (hoverScanTimer !== null) clearTimeoutFn(hoverScanTimer);
-var delay = ranImmediate ? 50 : Math.max(50, 120 - elapsed + 20);
-hoverScanTimer = setTimeoutFn(function () {
-hoverScanTimer = null;
-lastHoverTime = nowFn();
-if (!ranImmediate) runHoverTargetScan(target, hoverBound);
-var doFull = pendingFullFloatScan;
-pendingFullFloatScan = false;
-scanFloatingContainers(doFull, target);
-}, delay);
+},isClick?30:(ranImm?50:Math.max(50,120-elapsed+20)));
 };
-if (typeof doc.addEventListener === 'function') {
-doc.addEventListener('pointerenter', hoverHandler, { capture: true, passive: true });
-doc.addEventListener('contextmenu', hoverHandler, { capture: true, passive: true });
+if(typeof doc.addEventListener==='function'){
+doc.addEventListener('pointerenter',hoverHandler,{capture:true,passive:true});
+doc.addEventListener('contextmenu',hoverHandler,{capture:true,passive:true});
+doc.addEventListener('click',hoverHandler,{capture:true,passive:true});
 visibilityHandler = function () {
 if (!state.active || state.destroyed) return;
 if (isPaused()) {

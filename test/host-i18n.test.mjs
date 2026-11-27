@@ -2891,3 +2891,96 @@ test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collap
   assert.equal(cfCount.textContent, '3 files changed');
   assert.equal(cfReviewSpan.textContent, 'Review');
 });
+
+test('Sidebar chrome (Projects/Conversations/Pinned) translates in on/auto modes, Base UI menus translate synchronously without flash, and left-clicking a conversation row triggers rescan', () => {
+  const env = createTestEnv(1000);
+  const dict = {
+    exact: {
+      Projects: '项目列表',
+      Conversations: '会话列表',
+      Pinned: '已置顶',
+      Collapse: '收起',
+      Rename: '重命名',
+      Delete: '删除',
+      Review: '审查',
+      Save: '保存',
+    },
+    patterns: [],
+  };
+
+  const sidebarList = env.makeEl('div', { attrs: { 'data-testid': 'conversation-list-sidebar' } });
+  const projHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' } });
+  const projBtn = env.makeEl('button', { text: 'Projects' });
+  projHdr.append(projBtn);
+  const convHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' } });
+  const convH2 = env.makeEl('h2', { text: 'Conversations' });
+  convHdr.append(convH2);
+  const pinnedHdr = env.makeEl('div', { attrs: { 'data-testid': 'pinned-section-header' }, text: 'Pinned' });
+  const projNameBtn = env.makeEl('button', { attrs: { 'data-testid': 'project-header' }, text: 'Projects' });
+  const convRow = env.makeEl('button', { attrs: { 'data-testid': 'conversation-row-sidebar' }, text: 'Save' });
+  const collapseBtn = env.makeEl('button', { text: 'Collapse' });
+  sidebarList.append(projHdr, convHdr, pinnedHdr, projNameBtn, convRow, collapseBtn);
+
+  const convView = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const reviewBtn = env.makeEl('button', { text: 'Review' });
+  convView.append(reviewBtn);
+
+  env.doc.body.append(sidebarList, convView);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // 1) Sidebar chrome translates cleanly while user project/conversation rows remain protected
+  assert.equal(projBtn.textContent, '项目列表');
+  assert.equal(convH2.textContent, '会话列表');
+  assert.equal(pinnedHdr.textContent, '已置顶');
+  assert.equal(collapseBtn.textContent, '收起');
+  assert.equal(projNameBtn.textContent, 'Projects', 'User project-header must remain protected');
+  assert.equal(convRow.textContent, 'Save', 'User conversation-row-sidebar title must remain protected');
+
+  // 2) Dynamically mounted Base UI floating menu portal translates synchronously in MO microtask (0-frame flash, no rAF needed)
+  const basePortal = env.makeEl('div', { attrs: { 'data-base-ui-portal': '' } });
+  const menu = env.makeEl('div', { attrs: { role: 'menu' } });
+  const renameItem = env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Rename' });
+  const deleteItem = env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Delete' });
+  menu.append(renameItem, deleteItem);
+  basePortal.append(menu);
+  env.doc.body.append(basePortal);
+  env.flushObservers();
+  // Assert BEFORE advancing timers / rAF — proves synchronous zero-flash translation inside MO callback
+  assert.equal(renameItem.textContent, '重命名');
+  assert.equal(deleteItem.textContent, '删除');
+
+  // 2b) Dynamically appended sidebar section-header translates while new user conversation row stays untouched
+  const dynHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' }, text: 'Conversations' });
+  const dynUserRow = env.makeEl('button', { attrs: { 'data-testid': 'conversation-row-sidebar' }, text: 'Projects' });
+  sidebarList.append(dynHdr, dynUserRow);
+  env.flushObservers();
+  assert.equal(dynHdr.textContent, '会话列表');
+  assert.equal(dynUserRow.textContent, 'Projects');
+
+  // 3) Left-clicking a conversation row rescans conversation-view interactive controls
+  reviewBtn.firstChild._nodeValue = 'Review';
+  env.doc.dispatchEvent({ type: 'click', target: convRow });
+  env.advanceTime(80);
+  assert.equal(reviewBtn.textContent, '审查');
+
+  // 4) Lossless destroy() restores sidebar chrome and floating menu items back to English
+  inst.destroy();
+  assert.equal(projBtn.textContent, 'Projects');
+  assert.equal(convH2.textContent, 'Conversations');
+  assert.equal(pinnedHdr.textContent, 'Pinned');
+  assert.equal(collapseBtn.textContent, 'Collapse');
+  assert.equal(dynHdr.textContent, 'Conversations');
+  assert.equal(renameItem.textContent, 'Rename');
+  assert.equal(deleteItem.textContent, 'Delete');
+});
