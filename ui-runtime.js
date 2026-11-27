@@ -1065,7 +1065,7 @@ const ovs = qa(D, '.agy-overlay');
 if (!ovs?.length) return;
 let touched = false;
 for (const ov of ovs) {
-if (ha(ov, 'data-hover-card-popup') || tidOf(ov) === 'model-selector-panel' || (ga(ov, 'role') !== 'menu' && !clHas(ov, 'max-h-48'))) continue;
+if (ha(ov, 'data-hover-card-popup') || tidOf(ov) === 'model-selector-panel' || ga(ov, 'data-ag-cs-model-overlay') === '1' || (ga(ov, 'role') !== 'menu' && !clHas(ov, 'max-h-48'))) continue;
 if (ga(ov, A_PB) !== '1' || ga(ov, A_PM) !== '1') touched = true;
 setAttrIfChanged(ov, A_PB, '1'); setAttrIfChanged(ov, A_PM, '1');
 }
@@ -1509,21 +1509,25 @@ if (rh && split.contains?.(rh)) return true;
 }
 return !!cl(el, '[data-testid="bottom-terminal-panel-resize-handle"],[data-testid="tiling-splitter"]');
 };
+  let axInit = false, axLastStyleAt = 0;
+  const maybeBumpAuxResize = () => { const t = performance.now(), p = axLastStyleAt; axLastStyleAt = t; if (splitDragActive || (p > 0 && t - p <= 140)) bumpResizingPulse(); };
   const AX_H = /(?:^|[;\s])(?:width\s*:\s*0(?:\s|;|px|%|!|$)|display\s*:\s*none|position\s*:\s*absolute)/i;
   const axV = (e) => !!(e && tagU(e) === 'DIV' && !e.hidden && !ha(e, 'hidden') && ga(e, 'aria-hidden') !== 'true' && ga(e, 'data-split-overlaid') !== 'true' && e.style?.display !== 'none' && e.style?.position !== 'absolute' && e.style?.width !== '0' && e.style?.width !== '0px' && !AX_H.test(ga(e, 'style') || ''));
   const axCh = (s) => [fe(s) !== undefined ? fe(s) : s.children?.[0] || null, s.lastElementChild !== undefined ? s.lastElementChild : s.children?.[s.children.length - 1] || null];
-  const axU = (s) => {
+  const axU = (s, anim = false) => {
     if (!s || s[K_IC] === false) return false;
     const prev = ha(s, AX_A), [f, l] = axCh(s), tr = ga(s, 'data-split-transition');
     const next = !!(tr !== 'maximizing' && tr !== 'restoring' && tr !== 'closing' && f && l && f !== l && axV(f) && axV(l));
     if (next) setAttrIfChanged(s, AX_A, '1'); else if (prev) ra(s, AX_A);
+    if (next !== prev && axInit && anim && !splitDragActive) streamChoreoCtl.triggerSplitTransition?.(s, next);
+    axInit = true;
     return next !== prev;
   };
 const syncAuxSplit = () => {
 const s = qs(D, '[data-testid="aux-pane-split"]');
 if (s !== axE) {
 if (axTm) { CT(axTm); axTm = 0; }
-safe(() => axO?.disconnect?.()); axO = axF = axL = null;
+safe(() => axO?.disconnect?.()); axO = axF = axL = null; axInit = false; axLastStyleAt = 0;
 if (axE?.[K_IC] !== false) ra(axE, AX_A);
 axE = s;
 if (s && typeof MutationObserver === 'function') {
@@ -1539,15 +1543,15 @@ safe(() => { axO.observe(axE, { childList: true, attributes: true, attributeFilt
 axO = new MutationObserver((rs) => {
 if (destroyed || !axE) return;
 const c = rs?.some?.((r) => r.type === 'childList'), a = rs?.some?.((r) => r.type === 'attributes');
-if (c && !a) { if (!axTm) axTm = ST(() => { axTm = 0; if (!destroyed && axE) { rb(0); runGuardedMut(() => { axU(axE); }); } }, 64); return; }
+if (c && !a) { if (!axTm) axTm = ST(() => { axTm = 0; if (!destroyed && axE) { rb(0); runGuardedMut(() => { axU(axE, true); }); } }, 64); return; }
 if (c) rb(0);
-let dc = false; runGuardedMut(() => { dc = axU(axE); });
-if (!dc && rs?.some?.((r) => r.type === 'attributes' && r.attributeName === 'style')) bumpResizingPulse();
+let dc = false; runGuardedMut(() => { dc = axU(axE, true); });
+if (!dc && rs?.some?.((r) => r.type === 'attributes' && r.attributeName === 'style')) maybeBumpAuxResize();
 });
 rb(1);
 }
 }
-if (s) axU(s);
+if (s) axU(s, false);
 };
 
   const HC_A = 'data-hover-card-popup', HC_S = '[data-hover-card-popup]';
@@ -1570,8 +1574,8 @@ const IN_CONV_PROBE = `${TK_SUB_SEL},${S_RP},${T_BGC},${T_SP},.md-table-host,${C
 const classifyDirtySubtree = (el, ia, pCtx = null) => {
 if (!isElementLike(el)) return;
 const df = dirtyFlags, tid = tidOf(el), role = String(ga(el, 'role') || ''), cls = typeof el.className === 'string' ? el.className : String(el.className?.baseVal || ga(el, 'class') || ''), tg = tagU(el);
-const hc = fe(el) !== undefined ? !!fe(el) : !!(el.children?.length > 0);
-if (!tid && !role && !el.id && !cls.includes('agy-') && !cls.includes('surface-') && FAST_PRUNE_LEAF_TAGS.has(tg) && !hc) return;
+const hc = fe(el) !== undefined ? !!fe(el) : !!(el.children?.length > 0), inc = (k) => cls.includes(k);
+if (!tid && !role && !el.id && !inc('agy-') && !inc('surface-') && FAST_PRUNE_LEAF_TAGS.has(tg) && !hc) return;
 if (isHcEl(el) || (!pCtx && cl(el, HC_S))) return;
 if (tid === 'background-task-command') { if (ia) { df.m = true; dirtyBgCmds.add(el); } return; }
 const aConv = pCtx ? pCtx.inConv : !!cl(el, S_CV);
@@ -1580,35 +1584,35 @@ const aSide = pCtx ? pCtx.inSide : inSbP(el);
 const aDlg = pCtx ? pCtx.inDlg : !!cl(el, '[role="dialog"]');
 const aMdl = pCtx ? pCtx.inMdl : !!cl(el, MODEL_PANEL_SEL);
 let tb = false, ipd = false, inSbR = false;
-const ics = tid !== 'conversation-view' && tid !== 'agent-input-box' && !cls.includes('agy-home') && aConv && !aComp;
+const ics = tid !== 'conversation-view' && tid !== 'agent-input-box' && !inc('agy-home') && aConv && !aComp;
 const cHit = !ics || aDlg || (hc && !!qs(el, IN_CONV_PROBE));
 const q = (s) => hc && cHit && !!qs(el, s);
 if (tid === 'aux-pane-split' || q(T_AP)) df.a = true;
 const chkDlg = (r) => {
 ipd = true;
-if (r || (ia && (tg === 'H2' || cls.includes('space-y-2') || q('h2, div.space-y-2')))) df.g = true;
-if (ia && (r || cls.includes('agy-overlay'))) df.o = true;
+if (r || (ia && (tg === 'H2' || inc('space-y-2') || q('h2, div.space-y-2')))) df.g = true;
+if (ia && (r || inc('agy-overlay'))) df.o = true;
 };
 if (!ics) {
-if (cls.includes('agy-home') || tid === 'conversation-view' || tid === 'home-greeting' || q(ia ? '.agy-home, [data-testid="conversation-view"], [data-testid="home-greeting"]' : '.agy-home, [data-testid="conversation-view"]')) df.r = df.c = df.l = df.tk = df.cf = tb = true;
+if (inc('agy-home') || tid === 'conversation-view' || tid === 'home-greeting' || q(ia ? '.agy-home, [data-testid="conversation-view"], [data-testid="home-greeting"]' : '.agy-home, [data-testid="conversation-view"]')) df.r = df.c = df.l = df.tk = df.cf = tb = true;
 const isRc = tid === 'conversation-row-sidebar' || tid === 'breadcrumb-segment' || tid === 'conversation-row-history' || q('[data-testid="conversation-row-sidebar"],[data-testid="breadcrumb-segment"],[data-testid="conversation-row-history"]');
 const inSR = !isRc && (pCtx ? pCtx.inSR : inSbRow(el));
 if (isRc || aSide || inSR) {
 if (inSR) {
 inSbR = true;
-if (tid === 'status-loading-spinner' || tid.includes('stop') || tid.includes('cancel') || cls.includes('lucide-square') || cls.includes('lucide-circle-stop') || q('[data-testid="status-loading-spinner"],.lucide-square,.lucide-circle-stop')) df.s = true;
+if (tid === 'status-loading-spinner' || tid.includes('stop') || tid.includes('cancel') || inc('lucide-square') || inc('lucide-circle-stop') || q('[data-testid="status-loading-spinner"],.lucide-square,.lucide-circle-stop')) df.s = true;
 } else { df.s = true; if (ia) tb = true; }
 }
-if (COMP_TIDS.has(tid) || cls.includes('surface-composer-card') || cls.includes('agy-takeover-') || tid === 'ask-question-option' || aComp || q(`${S_IB}, [data-testid="input-cancel-button"], ${TK_SUB_SEL}, .surface-composer-card`)) { df.c = df.r = true; if (ia) tb = true; }
+if (COMP_TIDS.has(tid) || inc('surface-composer-card') || inc('agy-takeover-') || tid === 'ask-question-option' || aComp || q(`${S_IB}, [data-testid="input-cancel-button"], ${TK_SUB_SEL}, .surface-composer-card`)) { df.c = df.r = true; if (ia) tb = true; }
 const isMP = tid === 'model-selector-panel' || el.id === 'ag-pulse-status-bar' || el.id === 'ag-prism-pulse-bar' || ha(el, 'data-ag-prism-pulse-bar') || ga(el, 'data-ag-prism-fallback') === '1' || ga(el, 'data-ag-pulse-bar') === 'true' || el.id === 'context-card' || aMdl || q(MODEL_PANEL_SEL + ', #context-card');
 const isDR = role === 'dialog' || q('[role="dialog"]');
 if (isMP) { df.c = true; if (!aMdl) { df.o = true; if (ia) tb = true; } }
 else if (isDR || aDlg) chkDlg(isDR);
-else if (tid === 'overview-panel' || cls.includes('agy-overlay') || q('[data-testid="overview-panel"]') || (q('.agy-overlay') && !q(HC_S))) df.o = true;
+else if (tid === 'overview-panel' || inc('agy-overlay') || q('[data-testid="overview-panel"]') || (q('.agy-overlay') && !q(HC_S))) df.o = true;
 } else {
-if (tid === T_TK || tid === T_QM || tid === T_SQ || tid === T_RP || tid === 'agent-loading' || tid === 'ask-question-option' || cls.includes('agy-takeover-') || q(`${TK_SUB_SEL}, ${S_RP}`)) df.c = true;
+if (tid === T_TK || tid === T_QM || tid === T_SQ || tid === T_RP || tid === 'agent-loading' || tid === 'ask-question-option' || inc('agy-takeover-') || q(`${TK_SUB_SEL}, ${S_RP}`)) df.c = true;
 if (role === 'dialog' || aDlg) chkDlg(role === 'dialog');
-else if (tid === 'overview-panel' || cls.includes('agy-overlay')) df.o = true;
+else if (tid === 'overview-panel' || inc('agy-overlay')) df.o = true;
 }
 if (ia && q(T_BGC)) { df.m = true; dirtyBgCmds.add(el); }
 if (ia) {
@@ -1619,7 +1623,7 @@ else if (qs(el, `style:not([id]):not([${TS_A}]),img:not([${TI_A}])`)) dirtyTurbo
 }
 }
 if (tid === 'step-plan' || q(T_SP)) df.o = true;
-if (cls.includes('md-table-host') || q('.md-table-host')) df.l = true;
+if (inc('md-table-host') || q('.md-table-host')) df.l = true;
 const isTk = tid === 'thinking-collapsible-trigger', isCf = tid === 'changed-files-card-header';
 if (isTk || isCf || tg === 'PRE' || COLL_TIDS.has(tid)) {
 df.l = true;
@@ -1862,7 +1866,7 @@ if (hb) dirtyAddedRoots.add(el);
     });
   }
   const onWinPointerMove = (ev) => safe(() => { wakeWinBlur(); if (!isDragSuspendedRoot()) prismRimCtl.onPointerMove(ev); });
-  const onWinPointerUp = () => safe(() => { if (!destroyed && splitDragActive) { splitDragActive = false; scheduleResizingEnd(); } });
+  const onWinPointerUp = () => safe(() => { if (!destroyed) { streamChoreoCtl.prepareConvPressDip?.(null); if (splitDragActive) { splitDragActive = false; scheduleResizingEnd(); } } });
   const onWinResize = () => safe(() => { if (!destroyed) { markRim(); smoothCaretCtl.bumpMetricsEpoch(); smoothCaretCtl.queue(false, false, true); } });
   const onWinStorage = (ev) => safe(() => { if (!destroyed && (ev?.key === STORAGE_PRISM_KEY || ev?.key === STORAGE_FILE_CFG_KEY)) { cfg = loadSettings(currentBaseConfig); markAllDirty(); applyRootAttrs(); scheduleSync(); } });
   const onDocVisibilityChange = () => safe(() => {
@@ -1882,7 +1886,9 @@ if (hb) dirtyAddedRoots.add(el);
 
   const SLASH_CMD_RE = /^\/(plan|goal|boost|teamwork|swarm|browser|compact|schedule|grill-me|learn)(?:\s|$)/i;
   let lastSlashNotifyAt = 0, lastSlashNotifyCmd = '';
-  const dispatchComposerSubmit = (scopeEl) => {
+  const isSbAct = (t) => !!cl(t, 'button,[role="button"],input');
+  const dispatchComposerSubmit = (scopeEl, btn = null) => {
+    if (!cl(scopeEl, '.agy-home')) streamChoreoCtl.triggerSendLaunch?.(scopeEl, btn);
     const box = cl(scopeEl, `${S_IB}, .surface-composer-card, [data-testid="${T_SQ}"], [data-side-panel-focus-scope="true"]`);
     const ed = (box && qs(box, '[contenteditable="true"], textarea, input')) || scopeEl;
     const m = SLASH_CMD_RE.exec(String(ed?.innerText ?? ed?.[K_TC] ?? ed?.value ?? '').trim());
@@ -1934,8 +1940,12 @@ if (hb) dirtyAddedRoots.add(el);
       if (cl(sendBtn, '.agy-home')) streamChoreoCtl.triggerHomeLiftoffRippleBurst();
       if (ga(sendBtn, A_IC) === 'arrow-up-launch' && isMotionStandardOrUltra()) safe(() => motionEngine?.triggerIcon?.(sendBtn, 'launch'));
       convAuraCtl.triggerStart(findConvForTarget(sendBtn));
-      dispatchComposerSubmit(sendBtn);
+      dispatchComposerSubmit(sendBtn, sendBtn);
     }
+    const qBtn = cl(t, `[data-testid="${T_QM}"] button`);
+    if (qBtn && !qBtn.disabled && (/send/i.test(`${ga(qBtn, 'aria-label') || ''} ${qBtn[K_TC] || ''}`) || qs(qBtn, '.lucide-arrow-right,.lucide-arrow-up,.lucide-send'))) streamChoreoCtl.triggerSendLaunch?.(qBtn, qBtn);
+    const sbRow = cl(t, '[data-testid="conversation-row-sidebar"]');
+    if (sbRow && !isSbAct(t)) streamChoreoCtl.prepareConvSwitchExit?.(sbRow);
     const copyBtn = cl(t, `[${A_IC}="copy-check"]`) || cl(t, 'pre button, button[aria-label*="Copy" i], button[aria-label*="复制"]');
     if (copyBtn && !copyBtn.disabled && !isThoughtIsolatedNode(copyBtn)) {
       if (ga(copyBtn, A_IC) === 'copy-check' && !motionReduced() && isFn(motionEngine?.triggerIcon)) safe(() => motionEngine.triggerIcon(copyBtn, 'check', { revertAfterMs: 1600 }));
@@ -1959,7 +1969,10 @@ if (hb) dirtyAddedRoots.add(el);
     if (t?.closest) {
       trackActivePaneFromTarget(t, true);
       const sbRow = cl(t, '[data-testid="conversation-row-sidebar"]');
-      if (sbRow) streamChoreoCtl.lockSidebarRowRunningOnPointerDown?.(sbRow);
+      if (sbRow) {
+        streamChoreoCtl.lockSidebarRowRunningOnPointerDown?.(sbRow);
+        if (!isSbAct(t)) streamChoreoCtl.prepareConvPressDip?.(sbRow);
+      }
       if (isSplitResizeHandle(t)) {
         splitDragActive = true;
         const h = de(); if (h && ga(h, RESIZE_ATTR) !== '1') runGuardedMut(() => sa(h, RESIZE_ATTR, '1'));
@@ -2056,9 +2069,9 @@ continue;
 if (an?.charCodeAt(0) === 100 && /^data-has-(?:drawer-)?browser-hole$/.test(an)) { dirtyFlags.r = anyRelevant = true; continue; }
 if (tidOf(tgt?.[K_PE]) === 'aux-pane-split') {
 let dualChanged = false;
-runGuardedMut(() => { dualChanged = axU(tgt[K_PE]); });
+runGuardedMut(() => { dualChanged = axU(tgt[K_PE], true); });
 if (dualChanged) dirtyFlags.a = anyRelevant = true;
-else if (an === 'style') bumpResizingPulse();
+else if (an === 'style') maybeBumpAuxResize();
 continue;
 }
 if (an === A_QA) { if (!isThoughtIsolatedNode(tgt) && !isHoverCardNode(tgt)) dirtyFlags.c = anyRelevant = true; continue; }
@@ -2181,7 +2194,7 @@ smoothCaretCtl.teardown(); prismRimCtl.cancelPendingRaf();
 safe(storeUnsub); storeUnsub = null;
 safe(() => rootObsHandle?.disconnect?.()); rootObsHandle = mainObserver = null;
 if (axTm) { CT(axTm); axTm = 0; }
-safe(() => { axO?.disconnect?.(); ra(axE, AX_A); }); axO = axE = axF = axL = null;
+safe(() => { axO?.disconnect?.(); ra(axE, AX_A); }); axO = axE = axF = axL = null; axInit = false; axLastStyleAt = 0;
 syncCaretListeners(false);
 evOp(D, false, DOC_LISTENERS);
 if (isFn(W.removeEventListener)) evOp(W, false, WIN_LISTENERS);

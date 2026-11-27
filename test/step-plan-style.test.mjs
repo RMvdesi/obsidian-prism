@@ -586,3 +586,190 @@ test('stream-choreography decouples triggerHeroALiftoff / triggerHeroBHomeReturn
     else globalThis.document = prevDoc;
   }
 });
+
+test('transition choreography: two-phase exit-then-enter conv switch, dual-tab GPU split, send launch & overview/popup slimming', () => {
+  const scMod = require('../stream-choreography.js');
+  const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
+
+  // 1) CSS zero-flash Frame-0 guard & large overview shell backdrop-filter:none
+  assert.ok(
+    css.includes('[data-ag-cs-conv-seat="1"][data-ag-cs-swapping="1"] [data-testid="autoscroll-viewport"]:not([data-ag-cs-vp-live="1"]){opacity:0!important}'),
+    'style.css must include Frame-0 zero-flash swapping guard'
+  );
+  const ovRule = css.split('\n').find((l) => l.includes('& [data-ag-cs-overview-shell="1"]{')) || '';
+  assert.ok(ovRule.includes('backdrop-filter:none!important'), 'large overview shell must disable GPU backdrop-filter blur');
+
+  // 2) ui-runtime guards: model overlay skipped in syncPopupOverlayMirrors, non-drag aux-pane-split guarded, sidebar <a> allowed
+  assert.ok(uiSrc.includes("ga(ov, 'data-ag-cs-model-overlay') === '1'"), 'syncPopupOverlayMirrors must skip model-selector overlay');
+  assert.ok(uiSrc.includes('maybeBumpAuxResize()'), 'aux-pane-split style observer must gate resizing pulse on continuous drag');
+  assert.ok(uiSrc.includes('prepareConvSwitchExit?.(sbRow)') && uiSrc.includes('prepareConvPressDip?.(sbRow)'), 'sidebar rows must wire press-dip and click-exit');
+
+  // 3) Live controller tests for press-dip/cancel, exit->enter zero-flash, split transition, send launch & overview shell
+  const anims = [];
+  const makeEl = (attrs = {}, cls = '', tag = 'DIV') => {
+    const m = new Map(Object.entries(attrs));
+    const el = {
+      nodeType: 1,
+      tagName: tag,
+      className: cls,
+      parentElement: null,
+      children: [],
+      isConnected: true,
+      style: { setProperty() {}, removeProperty() {} },
+      classList: { contains: (c) => String(el.className || '').split(/\s+/).includes(c), remove() {} },
+      getAttribute: (k) => (m.has(k) ? m.get(k) : null),
+      setAttribute: (k, v) => m.set(k, String(v)),
+      hasAttribute: (k) => m.has(k),
+      removeAttribute: (k) => m.delete(k),
+      appendChild(c) { c.parentElement = el; el.children.push(c); return c; },
+      remove() { el.isConnected = false; },
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 40 }),
+      animate(kfs, opts) {
+        const rec = { el, kfs, opts, paused: false, played: false, pause() { this.paused = true; }, play() { this.played = true; } };
+        anims.push(rec);
+        return rec;
+      },
+      matches(sel) {
+        return String(sel).split(',').map((s) => s.trim()).some((s) => {
+          if (s.startsWith('.')) return el.classList.contains(s.slice(1));
+          const am = s.match(/^\[([^=\]]+)(?:="([^"]*)")?\]$/);
+          return am ? (am[2] === undefined ? el.hasAttribute(am[1]) : el.getAttribute(am[1]) === am[2]) : false;
+        });
+      },
+      closest(sel) { let c = el; while (c) { if (c.matches(sel)) return c; c = c.parentElement; } return null; },
+      querySelectorAll(sel) {
+        const out = [];
+        const walk = (x) => { for (const c of x.children) { if (c.matches(sel)) out.push(c); walk(c); } };
+        walk(el);
+        return out;
+      },
+      querySelector(sel) { return el.querySelectorAll(sel)[0] || null; },
+    };
+    return el;
+  };
+
+  const prevDoc = globalThis.document;
+  const prevRaf = globalThis.requestAnimationFrame;
+  const rafQ = [];
+  globalThis.requestAnimationFrame = (fn) => { rafQ.push(fn); return rafQ.length; };
+  const flushRaf = () => { while (rafQ.length) rafQ.shift()(); };
+
+  const body = makeEl();
+  const seat = makeEl({ 'data-ag-cs-conv-seat': '1' });
+  const conv = makeEl({ 'data-testid': 'conversation-view', 'data-cascade-id': 'cid-1' });
+  const vpWrap = makeEl({ 'data-ag-cs-vp-wrap': '1' });
+  const vp = makeEl({ 'data-testid': 'autoscroll-viewport' });
+  const compCard = makeEl({}, 'surface-composer-card');
+  const sendBtn = makeEl({ 'data-testid': 'input-send-button' }, '', 'BUTTON');
+  compCard.appendChild(sendBtn);
+  vpWrap.appendChild(vp);
+  conv.appendChild(vpWrap);
+  conv.appendChild(compCard);
+  seat.appendChild(conv);
+
+  const row1 = makeEl({ 'data-testid': 'conversation-row-sidebar', 'data-cascade-id': 'cid-1', 'data-selected': 'true' });
+  const row2 = makeEl({ 'data-testid': 'conversation-row-sidebar', 'data-cascade-id': 'cid-2' });
+  const ovShell = makeEl();
+  const ovPanel = makeEl({ 'data-testid': 'overview-panel' });
+  for (let i = 0; i < 10; i++) ovPanel.appendChild(makeEl({ 'data-testid': `overview-panel-row-${i}` }));
+  ovShell.appendChild(ovPanel);
+
+  const split = makeEl({ 'data-testid': 'aux-pane-split' });
+  const paneL = makeEl();
+  const sash = makeEl({ 'data-split-sash': '1' });
+  const paneR = makeEl();
+  split.appendChild(paneL);
+  split.appendChild(sash);
+  split.appendChild(paneR);
+
+  body.appendChild(seat);
+  body.appendChild(row1);
+  body.appendChild(row2);
+  body.appendChild(ovShell);
+  body.appendChild(split);
+
+  globalThis.document = {
+    body,
+    documentElement: makeEl(),
+    createElement: (t) => makeEl({}, '', String(t || 'DIV').toUpperCase()),
+    querySelector: (s) => body.querySelector(s),
+    querySelectorAll: (s) => body.querySelectorAll(s),
+  };
+
+  try {
+    const ctl = scMod.createStreamChoreographyController({
+      motionEngine: { glideIndicator() {} },
+      isDestroyed: () => false,
+      isMotionStandardOrUltra: () => true,
+      isMotionUltra: () => true,
+      setAttrIfChanged: (el, k, v) => el.setAttribute(k, v),
+      runGuardedMut: (fn) => fn(),
+    });
+
+    // Overview shell gets data-ag-cs-overview-shell without giant prism-rim canvas, and row stagger caps at 6
+    ctl.syncLensOverlayOrigins();
+    assert.equal(ovShell.getAttribute('data-ag-cs-overview-shell'), '1');
+    assert.equal(ovShell.hasAttribute('data-ag-cs-prism-box'), false);
+    assert.equal(ovShell.hasAttribute('data-ag-cs-prism-mirror'), false);
+    assert.equal(ovPanel.querySelectorAll('[data-ag-row-stagger="1"]').length, 6);
+
+    // Initialize sidebar selection snapshot at row1, then test press-dip -> cancel -> click-exit -> double-rAF enter
+    const snap1 = ctl.measureSidebarSelectionSnapshot();
+    ctl.syncSidebarSelectionGlide(snap1);
+    ctl.prepareConvPressDip(row2);
+    assert.equal(anims.some((a) => a.el === vpWrap && a.opts.duration === 120), true, 'press-dip must animate vpWrap');
+    ctl.prepareConvPressDip(null);
+    assert.equal(anims.some((a) => a.el === vpWrap && a.opts.duration === 150), true, 'null press-dip must reverse cleanly');
+
+    ctl.prepareConvSwitchExit(row2);
+    assert.equal(seat.getAttribute('data-ag-cs-swapping'), '1', 'click-exit must enable Frame-0 zero-flash guard');
+    assert.equal(vp.getAttribute('data-ag-cs-vp-live'), '1', 'outgoing viewport must stay visible during exit');
+
+    row1.removeAttribute('data-selected');
+    row2.setAttribute('data-selected', 'true');
+    conv.setAttribute('data-cascade-id', 'cid-2');
+    const snap2 = ctl.measureSidebarSelectionSnapshot();
+    const beforeEnter = anims.length;
+    ctl.syncSidebarSelectionGlide(snap2);
+    const enterAnims = anims.slice(beforeEnter);
+    assert.equal(enterAnims.some((a) => a.el === vpWrap && a.opts.duration === 420 && a.paused), true, 'entrance must pause until double-rAF');
+    flushRaf();
+    assert.equal(enterAnims.every((a) => a.played), true, 'double-rAF must play paused entrance animations');
+    assert.equal(seat.hasAttribute('data-ag-cs-swapping'), false, 'entrance play must clear zero-flash swapping guard');
+    assert.equal(vp.getAttribute('data-ag-cs-stage-glide'), 'up', 'existing Hero B2 stage-glide attribute stays intact');
+
+    // Single <-> Dual tab GPU split choreography
+    const beforeSplit = anims.length;
+    ctl.triggerSplitTransition(split, true);
+    const dualAnims = anims.slice(beforeSplit);
+    assert.equal(dualAnims.some((a) => a.el === paneL && a.opts.duration === 400 && a.paused), true);
+    assert.equal(dualAnims.some((a) => a.el === paneR && a.opts.duration === 420 && a.paused), true);
+    assert.equal(dualAnims.some((a) => a.el === sash && a.opts.duration === 240 && a.paused), true);
+    flushRaf();
+    assert.equal(dualAnims.every((a) => a.played), true);
+
+    const beforeClose = anims.length;
+    ctl.triggerSplitTransition(split, false);
+    assert.equal(anims.slice(beforeClose).some((a) => a.el === paneL && a.opts.duration === 400), true);
+    flushRaf();
+
+    // Send launch animation + newly appended user-message-bubble entrance
+    const beforeSend = anims.length;
+    ctl.triggerSendLaunch(sendBtn, sendBtn);
+    assert.equal(anims.slice(beforeSend).some((a) => a.el === compCard && a.opts.duration === 240), true);
+    assert.equal(anims.slice(beforeSend).some((a) => a.el === sendBtn && a.opts.duration === 260), true);
+    const newBubble = makeEl({ 'data-testid': 'user-message-bubble' });
+    vp.appendChild(newBubble);
+    ctl.syncHeroRouteChoreography({ inHome: false, formalConv: conv, checkCaustics: false });
+    assert.equal(anims.some((a) => a.el === newBubble && a.opts.duration === 340), true, 'fresh sent user bubble must animate in');
+
+    ctl.clearTransientTimers();
+    ctl.flushAllStreamArtifacts(true);
+  } finally {
+    if (prevDoc === undefined) delete globalThis.document;
+    else globalThis.document = prevDoc;
+    if (prevRaf === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = prevRaf;
+  }
+});
