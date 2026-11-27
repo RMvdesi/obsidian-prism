@@ -205,8 +205,13 @@
     let baseSpeedPrimed = false;
     let actC0 = columns;
     let actC1 = -1;
-    let actR0 = rows;
-    let actR1 = -1;
+    let actR0 = rows, actR1 = -1, rExp = new Float64Array(32), cExp = new Float64Array(64);
+    const setCell = (cell, col, row, noise) => {
+      speedFactor[cell] = M.min(1.4, M.max(0.3, 1 + RIPPLE.turbulence * (noise - 0.5) * 3.2));
+      const edge = M.min(col, row, columns - 1 - col, rows - 1 - row);
+      const border = M.max(0, 1 - edge / RIPPLE.borderCells);
+      damping[cell] = RIPPLE.damping + border * border * 12;
+    };
     if (columns >= 32 && rows >= 16) {
       const gCols = M.ceil(columns / 2) + 1;
       const gRows = M.ceil(rows / 2) + 1;
@@ -225,28 +230,23 @@
         const rowOff0 = gr * gCols;
         const rowOff1 = M.min(gRows - 1, gr + 1) * gCols;
         for (let column = 0; column < columns; column++) {
-          const cell = row * columns + column;
           const gc = column >> 1;
           const gc1 = M.min(gCols - 1, gc + 1);
           const tx = (column & 1) * 0.5;
           const n0 = coarse[rowOff0 + gc] + (coarse[rowOff0 + gc1] - coarse[rowOff0 + gc]) * tx;
           const n1 = coarse[rowOff1 + gc] + (coarse[rowOff1 + gc1] - coarse[rowOff1 + gc]) * tx;
-          const noise = n0 + (n1 - n0) * ty;
-          speedFactor[cell] = M.min(1.4, M.max(0.3, 1 + RIPPLE.turbulence * (noise - 0.5) * 3.2));
-          const edge = M.min(column, row, columns - 1 - column, rows - 1 - row);
-          const border = M.max(0, 1 - edge / RIPPLE.borderCells) ** 2;
-          damping[cell] = RIPPLE.damping + border * 12;
+          setCell(row * columns + column, column, row, n0 + (n1 - n0) * ty);
         }
       }
     } else {
       for (let row = 0; row < rows; row++) {
         for (let column = 0; column < columns; column++) {
-          const cell = row * columns + column;
-          const noise = fractalNoise((column * cellWidth) / RIPPLE.turbulenceScale + seed, (row * cellHeight) / RIPPLE.turbulenceScale + seed);
-          speedFactor[cell] = M.min(1.4, M.max(0.3, 1 + RIPPLE.turbulence * (noise - 0.5) * 3.2));
-          const edge = M.min(column, row, columns - 1 - column, rows - 1 - row);
-          const border = M.max(0, 1 - edge / RIPPLE.borderCells) ** 2;
-          damping[cell] = RIPPLE.damping + border * 12;
+          setCell(
+            row * columns + column,
+            column,
+            row,
+            fractalNoise((column * cellWidth) / RIPPLE.turbulenceScale + seed, (row * cellHeight) / RIPPLE.turbulenceScale + seed)
+          );
         }
       }
     }
@@ -260,66 +260,25 @@
       }
       baseSpeedPrimed = true;
     }
-    function raiseSpeeds(column, row) {
+    function boostSpeeds(column, row, reachPx, boost, falloff) {
       primeFarBaseline();
-      const nearMinusFar = RIPPLE.speedNear - RIPPLE.speedFar;
-      const maxReachPx = RIPPLE.speedFalloff * 4.6;
-      const maxReachSq = maxReachPx * maxReachPx;
-      const reachCols = M.ceil(maxReachPx / cellWidth);
-      const reachRows = M.ceil(maxReachPx / cellHeight);
-      const r0 = M.max(0, row - reachRows);
-      const r1 = M.min(rows - 1, row + reachRows);
-      const c0 = M.max(0, column - reachCols);
-      const c1 = M.min(columns - 1, column + reachCols);
+      const maxSq = reachPx * reachPx, rC = M.ceil(reachPx / cellWidth), rR = M.ceil(reachPx / cellHeight);
+      const r0 = M.max(0, row - rR), r1 = M.min(rows - 1, row + rR), c0 = M.max(0, column - rC), c1 = M.min(columns - 1, column + rC);
       for (let r = r0; r <= r1; r++) {
-        const dy = (r - row) * cellHeight;
-        const dy2 = dy * dy;
-        const rowBase = r * columns;
+        const dy = (r - row) * cellHeight, dy2 = dy * dy, rB = r * columns;
         for (let c = c0; c <= c1; c++) {
-          const dx = (c - column) * cellWidth;
-          const d2 = dx * dx + dy2;
-          if (d2 > maxReachSq) continue;
-          const cell = rowBase + c;
-          const speed = (RIPPLE.speedFar + nearMinusFar * M.exp(-M.sqrt(d2) / RIPPLE.speedFalloff)) * speedFactor[cell];
-          const squared = speed * speed;
-          if (squared > speedSquared[cell]) speedSquared[cell] = squared;
+          const dx = (c - column) * cellWidth, d2 = dx * dx + dy2;
+          if (d2 > maxSq) continue;
+          const cell = rB + c, sp = (RIPPLE.speedFar + boost * M.exp(-M.sqrt(d2) / falloff)) * speedFactor[cell], sq = sp * sp;
+          if (sq > speedSquared[cell]) speedSquared[cell] = sq;
         }
       }
     }
-    function raiseWakeSpeeds(column, row, speedNorm) {
-      primeFarBaseline();
-      const wakeBoost = (RIPPLE.speedNear - RIPPLE.speedFar) * (0.14 + 0.14 * speedNorm);
-      const reachPx = RIPPLE.speedFalloff * 0.65;
-      const reachCols = M.ceil(reachPx / cellWidth);
-      const reachRows = M.ceil(reachPx / cellHeight);
-      const r0 = M.max(0, row - reachRows);
-      const r1 = M.min(rows - 1, row + reachRows);
-      const c0 = M.max(0, column - reachCols);
-      const c1 = M.min(columns - 1, column + reachCols);
-      for (let r = r0; r <= r1; r++) {
-        const dy = (r - row) * cellHeight;
-        const dy2 = dy * dy;
-        for (let c = c0; c <= c1; c++) {
-          const dx = (c - column) * cellWidth;
-          const dist = M.sqrt(dx * dx + dy2);
-          if (dist > reachPx) continue;
-          const cell = r * columns + c;
-          const speed = (RIPPLE.speedFar + wakeBoost * M.exp(-dist / (RIPPLE.speedFalloff * 0.55))) * speedFactor[cell];
-          const squared = speed * speed;
-          if (squared > speedSquared[cell]) speedSquared[cell] = squared;
-        }
-      }
-    }
-    function injectGain() {
-      const k = RIPPLE.injectSoftness;
-      const n = 1 + load;
-      return M.tanh(k * n) / (M.tanh(k) * n);
-    }
-    function skimmerGain() {
-      const k = 0.85;
-      const n = 1 + wakeLoad;
-      return M.tanh(k * n) / (M.tanh(k) * n);
-    }
+    const raiseSpeeds = (c, r) => boostSpeeds(c, r, RIPPLE.speedFalloff * 4.6, RIPPLE.speedNear - RIPPLE.speedFar, RIPPLE.speedFalloff);
+    const raiseWakeSpeeds = (c, r, sn) => boostSpeeds(c, r, RIPPLE.speedFalloff * 0.65, (RIPPLE.speedNear - RIPPLE.speedFar) * (0.14 + 0.14 * sn), RIPPLE.speedFalloff * 0.55);
+    const softGain = (k, ld) => { const n = 1 + ld; return M.tanh(k * n) / (M.tanh(k) * n); };
+    const injectGain = () => softGain(RIPPLE.injectSoftness, load);
+    const skimmerGain = () => softGain(0.85, wakeLoad);
     function drive() {
       let keep = 0;
       for (let s = 0; s < sources.length; s++) {
@@ -345,15 +304,15 @@
         if (r1 > actR1) actR1 = r1;
         if (c0 < actC0) actC0 = c0;
         if (c1 > actC1) actC1 = c1;
+        const rL = r1 - r0 + 1, cL = c1 - c0 + 1;
+        if (rL > rExp.length) rExp = new Float64Array(rL);
+        if (cL > cExp.length) cExp = new Float64Array(cL);
+        for (let r = r0; r <= r1; r++) { const dy = (r - source.row) * cellHeight; rExp[r - r0] = M.exp(-(dy * dy) * inv2r2); }
+        for (let c = c0; c <= c1; c++) { const dx = (c - source.column) * cellWidth; cExp[c - c0] = M.exp(-(dx * dx) * inv2r2); }
         for (let r = r0; r <= r1; r++) {
-          const dy = (r - source.row) * cellHeight;
-          const dy2 = dy * dy;
-          const rowBase = r * columns;
+          const rG = gain * rExp[r - r0], rB = r * columns;
           for (let c = c0; c <= c1; c++) {
-            const dx = (c - source.column) * cellWidth;
-            const i = rowBase + c;
-            let v = height[i] + gain * M.exp(-(dx * dx + dy2) * inv2r2);
-            const av = v < 0 ? -v : v;
+            const i = rB + c; let v = height[i] + rG * cExp[c - c0], av = v < 0 ? -v : v;
             if (av > knee) v = (v < 0 ? -1 : 1) * (knee + span * M.tanh((av - knee) / span));
             height[i] = v;
           }
@@ -459,30 +418,20 @@
         if (!Number.isFinite(column) || !Number.isFinite(row)) return;
         const c = M.max(0, M.min(columns - 1, M.floor(column)));
         const r = M.max(0, M.min(rows - 1, M.floor(row)));
-        const hasOpts = opts && typeof opts === 'object';
-        if (hasOpts && opts.wake) {
-          raiseWakeSpeeds(c, r, Number.isFinite(opts.speedNorm) ? M.max(0, M.min(1, opts.speedNorm)) : 0.5);
+        const o = opts && typeof opts === 'object' ? opts : null;
+        if (o?.wake) {
+          raiseWakeSpeeds(c, r, Number.isFinite(o.speedNorm) ? M.max(0, M.min(1, o.speedNorm)) : 0.5);
         } else {
           raiseSpeeds(c, r);
         }
-        const duration = hasOpts && Number.isFinite(opts.duration) && opts.duration > 0
-          ? opts.duration
-          : (2 + M.floor(random() * 2)) / RIPPLE.sourceFrequency;
-        const radiusScale = hasOpts && Number.isFinite(opts.radiusScale) && opts.radiusScale > 0
-          ? opts.radiusScale
-          : 0.78 + random() * 0.92;
-        const baseAmp = hasOpts && Number.isFinite(opts.amplitudeScale)
-          ? M.max(0, opts.amplitudeScale)
-          : 0.78 + random() * 0.72;
-        const frequency = hasOpts && Number.isFinite(opts.frequency) && opts.frequency > 0
-          ? opts.frequency
-          : RIPPLE.sourceFrequency;
-        const loadWeight = hasOpts && Number.isFinite(opts.loadWeight)
-          ? M.max(0, opts.loadWeight)
-          : 1;
-        const delay = hasOpts && Number.isFinite(opts.delay) && opts.delay > 0
-          ? opts.delay
-          : 0;
+        const nP = (v, fb) => (Number.isFinite(v) && v > 0 ? v : fb);
+        const nZ = (v, fb) => (Number.isFinite(v) ? M.max(0, v) : fb);
+        const duration = nP(o?.duration, (2 + M.floor(random() * 2)) / RIPPLE.sourceFrequency);
+        const radiusScale = nP(o?.radiusScale, 0.78 + random() * 0.92);
+        const baseAmp = nZ(o?.amplitudeScale, 0.78 + random() * 0.72);
+        const frequency = nP(o?.frequency, RIPPLE.sourceFrequency);
+        const loadWeight = nZ(o?.loadWeight, 1);
+        const delay = nP(o?.delay, 0);
         sources.push({
           column: c,
           row: r,
@@ -531,13 +480,7 @@
         wakeLoad = M.min(2.4, wakeLoad + 0.28);
         moving = true;
       },
-      advance(seconds) {
-        behind += M.min(seconds, MAX_ADVANCE);
-        while (behind >= WAVE_STEP) {
-          step();
-          behind -= WAVE_STEP;
-        }
-      },
+      advance(s, m = 0) { const d = M.min(s, MAX_ADVANCE); behind = m > 0 ? M.min(behind + d, MAX_ADVANCE * 2) : behind + d; let n = 0; while (behind >= WAVE_STEP && (!(m > 0) || n < m)) { step(); behind -= WAVE_STEP; n += 1; } },
     };
   }
   function parseCssColorToRgb(cssColor) {
@@ -1083,13 +1026,22 @@ color = vec4(rgb * a, a);
     if (owner && typeof owner.hidden === 'boolean') return owner.hidden;
     return typeof document !== 'undefined' && Boolean(document && document.hidden === true);
   }
+  const readPerfMode = (m) => {
+    if (typeof m === 'string') return m.trim().toLowerCase();
+    const h = m?.documentElement || m?.ownerDocument?.documentElement || (typeof document !== 'undefined' ? document.documentElement : null);
+    return String(h?.dataset?.agCsPerfMode || h?.getAttribute?.('data-ag-cs-perf-mode') || '').trim().toLowerCase();
+  };
+  const pickRen = (cv, o, glFn, c2dFn) => {
+    if (o?.externalRenderer) return o.externalRenderer;
+    const h2 = Boolean(o?.force2D) || (typeof globalThis !== 'undefined' && globalThis.__agRippleForce2D === true);
+    const m = readPerfMode(cv);
+    return (h2 || o?.prefer2D ? null : glFn()) || (!h2 && (o?.no2DFallback || m === 'performance' || m === 'eco') ? null : c2dFn());
+  };
   function createGlyphField(canvas, columns, rows, waves, options) {
     columns = clampDim(columns);
     rows = clampDim(rows);
-    const force2D = Boolean(options && (options.prefer2D || options.force2D)) || (typeof globalThis !== 'undefined' && globalThis.__agRippleForce2D === true);
-    const extRen = options && options.externalRenderer ? options.externalRenderer : null;
     const renderer = (columns > 0 && rows > 0)
-      ? (extRen || (force2D ? null : createWebGL2Renderer(canvas, columns, rows)) || create2DRenderer(canvas, columns, rows))
+      ? pickRen(canvas, options, () => createWebGL2Renderer(canvas, columns, rows), () => create2DRenderer(canvas, columns, rows))
       : null;
     const isGpuMod = Boolean(renderer && (renderer.gpuIdleMod || renderer.mode === 'webgl2' || renderer.mode === 'worker-webgl2'));
     const { cellWidth, cellHeight } = RIPPLE;
@@ -1168,10 +1120,8 @@ color = vec4(rgb * a, a);
     }
     const onContextLost = (e) => { e?.preventDefault?.(); try { options?.onContextLost?.(e); } catch {} };
     const onContextRestored = () => { try { renderer?.build?.(); } catch {} stale = true; };
-    if (canvas && canvas.addEventListener) {
-      canvas.addEventListener('webglcontextlost', onContextLost);
-      canvas.addEventListener('webglcontextrestored', onContextRestored);
-    }
+    const ctxEv = (m) => { if (canvas?.[m]) { canvas[m]('webglcontextlost', onContextLost); canvas[m]('webglcontextrestored', onContextRestored); } };
+    ctxEv('addEventListener');
     function tickAt(now, still) {
       return still ? 0 : M.floor((now / 1000) * RIPPLE.changeRate);
     }
@@ -1193,10 +1143,8 @@ color = vec4(rgb * a, a);
         rawSpec !== undefined && rawSpec !== null
           ? resolveHorizonSpectrumCode(rawSpec)
           : detectHostSpectrumCode(canvas, dark);
-      const ambient =
-        palette.ambientIntensity !== undefined
-          ? clampFinite(palette.ambientIntensity, 1, 0, 1)
-          : 1;
+      const cl01 = (v, d) => (v !== undefined ? clampFinite(v, 1, 0, 1) : d);
+      const ambient = cl01(palette.ambientIntensity, 1);
       const ink = palette.ink || [146, 148, 156];
       const wave = palette.wave || [214, 218, 228];
       const useCoolLightMix = !dark && (specCode === 0 || specCode === 2);
@@ -1205,7 +1153,7 @@ color = vec4(rgb * a, a);
         effective.ink[i] = M.round(ink[i] + (RIPPLE.lightInkCool[i] - ink[i]) * mix);
         effective.wave[i] = M.round(wave[i] + (RIPPLE.lightWaveCool[i] - wave[i]) * mix * 0.65);
       }
-      const c = palette.conv === true, cl01 = (v, d) => (v !== undefined ? clampFinite(v, 1, 0, 1) : d);
+      const c = palette.conv === true;
       effective.dark = dark;
       effective.fontFamily = palette.fontFamily || 'monospace';
       effective.aura = ambient <= 0.001 ? null : (palette.aura || null);
@@ -1283,21 +1231,13 @@ color = vec4(rgb * a, a);
       triggerTideSwell() {
         if (!waves || typeof waves.disturb !== 'function' || columns <= 0 || rows <= 0) return false;
         const baseRow = M.max(0, rows - 1 - M.min(2, M.floor(rows * 0.06)));
-        const anchors = [
-          { nx: 0.5, delay: 0, amp: 0.78, rad: 1.32, dur: 0.62, freq: 3.2 },
-          { nx: 0.22, delay: 0.07, amp: 0.66, rad: 1.18, dur: 0.6, freq: 3.1 },
-          { nx: 0.78, delay: 0.14, amp: 0.66, rad: 1.18, dur: 0.6, freq: 3.1 },
-        ];
-        for (let i = 0; i < anchors.length; i++) {
-          const a = anchors[i];
-          const col = M.max(0, M.min(columns - 1, M.round(a.nx * (columns - 1))));
-          waves.disturb(col, baseRow, {
-            amplitudeScale: a.amp,
-            radiusScale: a.rad,
-            duration: a.dur,
-            frequency: a.freq,
-            delay: a.delay,
-            loadWeight: 0.16,
+        for (const [nx, delay, amplitudeScale, radiusScale, duration, frequency] of [
+          [0.5, 0, 0.78, 1.32, 0.62, 3.2],
+          [0.22, 0.07, 0.66, 1.18, 0.6, 3.1],
+          [0.78, 0.14, 0.66, 1.18, 0.6, 3.1],
+        ]) {
+          waves.disturb(M.max(0, M.min(columns - 1, M.round(nx * (columns - 1)))), baseRow, {
+            amplitudeScale, radiusScale, duration, frequency, delay, loadWeight: 0.16,
           });
         }
         stale = true;
@@ -1397,6 +1337,7 @@ color = vec4(rgb * a, a);
           }
         }
         let brightest = 0;
+        const qA = (a, t) => (a < t ? 0 : a >= 1 ? 255 : (a * 255 + 0.5) | 0);
         for (let row = 0; row < rows; row++) {
           const rowBase = row * columns;
           const hasAbove = row > 0;
@@ -1417,7 +1358,7 @@ color = vec4(rgb * a, a);
               }
               const at = cell << 2;
               data[at] = glyphs[cell];
-              data[at + 1] = alpha < (isGpuMod ? 0.001 : INVISIBLE_ALPHA) ? 0 : (alpha >= 1 ? 255 : (alpha * 255 + 0.5) | 0);
+              data[at + 1] = qA(alpha, isGpuMod ? 0.001 : INVISIBLE_ALPHA);
               data[at + 2] = 0;
               data[at + 3] = 0;
               continue;
@@ -1462,7 +1403,7 @@ color = vec4(rgb * a, a);
             alpha *= mask[cell] * themeScale;
             const at = cell << 2;
             data[at] = glyphs[cell];
-            data[at + 1] = alpha < (isGpuMod && lit === 0 ? 0.001 : INVISIBLE_ALPHA) ? 0 : (alpha >= 1 ? 255 : (alpha * 255 + 0.5) | 0);
+            data[at + 1] = qA(alpha, isGpuMod && lit === 0 ? 0.001 : INVISIBLE_ALPHA);
             data[at + 2] = lit > 0 ? M.max(1, (waveMix * 255 + 0.5) | 0) : 0;
             data[at + 3] = packed;
           }
@@ -1482,10 +1423,7 @@ color = vec4(rgb * a, a);
         stale = false;
       },
       dispose(keep) {
-        if (canvas && canvas.removeEventListener) {
-          canvas.removeEventListener('webglcontextlost', onContextLost);
-          canvas.removeEventListener('webglcontextrestored', onContextRestored);
-        }
+        ctxEv('removeEventListener');
         if (renderer) renderer.dispose(keep);
       },
     };
@@ -1521,42 +1459,22 @@ color = vec4(rgb * a, a);
     'complete-jade': 3,
   });
 
-  function resolveHorizonSpectrumCode(mode) {
-    if (typeof mode === 'number' && Number.isFinite(mode)) {
-      return M.max(0, M.min(6, M.round(mode)));
-    }
-    const key = String(mode || '').trim().toLowerCase();
-    return Object.prototype.hasOwnProperty.call(HORIZON_SPECTRUM_MODES, key)
-      ? HORIZON_SPECTRUM_MODES[key]
-      : 0;
-  }
-
-  function resolveHorizonSemanticCode(sem) {
-    if (typeof sem === 'number' && Number.isFinite(sem)) {
-      return M.max(0, M.min(3, M.round(sem)));
-    }
-    const key = String(sem || '').trim().toLowerCase();
-    return Object.prototype.hasOwnProperty.call(HORIZON_SEMANTIC_MODES, key)
-      ? HORIZON_SEMANTIC_MODES[key]
-      : 0;
-  }
+  const resolveCode = (v, tbl, max) => {
+    if (typeof v === 'number' && Number.isFinite(v)) return M.max(0, M.min(max, M.round(v)));
+    const key = String(v || '').trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(tbl, key) ? tbl[key] : 0;
+  };
+  const resolveHorizonSpectrumCode = (m) => resolveCode(m, HORIZON_SPECTRUM_MODES, 6);
+  const resolveHorizonSemanticCode = (s) => resolveCode(s, HORIZON_SEMANTIC_MODES, 3);
 
   function resolveHorizonDpr(devicePixelRatio = 1, baseScale = 0.72, modeOrDoc) {
-    const raw = Number.isFinite(Number(devicePixelRatio)) && Number(devicePixelRatio) > 0 ? Number(devicePixelRatio) : 1;
-    let mode = '';
-    if (typeof modeOrDoc === 'string') mode = modeOrDoc.trim().toLowerCase();
-    else {
-      const h = (modeOrDoc && modeOrDoc.documentElement) || (typeof document !== 'undefined' && document.documentElement);
-      mode = String((h && ((h.dataset && h.dataset.agCsPerfMode) || (h.getAttribute && h.getAttribute('data-ag-cs-perf-mode')))) || '').trim().toLowerCase();
-    }
-    if (mode === 'performance') return M.max(0.5, M.min(0.95, +(raw * 0.55).toFixed(3)));
-    if (mode === 'quality') return M.max(0.75, M.min(2.0, +raw.toFixed(3)));
-    if (mode === 'balanced') {
-      return raw <= 1 ? M.max(0.5, +(raw * 0.7).toFixed(3)) : M.max(0.7, M.min(1.25, +(raw * 0.63).toFixed(3)));
-    }
-    const sc = Number.isFinite(Number(baseScale)) && Number(baseScale) > 0 ? Number(baseScale) : 0.72;
-    if (raw <= 1) return M.max(0.5, +(raw * sc).toFixed(3));
-    return M.max(0.72, M.min(1.35, +(raw * M.min(0.68, sc * 0.9)).toFixed(3)));
+    const nRaw = Number(devicePixelRatio), raw = Number.isFinite(nRaw) && nRaw > 0 ? nRaw : 1;
+    const mode = readPerfMode(modeOrDoc), r3 = (x) => +x.toFixed(3);
+    if (mode === 'performance') return M.max(0.5, M.min(0.95, r3(raw * 0.55)));
+    if (mode === 'quality') return M.max(0.75, M.min(2.0, r3(raw)));
+    if (mode === 'balanced') return raw <= 1 ? M.max(0.5, r3(raw * 0.7)) : M.max(0.7, M.min(1.25, r3(raw * 0.63)));
+    const nSc = Number(baseScale), sc = Number.isFinite(nSc) && nSc > 0 ? nSc : 0.72;
+    return raw <= 1 ? M.max(0.5, r3(raw * sc)) : M.max(0.72, M.min(1.35, r3(raw * M.min(0.68, sc * 0.9))));
   }
 
   function detectHostSpectrumCode(canvas, dark = true) {
@@ -1564,14 +1482,12 @@ color = vec4(rgb * a, a);
       const doc = (canvas && canvas.ownerDocument) || (typeof document !== 'undefined' ? document : null);
       const html = doc && doc.documentElement;
       if (!html || typeof html.getAttribute !== 'function') return 0;
-      const ac = resolveHorizonSpectrumCode(html.getAttribute('data-ag-cs-accent'));
+      const ga = (k) => html.getAttribute(k), ac = resolveHorizonSpectrumCode(ga('data-ag-cs-accent'));
       if (ac) return ac;
-      const pal = String(html.getAttribute('data-ag-cs-palette') || '').trim().toLowerCase();
+      const pal = String(ga('data-ag-cs-palette') || '').trim().toLowerCase();
       if (pal === 'warm' || pal === 'claude') return 1;
-      if (!dark && String(html.getAttribute('data-ag-cs-light-preset') || '').trim().toLowerCase() === 'alabaster') {
-        return 1;
-      }
-      if (dark && html.getAttribute('data-ag-cs-dark-aura-style') === 'neon') return 6;
+      if (!dark && String(ga('data-ag-cs-light-preset') || '').trim().toLowerCase() === 'alabaster') return 1;
+      if (dark && ga('data-ag-cs-dark-aura-style') === 'neon') return 6;
     } catch {}
     return 0;
   }
@@ -1579,9 +1495,10 @@ color = vec4(rgb * a, a);
   const HORIZON_PRISM_STOPS = [[66, 133, 244], [155, 114, 203], [234, 67, 53], [251, 188, 4], [92, 198, 252]];
   const HORIZON_NEON_STOPS = [[86, 196, 248], [142, 108, 235], [220, 92, 224], [67, 130, 246]];
   const HORIZON_DAYLIGHT_STOPS = [[37, 99, 235], [124, 58, 237], [234, 67, 53], [217, 119, 6], [2, 132, 199]];
+  const _HP_IDX = [0, 1, 2, 3, 2, 1, 4];
   function horizonPrismRgb(t, out, dark = true) {
     const stops = dark === 2 ? HORIZON_NEON_STOPS : dark === false ? HORIZON_DAYLIGHT_STOPS : HORIZON_PRISM_STOPS;
-    const idx = dark && dark !== 2 ? [0, 1, 2, 3, 2, 1, 4] : 0;
+    const idx = dark && dark !== 2 ? _HP_IDX : 0;
     const n = idx ? 7 : stops.length;
     let f = (t - M.floor(t)) * n;
     const i = M.min(n - 1, M.floor(f));
@@ -1862,28 +1779,23 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
     2: [[0.863, 0.149, 0.149], [0.77795, 0.13535, 0.13885]],
     3: [[0.02, 0.588, 0.412], [0.01496, 0.5586, 0.56656]],
   };
+  const _HSL = { 0: [.361, .776, .988], 1: [.933, .682, .365], 5: [.847, .878, .929] };
+  const _HCL = { 0: [.839, .933, 1], 1: _HSL[1], 5: _HSL[5] };
+  const _HHA = { 0: [.19956, .36224, .92312], 1: [.635, .247, .141], 5: [.267, .318, .4] };
+  const _HG3 = 'baseA,baseB,prismA,prismB,lightA,lightB,surgeLead,chimeLead,hotAnchor,semA,semB'.split(',');
+  const _uCap = (k) => 'u' + k[0].toUpperCase() + k.slice(1);
   function computeHorizonUniforms(dark, presence, prism, surge, speed, spectrumCode, semanticCode) {
-    const sp = surge > 0.0001 ? M.min(1, M.max(0, surge)) : 0;
-    const cp = surge < -0.0001 ? M.min(1, M.max(0, -surge)) : 0;
+    const sp = surge > 1e-4 ? M.min(1, M.max(0, surge)) : 0, cp = surge < -1e-4 ? M.min(1, M.max(0, -surge)) : 0;
     const p1m = sp > 0 ? M.pow(1 - sp, 1.45) : cp > 0 ? M.pow(1 - cp, 1.35) : 1;
-    const env = sp > 0 ? M.sin(sp * M.PI) * (1 - 0.32 * sp) : cp > 0 ? M.sin(cp * M.PI) * (1 - 0.28 * cp) : 0;
-    const fyOrR = sp > 0 ? 1.15 * (1 - p1m) : cp > 0 ? 0.04 + 0.43 * (1 - p1m) : 0;
-    const setY = cp > 0 ? 0.7 * p1m + 0.04 : 0;
-    const effPres = M.pow(M.max(0, M.min(1, presence)), 0.68);
-    const sc = M.max(0, M.min(6, M.round(Number(spectrumCode) || 0)));
-    const semId = M.floor((Number(semanticCode) || 0) + 0.001);
-    const semW = semId > 0.5 ? M.max(0, M.min(1, 1 - (semanticCode - semId) / 0.98)) : 0;
+    const sc = M.max(0, M.min(6, M.round(Number(spectrumCode) || 0))), semId = M.floor((Number(semanticCode) || 0) + .001);
     const bd = _H_BASE_D[sc] || _H_BASE_D[0], pd = _H_PRISM_D[sc] || _H_PRISM_D[0], ld = _H_LIGHT[sc] || _H_LIGHT[0];
-    const semKey = semId < 1.5 ? 1 : semId < 2.5 ? 2 : 3;
-    const semPair = (dark ? _H_SEM_D : _H_SEM_L)[semKey];
+    const semPair = (dark ? _H_SEM_D : _H_SEM_L)[semId < 1.5 ? 1 : semId < 2.5 ? 2 : 3];
     return {
-      pre0: [env, fyOrR, setY, effPres],
-      pre1: [semId, semW, sc === 5 ? prism * 0.28 : prism, 0.6 * (1 + 0.08 * (speed - 1))],
+      pre0: [sp > 0 ? M.sin(sp * M.PI) * (1 - .32 * sp) : cp > 0 ? M.sin(cp * M.PI) * (1 - .28 * cp) : 0, sp > 0 ? 1.15 * (1 - p1m) : cp > 0 ? .04 + .43 * (1 - p1m) : 0, cp > 0 ? .7 * p1m + .04 : 0, M.pow(M.max(0, M.min(1, presence)), .68)],
+      pre1: [semId, semId > .5 ? M.max(0, M.min(1, 1 - (semanticCode - semId) / .98)) : 0, sc === 5 ? prism * .28 : prism, .6 * (1 + .08 * (speed - 1))],
       modes: [bd[0], pd[0], ld[0], sc === 0 ? 1 : 0],
       baseA: bd[1], baseB: bd[2], prismA: pd[1], prismB: pd[2], lightA: ld[1], lightB: ld[2],
-      surgeLead: sc === 5 ? [0.847, 0.878, 0.929] : sc === 1 ? [0.933, 0.682, 0.365] : [0.361, 0.776, 0.988],
-      chimeLead: sc === 5 ? [0.847, 0.878, 0.929] : sc === 1 ? [0.933, 0.682, 0.365] : [0.839, 0.933, 1.0],
-      hotAnchor: sc === 5 ? [0.267, 0.318, 0.4] : sc === 1 ? [0.635, 0.247, 0.141] : [0.19956, 0.36224, 0.92312],
+      surgeLead: _HSL[sc] || _HSL[0], chimeLead: _HCL[sc] || _HCL[0], hotAnchor: _HHA[sc] || _HHA[0],
       semA: semPair[0], semB: semPair[1],
     };
   }
@@ -1894,7 +1806,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
     const free = () => { if (prog) gl.deleteProgram(prog); prog = null; };
     function build() {
       free();
-      const built = linkGlProgram(gl, GLOW_VERT_SHADER, HORIZON_FRAGMENT_SHADER, 'uRes,uDpr,uTime,uDark,uReach,uIntensity,uPresence,uPrism,uSurge,uSpeed,uSpectrum,uSemantic,uPre0,uPre1,uSpecModes,uBaseA,uBaseB,uPrismA,uPrismB,uLightA,uLightB,uSurgeLead,uChimeLead,uHotAnchor,uSemA,uSemB'.split(','));
+      const built = linkGlProgram(gl, GLOW_VERT_SHADER, HORIZON_FRAGMENT_SHADER, 'uRes,uDpr,uTime,uDark,uReach,uIntensity,uPresence,uPrism,uSurge,uSpeed,uSpectrum,uSemantic,uPre0,uPre1,uSpecModes'.split(',').concat(_HG3.map(_uCap)));
       prog = built.prog; u = built.u;
     }
     try { build(); } catch { try { free(); } catch {} return null; }
@@ -1913,7 +1825,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
         u1(u.uPresence, presence); u1(u.uPrism, prism); u1(u.uSurge, surge);
         u1(u.uSpeed, speed); u1(u.uSpectrum, spectrumCode); u1(u.uSemantic, semanticCode);
         u4(u.uPre0, hu.pre0); u4(u.uPre1, hu.pre1); u4(u.uSpecModes, hu.modes);
-        for (const [uk, hk] of [['uBaseA','baseA'],['uBaseB','baseB'],['uPrismA','prismA'],['uPrismB','prismB'],['uLightA','lightA'],['uLightB','lightB'],['uSurgeLead','surgeLead'],['uChimeLead','chimeLead'],['uHotAnchor','hotAnchor'],['uSemA','semA'],['uSemB','semB']]) u3(u[uk], hu[hk]);
+        for (const k of _HG3) u3(u[_uCap(k)], hu[k]);
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
       },
       dispose(keep) { free(); if (!keep) try { gl.getExtension?.('WEBGL_lose_context')?.loseContext?.(); } catch {} },
@@ -2060,8 +1972,7 @@ outColor = clamp(vec4(premulRgb, outAlpha), 0.0, 1.0);
       };
     }
     const extRen = opts.externalRenderer || null;
-    const force2D = Boolean(opts.prefer2D || opts.force2D) || (typeof globalThis !== 'undefined' && globalThis.__agRippleForce2D === true);
-    const ren = extRen || (force2D ? null : createBrandHorizonGLRenderer(canvas)) || createBrandHorizon2DRenderer(canvas);
+    const ren = pickRen(canvas, opts, () => createBrandHorizonGLRenderer(canvas), () => createBrandHorizon2DRenderer(canvas));
     let cssW = M.max(0, Number(opts.width ?? canvas.clientWidth ?? 0)), cssH = M.max(0, Number(opts.height ?? canvas.clientHeight ?? 0));
     const maxDpr = extRen ? 2 : 1.75;
     let dpr = M.max(0.5, M.min(maxDpr, Number(opts.dpr || 1)));

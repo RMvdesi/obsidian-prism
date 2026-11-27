@@ -346,18 +346,18 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
       if (cfg?.workbenchEnhancer === 'off' || cfg?.workbenchEnhancer === false) return false;
       return !(
         cfg?.sidebarRestyle === false &&
-        cfg?.sidebarNavFold === 'off' &&
-        cfg?.scrollBottomMotion === 'instant' &&
-        cfg?.motionLevel === 'off'
+        (cfg?.sidebarNavFold === 'off' || cfg?.sidebarNavFold === false) &&
+        (cfg?.scrollBottomMotion === 'instant' || cfg?.scrollBottomMotion === 'off') &&
+        (cfg?.motionLevel === 'off' || cfg?.motionLevel === 'minimal')
       );
     },
     cfgSig: (cfg) => {
       if (cfg?.workbenchEnhancer === 'off' || cfg?.workbenchEnhancer === false) return 'off';
       return (
         cfg?.sidebarRestyle === false &&
-        cfg?.sidebarNavFold === 'off' &&
-        cfg?.scrollBottomMotion === 'instant' &&
-        cfg?.motionLevel === 'off'
+        (cfg?.sidebarNavFold === 'off' || cfg?.sidebarNavFold === false) &&
+        (cfg?.scrollBottomMotion === 'instant' || cfg?.scrollBottomMotion === 'off') &&
+        (cfg?.motionLevel === 'off' || cfg?.motionLevel === 'minimal')
       ) ? 'off' : 'on';
     },
   }),
@@ -440,9 +440,13 @@ function createChannelRegistry({ builders, readConfig }) {
 
   const bindEntry = (id, shouldEnable, build, buildForReport) => {
     const spec = specMap.get(id);
+    const resolvedShouldEnable =
+      typeof shouldEnable === 'function'
+        ? shouldEnable
+        : (cfg) => spec.defaultShouldEnable(cfg && typeof cfg === 'object' ? reconcileConfigAliases(cfg) : readConfig());
     return Object.freeze({
       ...spec,
-      shouldEnable,
+      shouldEnable: resolvedShouldEnable,
       build,
       teardown: CHANNEL_TEARDOWN_MAP[id] || '',
       _buildForReport: buildForReport || ((cfg, opts) => build(cfg, opts)),
@@ -452,13 +456,13 @@ function createChannelRegistry({ builders, readConfig }) {
   const CHANNEL_REGISTRY = Object.freeze([
     bindEntry(
       'omni',
-      (cfg) => (cfg && typeof cfg === 'object' ? reconcileConfigAliases(cfg) : readConfig()).omniModule !== 'off',
+      null,
       builders.buildOmniClientExpression,
       (_cfg, opts) => builders.buildOmniClientExpression(null, null, opts)
     ),
     bindEntry(
       'sidebar',
-      (cfg) => (cfg && typeof cfg === 'object' ? reconcileConfigAliases(cfg) : readConfig()).sidebarStudio === 'on',
+      null,
       builders.buildSidebarStudioExpression,
       (_cfg, opts) => builders.buildSidebarStudioExpression(null, null, opts)
     ),

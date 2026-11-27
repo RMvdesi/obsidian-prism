@@ -51,10 +51,10 @@
 1. **按需延迟通道优先**：新功能与重型交互能力优先设计为独立按需通道（`CHANNEL_REGISTRY` 注册的 16 条延迟/按需通道，含 Phase 3B 下沉的 `telemetry` / `effortSlider` / `workbenchEnhancer` / `contextMenu` 四条通道，或独立 Sidecar 服务），而非塞入主入口 Channel 1。
 2. **开关关闭三零保障**：功能开关处于 `off` 时，必须保证 **0 编译开销、0 页面注入、0 运行期常驻内存**。
 3. **核心入口与 16 通道独立字节预算（实测基线）**：
-   - **Channel 1 全语种（`auto` + 9 语：`zh-CN`/`zh-TW`/`en`/`ja`/`ko`/`es`/`fr`/`de`/`tr`）**：硬上限 `< 390,000 B`（当前实测 `auto = 385,786 B`，9 语单包 `384,933–385,264 B`，含 `tr = 385,120 B`）；
-   - **`pulse-vial-bridge.js`**：硬上限 `< 31,000 B`（当前实测 `30,671 B`）；
-   - **增量 `configRefresh` 表达式**（不含语言包切换）：硬上限 `< 4,096 B`（当前实测 `3,945 B`）；
-   - **16 条按需通道实测 / 预算对照**：`omni` `69,748 / 81,920 B`、`sidebar` `137,802 / 147,456 B`、`hostI18n` `537,865 B`（`tr` `277,677 B`）`/ 573,440 B`、`swarmI18n` `33,298 B`（`tr` `34,138 B`）`/ 49,152 B`、`thought` `149,532 / 163,840 B`、`inlineDiff` `50,433 / 57,344 B`、`wallpaper` `47,717 / 65,536 B`、`periodicPicker` `829,949 / 839,680 B`、`settings` `507,066 / 512,000 B`、`mascot` `124,764 / 131,072 B`、`suggester` `60,184 / 73,728 B`、`homeStudio` `57,220 / 57,344 B`、`telemetry` `115,686 / 131,072 B`、`effortSlider` `92,153 / 98,304 B`、`workbenchEnhancer` `51,002 / 57,344 B`、`contextMenu` `24,698 / 28,672 B`；
+   - **Channel 1 全语种（`auto` + 9 语：`zh-CN`/`zh-TW`/`en`/`ja`/`ko`/`es`/`fr`/`de`/`tr`）**：硬上限 `< 390,000 B`（当前实测 `auto = 388,082 B`，9 语单包 `387,229–387,560 B`，含 `tr = 387,416 B`）；
+   - **`pulse-vial-bridge.js`**：硬上限 `< 31,000 B`（当前实测 `30,998 B`）；
+   - **增量 `configRefresh` 表达式**（不含语言包切换）：硬上限 `< 4,096 B`（当前实测 `3,911 B`）；
+   - **16 条按需通道实测 / 预算对照**：`omni` `70,459 / 81,920 B`、`sidebar` `137,869 / 147,456 B`、`hostI18n` `553,455 B`（`tr` `288,314 B`）`/ 573,440 B`、`swarmI18n` `34,739 B`（`tr` `35,581 B`）`/ 49,152 B`、`thought` `152,359 / 163,840 B`、`inlineDiff` `54,438 / 57,344 B`、`wallpaper` `47,815 / 65,536 B`、`periodicPicker` `829,949 / 839,680 B`、`settings` `507,588 / 512,000 B`、`mascot` `124,909 / 131,072 B`、`suggester` `60,908 / 73,728 B`、`homeStudio` `57,220 / 57,344 B`、`telemetry` `116,886 / 131,072 B`、`effortSlider` `93,435 / 98,304 B`、`workbenchEnhancer` `50,878 / 57,344 B`、`contextMenu` `25,062 / 28,672 B`；
    - 任何涉及 Channel 1 的变更须保持字节中性或同步无损瘦身。
 
 ---
@@ -146,7 +146,7 @@ obsidian-prism/
 │   ├── security/                    # L1 (.mjs)：net-guard.mjs (SSRF/回环防线) / win-picker.mjs
 │   ├── runtime/                     # L1 (.js) ：浏览器按需辅助与 OffscreenCanvas ripple-worker / tr 语种包
 │   ├── platform/                    # L2 (.cjs)：install-manifest.cjs (四阶段原子升级) / repo-sync.cjs / process-probe.cjs / win-lnk.cjs 等
-│   └── daemon/                      # L3 (.mjs)：30 个显式组合守护子系统与 session-fsm.mjs 状态机
+│   └── daemon/                      # L3 (.mjs)：31 个显式组合守护子系统与 session-fsm.mjs 状态机
 ├── sidecars/daemon/                 # L3：原生 Sidecar 守护入口、归档器、更新器、脱敏规则与内存守卫
 ├── vendor/                          # 按需通道实现：host-i18n(含 tr)、omni-viewer、sidebar-studio、thought-translator、periodic-picker、wallpaper、pulse-dashboard、effort-slider、clawd-mascot、inline-diff、prompt-suggester
 ├── tools/install-plugin.cjs         # L4：CLI 安装/卸载工具（已接入原子升级引擎，旧 patch-asar.cjs 已彻底清除）
@@ -164,7 +164,7 @@ obsidian-prism/
 | --- | --- | --- |
 | [`repo-hygiene.test.mjs`](../test/gates/repo-hygiene.test.mjs) | ② ⑩ | 目录规范、根目录白名单棘轮、`AGENTS.md`/宪法/ADR 相对链接有效、测试命名棘轮 |
 | [`architecture-fitness.test.mjs`](../test/gates/architecture-fitness.test.mjs) | ① ② ⑥ | 0 外部依赖、0 循环依赖（含 Worker 边）、`L0→L4` 与 `src/` 四级内部单向分层、`src/` 扩展名统一与 Node 22.0 CJS 兼容、文件行数/体积棘轮、CSS 变量/卫生棘轮、运行期 0 `innerHTML`、0 原型 Mixin、唯一通道 SSOT、`config.example.json` 100% 对齐 `schema.cjs` |
-| [`bundle-budget.test.mjs`](../test/gates/bundle-budget.test.mjs) | ④ ⑩ | Ch1 (`auto` + 9 语) `< 390,000 B`（实测 `384,933–385,786 B`）、16 条延迟通道分通道预算（含 `tr` 语种包）与关闭态 0 B、`pulse-vial-bridge.js < 31,000 B`、`configRefresh < 4,096 B`、全仓 0 BOM / 0 CRLF |
+| [`bundle-budget.test.mjs`](../test/gates/bundle-budget.test.mjs) | ④ ⑩ | Ch1 (`auto` + 9 语) `< 390,000 B`（实测 `387,229–388,082 B`）、16 条延迟通道分通道预算（含 `tr` 语种包）与关闭态 0 B、`pulse-vial-bridge.js < 31,000 B`、`configRefresh < 4,096 B`、全仓 0 BOM / 0 CRLF |
 | [`security-redteam.test.mjs`](../test/gates/security-redteam.test.mjs) | ⑦ | 全仓严苛 CDP Domain 白名单（仅 `Page.*`/`Runtime.*`/`Target.*`/`Browser.close`，探针仅放行只读 `Performance`）、宿主 `.db` 物理绝缘、全仓 AV 红线 0 债（含变量名无关 `-e` 防护）、本地 HTTP 强制 `127.0.0.1` 绑定、PE 元数据与 SignPath 双步钩子 |
 | [`i18n-and-version-sync.test.mjs`](../test/gates/i18n-and-version-sync.test.mjs) | ③ ⑨ | 9 语种（`+tr`）完整度 + 非 CJK 0 汉字 + 0 `yue` 独立词典、0 禁用词（覆盖文档/UI 运行时/全量 `src/`）、`bump-version.mjs` 全部 18 处静态版本锚点与 `CHANGELOG.md` 卫生校验 |
 | [`performance-fitness.test.mjs`](../test/gates/performance-fitness.test.mjs) | ⑥ | 首页/对话 WebGL2 原地 resize 与 0fps 休眠、`ripple-worker` 1×1 探针缓存与零泄漏释放、`vial-core` 零 `drawImage`、`crystal-prism-core` MSAA/DPR 上限、R2 V8 IC / 0 `preserveDrawingBuffer` / 暗色 CSS 与 stub 预算硬红线 |

@@ -3,6 +3,12 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+  DEFAULT_SYNC_SUBDIRS,
+  isSafeManagedRelPath,
+  shouldExcludeSyncRelPath,
+  collectManagedSubdirFiles,
+} = require('../utils/sync-manifest.cjs');
 const { minifyCss, serializeJsValue } = require('./css-pack.cjs');
 const { minifyGlsl } = require('./glsl-minifier.cjs');
 const { JS_KEYWORDS, tokenizeJs } = require('./js-tokenizer.cjs');
@@ -47,10 +53,16 @@ const RUNTIME_PARTS = [
   'ui-runtime.js',
 ];
 
-const SYNC_ROOT_FILES = [
+const REPO_ROOT_DIR = path.resolve(__dirname, '..', '..');
+
+const SYNC_SUBDIRS = DEFAULT_SYNC_SUBDIRS;
+
+const BASE_SYNC_ROOT_FILES = Object.freeze([
   'plugin.json',
   'package.json',
   'README.md',
+  'README.en.md',
+  'CHANGELOG.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'config.example.json',
@@ -59,9 +71,36 @@ const SYNC_ROOT_FILES = [
   'remove.js',
   'style.css',
   'tools/install-plugin.cjs',
+  'workbench/app.js',
   ...DEFERRED_ROOT_MODULES,
   ...RUNTIME_PARTS.filter((p) => !p.includes('/')),
-];
+]);
+
+/**
+ * 动态拼装同步文件总表（兼容旧版 <= v1.0.8-beta.3 在线同步仅消费 SYNC_ROOT_FILES 的路径）：
+ * 基础根目录/工具受管文件 + 实时扫描 src/ 下全部合法运行期文件（去重、POSIX 相对路径、自动过滤非运行期垃圾文件与 symlink）。
+ */
+function buildSyncRootFiles(rootDir = REPO_ROOT_DIR) {
+  const out = [];
+  const seen = new Set();
+  const pushUnique = (rel) => {
+    const normalized = String(rel || '').replace(/\\/g, '/');
+    if (!normalized || !isSafeManagedRelPath(normalized) || shouldExcludeSyncRelPath(normalized)) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(normalized);
+  };
+  for (const rel of BASE_SYNC_ROOT_FILES) {
+    pushUnique(rel);
+  }
+  for (const rel of collectManagedSubdirFiles(rootDir, 'src')) {
+    pushUnique(rel);
+  }
+  return out;
+}
+
+const SYNC_ROOT_FILES = buildSyncRootFiles(REPO_ROOT_DIR);
 
 function minifyEmbeddedGlslTemplates(src) {
   if (!src.includes('#version 300 es')) return src;
@@ -485,7 +524,9 @@ function foldStaticCssConstTokens(tokens) {
 module.exports = {
   DEFERRED_ROOT_MODULES,
   RUNTIME_PARTS,
+  SYNC_SUBDIRS,
   SYNC_ROOT_FILES,
+  buildSyncRootFiles,
   minifyEmbeddedGlslTemplates,
   stripJsFunctionsByName,
   stripUnusedUpstreamMenuObserver,

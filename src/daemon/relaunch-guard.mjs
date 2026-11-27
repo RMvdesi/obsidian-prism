@@ -43,6 +43,7 @@ export class RelaunchGuard {
     this._lastActiveCdpPort = null;
     this._shortcutSyncInFlight = false;
     this._shortcutForcePending = false;
+    this._hostDetectCache = null;
   }
 
   setRootDir(dir) {
@@ -68,9 +69,8 @@ export class RelaunchGuard {
   }
 
   resetShortcutBackoff(reason = '') {
-    const hadBackoff = Boolean(this._shortcutAllClean || this._lastShortcutCheckAt > 0);
+    const hadBackoff = Boolean(this._shortcutAllClean);
     this._shortcutAllClean = false;
-    this._lastShortcutCheckAt = 0;
     if (reason && hadBackoff) {
       this._log(`[shortcut-guard] Reset shortcut backoff (${reason})`);
     }
@@ -174,7 +174,15 @@ export class RelaunchGuard {
         : null;
     if (!detectFn) return;
 
-    const host = await detectFn();
+    const useDetectCache = typeof this._relaunchHooks?.detectHost !== 'function';
+    const detectNow = Date.now();
+    let host = null;
+    if (useDetectCache && this._hostDetectCache && detectNow - this._hostDetectCache.at < 30000) {
+      host = this._hostDetectCache.host;
+    } else {
+      host = await detectFn();
+      if (useDetectCache) this._hostDetectCache = { at: Date.now(), host };
+    }
     if (!this._isRunning()) return;
     if (!host || !host.pid) {
       this._noPortSinceMs = Date.now();

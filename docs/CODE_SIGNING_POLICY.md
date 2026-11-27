@@ -2,7 +2,7 @@
 
 > **Free Code Signing Notice / 免费开源代码签名声明**
 >
-> Free code signing for official Windows release binaries of **Obsidian Prism** is provided by [SignPath.io](https://signpath.io/), using a certificate issued by the [SignPath Foundation](https://signpath.org/) (when enabled on official public release tags).
+> Free code signing for official Windows release binaries of **Obsidian Prism** is planned to be provided by [SignPath.io](https://signpath.io/), using a certificate issued by the [SignPath Foundation](https://signpath.org/) (when enabled on official public release tags).
 >
 > **Obsidian Prism** 官方 Windows 发版产物的免费开源代码签名计划由 [SignPath.io](https://signpath.io/) 提供，签名证书由 [SignPath Foundation](https://signpath.org/) 颁发（在官方公开标签发布流水线启用签名后生效）。
 

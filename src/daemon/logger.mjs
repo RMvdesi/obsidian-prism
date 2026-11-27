@@ -40,6 +40,7 @@ export class DaemonLogger {
     this._pendingLines = [];
     this._pendingBytes = 0;
     this._flushTimer = null;
+    this._asyncFlushPromise = null;
     this._lastLogAt = 0;
     registerProcessExitFlush(this);
   }
@@ -100,11 +101,49 @@ export class DaemonLogger {
     } catch {}
   }
 
+  _flushAsync() {
+    if (this._flushTimer) {
+      clearTimeout(this._flushTimer);
+      this._flushTimer = null;
+    }
+    if (!this.logFile || this._pendingLines.length === 0) {
+      this._pendingLines = [];
+      this._pendingBytes = 0;
+      return this._asyncFlushPromise || Promise.resolve();
+    }
+    if (this._asyncFlushPromise) return this._asyncFlushPromise;
+    const chunk = this._pendingLines.join('');
+    this._pendingLines = [];
+    this._pendingBytes = 0;
+    const task = fs.promises
+      .appendFile(this.logFile, chunk, { encoding: 'utf8', mode: 0o600 })
+      .catch(() => {})
+      .finally(() => {
+        if (this._asyncFlushPromise === task) this._asyncFlushPromise = null;
+        if (this._pendingLines.length > 0) {
+          if (this._pendingBytes >= LOG_BUFFER_MAX_BYTES) void this._flushAsync();
+          else this._scheduleFlush();
+        }
+      });
+    this._asyncFlushPromise = task;
+    return task;
+  }
+
+  async flushAsync() {
+    while (this._pendingLines.length > 0 || this._asyncFlushPromise) {
+      if (this._pendingLines.length > 0 && !this._asyncFlushPromise) {
+        await this._flushAsync();
+      } else if (this._asyncFlushPromise) {
+        await this._asyncFlushPromise;
+      }
+    }
+  }
+
   _scheduleFlush() {
     if (this._flushTimer) return;
     this._flushTimer = setTimeout(() => {
       this._flushTimer = null;
-      this.flush();
+      void this._flushAsync();
     }, LOG_FLUSH_DELAY_MS);
     if (typeof this._flushTimer.unref === 'function') this._flushTimer.unref();
   }
@@ -128,23 +167,22 @@ export class DaemonLogger {
           this.flush();
           this._rotateLogFile();
         }
-        const inBurst = this._lastLogAt > 0 && now - this._lastLogAt <= LOG_BURST_WINDOW_MS;
+        const isColdFirst = this._lastLogAt === 0 && opts?.buffered !== true;
         const syncNow =
           needsRotate ||
+          isColdFirst ||
           opts?.sync === true ||
-          isImmediateLogMessage(msg) ||
-          (!inBurst && opts?.buffered !== true);
+          isImmediateLogMessage(msg);
         this._lastLogAt = now;
         this._logBytes += lineBytes;
+        this._pendingLines.push(line);
+        this._pendingBytes += lineBytes;
         if (syncNow) {
-          this._pendingLines.push(line);
-          this._pendingBytes += lineBytes;
           this.flush();
+        } else if (this._pendingBytes >= LOG_BUFFER_MAX_BYTES) {
+          void this._flushAsync();
         } else {
-          this._pendingLines.push(line);
-          this._pendingBytes += lineBytes;
-          if (this._pendingBytes >= LOG_BUFFER_MAX_BYTES) this.flush();
-          else this._scheduleFlush();
+          this._scheduleFlush();
         }
       } catch {}
     }

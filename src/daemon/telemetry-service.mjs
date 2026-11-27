@@ -537,7 +537,14 @@ export async function fetchUsageRollupBatch(tel, rawItems, opts = {}) {
           const realStepCount = Math.max(stepCount, Number(fullTraj?.numTotalSteps || 0), allSteps.length);
           const totalGm = Math.max(Number(fullTraj?.numTotalGeneratorMetadata || 0), allGms.length);
           const firstStepTs = allSteps.find((s) => s?.metadata?.createdAt)?.metadata?.createdAt;
-          const lastStepTs = [...allSteps].reverse().find((s) => s?.metadata?.completedAt || s?.metadata?.createdAt);
+          let lastStepTs = null;
+          for (let si = allSteps.length - 1; si >= 0; si -= 1) {
+            const stepMeta = allSteps[si]?.metadata;
+            if (stepMeta && (stepMeta.completedAt || stepMeta.createdAt)) {
+              lastStepTs = allSteps[si];
+              break;
+            }
+          }
           const realLastModSec =
             lastModifiedSec ||
             (lastStepTs ? Math.floor((Date.parse(lastStepTs.metadata.completedAt || lastStepTs.metadata.createdAt) || 0) / 1000) : 0);

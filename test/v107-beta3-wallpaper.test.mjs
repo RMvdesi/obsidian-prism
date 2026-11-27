@@ -1988,3 +1988,31 @@ test('Issue #59 regression: WALLPAPER_CSS penetrates v2.34+ inset-shell, sheet, 
     'Light conv-seat scrim should use 66% color-mix for balanced wallpaper visibility and readability'
   );
 });
+
+test('PR #128 regression: wallpaper settings slider grid spacing, min-width:0 & monospace value pill badge', () => {
+  const css = wallpaperClientMod.WALLPAPER_CSS;
+  assert.equal(/[^\x00-\x7f]/.test(css), false, 'WALLPAPER_CSS must remain strictly pure ASCII');
+  assert.equal(css.includes(':has('), false, 'WALLPAPER_CSS must contain 0 :has() selectors');
+  assert.equal(checkBalancedBraces(css), true, 'WALLPAPER_CSS must have balanced braces');
+
+  assert.ok(
+    css.includes('.ag-prism-wp-sliders{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 18px;padding-top:2px;width:100%;}'),
+    'Slider grid must use gap:12px 18px and padding-top:2px'
+  );
+  assert.ok(
+    css.includes('.ag-prism-wp-slider-item{display:flex;flex-direction:column;gap:5px;min-width:0;}'),
+    'Slider item must include min-width:0 and gap:5px'
+  );
+  assert.ok(
+    css.includes('.ag-prism-wp-slider-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--muted-foreground);}'),
+    'Slider head must include gap:8px'
+  );
+  assert.ok(
+    css.includes('.ag-prism-wp-slider-val{font-family:var(--ag-cs-mono-stack,ui-monospace,monospace);font-size:11px;font-variant-numeric:tabular-nums;color:var(--foreground);font-weight:500;padding:1px 6px;border-radius:5px;background:var(--ag-cs-pill-bg,rgba(128,128,128,0.10));border:1px solid var(--ag-cs-border-1,rgba(128,128,128,0.18));}'),
+    'Slider value badge must render monospace pill styling'
+  );
+  assert.ok(
+    css.includes('.ag-prism-wp-range{width:100%;margin:0;accent-color:var(--primary,#669DF6);cursor:pointer;height:18px;}'),
+    'Slider range input must reset margin:0'
+  );
+});

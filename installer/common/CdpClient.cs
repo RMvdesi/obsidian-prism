@@ -176,7 +176,7 @@ namespace AgyClaudeStyle
             string manifestPath = Path.Combine(baseDir, "manifest.json");
             Dictionary<string, object> raw = MiniJson.ParseObject(File.ReadAllText(manifestPath, Encoding.UTF8));
             PluginManifest m = new PluginManifest();
-            m.Version = GetString(raw, "version", "1.0.8-beta.4");
+            m.Version = GetString(raw, "version", "1.0.8-beta.5");
             m.StyleId = GetString(raw, "styleId", "ag-prism-css");
             m.SettingBinding = GetString(raw, "settingBinding", "__agPrismSetting");
             m.RemoveExpression = GetString(raw, "removeExpression", "");
@@ -982,11 +982,9 @@ namespace AgyClaudeStyle
 
         public static Dictionary<string, object> ReconcileConfigAliases(Dictionary<string, object> raw)
         {
-            Dictionary<string, object> res = new Dictionary<string, object>(StringComparer.Ordinal);
-            if (raw != null)
-            {
-                foreach (KeyValuePair<string, object> kv in raw) res[kv.Key] = kv.Value;
-            }
+            Dictionary<string, object> res = raw != null
+                ? new Dictionary<string, object>(raw, StringComparer.Ordinal)
+                : new Dictionary<string, object>(StringComparer.Ordinal);
             if (res.ContainsKey("language")) res["lang"] = res["language"];
             else if (res.ContainsKey("lang")) res["language"] = res["lang"];
 
@@ -1148,6 +1146,22 @@ namespace AgyClaudeStyle
             }
             catch { }
             return ReconcileConfigAliases(cfg);
+        }
+
+        public static int ResolvePerfModeAutoTag(string baseDir)
+        {
+            try
+            {
+                string cfgPath = Path.Combine(baseDir, "config.json");
+                if (!File.Exists(cfgPath)) return 1;
+                Dictionary<string, object> raw = MiniJson.ParseObject(File.ReadAllText(cfgPath, Encoding.UTF8));
+                object pmObj;
+                if (raw == null || !raw.TryGetValue("performanceMode", out pmObj) || !(pmObj is string)) return 1;
+                string norm = ((string)pmObj).Trim().ToLowerInvariant();
+                if (norm == "performance" || norm == "eco" || norm == "balanced" || norm == "quality") return 0;
+                return norm == "auto" ? 2 : 1;
+            }
+            catch { return 1; }
         }
 
         public static bool ValidateConfigEntry(PluginManifest manifest, string key, object value)
@@ -3528,51 +3542,53 @@ namespace AgyClaudeStyle
 
         public static string BuildConfigRefreshExpression(string baseDir, PluginManifest manifest)
         {
-            Dictionary<string, object> config = ReadConfig(baseDir, manifest);
+            Dictionary<string, object> nextCfg = new Dictionary<string, object>(ReadConfig(baseDir, manifest), StringComparer.Ordinal);
             string codeHash = "";
             try { codeHash = ComputeHash(ReadRuntimeBundle(baseDir, manifest)); } catch { }
-            Dictionary<string, object> nextCfg = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (KeyValuePair<string, object> kv in config)
-            {
-                nextCfg[kv.Key] = kv.Value;
-            }
             nextCfg["binding"] = manifest.SettingBinding;
             if (!string.IsNullOrEmpty(codeHash)) nextCfg["codeHash"] = codeHash;
             nextCfg["__fromFile"] = true;
+            int pmAuto = ResolvePerfModeAutoTag(baseDir);
+            if (pmAuto > 0) nextCfg["__pmAuto"] = pmAuto;
             string cfgJson = MiniJson.Stringify(nextCfg, false);
             string verJson = MiniJson.StringifyString(manifest.Version);
             string hashJson = MiniJson.StringifyString(codeHash);
 
             StringBuilder sb = new StringBuilder(cfgJson.Length + 768);
-            sb.Append("(() => {\n");
-            sb.Append("    const nextCfg = ").Append(cfgJson).Append(";\n");
-            sb.Append("    const api = window.__agPrism || window.__agClaudeStyle;\n");
-            sb.Append("    if (!api || api.version !== ").Append(verJson).Append(" || typeof api.refreshConfig !== 'function') return { ok: false, refreshed: false };\n");
-            sb.Append("    if (").Append(hashJson).Append(" && api.codeHash && api.codeHash !== ").Append(hashJson).Append(") return { ok: false, refreshed: false };\n");
-            sb.Append("    api.refreshConfig(nextCfg);\n");
-            sb.Append("    const liveState = typeof api.getState === 'function' ? api.getState() : null;\n");
-            sb.Append("    const effectiveCfg = (liveState && liveState.cfg) || nextCfg;\n");
-            sb.Append("    try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("    try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("    try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("    try { window.__agPrismInlineDiff?.sync?.(effectiveCfg); } catch {}\n");
-            sb.Append("    try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n");
-            sb.Append("    if (effectiveCfg && effectiveCfg.sidebarStudio !== 'on') {\n");
-            sb.Append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n");
-            sb.Append("      try { window.__agPrismSidebar?.destroy?.(); } catch {}\n");
-            sb.Append("      try { delete window.__agPrismSidebar; } catch {}\n");
-            sb.Append("      try { if (document.documentElement) ['data-ag-prism-mode', 'data-ag-prism-chat-kind', 'data-ag-prism-chat-telemetry', 'data-ag-cs-space', 'data-ag-cs-space-palette', 'data-ag-cs-space-accent'].forEach((a) => document.documentElement.removeAttribute(a)); } catch {}\n");
-            sb.Append("    } else {\n");
-            sb.Append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'tr' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n");
-            sb.Append("    if (document.documentElement) {\n");
-            sb.Append("      if (effectiveCfg && effectiveCfg.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n");
-            sb.Append("      else document.documentElement.removeAttribute('data-ag-prism-thought-view');\n");
-            sb.Append("      document.documentElement.setAttribute('data-ag-prism-sidebar-studio', effectiveCfg && effectiveCfg.sidebarStudio === 'on' ? 'on' : 'off');\n");
-            sb.Append("    }\n");
-            sb.Append("    return { ok: true, refreshed: true, state: liveState };\n");
-            sb.Append("  })()");
+            sb.Append("(() => {\n    const nextCfg = ").Append(cfgJson)
+                .Append(";\n    const api = window.__agPrism || window.__agClaudeStyle;\n    if (!api || api.version !== ").Append(verJson)
+                .Append(" || typeof api.refreshConfig !== 'function') return { ok: false, refreshed: false };\n    if (").Append(hashJson)
+                .Append(" && api.codeHash && api.codeHash !== ").Append(hashJson)
+                .Append(
+                    ") return { ok: false, refreshed: false };\n" +
+                    "    if (nextCfg.__pmAuto) try { (window.__agDomBus || globalThis.__agDomBus)?.resolveAutoBootPerfMode?.(nextCfg, window); } catch {}\n" +
+                    "    api.refreshConfig(nextCfg);\n" +
+                    "    const liveState = typeof api.getState === 'function' ? api.getState() : null;\n" +
+                    "    const e = (liveState && liveState.cfg) || nextCfg, w = window, de = document.documentElement;\n" +
+                    "    try { w.__agPrismTelemetry?.sync?.(e); } catch {}\n" +
+                    "    try { w.__agPrismEffortSlider?.sync?.(e); } catch {}\n" +
+                    "    try { w.__agPrismThought?.sync?.(e); } catch {}\n" +
+                    "    try { w.__agPrismInlineDiff?.sync?.(e); } catch {}\n" +
+                    "    try { if (e.omniModule === 'off') w.__agPrismOmni?.destroy?.(); else w.__agPrismOmni?.sync?.(e, w.__agPrismOmniServerMeta || null); } catch {}\n" +
+                    "    if (e && e.sidebarStudio !== 'on') {\n" +
+                    "      try { w.__agPrismSidebar?.sync?.(e, w.__agPrismSidebarMeta || null); } catch {}\n" +
+                    "      try { w.__agPrismSidebar?.destroy?.(); } catch {}\n" +
+                    "      try { delete w.__agPrismSidebar; } catch {}\n" +
+                    "      try { if (de) ['data-ag-prism-mode', 'data-ag-prism-chat-kind', 'data-ag-prism-chat-telemetry', 'data-ag-cs-space', 'data-ag-cs-space-palette', 'data-ag-cs-space-accent'].forEach((a) => de.removeAttribute(a)); } catch {}\n" +
+                    "    } else {\n" +
+                    "      try { w.__agPrismSidebar?.sync?.(e, w.__agPrismSidebarMeta || null); } catch {}\n" +
+                    "    }\n" +
+                    "    try { const hiMode = e.hostLocalization; const hiLang = e.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') w.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'tr' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) w.__agPrismHostI18n?.destroy?.(); else w.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n" +
+                    "    if (de) {\n" +
+                    "      if (e && e.thoughtTranslate && e.thoughtTranslate !== 'off') de.setAttribute('data-ag-prism-thought-view', e.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n" +
+                    "      else de.removeAttribute('data-ag-prism-thought-view');\n" +
+                    "      de.setAttribute('data-ag-prism-sidebar-studio', e && e.sidebarStudio === 'on' ? 'on' : 'off');\n" +
+                    "      const pm = e && e.performanceMode, bus = w.__agPrismDomBus || w.__agDomBus || globalThis.__agDomBus;\n" +
+                    "      if (bus?.applyPerformanceMode) { try { bus.applyPerformanceMode(pm, document, w); } catch {} }\n" +
+                    "      else if (pm) de.setAttribute('data-ag-cs-perf-mode', pm === 'eco' ? 'performance' : pm === 'auto' ? 'balanced' : pm);\n" +
+                    "    }\n" +
+                    "    return { ok: true, refreshed: true, state: liveState };\n  })()"
+                );
             return sb.ToString();
         }
 
@@ -3586,29 +3602,21 @@ namespace AgyClaudeStyle
             string cfgJson = MiniJson.Stringify(config, false);
             string hashJson = MiniJson.StringifyString(ComputeHash(clientSource));
             StringBuilder sb = new StringBuilder(clientSource.Length + cfgJson.Length + 1024);
-            sb.Append("(() => {\n");
-            sb.Append("  const href = String((typeof location !== 'undefined' && location && location.href) || '');\n");
-            sb.Append("  const ttl = String((typeof document !== 'undefined' && document && document.title) || '').trim();\n");
-            sb.Append("  if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(href)) return { ok: false, skipped: true };\n");
-            sb.Append("  if (/^(devtools:|chrome:|chrome-extension:|edge:|about:|data:|blob:|plugin:)/i.test(href)) return { ok: false, skipped: true };\n");
-            sb.Append("  if (/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?\\/(?:viewer|sandbox|stream|api)(?:[/?#]|$)/i.test(href)) return { ok: false, skipped: true };\n");
-            sb.Append("  const bootCfg = ").Append(cfgJson).Append(";\n");
-            sb.Append("  const nextHash = ").Append(hashJson).Append(";\n");
-            sb.Append("  const liveCfg = (window.__agPrism && typeof window.__agPrism.getState === 'function' && window.__agPrism.getState()?.cfg) || bootCfg;\n");
-            sb.Append("  const serverMeta = window.__agPrismOmniServerMeta || null;\n");
-            sb.Append("  const prev = window.__agPrismOmni;\n");
-            sb.Append("  const reused = Boolean(prev && prev.codeHash === nextHash && typeof prev.sync === 'function');\n");
-            sb.Append("  if (!reused) {\n");
-            sb.Append("    try { prev?.destroy?.(); } catch {}\n");
-            sb.Append("    ").Append(clientSource).Append('\n');
-            sb.Append("    if (window.__agPrismOmni && typeof window.__agPrismOmni === 'object') {\n");
-            sb.Append("      try { window.__agPrismOmni.codeHash = nextHash; } catch {}\n");
-            sb.Append("    }\n");
-            sb.Append("  }\n");
-            sb.Append("  try { window.__agPrismOmni?.sync?.(liveCfg, serverMeta); } catch {}\n");
-            sb.Append("  if (liveCfg && liveCfg.omniModule === 'off') return { ok: true, status: 'disabled' };\n");
-            sb.Append("  return { ok: true, status: reused ? 'synced' : (window.__agPrismOmni ? 'mounted' : 'ready') };\n");
-            sb.Append("})()");
+            sb.Append(
+                "(() => {\n  const href = String((typeof location !== 'undefined' && location && location.href) || '');\n" +
+                "  const ttl = String((typeof document !== 'undefined' && document && document.title) || '').trim();\n" +
+                "  if (/^(?:untitled|launchpad)$/i.test(ttl) || /\\/launchpad(?:\\.html)?(?:[?#]|$)/i.test(href)) return { ok: false, skipped: true };\n" +
+                "  if (/^(devtools:|chrome:|chrome-extension:|edge:|about:|data:|blob:|plugin:)/i.test(href)) return { ok: false, skipped: true };\n" +
+                "  if (/^https?:\\/\\/(127\\.0\\.0\\.1|localhost|\\[::1\\])(?::\\d+)?\\/(?:viewer|sandbox|stream|api)(?:[/?#]|$)/i.test(href)) return { ok: false, skipped: true };\n" +
+                "  const bootCfg = ").Append(cfgJson).Append(";\n  const nextHash = ").Append(hashJson).Append(
+                ";\n  const liveCfg = (window.__agPrism && typeof window.__agPrism.getState === 'function' && window.__agPrism.getState()?.cfg) || bootCfg;\n" +
+                "  const serverMeta = window.__agPrismOmniServerMeta || null;\n  const prev = window.__agPrismOmni;\n" +
+                "  const reused = Boolean(prev && prev.codeHash === nextHash && typeof prev.sync === 'function');\n" +
+                "  if (!reused) {\n    try { prev?.destroy?.(); } catch {}\n    ").Append(clientSource).Append(
+                "\n    if (window.__agPrismOmni && typeof window.__agPrismOmni === 'object') { try { window.__agPrismOmni.codeHash = nextHash; } catch {} }\n" +
+                "  }\n  try { window.__agPrismOmni?.sync?.(liveCfg, serverMeta); } catch {}\n" +
+                "  if (liveCfg && liveCfg.omniModule === 'off') return { ok: true, status: 'disabled' };\n" +
+                "  return { ok: true, status: reused ? 'synced' : (window.__agPrismOmni ? 'mounted' : 'ready') };\n})()");
             return sb.ToString();
         }
 
@@ -3746,11 +3754,9 @@ namespace AgyClaudeStyle
                 catch { }
             }
 
-            Dictionary<string, object> reconciled = ReconcileConfigAliases(cfg);
-            Dictionary<string, object> bootCfg = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (KeyValuePair<string, object> kv in reconciled) bootCfg[kv.Key] = kv.Value;
+            Dictionary<string, object> bootCfg = new Dictionary<string, object>(ReconcileConfigAliases(cfg), StringComparer.Ordinal);
             object rawModeObj;
-            string rawMode = (reconciled.TryGetValue("thoughtTranslate", out rawModeObj) && rawModeObj is string)
+            string rawMode = (bootCfg.TryGetValue("thoughtTranslate", out rawModeObj) && rawModeObj is string)
                 ? ((string)rawModeObj).Trim().ToLowerInvariant() : "";
             bootCfg["thoughtTranslate"] = (rawMode == "machine") ? "machine" : "ai";
 
@@ -3887,19 +3893,15 @@ namespace AgyClaudeStyle
 
         public static string BuildInjectExpression(string baseDir, PluginManifest manifest)
         {
-            Dictionary<string, object> config = ReadConfig(baseDir, manifest);
+            Dictionary<string, object> initCfg = new Dictionary<string, object>(ReadConfig(baseDir, manifest), StringComparer.Ordinal);
             string css = File.ReadAllText(Path.Combine(baseDir, "style.css"), Encoding.UTF8);
             string bundle = ReadRuntimeBundle(baseDir, manifest);
             string codeHash = ComputeHash(bundle);
-
-            Dictionary<string, object> initCfg = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (KeyValuePair<string, object> kv in config)
-            {
-                initCfg[kv.Key] = kv.Value;
-            }
             initCfg["binding"] = manifest.SettingBinding;
             initCfg["codeHash"] = codeHash;
             initCfg["__fromFile"] = true;
+            int pmAuto = ResolvePerfModeAutoTag(baseDir);
+            if (pmAuto > 0) initCfg["__pmAuto"] = pmAuto;
 
             string styleIdJson = MiniJson.StringifyString(manifest.StyleId);
             string verJson = MiniJson.StringifyString(manifest.Version);
@@ -3966,29 +3968,22 @@ namespace AgyClaudeStyle
                 " });\n          fn.call = fn; fn.request = fn; fn.status = () => fn('status'); fn.pull = () => fn('pull'); fn.sync = () => fn('pull'); fn.resolve = () => {};\n" +
                 "          window.__agPrismRepoBridge = fn;\n        }\n" +
                 "        if (document.head) applyStyle();\n        else document.addEventListener('DOMContentLoaded', applyStyle, { once: true });\n        const bootCfg = "
-            ).Append(MiniJson.Stringify(initCfg, false)).Append(";\n        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n");
-            sb.Append("        const bundleUnchanged = Boolean(\n");
-            sb.Append("          existingPrism &&\n");
-            sb.Append("          existingPrism.version === ").Append(verJson).Append(" &&\n");
-            sb.Append("          existingPrism.codeHash === bootCfg.codeHash &&\n");
-            sb.Append("          typeof existingPrism.refreshConfig === 'function'\n");
-            sb.Append("        );\n");
-            sb.Append("        if (bundleUnchanged) {\n");
-            sb.Append("          existingPrism.refreshConfig(bootCfg);\n");
-            sb.Append("        } else {\n");
-            sb.Append("          try { existingPrism?.destroy?.(); } catch {}\n");
-            sb.Append("          try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n");
-            sb.Append("          try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n");
-            sb.Append("          try { window.__agPrismThought?.destroy?.(); } catch {}\n");
-            sb.Append("          try { window.__agPrismOmni?.destroy?.(); } catch {}\n");
-            sb.Append("          try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n");
-            sb.Append("          try { document.querySelectorAll?.('[data-ag-prism-fallback=\"1\"]').forEach((n) => n.remove()); } catch {}\n");
-            sb.Append("          ").Append(bundle).Append('\n');
-            sb.Append("          if (typeof globalThis.__agCsUiMain === 'function') {\n");
-            sb.Append("            globalThis.__agCsUiMain(bootCfg);\n");
-            sb.Append("          }\n");
-            sb.Append("        }\n");
-            sb.Append(
+            ).Append(MiniJson.Stringify(initCfg, false)).Append(
+                ";\n        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n" +
+                "        const autoPm = () => { try { (window.__agDomBus || globalThis.__agDomBus)?.resolveAutoBootPerfMode?.(bootCfg, window); } catch {} };\n" +
+                "        const bundleUnchanged = Boolean(\n          existingPrism &&\n          existingPrism.version === "
+            ).Append(verJson).Append(
+                " &&\n          existingPrism.codeHash === bootCfg.codeHash &&\n          typeof existingPrism.refreshConfig === 'function'\n        );\n" +
+                "        if (bundleUnchanged) {\n          autoPm();\n          existingPrism.refreshConfig(bootCfg);\n        } else {\n" +
+                "          try { existingPrism?.destroy?.(); } catch {}\n" +
+                "          try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n" +
+                "          try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n" +
+                "          try { window.__agPrismThought?.destroy?.(); } catch {}\n" +
+                "          try { window.__agPrismOmni?.destroy?.(); } catch {}\n" +
+                "          try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n" +
+                "          try { document.querySelectorAll?.('[data-ag-prism-fallback=\"1\"]').forEach((n) => n.remove()); } catch {}\n          "
+            ).Append(bundle).Append(
+                "\n          autoPm();\n          if (typeof globalThis.__agCsUiMain === 'function') {\n            globalThis.__agCsUiMain(bootCfg);\n          }\n        }\n" +
                 "        migrateLegacyStorage();\n" +
                 "        if (window.__agClaudeStyle && !window.__agPrism) window.__agPrism = window.__agClaudeStyle;\n" +
                 "        else if (window.__agPrism) window.__agClaudeStyle = window.__agPrism;\n" +

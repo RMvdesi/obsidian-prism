@@ -12,7 +12,7 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 
 <p>
   <a href="https://github.com/RMvdesi/obsidian-prism/releases"><img src="https://img.shields.io/github/v/release/RMvdesi/obsidian-prism?style=flat-square&color=3186ff&label=Release" alt="Latest Release" /></a>
-  <img src="https://img.shields.io/badge/Version-1.0.8--beta.4-0f172a?style=flat-square" alt="Version 1.0.8-beta.4" />
+  <img src="https://img.shields.io/badge/Version-1.0.8--beta.5-0f172a?style=flat-square" alt="Version 1.0.8-beta.5" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20Universal-1e293b?style=flat-square" alt="Platform" />
   <a href="https://github.com/RMvdesi/obsidian-prism/actions"><img src="https://img.shields.io/github/actions/workflow/status/RMvdesi/obsidian-prism/ci.yml?branch=main&style=flat-square&label=CI" alt="CI Status" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-2563eb?style=flat-square" alt="License: GPL-3.0" /></a>
@@ -22,7 +22,7 @@ Four dark & daylight themes · A living 512K context vial · Reasoning effort sl
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/hero-dark.webp" />
   <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/hero-light.webp" />
-  <img src="assets/screenshots/hero-dark.webp" width="100%" alt="Obsidian Prism v1.0.8-beta.4 showcase" />
+  <img src="assets/screenshots/hero-dark.webp" width="100%" alt="Obsidian Prism v1.0.8-beta.5 showcase" />
 </picture>
 
 <sub>Footage is rendered frame by frame by an offline stage that runs this repository's front-end source directly. All workspaces and conversations shown are fictional.</sub>
@@ -100,7 +100,7 @@ Off by default — enable it under **Settings → Appearance → Beta**. A switc
 <details>
 <summary><strong>Technical details: performance, security, telemetry & configuration (click to expand)</strong></summary>
 
-**Obsidian Prism (`v1.0.8-beta.4`)** provides Smoked Obsidian dark/daylight themes, host workbench & inline diff enhancements, a built-in side-pane browser and streaming multi-format file viewer, live quota telemetry, chain-of-thought translation, and experimental static/video wallpapers (Beta) for the Antigravity desktop client through a modular on-demand local plugin architecture — without altering host business logic or conflicting with external plugins:
+**Obsidian Prism (`v1.0.8-beta.5`)** provides Smoked Obsidian dark/daylight themes, host workbench & inline diff enhancements, a built-in side-pane browser and streaming multi-format file viewer, live quota telemetry, chain-of-thought translation, and experimental static/video wallpapers (Beta) for the Antigravity desktop client through a modular on-demand local plugin architecture — without altering host business logic or conflicting with external plugins:
 
 - **Four Dark/Daylight Themes & Fine-Grained Controls**: Includes two dark palettes (**Obsidian Dark** & **Warm Charcoal**) and two daylight presets (**Daylight Crystal** & **Warm Alabaster**) with automatic host light/dark tracking, unified Smoked Obsidian faceted surfaces (message bubbles, file-change strips, Artifact cards, graphite keycaps, and single-frame inline file chips), plus 5 accent tones (Follow Model, Cobalt, Iris, Amber, and Graphite Monochrome `mono`), 3 corner radius scales, 4 code monospace font stacks with ligature toggle, and ambient glow intensity controls.
 - **300Hz Split-Rate Pipeline, 5-Step Ink Streaming & `0fps` Semantic Afterglow**: Removes persistent multi-layer `backdrop-filter` blur passes and reclaims Canvas VRAM (`0x0`) during sleep; renders streaming responses with a `CSS.highlights`-based **5-step ink fade-in** (zero wrapper nodes, zero forced layout reflow, maintaining smooth high-refresh frame pacing even in `34k+`-node long sessions); caps steady-state background aurora rendering to `~30fps` on 300Hz displays and enters `0fps` idle sleep `1.2s` after activity ends. Provides non-intrusive three-state semantic edge cues (awaiting user decision, error halted, and background long-task completion) that freeze into `0fps` static snapshots.
@@ -126,7 +126,7 @@ Download the latest installer directly below (or browse all versions & Beta pre-
 2. **macOS (`Apple Silicon & Intel Universal`)**: Download [**`Obsidian-Prism-macOS-universal.dmg`**](https://github.com/RMvdesi/obsidian-prism/releases/latest/download/Obsidian-Prism-macOS-universal.dmg), mount the disk image, drag `Obsidian Prism.app` into `/Applications`, and **double-click `Obsidian Prism.app` once** to complete local plugin deployment and `LaunchAgent` setup (the same app also provides one-click clean uninstall).
 
 > **First-Launch OS Security Prompt (Open-Source Build Note)**
-> - **Windows SmartScreen**: Because the installer is built independently without a commercial EV code-signing certificate, if Windows shows *"Windows protected your PC"*, click **More info → Run anyway**.
+> - **Windows SmartScreen**: Because the installer is built independently without a commercial EV code-signing certificate, if Windows shows *"Windows protected your PC"*, click **More info → Run anyway**. Free open-source code signing for official Windows release binaries is planned via [SignPath.io](https://signpath.io/) / [SignPath Foundation](https://signpath.org/), taking effect once the public CI signing pipeline is enabled on official public release tags (see [**Code Signing Policy (`CODE_SIGNING_POLICY.md`)**](./docs/CODE_SIGNING_POLICY.md)).
 > - **macOS 15+ Gatekeeper**: Because the Universal `.app` uses open-source ad-hoc signing (not notarized under a paid Apple Developer ID), if macOS blocks first launch due to browser quarantine, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**, or strip the quarantine attribute once in Terminal before launching:
 >   ```bash
 >   xattr -cr "/Applications/Obsidian Prism.app"
@@ -183,7 +183,7 @@ npm run build:macos            # Build standalone macOS Universal bundle (.dmg)
 #### Core Repository Layout
 ```text
 obsidian-prism/
-├── plugin.json                         # Antigravity native plugin manifest (obsidian-prism@1.0.8-beta.4)
+├── plugin.json                         # Antigravity native plugin manifest (obsidian-prism@1.0.8-beta.5)
 ├── LICENSE / NOTICE / CITATION.cff     # GPL-3.0 license, attribution terms & citation metadata
 ├── THIRD_PARTY_NOTICES.md              # Preserved copyright & license notices for MIT upstreams
 ├── assets/                             # Vector plugin icon & documentation screenshots
@@ -232,7 +232,7 @@ Any fork, modification, port, or redistribution must comply with all three requi
   author       = {RMvdesi},
   title        = {{Obsidian Prism: Modular Optical UI, Workbench Enhancements, Omni File Viewer, Quota Telemetry & Thought Translator for Antigravity}},
   year         = {2026},
-  version      = {1.0.8-beta.4},
+  version      = {1.0.8-beta.5},
   license      = {GPL-3.0-only},
   url          = {https://github.com/RMvdesi/obsidian-prism}
 }
@@ -262,3 +262,11 @@ Heartfelt thanks to every community contributor whose Pull Requests, security ha
 
 - **Full Hall of Contributors & Detailed Credits**: See [**`docs/CONTRIBUTORS.md`**](./docs/CONTRIBUTORS.md) (permanently crediting all PR authors and key issue reporters, alongside release notes in [`CHANGELOG.md`](./CHANGELOG.md)).
 - Contributions via [Issues](https://github.com/RMvdesi/obsidian-prism/issues) and [Pull Requests](https://github.com/RMvdesi/obsidian-prism/pulls) are always welcome!
+
+---
+
+### 4. Code Signing Policy & Release Verification
+
+- **Code Signing Policy**: Full signing scope, reproducible public-CI two-step signing order, and approval governance are documented in [**`docs/CODE_SIGNING_POLICY.md`**](./docs/CODE_SIGNING_POLICY.md). Free open-source code signing for official Windows release binaries (`obsidian-prism-watcher.exe` and `obsidian-prism-installer.exe`) is planned to be provided by [SignPath.io](https://signpath.io/) with a certificate issued by the [SignPath Foundation](https://signpath.org/), **taking effect once the public CI signing pipeline is enabled on official public release tags** (unsigned builds continue to trigger standard OS first-run prompts until enabled).
+- **License, Project Members & Security Policy**: Obsidian Prism is publicly auditable open-source software with zero runtime npm dependencies under **[`GPL-3.0-only`](./LICENSE)** (with [`NOTICE`](./NOTICE)). Project maintainers and contributors are listed in [`docs/CONTRIBUTORS.md`](./docs/CONTRIBUTORS.md), and vulnerability disclosure & artifact revocation procedures are documented in [`.github/SECURITY.md`](./.github/SECURITY.md).
+- **Verifying Releases**: Every GitHub Release publishes a CI-generated `SHA256SUMS.txt` checksum file. Users can verify SHA-256 digests anytime before running any binary, and verify Authenticode signatures via PowerShell `Get-AuthenticodeSignature` once SignPath signing is enabled.

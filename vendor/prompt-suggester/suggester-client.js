@@ -1,11 +1,4 @@
-// Obsidian Prism — Channel 11 Context-Aware Next-Prompt Ghost Suggester Client Runtime (v1.0.8 · Beta)
-// - 严格按会话 data-cascade-id 隔离：绝不跨会话泄漏建议
-// - 精确展示生命周期：
-//   * 历史/静止对话重开保持静默，绝不自动发起请求或显示陈旧建议
-//   * /btw 侧栏问答与子智能体标签页严格排除
-//   * 主会话刚完成回复后触发一次预测，严格绑定该 cascadeId 与 turnSig
-//   * 关闭态（enabled: false）零 MutationObserver、零 document 捕获监听、零运行时样式注入
-// - Lexical 单次指令插入（杜绝异步双插）
+// Obsidian Prism — Ch11 Ghost Suggester Client (按 cascadeId 隔离，关闭态 0 MO/0 监听/0 样式)
 
 (function (root) {
   'use strict';
@@ -98,6 +91,7 @@
         el.setAttribute(NO_TR_ATTRS[i][0], NO_TR_ATTRS[i][1]);
       }
       el.setAttribute('data-ag-owned', '1');
+      el.setAttribute('data-ag-prism-suggester-owned', '1');
     }
     return el;
   }
@@ -291,30 +285,23 @@
     ).filter((el) => !isExcludedPaneNode(el));
     if (rawNodes.length === 0) return [];
 
-    const filtered = rawNodes.filter((node) => {
-      for (let i = 0; i < rawNodes.length; i++) {
-        const other = rawNodes[i];
-        if (other !== node && typeof node.contains === 'function' && node.contains(other)) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    const turns = [];
-    for (const el of filtered) {
-      const tid = String(el.getAttribute('data-testid') || '');
-      const role = tid.startsWith('user-') ? 'user' : 'assistant';
-      const text = extractCleanNodeText(el);
-      if (!text) continue;
-      const prev = turns[turns.length - 1];
-      if (prev && prev.role === role) {
-        prev.text = `${prev.text}\n\n${text}`.slice(-2400);
-      } else {
-        turns.push({ role, text });
+    const rawSet = new Set(rawNodes), hasNestedRaw = new Set();
+    for (let i = 0; i < rawNodes.length; i++) {
+      for (let cur = rawNodes[i].parentElement || rawNodes[i].parentNode; cur && cur !== viewEl; cur = cur.parentElement || cur.parentNode) {
+        if (rawSet.has(cur)) hasNestedRaw.add(cur);
       }
     }
-    return turns.slice(-6);
+    const filtered = rawNodes.filter((n) => !hasNestedRaw.has(n)), revTurns = [];
+    for (let i = filtered.length - 1; i >= 0; i--) {
+      const el = filtered[i], tid = String(el.getAttribute('data-testid') || ''), role = tid.startsWith('user-') ? 'user' : 'assistant';
+      const prev = revTurns[revTurns.length - 1];
+      if (revTurns.length >= 6 && (!prev || prev.role !== role)) break;
+      const text = extractCleanNodeText(el);
+      if (!text) continue;
+      if (prev && prev.role === role) prev.text = `${text}\n\n${prev.text}`.slice(-2400);
+      else revTurns.push({ role, text });
+    }
+    return revTurns.reverse();
   }
 
   function hasScopedIndicator(scopeEl, selector) {
@@ -454,8 +441,7 @@
     let settleCompletedAt = 0;
     let ttlExpiryTimer = null;
     let composerSyncTimer = null;
-    let isComposing = false;
-    let suppressUntilMs = 0;
+    let isComposing = false, suppressUntilMs = 0, lastOverlayHost = null, lastOverlaySig = '', pendingHiddenCheck = false;
 
     const getTtlMs = () => {
       const m = Number(config.ttlMinutes);
@@ -657,13 +643,15 @@
       return edEl.closest?.('[data-ag-cs-caret-host]') || edEl.parentElement || null;
     };
 
+    const drainMutObserver = () => { if (mutObserver && typeof mutObserver.takeRecords === 'function') try { mutObserver.takeRecords(); } catch {} };
     const removeOverlayDom = () => {
+      lastOverlayHost = null; lastOverlaySig = '';
       if (!doc.querySelectorAll) return;
-      doc.querySelectorAll(`[data-testid="${OVERLAY_TESTID}"]`).forEach((n) => n.remove());
-      doc.querySelectorAll(`[${GHOST_ACTIVE_ATTR}]`).forEach((el) => {
-        el.removeAttribute(GHOST_ACTIVE_ATTR);
-        el.style?.removeProperty?.('--ag-prism-ghost-min-h');
-      });
+      const ov = doc.querySelectorAll(`[data-testid="${OVERLAY_TESTID}"]`), hs = doc.querySelectorAll(`[${GHOST_ACTIVE_ATTR}]`);
+      if (!ov.length && !hs.length) return;
+      ov.forEach((n) => n.remove());
+      hs.forEach((el) => { el.removeAttribute(GHOST_ACTIVE_ATTR); el.style?.removeProperty?.('--ag-prism-ghost-min-h'); });
+      drainMutObserver();
     };
 
     // 仅解析严格属于当前可见 cascadeId 且对应最新轮次的建议
@@ -710,13 +698,12 @@
       }, Math.min(2147483600, offered.remainMs + 60));
       if (ttlExpiryTimer && typeof ttlExpiryTimer.unref === 'function') ttlExpiryTimer.unref();
 
-      // 清除挂载在非当前宿主上的残留浮层
-      doc.querySelectorAll?.(`[data-testid="${OVERLAY_TESTID}"]`)?.forEach?.((n) => {
-        if (n.parentElement !== host) n.remove();
-      });
-
-      ensureStyle();
+      const ariaAccept = getAria().accept;
+      const nextSig = `${offered.cascadeId}\x1f${offered.suggestion}\x1f${ariaAccept}`;
       let overlay = host.querySelector?.(`[data-testid="${OVERLAY_TESTID}"]`);
+      if (overlay && overlay.isConnected !== false && lastOverlayHost === host && lastOverlaySig === nextSig && host.getAttribute?.(GHOST_ACTIVE_ATTR) === '1') return true;
+      doc.querySelectorAll?.(`[data-testid="${OVERLAY_TESTID}"]`)?.forEach?.((n) => { if (n.parentElement !== host) n.remove(); });
+      ensureStyle();
       if (!overlay) {
         overlay = doc.createElement('div');
         overlay.className = 'ag-prism-ghost-overlay';
@@ -725,40 +712,30 @@
         host.appendChild(overlay);
       }
       overlay.setAttribute('data-cascade-owner', offered.cascadeId);
-
       while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
-
       const textSpan = doc.createElement('span');
       textSpan.className = 'ag-prism-ghost-text';
       textSpan.setAttribute('aria-hidden', 'true');
       textSpan.textContent = offered.suggestion;
       overlay.appendChild(textSpan);
-
       const tabBtn = doc.createElement('button');
-      tabBtn.type = 'button';
-      tabBtn.tabIndex = -1;
-      tabBtn.className = 'ag-prism-ghost-tab-btn';
+      tabBtn.type = 'button'; tabBtn.tabIndex = -1; tabBtn.className = 'ag-prism-ghost-tab-btn';
       tabBtn.setAttribute('data-testid', ACCEPT_BTN_TESTID);
-      tabBtn.setAttribute('aria-label', getAria().accept);
+      tabBtn.setAttribute('aria-label', ariaAccept);
       tabBtn.addEventListener('pointerdown', (ev) => ev.preventDefault());
       tabBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
-      tabBtn.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        acceptCurrentGhost();
-      });
-
+      tabBtn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); acceptCurrentGhost(); });
       const kbd = doc.createElement('kbd');
-      kbd.className = 'ag-prism-ghost-kbd';
-      kbd.textContent = '\u21e5 Tab';
+      kbd.className = 'ag-prism-ghost-kbd'; kbd.textContent = '\u21e5 Tab';
       tabBtn.appendChild(kbd);
       overlay.appendChild(tabBtn);
-
       host.setAttribute(GHOST_ACTIVE_ATTR, '1');
       try {
         const neededH = Math.min(104, Math.max(40, (overlay.offsetHeight || 22) + 14));
         host.style?.setProperty?.('--ag-prism-ghost-min-h', `${neededH}px`);
       } catch {}
+      lastOverlayHost = host; lastOverlaySig = nextSig;
+      drainMutObserver();
       return true;
     };
 
@@ -883,42 +860,18 @@
       };
     };
 
-    // 校验当前键盘事件焦点是否允许触发 Tab / Escape 建议快捷键（杜绝劫持周期表、浮层与外部控件）
     const isFocusAllowedForShortcut = (target, offered) => {
       if (hasBlockingUiOpen(doc)) return false;
       const activeEl = doc.activeElement && doc.activeElement.nodeType === 1 ? doc.activeElement : null;
       const targetEl = target && target.nodeType === 1 ? target : null;
-      const isNeutralTag = (el) => {
-        if (!el) return true;
-        const tag = String(el.tagName || '').toUpperCase();
-        return tag === 'BODY' || tag === 'HTML';
-      };
-
-      const focusEl =
-        targetEl && !isNeutralTag(targetEl)
-          ? targetEl
-          : activeEl && !isNeutralTag(activeEl)
-          ? activeEl
-          : targetEl || activeEl;
-
+      const isNeutralTag = (el) => !el || /^(BODY|HTML)$/i.test(String(el.tagName || ''));
+      const focusEl = targetEl && !isNeutralTag(targetEl) ? targetEl : activeEl && !isNeutralTag(activeEl) ? activeEl : targetEl || activeEl;
       if (!focusEl || isNeutralTag(focusEl)) return true;
       if (isExcludedPaneNode(focusEl) || isInBlockingContainer(focusEl)) return false;
-
-      // 焦点直接位于主编辑器或其子节点
-      if (offered?.editor && (focusEl === offered.editor || offered.editor.contains?.(focusEl))) {
-        return true;
-      }
-
-      // 焦点在 .surface-composer 内部时，仅放行主编辑区或幽灵接受按钮，放过工具栏中的模型/发送等按钮
+      if (offered?.editor && (focusEl === offered.editor || offered.editor.contains?.(focusEl))) return true;
       if (typeof focusEl.closest === 'function' && focusEl.closest('.surface-composer')) {
-        return Boolean(
-          focusEl.closest(
-            '[data-lexical-editor="true"], [contenteditable="true"], textarea, [data-testid="prism-ghost-accept-btn"]'
-          )
-        );
+        return Boolean(focusEl.closest('[data-lexical-editor="true"], [contenteditable="true"], textarea, [data-testid="prism-ghost-accept-btn"]'));
       }
-
-      // 其他外部按钮、输入框、链接或可聚焦控件一律不劫持
       return false;
     };
 
@@ -1056,34 +1009,16 @@
         clearSettleTimer();
         runningByCascade.set(cid, runningNow);
 
-        // 检查该会话是否在后台刚完成且仍处于 ttlMinutes 有效窗口内
         const bgDoneAt = bgCompletedAtByCascade.get(cid) || 0;
         if (bgDoneAt > 0) {
           const ageMs = nowMs() - bgDoneAt;
-          if (ageMs < 0 || ageMs > getTtlMs()) {
-            bgCompletedAtByCascade.delete(cid);
-          } else if (!runningNow && config.enabled) {
-            syncOverlayForActiveCascade();
-            scheduleSettleForCascade(cid, 320, bgDoneAt, 5);
-            return;
-          } else {
-            syncOverlayForActiveCascade();
-            return;
-          }
+          if (ageMs < 0 || ageMs > getTtlMs()) bgCompletedAtByCascade.delete(cid);
+          else if (!runningNow && config.enabled) { syncOverlayForActiveCascade(); scheduleSettleForCascade(cid, 320, bgDoneAt, 5); return; }
+          else { syncOverlayForActiveCascade(); return; }
         }
-
         if (!runningNow && !sessionStore.has(cid)) {
-          // 刚打开的历史静止对话记录初始 sampledSig，绝不误触发预测
           const existingSig = computeTurnSig(extractTurnsFromView(snap.view));
-          if (existingSig) {
-            touchSessionEntry(cid, {
-              turnSig: '',
-              suggestion: '',
-              dismissed: false,
-              sampledSig: existingSig,
-              createdAt: 0,
-            });
-          }
+          if (existingSig) touchSessionEntry(cid, { turnSig: '', suggestion: '', dismissed: false, sampledSig: existingSig, createdAt: 0 });
         }
         syncOverlayForActiveCascade();
         return;
@@ -1190,6 +1125,7 @@ on(doc, 'cut', onComposerBeforeEdit, true);
 on(doc, 'compositionstart', onComposerCompositionStart, true);
 on(doc, 'compositionend', onComposerCompositionEnd, true);
 on(doc, 'keyup', onComposerKeyUp, true);
+on(doc, 'visibilitychange', () => { if (!destroyed && config.enabled && !doc.hidden && pendingHiddenCheck) { pendingHiddenCheck = false; scheduleMutCheck(); } });
 const domBus = (win && (win.__agDomBus || win.__agPrismDomBus)) || null;
 if ((domBus?.subscribe || typeof win?.MutationObserver === 'function') && doc.documentElement) {
 const isHcPortal = (n) => {
@@ -1197,6 +1133,7 @@ if (!n || n.nodeType !== 1 || n === doc.body || n === doc.documentElement) retur
 const f = n.firstElementChild;
 return Boolean(n.hasAttribute?.('data-hover-card-popup') || f?.hasAttribute?.('data-hover-card-popup') || f?.firstElementChild?.hasAttribute?.('data-hover-card-popup') || (n.hasAttribute?.('data-base-ui-portal') && n.querySelector?.('[data-hover-card-popup]')));
 };
+const isOwn = (n) => Boolean(n && n.nodeType === 1 && (n.id === 'ag-prism-prompt-suggester-root' || n.id === SUGGESTER_STYLE_ID || n.hasAttribute?.('data-ag-prism-suggester-owned') || n.getAttribute?.('data-testid') === OVERLAY_TESTID));
 const someMutNode = (m, fn) => {
 for (const l of [m.addedNodes, m.removedNodes]) if (l) for (let i = 0; i < l.length; i++) if (fn(l[i])) return true;
 return false;
@@ -1214,10 +1151,13 @@ const SB_TIDS = new Set(['conversation-row-sidebar', 'status-loading-spinner']);
 const VP_TIDS = new Set('stop-button|cancel-button|input-cancel-button|agent-loading|thinking-collapsible-trigger'.split('|'));
 const isSuggesterNoise = (m, b) => {
 const t = m?.target, el = t && (t.nodeType === 1 ? t : t.parentElement);
-if (!el || el.id === 'ag-prism-prompt-suggester-root' || el.hasAttribute?.('data-ag-prism-suggester-owned') || isHcPortal(el)) return true;
-if (m.type === 'childList' && el === doc.body && hasMutNode(m) && !someMutNode(m, (n) => !isHcPortal(n))) return true;
+if (!el || isOwn(el) || isHcPortal(el)) return true;
+if (m.type === 'childList' && hasMutNode(m)) {
+if (!someMutNode(m, (n) => !isOwn(n))) return true;
+if (el === doc.body && !someMutNode(m, (n) => !isHcPortal(n))) return true;
+}
 if (typeof el.closest === 'function') {
-if (el.closest('[data-ag-prism-suggester-owned],[data-hover-card-popup],.toast-viewport')) return true;
+if (el.closest(`[data-ag-prism-suggester-owned],[data-testid="${OVERLAY_TESTID}"],[data-hover-card-popup],.toast-viewport`)) return true;
 if (m.type === 'attributes' && m.attributeName === 'class') {
 const tid = el.getAttribute?.('data-testid') || '';
 if (tid !== 'conversation-view' && tid !== 'agent-input-box' && tid !== 'conversation-row-sidebar' && !el.hasAttribute?.('data-cascade-id') && !el.classList?.contains?.('agy-home')) return true;
@@ -1233,12 +1173,15 @@ return false;
 };
 const onMut = (muts) => {
 if (destroyed || !config.enabled) return;
+if (doc.hidden) { pendingHiddenCheck = true; return; }
 const b = { n: 8 };
+let sawRootAttr = false;
 for (let i = 0; i < muts.length; i++) {
 const m = muts[i];
-if (m.type === 'attributes' && m.target === doc.documentElement) { syncOverlayForActiveCascade(); continue; }
-if ((m.type === 'childList' || m.type === 'attributes') && !isSuggesterNoise(m, b)) { scheduleMutCheck(); break; }
+if (m.type === 'attributes' && m.target === doc.documentElement) { sawRootAttr = true; continue; }
+if ((m.type === 'childList' || m.type === 'attributes') && !isSuggesterNoise(m, b)) { scheduleMutCheck(); return; }
 }
+if (sawRootAttr) syncOverlayForActiveCascade();
 };
 const obsOpts = {
 childList: true, subtree: true, attributes: true,
@@ -1257,6 +1200,7 @@ clearMutDebounce();
 cancelMountRaf();
       isComposing = false;
       suppressUntilMs = 0;
+      lastOverlayHost = null; lastOverlaySig = ''; pendingHiddenCheck = false;
       if (mutObserver) {
         try {
           mutObserver.disconnect();

@@ -46,7 +46,7 @@
     return o;
   };
   const SHARED_PROP_PALETTE = decodePal(
-    'k9c958c;wfbf8f1;cecdfc6;ga8a194;B5b8fb9;bcfe3ee;rcc4f45;ye8b64a;hrgba(20, 20, 19, 0.20);d9a8e80;D6f8ca6;pef9aa6;n8b5e3c;l6a6158;e78716a;F9e3324;fc9642a;Ye0a23c;Vfff1dc;mrgba(120, 112, 104, 0.55);G7dff9b;trgba(125, 255, 155, 0.38);Nff6bd6;urgba(255, 107, 214, 0.38);Weffff3;Z232120;z756f69;A3d8bff;Ed6e8ff;C2753a8;irgba(80, 150, 255, 0.78);Irgba(80, 150, 255, 0.32);Lff3b30;Hffd6d2;xb3312a;jrgba(255, 80, 60, 0.78);Jrgba(255, 80, 60, 0.32);Pd87e64;Mded6cc;Rff3b4f;ac6d9f7;v788eac'
+    'k9c958c;wfbf8f1;cecdfc6;ga8a194;B5b8fb9;bcfe3ee;rcc4f45;ye8b64a;hrgba(20, 20, 19, 0.20);d9a8e80;D6f8ca6;pef9aa6;n8b5e3c;l6a6158;e78716a;F9e3324;fc9642a;Ye0a23c;Vfff1dc;mrgba(120, 112, 104, 0.55);G7dff9b;trgba(125, 255, 155, 0.38);Nff6bd6;urgba(255, 107, 214, 0.38);Weffff3;Z232120;z756f69;A3d8bff;Ed6e8ff;C2753a8;irgba(80, 150, 255, 0.78);Irgba(80, 150, 255, 0.32);Lff3b30;Hffd6d2;xb3312a;jrgba(255, 80, 60, 0.78);Jrgba(255, 80, 60, 0.32);Pd87e64;Mded6cc;Rff3b4f;ac6d9f7;v788eac;K9b72f2;S3f7f5c'
   );
   const PALETTES = {};
   for (const row of (
@@ -64,12 +64,76 @@
 
   const RIM_PALS = Object.fromEntries(
     'default:164,208,255;155,114,203;37,99,235;124,58,237|warm:255,220,176;240,163,126;194,89,52;217,119,6|cobalt:148,228,255;66,133,244;29,78,216;2,132,199|iris:221,214,254;165,138,248;91,33,182;139,92,246|amber:253,230,138;242,184,75;180,83,9;245,158,11|mono:236,242,248;148,163,184;51,65,85;100,116,139'
-      .split('|')
-      .map((s) => {
-        const [k, v] = s.split(':');
-        return [k, v.split(';')];
-      })
+      .split('|').map((s) => { const [k, v] = s.split(':'); return [k, v.split(';')]; })
   );
+  const HABITAT_LIGHT_STYLE_ID = 'ag-prism-habitat-light-css';
+  const HABITAT_MODES = Object.freeze('lamp,lantern,candle,campfire,crystal,starjar,cactus,hourglass,coffee,books,vinyl'.split(','));
+  const HABITAT_LIGHT_KIND = Object.freeze({ lamp: 'warm', lantern: 'warm', candle: 'warm', campfire: 'warm', crystal: 'prism', starjar: 'prism' });
+  const HABITAT_POOLS = Object.freeze({
+    night: HABITAT_MODES.slice(0, 6),
+    morning: ['coffee', 'cactus', 'books'],
+    afternoon: ['cactus', 'coffee', 'books', 'vinyl', 'crystal'],
+    evening: ['lantern', 'lamp', 'starjar', 'candle', 'vinyl'],
+  });
+  const resolveHabitatModeForTime = (nowMsVal = Date.now(), seed = 0, scheduleUntil = 0) => {
+    const t = isFin(nowMsVal) ? nowMsVal : Date.now();
+    if (t < scheduleUntil) return 'hourglass';
+    const h = new Date(t).getHours();
+    const pool = h >= 21 || h < 6 ? HABITAT_POOLS.night : h < 11 ? HABITAT_POOLS.morning : h < 17 ? HABITAT_POOLS.afternoon : HABITAT_POOLS.evening;
+    return pool[abs(floor(t / 864e5) * 7 + h + floor(Number(seed) || 0)) % pool.length];
+  };
+  const HABITAT_LIGHT_CSS = (() => {
+    const H = '.ag-v2-habitat-prop', L = H + '[data-habitat-light]', W = H + '[data-habitat-light="warm"]', P = H + '[data-habitat-light="prism"]';
+    const LT = 'html[data-ag-cs-theme="light"]', Z = 'html:is([data-ag-cs-perf-mode="performance"],[data-ag-cs-perf-mode="eco"],[data-ag-cs-motion="off"],[data-ag-cs-win-blur="1"],[data-ag-pp-open="1"])';
+    const cv = (k, o = 0) => '--ag-prism-hc0:' + RIM_PALS[k][o] + ';--ag-prism-hc1:' + RIM_PALS[k][o + 1];
+    const rg = (c, a) => 'rgba(var(--ag-prism-hc' + c + '),' + (a === 0 ? '0' : 'var(--ag-prism-' + a + ')') + ')';
+    return (
+      H + '{position:absolute;overflow:visible;pointer-events:none!important}' +
+      L + '{--ag-prism-ha0:.32;--ag-prism-ha1:.15;--ag-prism-ha2:.048;--ag-prism-ga0:.26;--ag-prism-ga1:.1;--ag-prism-hd:4.8s}' +
+      L + '::before,' + L + '::after{content:"";position:absolute;left:50%;pointer-events:none!important;z-index:-1;will-change:opacity;animation:ag-prism-hab-breath var(--ag-prism-hd) ease-in-out infinite}' +
+      L + '::before{top:38%;width:48px;height:46px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle closest-side at 50% 50%,' + rg(0, 'ha0') + ' 0%,' + rg(0, 'ha1') + ' 34%,' + rg(1, 'ha2') + ' 62%,' + rg(1, 0) + ' 90%)}' +
+      L + '::after{bottom:3px;width:58px;height:8px;transform:translateX(-50%);background:radial-gradient(ellipse closest-side at 50% 50%,' + rg(0, 'ga0') + ' 0%,' + rg(1, 'ga1') + ' 44%,' + rg(1, 0) + ' 82%)}' +
+      W + '{' + cv('amber') + '}' + H + ':is([data-habitat-mode="candle"],[data-habitat-mode="campfire"]){--ag-prism-hd:4.3s}' +
+      P + '{' + cv('default') + ';--ag-prism-hd:5.2s}' +
+      'cobalt,iris,amber,mono'.split(',').map((k) => 'html[data-ag-cs-accent="' + k + '"] ' + P + '{' + cv(k) + '}' + LT + '[data-ag-cs-accent="' + k + '"] ' + P + '{' + cv(k, 2) + '}').join('') +
+      'html:is([data-ag-cs-palette="warm"],[data-ag-cs-palette="claude"]):not([data-ag-cs-accent="cobalt"],[data-ag-cs-accent="iris"],[data-ag-cs-accent="amber"],[data-ag-cs-accent="mono"]) ' + P + '{' + cv('warm') + '}' +
+      LT + ' ' + L + '{--ag-prism-ha0:.16;--ag-prism-ha1:.065;--ag-prism-ha2:.02;--ag-prism-ga0:.12;--ag-prism-ga1:.04}' + LT + ' ' + W + '{' + cv('amber', 2) + '}' + LT + ' ' + P + '{' + cv('default', 2) + '}' +
+      '@keyframes ag-prism-hab-breath{0%,100%{opacity:.78}50%{opacity:1}}' +
+      Z + ' ' + L + '::before,' + Z + ' ' + L + '::after{animation:none!important;opacity:.86}' +
+      '@media (prefers-reduced-motion:reduce){html:not([data-ag-cs-ignore-rm="1"]) ' + L + '::before,html:not([data-ag-cs-ignore-rm="1"]) ' + L + '::after{animation:none!important;opacity:.86}}'
+    );
+  })();
+  const habStyleRefs = new WeakMap();
+  const rmStyleEl = (el) => { try { if (el) (isFn(el.remove) ? el.remove() : el.parentNode?.removeChild?.(el)); } catch {} };
+  const findHabStyle = (d) => { try { return isFn(d?.getElementById) ? d.getElementById(HABITAT_LIGHT_STYLE_ID) : isFn(d?.querySelector) ? d.querySelector('#' + HABITAT_LIGHT_STYLE_ID) : null; } catch { return null; } };
+  const ensureHabitatStyle = (d, tok) => {
+    if (!d || !isFn(d.createElement)) return null;
+    let rec = habStyleRefs.get(d);
+    if (!rec) { rec = { toks: new Set(), el: null }; habStyleRefs.set(d, rec); }
+    if (tok) rec.toks.add(tok);
+    try {
+      const ex = findHabStyle(d) || (rec.el && rec.el.parentNode ? rec.el : null);
+      if (ex) { if (ex.textContent !== HABITAT_LIGHT_CSS) ex.textContent = HABITAT_LIGHT_CSS; return (rec.el = ex); }
+      const st = d.createElement('style');
+      st.id = HABITAT_LIGHT_STYLE_ID; st.setAttribute?.('id', HABITAT_LIGHT_STYLE_ID); st.setAttribute?.('data-ag-owned', '1');
+      st.textContent = HABITAT_LIGHT_CSS;
+      (d.head || d.documentElement || d.body)?.appendChild?.(st);
+      return (rec.el = st);
+    } catch { return null; }
+  };
+  const releaseHabitatStyle = (d, tok) => {
+    if (!d) return;
+    const rec = habStyleRefs.get(d);
+    if (rec && tok) rec.toks.delete(tok);
+    if (!rec || rec.toks.size === 0) { rmStyleEl(rec?.el); rmStyleEl(findHabStyle(d)); habStyleRefs.delete(d); }
+  };
+  const disposeHabitatStyle = (d) => {
+    const ref = d || (typeof document !== 'undefined' ? document : null);
+    if (!ref) return;
+    const rec = habStyleRefs.get(ref);
+    if (rec) rec.toks.clear();
+    releaseHabitatStyle(ref, null);
+  };
 
   const F = (rows, ox = 0, oy = 0, extra = null) =>
     extra ? { rows, ox, oy, ...extra } : { rows, ox, oy };
@@ -99,7 +163,7 @@
     'w.body!stand=2,1:.10#./12#*4/##8U##/#10U#/.#8U#./..8T..;squash=1,3:..10s../.12#./14#*2/##10U##/.#10U#./..10T..;loaf=2,4:.10s./12#*2/##8U##/#10U#/.10T.;stretch=2,0:.s9#./12#*4/##8U##/#10U#/.#8U#./..8T..;flat=2,7:.10s./12#/#10U#;turnL=2,1:.9#s./11#s*4/#8U##s/10U#s/.8U#s./..8T..;turnR=~turnL;leanR=2,1:..10#/.12#*4/.##8U##/#10U#./.#8U#../..8T..;leanL=1,1:.10#../12#.*4/##8U##./.#10U#/..#8U#./..8T..;peek=2,2:.10#./12#*4/##8T##|' +
     'w.paws!none=0,6:.s/ss;flap=0,5:ss/.s;cheer=0,4:ss12.ss/.s12.s.;up=@cheer,0,2;upR=14,4:ss/.s;groom1=0,5:.s11.ss/ss11.ss;groom2=@groom1,0,4;write1=@groom1,0,5;write2=0,6:.s12.ss/ss12.ss;peekGrip=1,7:ss10.ss;tuck=1,7:s|' +
     'w.tail!up=13,1:..#..#/..4#/3.##./..3#./.3#../##s3.;sway=13,2:3.#..#/..4#./..3#../.3#3./##s4.;curl=13,3:..#.#./..3#./.3#../##s3.;loaf=13,5:..#.#./.3#../##s3.;puff=13,0:..#..#/..4#/..3#./.3#../3#3./##s3.|' +
-    'p!dragonFlame0=14,4:.f./YVf/.f.;dragonFlame1=14,3:..fF./.YVfF/VYYfF/.fF..;dragonFlame2=14,3:3.fF./.fYVfF/VYYfF./..fF..;whaleSpout0=5,-3:.B..B./..AA../..BA../..AA..;whaleSpout1=4,-5:.B4.B./B.A..A.B/..AB.BA./3.AA3./3.BA3./3.AA3.;whaleSpout2=3,-5:..B4.B../.A6.A./B3.BB3.B/4.AA4./.B..BA..B./4.AA4.;quill1=15,3:..B/.B./k..;quill2=@quill1,16,4;sheet=12,8:6c/ckk3c/6g;mug=13,4:..4D/3DbwD/D.DbbD/3DbbD/..4D;cloth1=13,2:cw../w3c/.cwc/..c.;cloth2=14,3:..cw/3cw/.cwc/..c.;bowl=12,7:5w/DBwBD/.3D.;bowlEmpty=12,8:D3gD/.3D.;chop1=12,4:3.n/..n./.n../n3.;chop2=12,3:3.n/..n./.n../w3.;fishDish=11,7:.PPsPP./7D/.5D.;fishBone=11,7:.M.M.M./7D/.5D.;envS=12,5:6d/ddwwdd/dwddwd/d4wd/6d;envSOpen=12,4:..dd../.dwwd./6d/d4wd*2/6d;letter=14,1:7d/d5cd/d3gccd/d5cd/d4gcd/d5cd/dggccrd/7d;seed=15,8,g:On/nO;p1=16,7,g:O/l*2;p2=16,6,g:O/l*3;p3=14,5,g:..O../..l../O.l.O/.3l./..l..;p4=14,3,g:..O../O.l.O/.3l./O.l.O/.3l./..l..*2;d1=13,0,g:3.O3./O5.O/.O3.O./7./O5.O/7.*2/3.O3.;d2=13,-2,g:.q3.q./3.q3./q5.q/7./.q3.q./7./3.q3.;wilt1=14,3,g:..q../q.l.q/.3l./q.l.q/.3l./..l..*2;wilt2=14,4,g:q4./.q.q./..ll./.q.l./..ll./..l..;wilt3=15,6,g:Q.Q/.l./Ql./.l.;bfUp=13,-4:B3.B/BB.BB/.BkB./..k..;bfDn=13,-4:5.*2/BBkBB/.BkB.;bfLeftUp=@bfUp,1,-5;bfLeftDn=@bfDn,1,-5;bfRest=7,-3:..B../.BB../..k..;stickUp=14,-9:WW/GG*6;stickLT=9,-9:5.tt/WG3.tt/.GG..tt/..GG.tt/3.GGtt/4.GGt/5.GG;stickRT=~stickLT,14,-9;sirenDim=5,-4:..LL../.4x.*2/6l;sirenL=5,-4:..Lx../.HLxx./.LLxx./6l;sirenF=5,-4:..HH../.LHHL./.4L./6l;sirenR=~sirenL;beamL=-1,-7:J5./.j4./..j3./6./J3j../6./.Jjj..;beamF=4,-7:J..JJ..J/.j.jj.j.;micStand=1,4,g:6.ZZ6./6.Zz6./6.ZZ6./6.Z7.*2/5.4Z5.;micSink1=1,6,g:6.ZZ6./6.Zz6./6.ZZ6./5.4Z5.;micSink2=1,8,g:6.ZZ6./5.4Z5.;smoke=6,-4:.m./mm./.mm/.m.;iceCrystal=5,-6:..av../.aavv./3a3v/.aavv./..av..;iceCrystalHi=@iceCrystal,5,-7;laser0=16,7,g:.p./pRp/.p.;laser1=18,8,g:.R./RpR;laser2=15,8,g:pRp/.R.;blueprint=12,2:7B/B4EBB/BE3BEB/B4EBB/BE3BEB/7B;headband=1,1:.12L.L/..10H..L;goalFlame0=4,-7,g:3.Y3./..fYf../.FfYfF./FfYVYfF;goalFlame1=4,-7,g:..Y4./.fYf..Y/FfYVYf./.FfYfF.;goggles=3,0:gAAg..gAAg/gEAg..gEAg;iceCrystalSpin=6,-7:.av./aavv*2/.av.;flag0=14,-6:l4A./lAAyA./l4A./l5.*4;flag1=14,-6:l..3A/lAAyAA/l3A../l5.*4;shadesProp=3,2:4Z..4Z/ZEZZ..ZEZZ;surfboard=1,8,g:..10A../.A10EA.;waveSplash0=-3,6,g:..E./E.A./.AA.;waveSplash1=-3,6,g:E3./.EA./AA..;cloudBig=12,2:..3w../.w3Ew./5wbw/.5b.;cloudMid=13,3:.3w./wEEbw/.3b.;cubeGlow=13,3:.y.y./A3EA/AEyEA/5A;hourglass0=13,1:5n/.byb./..y../.b.b./5n;hourglass1=13,1:5n/.b.b./..y../.byb./5n;pocketWatch=12,4:..y../.ywy./ywnwy/.3y.;micHand=13,2:.ZZ./ZwZZ/.gg./..g.*2;spotlight=5,-9:..VV../.VyyV./V.yy.V;book0=12,4:5B/B3wB/BwgwB/B3wB/5B;book1=12,4:BB.BB/BwBwB/BwgwB/BwBwB/BB.BB;bulbOff=5,-8:..gg../.g..g.*2/..cc..;bulbOn=5,-9:y.yy.y/.yVVy./y4Vy/..yy../..cc..;hotCup0=12,3:.m..m./m..m../5D./D3nDD/D3nD./.3D..;hotCup1=12,3:m..m../.m..m./5D./D3nDD/D3nD./.3D..;donut0=12,4:.3p./pywpp/pp.pn/5n/.3n.;donut1=12,4:.pp../pyw../pp.pn/5n/.3n.;habCactus=0,0,g:3.P3./..lGl../l.lGl../lGlGl.l/..lGlGl/.5n./..3n..;habLamp=0,0,g:..3l../.l3Vl./.l3Yl./..3l../3.z3.*4/..3z..;habHourglass=0,0,g:.5n./..byb../3.y3./..byb../.5n.|s!heart=5,-7:.r.r./5r/.3r./..r..;spark=5,-8:..y..*2/5y/..y..*2;z1=10,-6:4k/..k./.k../4k;z2=12,-9:3k/.k./3k;vein=5,-7:.r.r./rr.rr/5./rr.rr/.r.r.;bang=6,-8:.r.*3/3./.r.;q=5,-9:.3k./k3.k/3.k./..k../5./..k..;note=5,-8:..kk./..k.k/..k../3k../kk3.;sweat=13,-4:.B./BbB*2/.B.;tilde=5,-7:.k3./k.k.k/3.k.;dozeZ0=@z2,12,-3;dozeZ1=@z1,13,-7;dozeZ2=14,-12:5k/3.k./..k../.k3./5k;fireSpark0=5,-8:..Y../f3.V/..f..;fireSpark1=5,-9:.V..f/..Y../f4.;fireSpark2=5,-8:f..Y./4.V/.f3.;sleepBubble0=12,4:.b./bEb/.b.;sleepBubble1=12,3:.bb./bEwb/bEEb/.bb.|m!cowboy=0,-2:5.6H5./3.10H3./..12R../..12#../..##o6#o##../16#/..12#../3.#.#4.#.#3.;shades=0,0:..12#../..4Gg##g4G../..12G../16#/..12#../3.#.#4.#.#3.;wizard=0,-3:7.MM7./6.MyMM6./5.6M5./..12M../..12#../..##o6#o##../16#/..12#../3.#.#4.#.#3.|ma.cowboy!trick=0,-2:4.6H6./..10H4./.12R3./..12#../..##o6#o##../16#/..12#../..#..#4.#..#..|ma.shades!trick=0,0:..12#../..GwGGw##GwGGw../..12G../16#/..12#../3.#.#4.#.#3.|ma.wizard!trick=0,-3:5.y10./4.yMyMM7./5.6M5./..12M../..12#../..##o6#o##../16#/..12#y./3.#.#4.#.#.y.';
+    'p!dragonFlame0=14,4:.f./YVf/.f.;dragonFlame1=14,3:..fF./.YVfF/VYYfF/.fF..;dragonFlame2=14,3:3.fF./.fYVfF/VYYfF./..fF..;whaleSpout0=5,-3:.B..B./..AA../..BA../..AA..;whaleSpout1=4,-5:.B4.B./B.A..A.B/..AB.BA./3.AA3./3.BA3./3.AA3.;whaleSpout2=3,-5:..B4.B../.A6.A./B3.BB3.B/4.AA4./.B..BA..B./4.AA4.;quill1=15,3:..B/.B./k..;quill2=@quill1,16,4;sheet=12,8:6c/ckk3c/6g;mug=13,4:..4D/3DbwD/D.DbbD/3DbbD/..4D;cloth1=13,2:cw../w3c/.cwc/..c.;cloth2=14,3:..cw/3cw/.cwc/..c.;bowl=12,7:5w/DBwBD/.3D.;bowlEmpty=12,8:D3gD/.3D.;chop1=12,4:3.n/..n./.n../n3.;chop2=12,3:3.n/..n./.n../w3.;fishDish=11,7:.PPsPP./7D/.5D.;fishBone=11,7:.M.M.M./7D/.5D.;envS=12,5:6d/ddwwdd/dwddwd/d4wd/6d;envSOpen=12,4:..dd../.dwwd./6d/d4wd*2/6d;letter=14,1:7d/d5cd/d3gccd/d5cd/d4gcd/d5cd/dggccrd/7d;seed=15,8,g:On/nO;p1=16,7,g:O/l*2;p2=16,6,g:O/l*3;p3=14,5,g:..O../..l../O.l.O/.3l./..l..;p4=14,3,g:..O../O.l.O/.3l./O.l.O/.3l./..l..*2;d1=13,0,g:3.O3./O5.O/.O3.O./7./O5.O/7.*2/3.O3.;d2=13,-2,g:.q3.q./3.q3./q5.q/7./.q3.q./7./3.q3.;wilt1=14,3,g:..q../q.l.q/.3l./q.l.q/.3l./..l..*2;wilt2=14,4,g:q4./.q.q./..ll./.q.l./..ll./..l..;wilt3=15,6,g:Q.Q/.l./Ql./.l.;bfUp=13,-4:B3.B/BB.BB/.BkB./..k..;bfDn=13,-4:5.*2/BBkBB/.BkB.;bfLeftUp=@bfUp,1,-5;bfLeftDn=@bfDn,1,-5;bfRest=7,-3:..B../.BB../..k..;stickUp=14,-9:WW/GG*6;stickLT=9,-9:5.tt/WG3.tt/.GG..tt/..GG.tt/3.GGtt/4.GGt/5.GG;stickRT=~stickLT,14,-9;sirenDim=5,-4:..LL../.4x.*2/6l;sirenL=5,-4:..Lx../.HLxx./.LLxx./6l;sirenF=5,-4:..HH../.LHHL./.4L./6l;sirenR=~sirenL;beamL=-1,-7:J5./.j4./..j3./6./J3j../6./.Jjj..;beamF=4,-7:J..JJ..J/.j.jj.j.;micStand=1,4,g:6.ZZ6./6.Zz6./6.ZZ6./6.Z7.*2/5.4Z5.;micSink1=1,6,g:6.ZZ6./6.Zz6./6.ZZ6./5.4Z5.;micSink2=1,8,g:6.ZZ6./5.4Z5.;smoke=6,-4:.m./mm./.mm/.m.;iceCrystal=5,-6:..av../.aavv./3a3v/.aavv./..av..;iceCrystalHi=@iceCrystal,5,-7;laser0=16,7,g:.p./pRp/.p.;laser1=18,8,g:.R./RpR;laser2=15,8,g:pRp/.R.;blueprint=12,2:7B/B4EBB/BE3BEB/B4EBB/BE3BEB/7B;headband=1,1:.12L.L/..10H..L;goalFlame0=4,-7,g:3.Y3./..fYf../.FfYfF./FfYVYfF;goalFlame1=4,-7,g:..Y4./.fYf..Y/FfYVYf./.FfYfF.;goggles=3,0:gAAg..gAAg/gEAg..gEAg;iceCrystalSpin=6,-7:.av./aavv*2/.av.;flag0=14,-6:l4A./lAAyA./l4A./l5.*4;flag1=14,-6:l..3A/lAAyAA/l3A../l5.*4;shadesProp=3,2:4Z..4Z/ZEZZ..ZEZZ;surfboard=1,8,g:..10A../.A10EA.;waveSplash0=-3,6,g:..E./E.A./.AA.;waveSplash1=-3,6,g:E3./.EA./AA..;cloudBig=12,2:..3w../.w3Ew./5wbw/.5b.;cloudMid=13,3:.3w./wEEbw/.3b.;cubeGlow=13,3:.y.y./A3EA/AEyEA/5A;hourglass0=13,1:5n/.byb./..y../.b.b./5n;hourglass1=13,1:5n/.b.b./..y../.byb./5n;pocketWatch=12,4:..y../.ywy./ywnwy/.3y.;micHand=13,2:.ZZ./ZwZZ/.gg./..g.*2;spotlight=5,-9:..VV../.VyyV./V.yy.V;book0=12,4:5B/B3wB/BwgwB/B3wB/5B;book1=12,4:BB.BB/BwBwB/BwgwB/BwBwB/BB.BB;bulbOff=5,-8:..gg../.g..g.*2/..cc..;bulbOn=5,-9:y.yy.y/.yVVy./y4Vy/..yy../..cc..;hotCup0=12,3:.m..m./m..m../5D./D3nDD/D3nD./.3D..;hotCup1=12,3:m..m../.m..m./5D./D3nDD/D3nD./.3D..;donut0=12,4:.3p./pywpp/pp.pn/5n/.3n.;donut1=12,4:.pp../pyw../pp.pn/5n/.3n.;habCactus=0,0,g:3.P3./..lGl../l.lGl../lGlGl.l/..lGlGl/.5n./..3n..;habLamp=0,0,g:3.yy3./..lYYl../.lYVVYl./.l4Vl./..yVVy../3.zy3./3.z4./..zzy3./.l4zl.;habLantern=0,0,g:3.kk3./..k..k../..4y../.l.VV.l./.lbVVbl./.lbYYbl./.l.ff.l./..4y../.nyYYyn./.6n.;habCandle=0,0,g:3.V4./..YV4./..fVf3./..3w3./..wcc3./..wcw3./..wcc.yy/.5y.y/..nyyn..;habCampfire=0,0,g:5.V../3.Y4./..fVY3./.fYVVf../.FfVYFf./.nnFFnn./z6ez/.z4lz.;habCrystal=0,0,g:4.E3./3.EAK../.E.EAK../.AKAAK.E/.AKCAKAK/.CKCCKKC/.z3ZKKz/3Zz4Z/.6Z.;habStarjar=0,0,g:3.nn3./..bnnb../.bEIIEb./.bIVVIb./.bIAEKb./.b.EV.b./.bIiiIb./.bbEEbb./..4b..;habHourglass=0,0,g:.5n./.nbybn./..byb../3.y3./..byb../.nbybn./.5n.;habCoffee=0,0,g:..m.m3./3.m.m../..m.m3./.w3nw../.wccwcww/.wccwc.w/.wccwcww/.g4wg.;habBooks=0,0,g:..rryrr./..r3wr./.BBy4B/.B4wB./4SyySS/S6cS/8S;habVinyl=0,0,g:6.kk/..4Zk./.ZZrrZk./.ZZyZZg./.6Z./8n/3nkkyyn|s!heart=5,-7:.r.r./5r/.3r./..r..;spark=5,-8:..y..*2/5y/..y..*2;z1=10,-6:4k/..k./.k../4k;z2=12,-9:3k/.k./3k;vein=5,-7:.r.r./rr.rr/5./rr.rr/.r.r.;bang=6,-8:.r.*3/3./.r.;q=5,-9:.3k./k3.k/3.k./..k../5./..k..;note=5,-8:..kk./..k.k/..k../3k../kk3.;sweat=13,-4:.B./BbB*2/.B.;tilde=5,-7:.k3./k.k.k/3.k.;dozeZ0=@z2,12,-3;dozeZ1=@z1,13,-7;dozeZ2=14,-12:5k/3.k./..k../.k3./5k;fireSpark0=5,-8:..Y../f3.V/..f..;fireSpark1=5,-9:.V..f/..Y../f4.;fireSpark2=5,-8:f..Y./4.V/.f3.;sleepBubble0=12,4:.b./bEb/.b.;sleepBubble1=12,3:.bb./bEwb/bEEb/.bb.|m!cowboy=0,-2:5.6H5./3.10H3./..12R../..12#../..##o6#o##../16#/..12#../3.#.#4.#.#3.;shades=0,0:..12#../..4Gg##g4G../..12G../16#/..12#../3.#.#4.#.#3.;wizard=0,-3:7.MM7./6.MyMM6./5.6M5./..12M../..12#../..##o6#o##../16#/..12#../3.#.#4.#.#3.|ma.cowboy!trick=0,-2:4.6H6./..10H4./.12R3./..12#../..##o6#o##../16#/..12#../..#..#4.#..#..|ma.shades!trick=0,0:..12#../..GwGGw##GwGGw../..12G../16#/..12#../3.#.#4.#.#3.|ma.wizard!trick=0,-3:5.y10./4.yMyMM7./5.6M5./..12M../..12#../..##o6#o##../16#/..12#y./3.#.#4.#.#.y.';
 
   function decodeSpriteAtlas(raw) {
     const out = { c: {}, k: {}, d: {}, w: {}, p: {}, s: {}, m: {}, ma: {} };
@@ -499,93 +563,52 @@
     ctx.save();
     if (typeof clipBottomY === 'number' && isFn(ctx.clip)) {
       ctx.beginPath();
-      if (isFn(ctx.rect)) {
-        ctx.rect(0, 0, cssW, clipBottomY);
-      } else {
-        ctx.moveTo(0, 0);
-        ctx.lineTo(cssW, 0);
-        ctx.lineTo(cssW, clipBottomY);
-        ctx.lineTo(0, clipBottomY);
-        ctx.closePath();
-      }
+      if (isFn(ctx.rect)) ctx.rect(0, 0, cssW, clipBottomY);
+      else { ctx.moveTo(0, 0); ctx.lineTo(cssW, 0); ctx.lineTo(cssW, clipBottomY); ctx.lineTo(0, clipBottomY); ctx.closePath(); }
       ctx.clip();
     }
-
     if (groundedLayers.length) {
       ctx.save();
-      if (mirror) {
-        ctx.translate(anchorX, 0);
-        ctx.scale(-1, 1);
-        ctx.translate(-anchorX, 0);
-      }
+      if (mirror) { ctx.translate(anchorX, 0); ctx.scale(-1, 1); ctx.translate(-anchorX, 0); }
       drawLayerSet(ctx, oxGrid, oyGrid, pxSize, palette, groundedLayers);
       ctx.restore();
     }
-
     const paintElastic = (c2) => {
-      c2.save();
-      c2.translate(0, tyPx);
+      c2.save(); c2.translate(0, tyPx);
       if (mirror) {
-        const flipSet = [];
-        const symSet = [];
-        for (const l of elasticLayers) {
-          if (SYM_LAYERS.has(l)) symSet.push(l);
-          else flipSet.push(l);
-        }
-        c2.save();
-        c2.translate(anchorX, 0);
-        c2.scale(-1, 1);
-        c2.translate(-anchorX, 0);
+        const flipSet = [], symSet = [];
+        for (const l of elasticLayers) (SYM_LAYERS.has(l) ? symSet : flipSet).push(l);
+        c2.save(); c2.translate(anchorX, 0); c2.scale(-1, 1); c2.translate(-anchorX, 0);
         drawLayerSet(c2, oxGrid, oyGrid, pxSize, palette, flipSet, options.colorResolver || null);
-        if (isFn(options.overlayPainter)) {
-          options.overlayPainter(c2, oxGrid, oyGrid, pxSize);
-        }
+        if (isFn(options.overlayPainter)) options.overlayPainter(c2, oxGrid, oyGrid, pxSize);
         c2.restore();
         if (symSet.length) {
-          const placed = symSet.map((s) => {
-            const w = max(1, ...s.rows.map((r) => r.length));
-            return { ...s, ox: 16 - (s.ox + w) };
-          });
+          const placed = symSet.map((s) => ({ ...s, ox: 16 - (s.ox + max(1, ...s.rows.map((r) => r.length))) }));
           drawLayerSet(c2, oxGrid, oyGrid, pxSize, palette, placed, options.colorResolver || null);
         }
       } else {
         drawLayerSet(c2, oxGrid, oyGrid, pxSize, palette, elasticLayers, options.colorResolver || null);
-        if (isFn(options.overlayPainter)) {
-          options.overlayPainter(c2, oxGrid, oyGrid, pxSize);
-        }
+        if (isFn(options.overlayPainter)) options.overlayPainter(c2, oxGrid, oyGrid, pxSize);
       }
       if (isFn(options.rimPainter)) options.rimPainter(c2, cssW, oxGrid, oyGrid, pxSize);
       c2.restore();
     };
-
     if (!rotDeg) {
       paintElastic(ctx);
     } else {
       let off = canvas.__agRotOff;
       const docRef = canvas.ownerDocument;
-      if (!off && docRef && isFn(docRef.createElement)) {
-        off = docRef.createElement('canvas');
-        canvas.__agRotOff = off;
-      }
+      if (!off && docRef && isFn(docRef.createElement)) off = canvas.__agRotOff = docRef.createElement('canvas');
       const offCtx = off ? off._ctx || (off._ctx = off.getContext('2d')) : null;
       if (!offCtx) {
-        ctx.translate(anchorX, anchorY);
-        ctx.rotate((rotDeg * PI) / 180);
-        ctx.translate(-anchorX, -anchorY);
+        ctx.translate(anchorX, anchorY); ctx.rotate((rotDeg * PI) / 180); ctx.translate(-anchorX, -anchorY);
         paintElastic(ctx);
       } else {
-        if (off.width !== canvas.width || off.height !== canvas.height) {
-          off.width = canvas.width;
-          off.height = canvas.height;
-        }
-        offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        offCtx.clearRect(0, 0, cssW, cssH);
-        offCtx.imageSmoothingEnabled = false;
+        if (off.width !== canvas.width || off.height !== canvas.height) { off.width = canvas.width; off.height = canvas.height; }
+        offCtx.setTransform(dpr, 0, 0, dpr, 0, 0); offCtx.clearRect(0, 0, cssW, cssH); offCtx.imageSmoothingEnabled = false;
         paintElastic(offCtx);
         ctx.imageSmoothingEnabled = false;
-        ctx.translate(anchorX, anchorY);
-        ctx.rotate((rotDeg * PI) / 180);
-        ctx.translate(-anchorX, -anchorY);
+        ctx.translate(anchorX, anchorY); ctx.rotate((rotDeg * PI) / 180); ctx.translate(-anchorX, -anchorY);
         ctx.drawImage(off, 0, 0, cssW, cssH);
       }
     }
@@ -1290,12 +1313,11 @@
     const PP_OPEN = 'data-ag-pp-open';
     const PERF_M = 'data-ag-cs-perf-mode';
     const isDocHidden = () => !!(doc?.hidden);
-    const isPpOpen = () => {
-      const root = doc?.documentElement;
-      if (!root || !isFn(root.getAttribute) || root.getAttribute(PP_OPEN) !== '1') return false;
-      const pm = String(root.dataset?.agCsPerfMode || root.getAttribute(PERF_M) || '').trim().toLowerCase();
+    const isPerf = () => {
+      const r = doc?.documentElement, pm = String(r?.dataset?.agCsPerfMode || r?.getAttribute?.(PERF_M) || '').trim().toLowerCase();
       return pm === 'performance' || pm === 'eco';
     };
+    const isPpOpen = () => doc?.documentElement?.getAttribute?.(PP_OPEN) === '1' && isPerf();
     const isAttrB = () => {
       const root = doc?.documentElement;
       if (!root) return false;
@@ -1311,7 +1333,7 @@
       if (!root) return false;
       return isFn(root.getAttribute) && root.getAttribute(PM) === 'chat';
     };
-    const readDpr = () => min((win?.devicePixelRatio) || 1, 2);
+    const readDpr = () => min((win?.devicePixelRatio) || 1, isPerf() ? 1 : 2);
     let dpr = readDpr();
     const rand = (a, b) => a + random() * (b - a);
     const ticksIn = (minMs, maxMs) => max(1, round(rand(minMs, maxMs) / TICK));
@@ -1643,23 +1665,40 @@
     releaseFxCanvas();
     hostEl.appendChild(fxCanvas);
 
-    // 右侧角落微缩像素栖息地摆件（纯 CSS SVG DataURI，0 Canvas 0 innerHTML）
+    // 右侧角落微缩像素栖息地摆件（11 款 crispEdges SVG + 纯 GPU 三层氛围光，0 Canvas 0 innerHTML）
+    const habStyleTok = {};
+    ensureHabitatStyle(doc, habStyleTok);
     const habitatEl = markNoTrOwned(doc.createElement('div'));
     habitatEl.className = 'ag-v2-habitat-prop';
     habitatEl.setAttribute('aria-hidden', 'true');
-    if (habitatEl.style) Object.assign(habitatEl.style, { position: 'absolute', right: '10px', bottom: '2px', width: '24px', height: '30px', pointerEvents: 'none', zIndex: '14', imageRendering: 'pixelated', backgroundRepeat: 'no-repeat', backgroundSize: '24px 30px' });
+    if (habitatEl.style) Object.assign(habitatEl.style, { position: 'absolute', right: '28px', bottom: '2px', width: '24px', height: '30px', pointerEvents: 'none', overflow: 'visible', zIndex: '14', imageRendering: 'pixelated', backgroundRepeat: 'no-repeat', backgroundSize: '24px 30px' });
     hostEl.appendChild(habitatEl);
     let habitatPreview = 'auto', scheduleWatchUntil = 0, lastHabitatKey = '';
+    const habitatSeed = isFin(options.habitatSeed) ? floor(Number(options.habitatSeed)) : floor(random() * 60);
+    const getWallNow = isFn(options.getNow) ? options.getNow : () => Date.now();
     const habSvgCache = {};
-    const resolveHabitatMode = () => {
-      if (habitatPreview !== 'auto') return habitatPreview;
-      if (Date.now() < scheduleWatchUntil) return 'hourglass';
-      const h = new Date().getHours();
-      return h >= 23 || h < 5 ? 'lamp' : 'cactus';
+    const resolveHabitatMode = () => (habitatPreview !== 'auto' ? habitatPreview : resolveHabitatModeForTime(getWallNow(), habitatSeed, scheduleWatchUntil));
+    const isLightTheme = () => doc?.documentElement?.getAttribute?.('data-ag-cs-theme') === 'light';
+    const resolveHabitatToneKey = (lightKind, dark) => {
+      if (lightKind === 'warm') return 'amber';
+      const r = doc?.documentElement, acc = r?.getAttribute?.('data-ag-cs-accent') || 'follow';
+      if (acc === 'cobalt' || acc === 'iris' || acc === 'amber' || acc === 'mono') return acc;
+      const pal = r?.getAttribute?.('data-ag-cs-palette') || 'obsidian';
+      return pal === 'warm' || pal === 'claude' || (!dark && pal === 'obsidian' && r?.getAttribute?.('data-ag-cs-light-preset') === 'alabaster') ? 'warm' : 'default';
+    };
+    const evalActorHabLight = (a, mode = resolveHabitatMode()) => {
+      const lightKind = HABITAT_LIGHT_KIND[mode] || null;
+      if (!a || !lightKind) return { lv: 0, dir: 0, tone: 'amber', dark: true, strength: 0 };
+      const habX = max(24, readStageWidth() - 40), dxH = getEntWorldCx(a) - habX;
+      const fy = a.stackedOn ? computeWorldFootY(a) : (a.y || 0);
+      const dist = max(0, 1 - abs(dxH) / 240), vert = max(0, 1 - abs(fy) / 56), dark = !isLightTheme();
+      const strength = dist * (0.45 + 0.55 * dist) * vert * (dark ? 1 : 0.55);
+      const lv = round(strength * 10);
+      return { lv, dir: lv > 0 ? clamp(round(-dxH / 42), -2, 2) : 0, tone: resolveHabitatToneKey(lightKind, dark), dark, strength: round(strength * 100) / 100 };
     };
     const buildHabitatSvgUri = (mode) => {
       if (habSvgCache[mode]) return habSvgCache[mode];
-      const spr = PROPS[mode === 'lamp' ? 'habLamp' : mode === 'hourglass' ? 'habHourglass' : 'habCactus'];
+      const spr = PROPS[HABITAT_MODES.includes(mode) ? 'hab' + mode[0].toUpperCase() + mode.slice(1) : 'habCactus'];
       if (!spr || !spr.rows) return '';
       const cell = 3, oy = max(0, floor(30 / cell) - spr.rows.length), pal = PALETTES.clawd, rects = [];
       for (let ry = 0; ry < spr.rows.length; ry++) {
@@ -1683,6 +1722,9 @@
       const uri = buildHabitatSvgUri(mode);
       if (uri && habitatEl.style) habitatEl.style.backgroundImage = uri;
       habitatEl.setAttribute('data-habitat-mode', mode);
+      const lk = HABITAT_LIGHT_KIND[mode] || '';
+      if (lk) habitatEl.setAttribute('data-habitat-light', lk);
+      else habitatEl.removeAttribute?.('data-habitat-light');
     };
     renderHabitatProp(true);
 
@@ -2168,7 +2210,7 @@
       for (const e of allActiveEnts()) {
         if (e.stackedOn || e.dragging || e.ballisticActive) continue;
         if ((e.y || 0) < -3 || e.leap) continue;
-        if (isMiniEnt(e) && e.act && (e.act.type === 'ride' || e.act.type === 'leap')) continue;
+        if (isMiniEnt(e) && e.act && (e.act.type === 'ride' || e.act.type === 'leap' || e.act.type === 'chase' || e.act.type === 'scatter')) continue;
         groundList.push({
           id: e.id,
           ent: e,
@@ -2393,7 +2435,7 @@
       const direct = syncDirectMotionDomAttr(actor, actor.el);
       const depth = actor.stackedOn ? getStackDepth(actor.id) : 0;
       const tx = snapCoord(actor.x, direct);
-      const ty = snapCoord(yPx, direct);
+      const ty = snapCoord(yPx + (now < actor.nodUntil ? actor.nodY : 0), direct);
       const tz = yieldMode === 'peek' ? '8' : actor.dragging ? '38' : depth > 0 ? String(24 + depth * 2) : '24';
       if (actor.lastDomX !== tx || actor.lastDomY !== ty) {
         actor.lastDomX = tx;
@@ -2403,14 +2445,12 @@
       } else {
         perfStats.domTransformSkips += 1;
       }
-      // 60fps GPU 倾角同步到内层 canvas（外层 actor.el 维持纯 translate3d 兼容），静止 rot=0 清回 ''
+      // 60fps GPU rot on inner canvas
       const nextRot = snapRot(inspectState ? 0 : effectiveRot(actor, now));
       if (actor.lastDomRot !== nextRot) {
         actor.lastDomRot = nextRot;
         actor.lastRender.lastRot = nextRot;
-        if (actor.canvas && actor.canvas.style) {
-          actor.canvas.style.transform = nextRot ? `rotate(${nextRot}deg)` : '';
-        }
+        if (actor.canvas?.style) actor.canvas.style.transform = nextRot ? `rotate(${nextRot}deg)` : '';
         perfStats.domTransformWrites += 1;
       }
       if (actor.lastDomZ !== tz) {
@@ -2494,51 +2534,31 @@
       return fx;
     };
 
-    // ── 叠叠乐平衡：下方角色（含迷你蟹）每拍位移 → 上方角色反向摆角（±8°）──
     const updateBalance = () => {
       for (const id of activeMainIds()) {
-        const top = actors[id];
-        const base = top.stackedOn ? getEnt(top.stackedOn) : null;
-        let target = 0;
-        if (base && !reducedMotion && base.prevCx != null) {
-          target = max(-8, min(8, -(getEntWorldCx(base) - base.prevCx) * 4));
-        }
+        const top = actors[id], base = top.stackedOn ? getEnt(top.stackedOn) : null;
+        const target = base && !reducedMotion && base.prevCx != null ? max(-8, min(8, -(getEntWorldCx(base) - base.prevCx) * 4)) : 0;
         top.balRot = abs(target) >= abs(top.balRot) ? target : top.balRot * 0.55 + target * 0.45;
         if (abs(top.balRot) < 0.4) top.balRot = 0;
       }
       for (const e of allActiveEnts()) e.prevCx = getEntWorldCx(e);
     };
-
-    // ── 生态联动辅助：打盹 z / 迷你蟹互动路径 ─────────────────────────────
-    // 打盹符号：日间打盹冒 z（小→中→大），深夜（23:00~05:00）吹轻柔睡眠小鼻泡
     const dozeSymFor = (a) => {
-      const offNight = Number(a.phaseOff) || 0;
-      const offDay = (offNight * 2 + (a.kind === 'cat' ? 1 : a.kind === 'whale' ? 3 : 0)) % 18;
-      if (isLateNight()) {
-        if (reducedMotion) return 'sleepBubble0';
-        const ph = (tickIdx + offNight) % 12;
-        return ph < 6 ? 'sleepBubble0' : 'sleepBubble1';
-      }
+      const offNight = Number(a.phaseOff) || 0, offDay = (offNight * 2 + (a.kind === 'cat' ? 1 : a.kind === 'whale' ? 3 : 0)) % 18;
+      if (isLateNight()) return reducedMotion ? 'sleepBubble0' : (tickIdx + offNight) % 12 < 6 ? 'sleepBubble0' : 'sleepBubble1';
       if (reducedMotion) return 'dozeZ1';
       const ph = (tickIdx + offDay) % 18;
       return ph < 4 ? 'dozeZ0' : ph < 8 ? 'dozeZ1' : ph < 12 ? 'dozeZ2' : null;
     };
-    const crabRiding = () =>
-      miniPileEnabled && miniCrabs.some((mc) => mc.act && mc.act.type === 'ride' && tickIdx >= mc.act.start);
-
-    // 迷你蟹分段路径求值：返回 { x, y, sprite, mirror, hopPx }；未激活或结束返回 null
+    const crabRiding = () => miniPileEnabled && miniCrabs.some((mc) => mc.act && mc.act.type === 'ride' && tickIdx >= mc.act.start);
     const miniActPose = (mc, baseSprite, anim) => {
       const act = mc.act;
       if (!act) return null;
       const t = tickIdx - act.start;
       if (t < 0) return null;
-      let k0 = t;
-      let segIdx = -1;
+      let k0 = t, segIdx = -1;
       for (let i = 0; i < act.segs.length; i++) {
-        if (k0 < act.segs[i].ticks) {
-          segIdx = i;
-          break;
-        }
+        if (k0 < act.segs[i].ticks) { segIdx = i; break; }
         k0 -= act.segs[i].ticks;
       }
       if (segIdx < 0 || (act.abort && act.abort(segIdx))) {
@@ -2546,119 +2566,62 @@
         if (segIdx >= 0 && act.onAbort) act.onAbort();
         return null;
       }
-      const seg = act.segs[segIdx];
-      const k = (k0 + 1) / seg.ticks;
-      const x = seg.x0 + (seg.x1 - seg.x0) * k;
-      const y = seg.y0 + (seg.y1 - seg.y0) * k - (seg.arc || 0) * sin(PI * k);
+      const seg = act.segs[segIdx], k = (k0 + 1) / seg.ticks;
+      const x = seg.x0 + (seg.x1 - seg.x0) * k, y = seg.y0 + (seg.y1 - seg.y0) * k - (seg.arc || 0) * sin(PI * k);
       if (seg.x1 !== seg.x0) mc.mirror = seg.x1 < seg.x0;
       else if (seg.face) mc.mirror = seg.face < 0;
-      const still = MINI_SPRITES[mc.id];
-      const blinking = tickIdx - mc.blinkAt >= 0 && tickIdx - mc.blinkAt < 2;
+      const still = MINI_SPRITES[mc.id], blinking = tickIdx - mc.blinkAt >= 0 && tickIdx - mc.blinkAt < 2;
       let sprite;
       if (seg.sprite === 'walk') sprite = tickIdx % 2 ? anim.walkB : still;
       else if (seg.sprite === 'trick') sprite = anim.trick;
       else if (seg.sprite === 'wave') sprite = reducedMotion || k0 % 4 < 2 ? anim.trick : still;
       else if (seg.sprite === 'sit') sprite = k0 >= 8 && k0 < 14 && k0 % 4 < 2 ? anim.trick : blinking ? miniBlinkFrame(still) : still;
       else sprite = blinking ? miniBlinkFrame(still) : still;
-      return {
-        x: round(x),
-        y: round(y / 2) * 2,
-        sprite: sprite || baseSprite,
-        mirror: mc.mirror,
-        hopPx: seg.hop && !reducedMotion && k0 % 4 < 2 ? -2 : 0,
-      };
+      return { x: round(x), y: round(y / 2) * 2, sprite: sprite || baseSprite, mirror: mc.mirror, hopPx: seg.hop && !reducedMotion && k0 % 4 < 2 ? -2 : 0 };
     };
-
-    // 迷你蟹坐标：translateX 相对迷你堆左缘（宿主 left 12px），精灵中心在画布 20px 处
     const crabHostCenter = (mc) => 12 + mc.lastX + 20;
     const crabSafeX = (x) => min(clampActorX(9999) - 132, max(2, round(x)));
     const crabMaxX = () => max(40, readStageWidth() - 52);
-    const nearestFreeCrab = (hx) =>
-      miniCrabs
-        .filter((mc) => !mc.act || tickIdx - mc.act.start < 0)
-        .sort((m1, m2) => abs(crabHostCenter(m1) - hx) - abs(crabHostCenter(m2) - hx))[0] || null;
-    const actorFree = (a, now) =>
-      !a.dragging && !a.ballisticActive && !a.stackedOn && !a.seq && a.y === 0 && !(a.overridePose === 'dangle' && now < a.overrideUntil);
-
-    // 迎宾：三蟹集体挥手（复用 trick 帧，错峰 2 拍起手）
+    const nearestFreeCrab = (hx) => miniCrabs.filter((mc) => !mc.act || tickIdx - mc.act.start < 0).sort((m1, m2) => abs(crabHostCenter(m1) - hx) - abs(crabHostCenter(m2) - hx))[0] || null;
+    const actorFree = (a, now) => !a.dragging && !a.ballisticActive && !a.stackedOn && !a.seq && a.y === 0 && !(a.overridePose === 'dangle' && now < a.overrideUntil);
     const crabsWave = () => {
       if (!miniPileEnabled) return;
       miniCrabs.forEach((mc, idx) => {
         if (mc.act && mc.act.type === 'ride') return;
         const x = crabSafeX(mc.lastX);
-        mc.act = {
-          type: 'wave',
-          start: tickIdx + 1 + idx * 2,
-          segs: [{ ticks: 14, x0: x, x1: x, y0: 0, y1: 0, sprite: 'wave', hop: true }],
-        };
+        mc.act = { type: 'wave', start: tickIdx + 1 + idx * 2, segs: [{ ticks: 14, x0: x, x1: x, y0: 0, y1: 0, sprite: 'wave', hop: true }] };
       });
     };
-
-    // 抛掷落地砸在蟹附近：受惊跳开 → 定住 → 慢慢走回原位
     const scatterCrabsNear = (hx) => {
       if (!miniPileEnabled || reducedMotion) return;
       miniCrabs.forEach((mc, idx) => {
         if (mc.act && mc.act.type === 'ride') return;
         const d = crabHostCenter(mc) - hx;
         if (abs(d) >= 64) return;
-        const dir = d >= 0 ? 1 : -1;
-        const x0 = crabSafeX(mc.lastX);
-        const far = max(0, min(crabMaxX(), x0 + dir * 26));
+        const dir = d >= 0 ? 1 : -1, x0 = crabSafeX(mc.lastX), far = max(0, min(crabMaxX(), x0 + dir * 26));
         mc.act = {
-          type: 'scatter',
-          start: tickIdx + (idx % 2),
-          segs: [
-            { ticks: 5, x0, x1: far, y0: 0, y1: 0, arc: 6, sprite: 'walk' },
-            { ticks: 4, x0: far, x1: far, y0: 0, y1: 0, sprite: 'still', face: -dir },
-            { ticks: 9, x0: far, x1: x0, y0: 0, y1: 0, sprite: 'walk' },
-          ],
+          type: 'scatter', start: tickIdx + (idx % 2),
+          segs: [{ ticks: 5, x0, x1: far, y0: 0, y1: 0, arc: 6, sprite: 'walk' }, { ticks: 4, x0: far, x1: far, y0: 0, y1: 0, sprite: 'still', face: -dir }, { ticks: 9, x0: far, x1: x0, y0: 0, y1: 0, sprite: 'walk' }],
         };
       });
     };
-
     let crabSerial = 0;
-    // 小猫追蟹：一只迷你蟹跑到猫（或任意在场主宠）跟前挑衅 → 惊觉追几步 → 蟹逃回原位 → 歪头
     const runCrabChase = (force) => {
-      const now = nowMs();
-      const cat = actors.cat || activeMainActors().find((a) => a.kind === 'cat') || activeMainActors()[0];
-      if (!cat || !miniPileEnabled || reducedMotion || dozing || !actorFree(cat, now)) return false;
-      if (!force && stageBusy()) return false;
+      const now = nowMs(), cat = actors.cat || activeMainActors().find((a) => a.kind === 'cat') || activeMainActors()[0];
+      if (!cat || !miniPileEnabled || reducedMotion || dozing || !actorFree(cat, now) || (!force && stageBusy())) return false;
       const mc = nearestFreeCrab(cat.x + 48);
       if (!mc) return false;
-      const x0 = crabSafeX(mc.lastX);
-      const crabLeft = x0 + 20 + 12 < cat.x + 48;
-      const tx = max(0, min(crabMaxX(), crabLeft ? cat.x - 26 : cat.x + 58));
-      const catDir = crabLeft ? -1 : 1;
-      const dist = abs(tx - x0);
-      const approach = clamp(round(dist / 7), 3, 36);
-      const flee = clamp(round(dist / 10), 4, 28);
-      const act = {
-        type: 'chase',
-        start: tickIdx + 1,
-        segs: [
-          { ticks: approach, x0, x1: tx, y0: 0, y1: 0, sprite: 'walk' },
-          { ticks: 6, x0: tx, x1: tx, y0: 0, y1: 0, sprite: 'wave', face: -catDir },
-          { ticks: flee, x0: tx, x1: x0, y0: 0, y1: 0, sprite: 'walk', hop: true },
-        ],
+      const x0 = crabSafeX(mc.lastX), crabLeft = x0 + 32 < cat.x + 48, tx = max(0, min(crabMaxX(), crabLeft ? cat.x - 26 : cat.x + 58)), catDir = crabLeft ? -1 : 1;
+      const dist = abs(tx - x0), approach = clamp(round(dist / 7), 3, 36), flee = clamp(round(dist / 10), 4, 28);
+      mc.act = {
+        type: 'chase', start: tickIdx + 1,
+        segs: [{ ticks: approach, x0, x1: tx, y0: 0, y1: 0, sprite: 'walk' }, { ticks: 6, x0: tx, x1: tx, y0: 0, y1: 0, sprite: 'wave', face: -catDir }, { ticks: flee, x0: tx, x1: x0, y0: 0, y1: 0, sprite: 'walk', hop: true }],
       };
-      mc.act = act;
-      const serial = (crabSerial += 1);
+      const serial = (crabSerial += 1), t0 = (approach + 1) * TICK;
       const alive = () => serial === crabSerial && !disposed && !reducedMotion && actors[cat.id] === cat && !cat.dragging && !cat.stackedOn && !dozing;
-      const t0 = (approach + 1) * TICK;
-      later(t0, () => {
-        if (!alive()) return;
-        startClip(cat, 'wow', 500, { sym: 'bang' });
-        renderAllFrames();
-      });
-      later(t0 + 500, () => {
-        if (!alive()) return;
-        startClip(cat, 'walk', 1200, { patrolDir: catDir, mirror: catDir > 0, sym: 'spark', symDurationMs: 600 });
-      });
-      later(t0 + 1750, () => {
-        if (!alive()) return;
-        startClip(cat, 'tilt', 900, { rot: -9, sym: 'q' });
-        renderAllFrames();
-      });
+      later(t0, () => { if (alive()) { startClip(cat, 'wow', 500, { sym: 'bang' }); renderAllFrames(); } });
+      later(t0 + 500, () => { if (alive()) startClip(cat, 'walk', 1200, { patrolDir: catDir, mirror: catDir > 0, sym: 'spark', symDurationMs: 600 }); });
+      later(t0 + 1750, () => { if (alive()) { startClip(cat, 'tilt', 900, { rot: -9, sym: 'q' }); renderAllFrames(); } });
       later(t0 + 2750, () => {
         if (alive() && !stageBusy()) resetHomePositions(true);
       });
@@ -2864,7 +2827,7 @@
         const effectivePose = inspectState ? inspectState.pose : hasRider && pose === 'idle' ? 'squash' : pose;
         const sulkJitter = effectivePose === 'sulk' && !reducedMotion && !inspectState ? (tickIdx % 4 < 2 ? 0 : -PX) : 0;
         const liftPx = st?.lift && !reducedMotion ? st.lift * PX : 0;
-        const nodOffset = (now < a.nodUntil ? a.nodY : 0) + sulkJitter + liftPx;
+        const nodOffset = sulkJitter + liftPx;
         let sqW = inspectState ? inspectState.sqW : st ? st.sqW : 0;
         let sqH = inspectState ? inspectState.sqH : st ? st.sqH : 0;
         if (!inspectState && !st && hasRider && pose !== 'idle') sqH = -1;
@@ -2902,48 +2865,26 @@
 
         const flip = inspectState ? inspectState.mirror : !!a.mirror;
         const rulerOn = !!(inspectState?.ruler);
-        let bLv = 0;
-        let bDir = 0;
+        let bLv = 0, bDir = 0;
         if (!inspectState && rim.on) {
           const dx = getEntWorldCx(a) - rim.x;
           const fy = a.stackedOn ? computeWorldFootY(a) : (a.y || 0);
           bLv = round(rim.s * max(0, 1 - abs(dx) / 240) * max(0, 1 - abs(fy) / 48) * 12);
           if (bLv > 0) bDir = clamp(round(-dx / 55), -2, 2);
         }
-        const tintState = `${a.kind}:${crystalActive ? 1 : 0}:${rulerOn ? 1 : 0}:${isChromaCat ? `p${phaseBucket}_${earSparkPhase}` : '0'}${bLv ? `:r${bLv}_${bDir}_${rim.t}_${rim.d ? 1 : 0}` : ''}`;
+        const hL = inspectState ? null : a.dragging || a.ballisticActive ? (a._habL || null) : (a._habL = evalActorHabLight(a, resolveHabitatMode()));
+        const hLv = hL ? hL.lv : 0, hDir = hL ? hL.dir : 0, hTone = hL ? hL.tone : 'amber', hDark = hL ? hL.dark : true;
+        const tintState = `${a.kind}:${crystalActive ? 1 : 0}:${rulerOn ? 1 : 0}:${isChromaCat ? `p${phaseBucket}_${earSparkPhase}` : '0'}${bLv ? `:r${bLv}_${bDir}_${rim.t}_${rim.d ? 1 : 0}` : ''}${hLv ? `:h${hLv}_${hDir}_${hTone}_${hDark ? 1 : 0}` : ''}`;
         const snappedTy = round(Number(nodOffset || 0) / PX) * PX;
         const frameIdx = computeLayersFrameIdx(layers);
         const rc = a.lastRender;
-        // 像素层仅在精灵帧/朝向/表情/挤压/尺寸等真实像素内容变化时重绘，物理位移与倾角 rot 由 GPU transform 实时驱动
-        if (
-          rc.poseKey === effectivePose &&
-          rc.frameIdx === frameIdx &&
-          rc.flip === flip &&
-          rc.tintState === tintState &&
-          rc.tyPx === snappedTy &&
-          rc.sqW === sqW &&
-          rc.sqH === sqH &&
-          rc.cw === a.canvas.width &&
-          rc.ch === a.canvas.height
-        ) {
+        if (rc.poseKey === effectivePose && rc.frameIdx === frameIdx && rc.flip === flip && rc.tintState === tintState && rc.tyPx === snappedTy && rc.sqW === sqW && rc.sqH === sqH && rc.cw === a.canvas.width && rc.ch === a.canvas.height) {
           perfStats.canvasSkips += 1;
         } else {
-          rc.poseKey = effectivePose;
-          rc.frameIdx = frameIdx;
-          rc.flip = flip;
-          rc.tintState = tintState;
-          rc.tyPx = snappedTy;
-          rc.sqW = sqW;
-          rc.sqH = sqH;
-          rc.cw = a.canvas.width;
-          rc.ch = a.canvas.height;
+          rc.poseKey = effectivePose; rc.frameIdx = frameIdx; rc.flip = flip; rc.tintState = tintState;
+          rc.tyPx = snappedTy; rc.sqW = sqW; rc.sqH = sqH; rc.cw = a.canvas.width; rc.ch = a.canvas.height;
           const colorResolver = isChromaCat
-            ? (ch, gx, gy, pal) =>
-                ch === '#'
-                  ? evalChromaColorAt(gx, gy, chromaPhase, false)
-                  : ch === 's'
-                    ? evalChromaColorAt(gx, gy, chromaPhase, true)
-                    : pal[ch]
+            ? (ch, gx, gy, pal) => (ch === '#' ? evalChromaColorAt(gx, gy, chromaPhase, false) : ch === 's' ? evalChromaColorAt(gx, gy, chromaPhase, true) : pal[ch])
             : null;
           const isLaptopWrite = effectivePose === 'write' && a.kind === 'clawd';
           const overlayPainter =
@@ -2966,59 +2907,56 @@
                     c2.fillRect(lx + (tap ? 4 : 5) * pxS, ly + (tap ? 2 : 1) * pxS, 2 * pxS, pxS);
                   }
                   if (isChromaCat && (earSparkPhase < 3 || (earSparkPhase >= 5 && earSparkPhase < 8))) {
-                    const leftEar = earSparkPhase < 3;
-                    const sx = (oxG + (leftEar ? 2 : 13)) * pxS;
-                    const sy = (oyG - 3) * pxS;
+                    const leftEar = earSparkPhase < 3, sx = (oxG + (leftEar ? 2 : 13)) * pxS, sy = (oyG - 3) * pxS;
                     c2.fillStyle = '#FFFFFF';
                     c2.fillRect(sx, sy, pxS, pxS);
                     if (earSparkPhase === 1 || earSparkPhase === 6) {
-                      c2.fillRect(sx - pxS, sy, pxS, pxS);
-                      c2.fillRect(sx + pxS, sy, pxS, pxS);
-                      c2.fillRect(sx, sy - pxS, pxS, pxS);
-                      c2.fillRect(sx, sy + pxS, pxS, pxS);
+                      c2.fillRect(sx - pxS, sy, pxS, pxS); c2.fillRect(sx + pxS, sy, pxS, pxS);
+                      c2.fillRect(sx, sy - pxS, pxS, pxS); c2.fillRect(sx, sy + pxS, pxS, pxS);
                     }
                   }
-                  if (rulerOn) {
-                    const y9 = (oyG + 10) * pxS - 1;
-                    c2.fillStyle = 'rgba(234,67,53,0.92)';
-                    c2.fillRect(0, y9, (oxG + 20) * pxS, 1);
-                  }
+                  if (rulerOn) { c2.fillStyle = 'rgba(234,67,53,0.92)'; c2.fillRect(0, (oyG + 10) * pxS - 1, (oxG + 20) * pxS, 1); }
                 }
               : null;
-          const rimPainter =
-            bLv > 0
-              ? (c2, cw, oxG, oyG, pxS) => {
-                  if (typeof c2.createRadialGradient !== 'function') return;
-                  const p = RIM_PALS[rim.t] || RIM_PALS.default;
-                  const o = rim.d ? 0 : 2;
-                  const lv = (bLv / 12) * (rim.d ? 1 : 0.65);
-                  const by = (oyG + 10) * pxS;
-                  const gx = (oxG + 8) * pxS + bDir * 9;
+          const rimPainter = bLv > 0 || hLv > 0
+            ? (c2, cw, oxG, oyG, pxS) => {
+                if (typeof c2.createRadialGradient !== 'function') return;
+                const by = (oyG + 10) * pxS;
+                c2.save();
+                c2.globalCompositeOperation = 'source-atop';
+                if (bLv > 0) {
+                  const p = RIM_PALS[rim.t] || RIM_PALS.default, o = rim.d ? 0 : 2, lv = (bLv / 12) * (rim.d ? 1 : 0.65), gx = (oxG + 8) * pxS + bDir * 9;
                   const paint = (yy, r, h, s0, s1) => {
                     const g = c2.createRadialGradient(gx, yy, 0, gx, yy, r);
                     g.addColorStop(0, s0);
                     if (s1) g.addColorStop(0.5, s1);
                     g.addColorStop(1, `rgba(${p[o + (s1 ? 1 : 0)]},0)`);
-                    c2.fillStyle = g;
-                    c2.fillRect(0, max(0, by - h), cw, h);
+                    c2.fillStyle = g; c2.fillRect(0, max(0, by - h), cw, h);
                   };
-                  c2.save();
-                  c2.globalCompositeOperation = 'source-atop';
                   paint(by + 2, 34, 30, `rgba(${p[o]},${(0.36 * lv).toFixed(3)})`, `rgba(${p[o + 1]},${(0.16 * lv).toFixed(3)})`);
                   paint(by, 26, pxS, `rgba(${p[o]},${(0.3 * lv).toFixed(3)})`, '');
-                  c2.restore();
                 }
-              : null;
+                if (hLv > 0) {
+                  const p = RIM_PALS[hTone] || RIM_PALS.amber, o = hDark ? 0 : 2, lv = (hLv / 10) * (bLv > 0 ? 0.85 : 1);
+                  const gx = (oxG + 8) * pxS + hDir * 12, gy = (oyG + 6) * pxS;
+                  const g = c2.createRadialGradient(gx, gy, 0, gx, gy, 32);
+                  g.addColorStop(0, `rgba(${p[o]},${(0.42 * lv).toFixed(3)})`);
+                  g.addColorStop(0.52, `rgba(${p[o + 1]},${(0.18 * lv).toFixed(3)})`);
+                  g.addColorStop(1, `rgba(${p[o + 1]},0)`);
+                  c2.fillStyle = g; c2.fillRect(0, max(0, (oyG - 2) * pxS), cw, 13 * pxS);
+                  if (hDir !== 0) {
+                    const ex = (oxG + (hDir > 0 ? 14 : 1)) * pxS;
+                    const eg = c2.createRadialGradient(ex + pxS * 0.5, gy, 0, ex + pxS * 0.5, gy, 20);
+                    eg.addColorStop(0, `rgba(${p[o]},${(0.34 * lv).toFixed(3)})`);
+                    eg.addColorStop(1, `rgba(${p[o]},0)`);
+                    c2.fillStyle = eg; c2.fillRect(ex - pxS, max(0, (oyG - 1) * pxS), pxS * 3, 11 * pxS);
+                  }
+                }
+                c2.restore();
+              }
+            : null;
           renderPixelLayers(a.canvas, dpr, OX, OY, PX, PALETTES[a.kind], layers, {
-            ctx: a._ctx,
-            mirror: flip,
-            tyPx: snappedTy,
-            sqW,
-            sqH,
-            rotDeg: 0,
-            colorResolver,
-            overlayPainter,
-            rimPainter,
+            ctx: a._ctx, mirror: flip, tyPx: snappedTy, sqW, sqH, rotDeg: 0, colorResolver, overlayPainter, rimPainter,
           });
           perfStats.canvasDraws += 1;
         }
@@ -3050,159 +2988,76 @@
           const anim = MINI_ANIM_FRAMES[mc.id];
           const moving = !reducedMotion && !dozing && yieldMode !== 'peek';
 
-          // 自动搭便车超时后轻巧侧跳落地
           if (mc.stackedOn && mc.perchUntil > 0 && now >= mc.perchUntil && !mc.dragging) {
-            mc.perchUntil = 0;
-            const prevY = computeWorldFootY(mc);
-            const jumpDir = idx % 2 === 0 ? -1 : 1;
-            mc.stackedOn = null;
-            mc.y = prevY;
+            mc.perchUntil = 0; const prevY = computeWorldFootY(mc), jumpDir = idx % 2 === 0 ? -1 : 1;
+            mc.stackedOn = null; mc.y = prevY;
             startMiniBallistic(mc, jumpDir * 2.8, -3.6, { noSnap: true });
           }
-
-          // 抛物线撑跳越过推进
           if (mc.leap && !mc.dragging) {
-            const lp = mc.leap;
-            const k = min(1, (tickIdx - lp.startTick + 1) / max(1, lp.ticks));
-            const cx = lp.cx0 + (lp.cx1 - lp.cx0) * k;
-            setEntWorldCx(mc, cx);
+            const lp = mc.leap, k = min(1, (tickIdx - lp.startTick + 1) / max(1, lp.ticks));
+            setEntWorldCx(mc, lp.cx0 + (lp.cx1 - lp.cx0) * k);
             mc.y = -round(lp.peak * sin(PI * k));
             if (k >= 1) {
-              mc.leap = null;
-              mc.y = 0;
-              if (lp.landOnto) {
-                const holder = getEnt(lp.landOnto);
-                if (holder && !holder.dragging && getTowerMembers(holder.id).length < maxTowerDepthAllowed()) {
-                  mc.stackedOn = holder.id;
-                  mc.perchUntil = now + 7200;
-                  syncAllStackedFollowers();
-                } else {
-                  enforceGroundSeparation();
-                }
-              } else {
-                enforceGroundSeparation();
-              }
+              mc.leap = null; mc.y = 0;
+              const holder = lp.landOnto ? getEnt(lp.landOnto) : null;
+              if (holder && !holder.dragging && getTowerMembers(holder.id).length < maxTowerDepthAllowed()) {
+                mc.stackedOn = holder.id; mc.perchUntil = now + 7200; syncAllStackedFollowers();
+              } else enforceGroundSeparation();
             }
           }
-
-          const cycle = (tickIdx + idx * 7) % 24;
-          const isTrick = moving && !mc.stackedOn && cycle >= 18;
-          const inBump = moving && tickIdx < mc.bumpUntilTick;
-          const inPassHop = moving && tickIdx < mc.passHopUntilTick;
-          let sprite = mc.dragging
-            ? tickIdx % 2 === 0
-              ? anim.walkB
-              : MINI_SPRITES[mc.id]
-            : mc.leap
-              ? anim.trick
-              : mc.stackedOn
-                ? cycle >= 20
-                  ? anim.trick
-                  : MINI_SPRITES[mc.id]
-                : inBump
-                  ? anim.trick
-                  : isTrick && !inPassHop
-                    ? anim.trick
-                    : moving && tickIdx % 4 >= 2
-                      ? anim.walkB
-                      : MINI_SPRITES[mc.id];
-          if (tickIdx >= mc.nextBlink) {
-            mc.blinkAt = tickIdx;
-            mc.nextBlink = tickIdx + ticksIn(2600, 6500);
-          }
-          if (!mc.dragging && tickIdx - mc.blinkAt >= 0 && tickIdx - mc.blinkAt < 2 && !isTrick && !inBump) {
-            sprite = miniBlinkFrame(sprite);
-          }
+          const cycle = (tickIdx + idx * 7) % 24, isTrick = moving && !mc.stackedOn && cycle >= 18;
+          const inBump = moving && tickIdx < mc.bumpUntilTick, inPassHop = moving && tickIdx < mc.passHopUntilTick;
+          let sprite = mc.dragging ? (tickIdx % 2 === 0 ? anim.walkB : MINI_SPRITES[mc.id])
+            : mc.leap || inBump || (isTrick && !inPassHop) || (mc.stackedOn && cycle >= 20) ? anim.trick
+            : !mc.stackedOn && moving && tickIdx % 4 >= 2 ? anim.walkB : MINI_SPRITES[mc.id];
+          if (tickIdx >= mc.nextBlink) { mc.blinkAt = tickIdx; mc.nextBlink = tickIdx + ticksIn(2600, 6500); }
+          if (!mc.dragging && tickIdx - mc.blinkAt >= 0 && tickIdx - mc.blinkAt < 2 && !isTrick && !inBump) sprite = miniBlinkFrame(sprite);
           const tc = cycle - 18;
           let hopPx = 0;
           if (!mc.dragging && !mc.stackedOn && !mc.leap) {
-            if (inPassHop) {
-              const rem = mc.passHopUntilTick - tickIdx;
-              hopPx = rem === 2 || rem === 3 ? -4 : -2;
-            } else if (inBump) {
-              hopPx = -2;
-            } else if (moving) {
-              const hopCells = isTrick
-                ? tc === 1 || tc === 2
-                  ? -1
-                  : 0
-                : (tickIdx + idx * 3) % 14 === 0
-                  ? -1
-                  : 0;
-              hopPx = hopCells * 2;
-            }
+            if (inPassHop) { const rem = mc.passHopUntilTick - tickIdx; hopPx = rem === 2 || rem === 3 ? -4 : -2; }
+            else if (inBump) hopPx = -2;
+            else if (moving) hopPx = (isTrick ? (tc === 1 || tc === 2 ? -1 : 0) : (tickIdx + idx * 3) % 14 === 0 ? -1 : 0) * 2;
           }
-
           const actPos = !mc.dragging && !mc.stackedOn && !mc.leap ? miniActPose(mc, sprite, anim) : null;
-          const targetSprite = actPos ? actPos.sprite : sprite;
-          const targetMirror = actPos ? !!actPos.mirror : !!(moving && mc.dir < 0);
-          const targetTy = actPos ? actPos.hopPx : hopPx;
-          const mcDirect = syncDirectMotionDomAttr(mc, mc.canvas);
-          let targetX;
-          let targetY;
+          const targetSprite = actPos ? actPos.sprite : sprite, targetMirror = actPos ? !!actPos.mirror : !!(moving && mc.dir < 0);
+          const targetTy = actPos ? actPos.hopPx : hopPx, mcDirect = syncDirectMotionDomAttr(mc, mc.canvas);
+          let targetX, targetY;
           if (mc.stackedOn && !mc.dragging) {
-            const root = getTowerRoot(mc.id);
-            const wCx = getEntWorldCx(root || mc);
-            targetX = snapCoord(wCx - 32, mcDirect);
+            targetX = snapCoord(getEntWorldCx(getTowerRoot(mc.id) || mc) - 32, mcDirect);
             targetY = snapCoord(computeWorldFootY(mc) + (yieldMode === 'peek' ? PEEK_Y : 0), mcDirect);
-            mc.px = targetX;
-            mc.lastX = round(targetX);
+            mc.px = targetX; mc.lastX = round(targetX);
           } else if (actPos) {
-            targetX = actPos.x;
-            targetY = actPos.y;
-            if (actPos.y === 0) {
-              mc.lastX = clamp(actPos.x, 2, safeRight);
-              mc.px = mc.lastX;
-            }
+            targetX = actPos.x; targetY = actPos.y;
+            if (actPos.y === 0) mc.px = mc.lastX = clamp(actPos.x, 2, safeRight);
           } else {
-            const rawX = mc.dragging
-              ? mc.px
-              : moving
-                ? clamp(mc.px, 2, safeRight)
-                : clamp(mc.px ?? mc.x, 2, safeRight);
+            const rawX = mc.dragging ? mc.px : clamp(moving ? mc.px : (mc.px ?? mc.x), 2, safeRight);
             targetX = snapCoord(rawX, mcDirect);
             targetY = snapCoord((mc.y || 0) + (yieldMode === 'peek' && !mc.dragging && !mc.stackedOn && !mc.leap ? MINI_PEEK_Y : 0), mcDirect);
             mc.lastX = round(targetX);
           }
-
           const mz = miniZ(mc);
           if (!mc.canvas) return;
           const mKey = `${computeLayersFrameIdx([targetSprite])}|${targetMirror ? 1 : 0}|${targetTy}|${mc.canvas.width}`;
           if (mc.lastFrameKey !== mKey) {
             mc.lastFrameKey = mKey;
-            renderPixelLayers(mc.canvas, dpr, 2, 5, 2, PALETTES[mc.id], [targetSprite], {
-              ctx: mc._ctx,
-              mirror: targetMirror,
-              tyPx: targetTy,
-            });
+            renderPixelLayers(mc.canvas, dpr, 2, 5, 2, PALETTES[mc.id], [targetSprite], { ctx: mc._ctx, mirror: targetMirror, tyPx: targetTy });
           }
           applyMiniTransform(mc, targetX, targetY, mz, mc.dragging || mc.ballisticActive ? mc.rot : 0);
         });
       } else {
-        miniCrabs.forEach((mc) => {
-          mc.act = null;
-          mc.stackedOn = null;
-          mc.dragging = false;
-          mc.ballisticActive = false;
-          mc.rot = 0;
-          mc.y = 0;
-        });
+        miniCrabs.forEach((mc) => { mc.act = mc.stackedOn = null; mc.dragging = mc.ballisticActive = false; mc.rot = mc.y = 0; });
         syncMascotDragRootAttr();
       }
-
       const draggingMain = activeMainActors().find((a) => a.dragging);
-      enforceGroundSeparation(
-        draggingMain ? draggingMain.id : (miniCrabs.find((m) => m.dragging) || {}).id || null
-      );
-      // 二次刷新被防重叠微调后的 DOM transform（若未变则自动命中缓存 0 写入）
+      enforceGroundSeparation(draggingMain ? draggingMain.id : (miniCrabs.find((m) => m.dragging) || {}).id || null);
       for (const a of activeMainActors()) applyActorTransform(a, now);
       if (miniPileEnabled) {
         const miniPeekY = yieldMode === 'peek' ? MINI_PEEK_Y : 0;
         for (const mc of miniCrabs) {
           if (!mc.dragging && !mc.ballisticActive && !mc.stackedOn && !mc.act && !mc.leap && mc.y === 0) {
             syncDirectMotionDomAttr(mc, mc.canvas);
-            const tx = round(mc.px);
-            applyMiniTransform(mc, tx, miniPeekY, null, 0);
+            applyMiniTransform(mc, round(mc.px), miniPeekY, null, 0);
           }
         }
       }
@@ -3537,15 +3392,9 @@
     };
     scheduleTheater(3800);
 
-    // ── 多层图腾塔吸附、抽底重力顺滑补位、剧烈动作侧跳下塔与统一弹道引擎 ──────
     const trySnapOntoTower = (mover, now = nowMs()) => {
       if (!mover || mover.dragging) return false;
-      const moverChain = getTowerMembers(mover.id);
-      const maxDepth = maxTowerDepthAllowed();
-      const moverCx = getEntWorldCx(mover);
-      const moverFootY = mover.y || 0;
-      const seenRoots = new Set(moverChain);
-
+      const moverChain = getTowerMembers(mover.id), maxDepth = maxTowerDepthAllowed(), moverCx = getEntWorldCx(mover), moverFootY = mover.y || 0, seenRoots = new Set(moverChain);
       for (const cand of allActiveEnts()) {
         const root = getTowerRoot(cand.id);
         if (!root || seenRoots.has(root.id)) continue;
@@ -3556,356 +3405,175 @@
         if (baseChain.length + moverChain.length > maxDepth) continue;
         const top = getEnt(baseChain[baseChain.length - 1]);
         if (!top || top.dragging || top.ballisticActive || top.leap || ((top.y || 0) < -2 && !top.stackedOn)) continue;
-
         const perchY = computeWorldFootY(top) - mountStepH(top.id);
         if (abs(moverCx - getEntWorldCx(top)) <= 28 && moverFootY >= perchY - 24 && moverFootY <= perchY + 20) {
           resetActorTransient(mover, { keepFly: true });
-          mover.stackedOn = top.id;
-          mover.y = 0;
-          mover.perchUntil = 0;
-          if (!isMiniEnt(mover)) {
-            mover.overridePose = 'happy';
-            mover.overrideUntil = now + 950;
-            mover.sym = 'heart';
-            mover.symUntil = now + 1100;
-            playSeq(mover, [['happy', 1, 2, -1]]);
-          }
-          syncAllStackedFollowers();
-          renderAllFrames(now);
-          return true;
+          mover.stackedOn = top.id; mover.y = mover.perchUntil = 0;
+          if (!isMiniEnt(mover)) { mover.overridePose = 'happy'; mover.overrideUntil = now + 950; mover.sym = 'heart'; mover.symUntil = now + 1100; playSeq(mover, [['happy', 1, 2, -1]]); }
+          syncAllStackedFollowers(); renderAllFrames(now); return true;
         }
       }
       return false;
     };
-
     const startGravitySettle = (subRoot, targetHolderId) => {
       if (!subRoot) return;
       const subLen = getTowerMembers(subRoot.id).length;
-      if (reducedMotion) {
-        subRoot.flying += 1;
-        subRoot.ballisticActive = false;
-        const holder = targetHolderId ? getEnt(targetHolderId) : null;
-        if (holder && !holder.dragging && getTowerMembers(holder.id).length + subLen <= maxTowerDepthAllowed()) {
+      const landSettle = (holder, playAnim) => {
+        subRoot.ballisticActive = false; subRoot.vx = subRoot.vy = subRoot.rot = subRoot.y = 0;
+        if (holder) {
           subRoot.stackedOn = holder.id;
-          subRoot.y = 0;
+          if (playAnim && !isMiniEnt(subRoot)) playSeq(subRoot, [['idle', 1, 2, -1]]);
           syncAllStackedFollowers();
         } else {
           subRoot.stackedOn = null;
-          subRoot.y = 0;
+          if (playAnim && !isMiniEnt(subRoot)) playSeq(subRoot, landingSteps(1));
           enforceGroundSeparation();
         }
-        subRoot.vx = 0;
-        subRoot.vy = 0;
-        subRoot.rot = 0;
-        renderAllFrames();
-        return;
+      };
+      if (reducedMotion) {
+        subRoot.flying += 1;
+        const holder = targetHolderId ? getEnt(targetHolderId) : null;
+        landSettle(holder && !holder.dragging && getTowerMembers(holder.id).length + subLen <= maxTowerDepthAllowed() ? holder : null, false);
+        renderAllFrames(); return;
       }
-
       const settleId = (subRoot.flying += 1);
       subRoot.ballisticActive = true;
       syncDirectMotionDomAttr(subRoot, isMiniEnt(subRoot) ? subRoot.canvas : subRoot.el);
-      let vy = 0.65;
-      let prev = nowMs();
+      let vy = 0.65, prev = nowMs();
       const step = (now) => {
-        if (disposed || settleId !== subRoot.flying || subRoot.dragging) {
-          if (disposed || subRoot.dragging) subRoot.ballisticActive = false;
-          return;
-        }
-        const k = max(0.5, min(2.5, (now - prev) / 16.6667));
-        prev = now;
+        if (disposed || settleId !== subRoot.flying || subRoot.dragging) { if (disposed || subRoot.dragging) subRoot.ballisticActive = false; return; }
+        const k = max(0.5, min(2.5, (now - prev) / 16.6667)); prev = now;
         let holder = targetHolderId ? getEnt(targetHolderId) : null;
-        if (holder && (holder.dragging || getTowerMembers(holder.id).includes(subRoot.id) || getTowerMembers(holder.id).length + subLen > maxTowerDepthAllowed())) {
-          holder = null;
-        }
+        if (holder && (holder.dragging || getTowerMembers(holder.id).includes(subRoot.id) || getTowerMembers(holder.id).length + subLen > maxTowerDepthAllowed())) holder = null;
         const goalY = holder ? computeWorldFootY(holder) - mountStepH(holder.id) : 0;
-        if (isDocHidden() || isHostSleeping() || parked) {
-          subRoot.ballisticActive = false;
-          subRoot.vx = 0;
-          subRoot.vy = 0;
-          subRoot.rot = 0;
-          if (holder) {
-            subRoot.stackedOn = holder.id;
-            subRoot.y = 0;
-            syncAllStackedFollowers();
-          } else {
-            subRoot.stackedOn = null;
-            subRoot.y = 0;
-            enforceGroundSeparation();
-          }
-          syncTower(subRoot, now);
-          reclaimStageVram();
-          return;
-        }
-        if (holder) {
-          const curCx = getEntWorldCx(subRoot);
-          setEntWorldCx(subRoot, curCx + (getEntWorldCx(holder) - curCx) * min(1, 0.35 * k));
-        }
-        vy = min(14, vy + 0.54 * k);
-        subRoot.y += vy * k;
-        subRoot.vy = vy;
-        if (subRoot.y >= goalY) {
-          subRoot.ballisticActive = false;
-          subRoot.vx = 0;
-          subRoot.vy = 0;
-          subRoot.rot = 0;
-          if (holder) {
-            subRoot.stackedOn = holder.id;
-            subRoot.y = 0;
-            if (!isMiniEnt(subRoot)) playSeq(subRoot, [['idle', 1, 2, -1]]);
-            syncAllStackedFollowers();
-          } else {
-            subRoot.stackedOn = null;
-            subRoot.y = 0;
-            if (!isMiniEnt(subRoot)) playSeq(subRoot, landingSteps(1));
-            enforceGroundSeparation();
-          }
-          syncTower(subRoot, now);
-          renderAllFrames(now);
-          return;
-        }
-        syncAllStackedFollowers();
-        syncTower(subRoot, now);
-        rAF(step);
+        if (isDocHidden() || isHostSleeping() || parked) { landSettle(holder, false); syncTower(subRoot, now); reclaimStageVram(); return; }
+        if (holder) { const curCx = getEntWorldCx(subRoot); setEntWorldCx(subRoot, curCx + (getEntWorldCx(holder) - curCx) * min(1, 0.35 * k)); }
+        vy = min(14, vy + 0.54 * k); subRoot.y += vy * k; subRoot.vy = vy;
+        if (subRoot.y >= goalY) { landSettle(holder, true); syncTower(subRoot, now); renderAllFrames(now); return; }
+        syncAllStackedFollowers(); syncTower(subRoot, now); rAF(step);
       };
       rAF(step);
     };
-
     const detachWithGravitySettle = (pulledId) => {
       const pulled = getEnt(pulledId);
       if (!pulled) return;
-      const lowerHolderId = pulled.stackedOn || null;
-      const upperRider = findDirectRider(pulledId);
+      const lowerHolderId = pulled.stackedOn || null, upperRider = findDirectRider(pulledId);
       if (upperRider) {
-        const riderStartFootY = computeWorldFootY(upperRider);
-        const riderStartCx = getEntWorldCx(upperRider);
-        upperRider.stackedOn = null;
-        upperRider.perchUntil = 0;
+        const riderStartFootY = computeWorldFootY(upperRider), riderStartCx = getEntWorldCx(upperRider);
+        upperRider.stackedOn = null; upperRider.perchUntil = 0;
         resetActorTransient(upperRider, { keepFly: true });
-        setEntWorldCx(upperRider, riderStartCx);
-        upperRider.y = riderStartFootY;
+        setEntWorldCx(upperRider, riderStartCx); upperRider.y = riderStartFootY;
       }
-      pulled.stackedOn = null;
-      pulled.perchUntil = 0;
+      pulled.stackedOn = null; pulled.perchUntil = 0;
       if (upperRider) startGravitySettle(upperRider, lowerHolderId);
     };
-
     const dismountRidersSideHop = (baseId) => {
-      const chain = getTowerMembers(baseId);
-      const idx = chain.indexOf(baseId);
+      const chain = getTowerMembers(baseId), idx = chain.indexOf(baseId);
       if (idx < 0 || idx >= chain.length - 1) return false;
-      const snapshots = chain
-        .slice(idx + 1)
-        .map((id) => getEnt(id))
-        .filter(Boolean)
-        .map((r) => ({ r, footY: computeWorldFootY(r), cx: getEntWorldCx(r) }));
-      for (const s of snapshots) {
-        s.r.stackedOn = null;
-        s.r.perchUntil = 0;
-        resetActorTransient(s.r, { keepFly: true });
-        s.r.y = s.footY;
-        setEntWorldCx(s.r, s.cx);
-      }
+      const snapshots = chain.slice(idx + 1).map((id) => getEnt(id)).filter(Boolean).map((r) => ({ r, footY: computeWorldFootY(r), cx: getEntWorldCx(r) }));
+      for (const s of snapshots) { s.r.stackedOn = null; s.r.perchUntil = 0; resetActorTransient(s.r, { keepFly: true }); s.r.y = s.footY; setEntWorldCx(s.r, s.cx); }
       snapshots.forEach((s, i) => {
         const dir = i % 2 === 0 ? -1 : 1;
-        if (reducedMotion) {
-          setEntWorldCx(s.r, s.cx + dir * (28 + i * 18));
-          s.r.y = 0;
-        } else {
-          const isM = isMiniEnt(s.r);
-          startEntityBallistic(s.r, dir * ((isM ? 2.6 : 2.8) + i * 0.6), (isM ? -3.5 : -3.8) - i * 0.4, { noSnap: true });
-        }
+        if (reducedMotion) { setEntWorldCx(s.r, s.cx + dir * (28 + i * 18)); s.r.y = 0; }
+        else { const isM = isMiniEnt(s.r); startEntityBallistic(s.r, dir * ((isM ? 2.6 : 2.8) + i * 0.6), (isM ? -3.5 : -3.8) - i * 0.4, { noSnap: true }); }
       });
-      if (reducedMotion) {
-        enforceGroundSeparation();
-        renderAllFrames();
-      }
+      if (reducedMotion) { enforceGroundSeparation(); renderAllFrames(); }
       return true;
     };
-
     const triggerObstacleEncounter = (moverId, obstacleId, forcedAction = null) => {
-      const mover = getEnt(moverId);
-      const obs = getEnt(obstacleId);
+      const mover = getEnt(moverId), obs = getEnt(obstacleId);
       if (!mover || !obs || mover.id === obs.id) return null;
-      const now = nowMs();
-      const obsRoot = getTowerRoot(obs.id) || obs;
+      const now = nowMs(), obsRoot = getTowerRoot(obs.id) || obs;
       if (obsRoot.id === mover.id) return null;
-
-      const moverCx = getEntWorldCx(mover);
-      const obsCx = getEntWorldCx(obsRoot);
-      const dir = moverCx <= obsCx ? 1 : -1;
-      const landCx = obsCx + dir * (entHalfW(obsRoot) + entHalfW(mover) + 12);
-      const { minX, maxX } = stageBoundsX();
-      const mHw = entHalfW(mover);
-      const canLeap = landCx >= minX + mHw + 2 && landCx <= maxX - mHw - 2;
-      const obsTowerLen = getTowerMembers(obsRoot.id).length;
+      const moverCx = getEntWorldCx(mover), obsCx = getEntWorldCx(obsRoot), dir = moverCx <= obsCx ? 1 : -1;
+      const landCx = obsCx + dir * (entHalfW(obsRoot) + entHalfW(mover) + 12), { minX, maxX } = stageBoundsX(), mHw = entHalfW(mover);
+      const canLeap = landCx >= minX + mHw + 2 && landCx <= maxX - mHw - 2, obsTowerLen = getTowerMembers(obsRoot.id).length;
       const canPerch = getTowerMembers(mover.id).length === 1 && obsTowerLen < maxTowerDepthAllowed();
-
       let action = forcedAction || chooseObstacleAction({ canLeap, canPerch });
       if (action === 'autoPerch' && !canPerch) action = canLeap ? 'leapfrog' : 'greetTurn';
       if (action === 'leapfrog' && !canLeap) action = canPerch ? 'autoPerch' : 'greetTurn';
-
       if (action === 'leapfrog') {
         const peak = min(62, 26 + max(0, obsTowerLen - 1) * 14);
         resetActorTransient(mover, { keepFly: true });
-        if (reducedMotion) {
-          setEntWorldCx(mover, landCx);
-          mover.y = 0;
-          enforceGroundSeparation();
-        } else {
+        if (reducedMotion) { setEntWorldCx(mover, landCx); mover.y = 0; enforceGroundSeparation(); }
+        else {
           mover.leap = { cx0: moverCx, cx1: landCx, peak, startTick: tickIdx, ticks: 6, landOnto: null };
-          if (!isMiniEnt(mover)) {
-            mover.faceDir = dir > 0 ? 'right' : 'left';
-            mover.sym = 'spark';
-            mover.symUntil = now + 750;
-          }
+          if (!isMiniEnt(mover)) { mover.faceDir = dir > 0 ? 'right' : 'left'; mover.sym = 'spark'; mover.symUntil = now + 750; }
         }
       } else if (action === 'autoPerch') {
         const top = getStackTop(obsRoot.id);
         resetActorTransient(mover, { keepFly: true });
-        if (reducedMotion) {
-          mover.stackedOn = top.id;
-          mover.y = 0;
-          mover.perchUntil = now + 7200;
-          syncAllStackedFollowers();
-        } else {
-          const peak = max(26, abs(computeWorldFootY(top) - mountStepH(top.id)) + 10);
-          mover.leap = { cx0: moverCx, cx1: getEntWorldCx(top), peak, startTick: tickIdx, ticks: 5, landOnto: top.id };
-          if (!isMiniEnt(obsRoot) && !obsRoot.dragging && !obsRoot.stackedOn) {
-            startClip(obsRoot, 'walk', 2800, { patrolDir: dir });
-          }
+        if (reducedMotion) { mover.stackedOn = top.id; mover.y = 0; mover.perchUntil = now + 7200; syncAllStackedFollowers(); }
+        else {
+          mover.leap = { cx0: moverCx, cx1: getEntWorldCx(top), peak: max(26, abs(computeWorldFootY(top) - mountStepH(top.id)) + 10), startTick: tickIdx, ticks: 5, landOnto: top.id };
+          if (!isMiniEnt(obsRoot) && !obsRoot.dragging && !obsRoot.stackedOn) startClip(obsRoot, 'walk', 2800, { patrolDir: dir });
         }
       } else {
         action = 'greetTurn';
-        if (isMiniEnt(mover)) {
-          mover.act = null;
-          mover.bumpUntilTick = tickIdx + 6;
-          mover.blinkAt = tickIdx;
-          mover.dir = -dir;
-          setEntWorldCx(mover, moverCx - dir * 4);
-        } else {
-          mover.nextBlinkTick = tickIdx;
-          mover.patrolDir = -dir;
-          startClip(mover, mover.kind === 'clawd' ? 'wave' : 'tilt', 560, {
-            face: dir > 0 ? 'right' : 'left',
-            sym: 'note',
-            rot: mover.kind === 'cat' ? -8 : 0,
-          });
-          later(520, () => {
-            if (!disposed && !stageBusy() && !reducedMotion && !dozing && !mover.dragging && !mover.stackedOn) {
-              startClip(mover, 'walk', 2000, { patrolDir: -dir });
-            }
-          });
+        if (isMiniEnt(mover)) { mover.act = null; mover.bumpUntilTick = tickIdx + 6; mover.blinkAt = tickIdx; mover.dir = -dir; setEntWorldCx(mover, moverCx - dir * 4); }
+        else {
+          mover.nextBlinkTick = tickIdx; mover.patrolDir = -dir;
+          startClip(mover, mover.kind === 'clawd' ? 'wave' : 'tilt', 560, { face: dir > 0 ? 'right' : 'left', sym: 'note', rot: mover.kind === 'cat' ? -8 : 0 });
+          later(520, () => { if (!disposed && !stageBusy() && !reducedMotion && !dozing && !mover.dragging && !mover.stackedOn) startClip(mover, 'walk', 2000, { patrolDir: -dir }); });
         }
-        if (isMiniEnt(obsRoot)) {
-          obsRoot.bumpUntilTick = tickIdx + 5;
-          obsRoot.blinkAt = tickIdx;
-        } else {
-          obsRoot.nextBlinkTick = tickIdx;
-          obsRoot.nodY = PX;
-          obsRoot.nodUntil = now + 180;
-        }
+        if (isMiniEnt(obsRoot)) { obsRoot.bumpUntilTick = tickIdx + 5; obsRoot.blinkAt = tickIdx; }
+        else { obsRoot.nextBlinkTick = tickIdx; obsRoot.nodY = PX; obsRoot.nodUntil = now + 180; }
       }
-
-      recordInteraction(action, `${mover.id}->${obsRoot.id}`, now);
-      renderAllFrames(now);
+      recordInteraction(action, `${mover.id}->${obsRoot.id}`, now); renderAllFrames(now);
       return action;
     };
 
     // 统一主宠 + 迷你蟹弹道物理循环
     const launchEntity = (ent, vx0, vy0, bopts = {}) => {
-      const mini = isMiniEnt(ent);
-      const flightId = (ent.flying += 1);
+      const mini = isMiniEnt(ent), flightId = (ent.flying += 1);
       const hasReboundTarget = !mini && typeof bopts.reboundTargetX === 'number' && isFin(bopts.reboundTargetX);
-      const vLim = mini ? 14 : 18;
-      const maxVx = hasReboundTarget ? 64 : vLim;
-      let vx = clamp(vx0, -maxVx, maxVx);
-      let vy = clamp(vy0, -vLim, vLim);
-      let bounces = 0;
-      let scattered = false;
+      const vLim = mini ? 14 : 18, maxVx = hasReboundTarget ? 64 : vLim;
+      let vx = clamp(vx0, -maxVx, maxVx), vy = clamp(vy0, -vLim, vLim), bounces = 0, scattered = false;
       resetActorTransient(ent, { keepFly: true, keepVel: true, keepBallistic: true });
       ent.ballisticActive = true;
-      if (!mini) {
-        ent.reboundNoBump = !!bopts.reboundNoBump;
-        ent.overridePose = 'dangle';
-        ent.overrideUntil = nowMs() + 3000;
-      }
-      // 起跳瞬间立刻锁死 data-direct="1" 与 transition: none，防止首帧落入 220ms CSS transition
+      if (!mini) { ent.reboundNoBump = !!bopts.reboundNoBump; ent.overridePose = 'dangle'; ent.overrideUntil = nowMs() + 3000; }
       syncDirectMotionDomAttr(ent, mini ? ent.canvas : ent.el);
-
       let prev = nowMs();
       const step = (now) => {
-        if (disposed || flightId !== ent.flying || ent.dragging) {
-          if (disposed || ent.dragging) ent.ballisticActive = false;
-          return;
-        }
+        if (disposed || flightId !== ent.flying || ent.dragging) { if (disposed || ent.dragging) ent.ballisticActive = false; return; }
         if (isDocHidden() || isHostSleeping() || parked) {
-          if (hasReboundTarget) {
-            ent.x = max(8, min(maxXFor(readStageWidth()), bopts.reboundTargetX));
-          }
+          if (hasReboundTarget) ent.x = max(8, min(maxXFor(readStageWidth()), bopts.reboundTargetX));
           if (!mini) ent.reboundNoBump = false;
-          resetActorTransient(ent, { keepFly: true });
-          ent.y = 0;
-          enforceGroundSeparation();
-          if (!mini) applyActorTransform(ent, now);
-          else syncTower(ent, now);
+          resetActorTransient(ent, { keepFly: true }); ent.y = 0; enforceGroundSeparation();
+          if (!mini) applyActorTransform(ent, now); else syncTower(ent, now);
           reclaimStageVram();
           return;
         }
-        const k = max(0.5, min(2.5, (now - prev) / 16.6667));
-        prev = now;
+        const k = max(0.5, min(2.5, (now - prev) / 16.6667)); prev = now;
         vy += (mini ? 0.46 : 0.44) * k;
-        const drag = Math.pow(mini ? 0.985 : 0.988, k);
-        vx *= drag;
-        vy *= drag;
-
-        let mainMinX = 8;
-        let mainMaxX = 40;
+        const drag = Math.pow(mini ? 0.985 : 0.988, k); vx *= drag; vy *= drag;
+        let mainMinX = 8, mainMaxX = 40;
         if (mini) {
-          const { minX, maxX } = stageBoundsX();
-          const hw = entHalfW(ent);
+          const { minX, maxX } = stageBoundsX(), hw = entHalfW(ent);
           let cx = getEntWorldCx(ent) + vx * k;
           if (cx < minX + hw) { cx = minX + hw; vx = -0.45 * vx; }
           else if (cx > maxX - hw) { cx = maxX - hw; vx = -0.45 * vx; }
-          setEntWorldCx(ent, cx);
-          ent.y = max(-180, (ent.y || 0) + vy * k);
+          setEntWorldCx(ent, cx); ent.y = max(-180, (ent.y || 0) + vy * k);
         } else {
-          ent.x += vx * k;
-          ent.y += vy * k;
-          mainMinX = 8;
-          mainMaxX = maxXFor(readStageWidth());
+          ent.x += vx * k; ent.y += vy * k; mainMaxX = maxXFor(readStageWidth());
           if (hasReboundTarget) {
             const targetX = clamp(bopts.reboundTargetX, mainMinX, mainMaxX);
-            if ((vx >= 0 && ent.x > targetX) || (vx < 0 && ent.x < targetX)) {
-              ent.x = targetX;
-              vx = 0;
-            }
+            if ((vx >= 0 && ent.x > targetX) || (vx < 0 && ent.x < targetX)) { ent.x = targetX; vx = 0; }
           }
           if (ent.x < mainMinX) { ent.x = mainMinX; vx = -0.45 * vx; }
           else if (ent.x > mainMaxX) { ent.x = mainMaxX; vx = -0.45 * vx; }
           if (ent.y < -180) { ent.y = -180; vy = -0.45 * vy; }
         }
-        ent.vx = vx;
-        ent.vy = vy;
-
+        ent.vx = vx; ent.vy = vy;
         if (!bopts.noSnap && vy >= 0 && trySnapOntoTower(ent, now)) return;
-
         if (!mini && !bopts.reboundNoBump) {
           for (const other of activeMainActors()) {
             if (other === ent) continue;
-            if (
-              !other.reboundNoBump &&
-              !other.dragging && !other.stackedOn && !ent.stackedOn &&
-              abs(ent.x - other.x) < 42 && abs(ent.y - other.y) < 22 &&
-              ((ent.x < other.x && vx > 0.35) || (ent.x >= other.x && vx < -0.35)) &&
-              canTriggerPair('ballistic', now, 650)
-            ) {
-              const sign = ent.x < other.x ? -1 : 1;
+            if (!other.reboundNoBump && !other.dragging && !other.stackedOn && !ent.stackedOn && abs(ent.x - other.x) < 42 && abs(ent.y - other.y) < 22 && ((ent.x < other.x && vx > 0.35) || (ent.x >= other.x && vx < -0.35)) && canTriggerPair('ballistic', now, 650)) {
+              const sign = ent.x < other.x ? -1 : 1, incomingVx = vx;
               ent.x = clampActorX(other.x + sign * 42);
-              const incomingVx = vx;
-              vx = -incomingVx * 0.46;
-              if (abs(vx) < 1.6) vx = sign * 1.8;
-              ent.sym = 'sweat';
-              ent.symUntil = now + 750;
+              vx = -incomingVx * 0.46; if (abs(vx) < 1.6) vx = sign * 1.8;
+              ent.sym = 'sweat'; ent.symUntil = now + 750;
               startClip(other, 'wow', 800, { sym: 'bang', face: sign < 0 ? 'left' : 'right' });
               startEntityBallistic(other, clamp(incomingVx * 0.62 || -sign * 2.6, -7.2, 7.2), -2.7);
               recordInteraction('ballisticBump', `${ent.id}->${other.id}`, now);
@@ -3914,72 +3582,46 @@
             }
           }
         }
-
         if (ent.y >= 0) {
           ent.y = 0;
           if (!mini && !scattered) { scattered = true; scatterCrabsNear(ent.x + 48); }
-          const maxB = mini ? 1 : 2;
-          const minVy = mini ? 2.6 : 2.4;
-          if (abs(vy) > minVy && bounces < maxB) {
-            vy = -vy * (mini ? 0.32 : 0.36);
-            vx *= mini ? 0.78 : 0.82;
-            bounces += 1;
-            // 中途弹跳：ballisticActive 保持 true 锁死 data-direct
+          if (abs(vy) > (mini ? 2.6 : 2.4) && bounces < (mini ? 1 : 2)) {
+            vy = -vy * (mini ? 0.32 : 0.36); vx *= mini ? 0.78 : 0.82; bounces += 1;
             if (!mini) playSeq(ent, [['flat', 1, 2, 0]]);
           } else {
             const impact = abs(vy);
-            if (hasReboundTarget) {
-              ent.x = clamp(bopts.reboundTargetX, mainMinX, mainMaxX);
-            }
+            if (hasReboundTarget) ent.x = clamp(bopts.reboundTargetX, mainMinX, mainMaxX);
             if (!mini) ent.reboundNoBump = false;
             resetActorTransient(ent, { keepFly: true });
             if (!mini) {
               const steps = landingSteps(impact > 1.2 || bounces > 0 ? 2 : 1);
               playSeq(ent, steps);
-              if (ent.throws >= 3) {
-                ent.throws = 0;
-                startClip(ent, 'angry', 1400 + seqTotalMs(steps), { sym: 'vein' });
-              }
+              if (ent.throws >= 3) { ent.throws = 0; startClip(ent, 'angry', 1400 + seqTotalMs(steps), { sym: 'vein' }); }
             }
             enforceGroundSeparation();
-            if (!mini) applyActorTransform(ent, now);
-            else syncTower(ent, now);
+            if (!mini) applyActorTransform(ent, now); else syncTower(ent, now);
             renderAllFrames(now);
             return;
           }
         }
-        ent.rot = clamp(-vx * 0.65, -14, 14);
-        ent.vx = vx;
-        ent.vy = vy;
+        ent.rot = clamp(-vx * 0.65, -14, 14); ent.vx = vx; ent.vy = vy;
         syncAllStackedFollowers();
-        if (mini) {
-          syncTower(ent, now);
-        } else {
-          applyActorTransform(ent, now);
-          // 仅在姿态真正切变（如起跳进 dangle 或触地切 flat）时重绘精灵，避免 60fps 软件重绘
-          if (resolvePoseFor(ent, now) !== ent.lastRender.poseKey) {
-            renderAllFrames(now);
-          }
-        }
+        if (mini) syncTower(ent, now);
+        else { applyActorTransform(ent, now); if (resolvePoseFor(ent, now) !== ent.lastRender.poseKey) renderAllFrames(now); }
         rAF(step);
       };
       rAF(step);
     };
-
     const startEntityBallistic = (ent, vx0, vy0, bopts = {}) => {
       if (!ent) return;
       const mini = isMiniEnt(ent);
       if (!mini && Math.hypot(vx0, vy0) > 2.2) dismountRidersSideHop(ent.id);
       if (reducedMotion) {
         resetActorTransient(ent, { keepPose: !mini && ent.overridePose !== 'dangle' });
-        if (!mini && typeof bopts.reboundTargetX === 'number' && isFin(bopts.reboundTargetX)) {
-          ent.x = clampActorX(bopts.reboundTargetX);
-        }
+        if (!mini && typeof bopts.reboundTargetX === 'number' && isFin(bopts.reboundTargetX)) ent.x = clampActorX(bopts.reboundTargetX);
         if (bopts.noSnap || !trySnapOntoTower(ent, nowMs())) {
-          ent.y = 0;
-          enforceGroundSeparation();
-          if (!mini) applyActorTransform(ent);
-          else syncTower(ent);
+          ent.y = 0; enforceGroundSeparation();
+          if (!mini) applyActorTransform(ent); else syncTower(ent);
           renderAllFrames();
         }
         return;
@@ -3988,19 +3630,16 @@
         const prepId = (ent.flying += 1);
         ent.ballisticActive = false;
         playSeq(ent, [['squash', 2, 2, -1]]);
-        later(TICK * 2, () => {
-          if (ent.flying === prepId && !ent.dragging) launchEntity(ent, vx0, vy0, bopts);
-        });
+        later(TICK * 2, () => { if (ent.flying === prepId && !ent.dragging) launchEntity(ent, vx0, vy0, bopts); });
         return;
       }
       launchEntity(ent, vx0, vy0, bopts);
     };
-    const startBallistic = startEntityBallistic;
-    const startMiniBallistic = startEntityBallistic;
+    const startBallistic = startEntityBallistic, startMiniBallistic = startEntityBallistic;
 
     const dragReleaseHooks = [];
-    let dragRafPending = false;
-    let dragRafId = 0;
+    let dragRafPending = false, dragRafId = 0, typeRaf = 0;
+    const schedTypeRender = () => { if (!disposed && !typeRaf) typeRaf = rAF(() => { typeRaf = 0; if (!disposed) renderAllFrames(); }); };
     const cAF =
       (win && isFn(win.cancelAnimationFrame) && win.cancelAnimationFrame.bind(win)) ||
       (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : null);
@@ -4033,57 +3672,30 @@
 
     // 统一主宠 + 迷你蟹指针拖拽绑定（主宠附带右键甜甜圈 & Alt+左键热咖啡投喂）
     const bindEntityPointer = (ent) => {
-      const mini = isMiniEnt(ent);
-      const domNode = mini ? ent.canvas : ent.el;
-      const dragThreshold = mini ? 2.5 : 7;
-      let downX = 0;
-      let downY = 0;
-      let startX = 0;
-      let startY = 0;
-      let cachedA = 720;
-      let cachedB = 680;
-      let lastMoveX = 0;
-      let lastMoveY = 0;
-      let lastMoveT = 0;
-      let moved = false;
-      let petTimer = 0;
-      let petTriggered = false;
-
+      const mini = isMiniEnt(ent), domNode = mini ? ent.canvas : ent.el, dragThreshold = mini ? 2.5 : 7;
+      let downX = 0, downY = 0, startX = 0, startY = 0, cachedA = 720, cachedB = 680;
+      let lastMoveX = 0, lastMoveY = 0, lastMoveT = 0, moved = false, petTimer = 0, petTriggered = false;
       const onDown = (evt) => {
         if (yieldMode === 'peek' || evt.button !== 0 || (mini && !miniPileEnabled)) return;
-        evt.preventDefault();
-        evt.stopPropagation();
-        if (!mini && evt.altKey) {
-          feedActor(ent, 'coffee');
-          return;
-        }
+        evt.preventDefault(); evt.stopPropagation();
+        if (!mini && evt.altKey) { feedActor(ent, 'coffee'); return; }
         try { ent.el.setPointerCapture?.(evt.pointerId); } catch {}
         const downNow = nowMs();
         if (ent.glideUntil && downNow < ent.glideUntil) {
-          ent.glideSeq = (ent.glideSeq || 0) + 1;
-          ent.glideUntil = 0;
+          ent.glideSeq = (ent.glideSeq || 0) + 1; ent.glideUntil = 0;
           try {
-            const er = ent.el?.getBoundingClientRect?.();
-            const hr = hostEl?.getBoundingClientRect?.();
-            const hasRect =
-              er &&
-              hr &&
-              isFin(er.left) &&
-              isFin(hr.left) &&
-              ((isFin(er.width) && er.width > 0) || (isFin(er.right) && er.right > er.left));
-            if (hasRect) {
+            const er = ent.el?.getBoundingClientRect?.(), hr = hostEl?.getBoundingClientRect?.();
+            if (er && hr && isFin(er.left) && isFin(hr.left) && ((isFin(er.width) && er.width > 0) || (isFin(er.right) && er.right > er.left))) {
               if (mini) setEntWorldCx(ent, er.left - hr.left + 20);
               else ent.x = clampActorX(er.left - hr.left);
             }
           } catch {}
-          if (mini) {
-            if (ent.el?.style) ent.el.style.transition = '';
-          } else {
+          if (mini) { if (ent.el?.style) ent.el.style.transition = ''; }
+          else {
             for (const cid of getTowerMembers(ent.id)) {
               const member = getEnt(cid);
               if (!member) continue;
-              member.glideSeq = (member.glideSeq || 0) + 1;
-              member.glideUntil = 0;
+              member.glideSeq = (member.glideSeq || 0) + 1; member.glideUntil = 0;
               if (member.el?.style) member.el.style.transition = '';
             }
             syncTower(ent);
@@ -4091,201 +3703,105 @@
         }
         if (!mini) ent.reboundNoBump = false;
         if (mini) {
-          const { minX, maxX } = stageBoundsX();
-          const hw = entHalfW(ent);
-          cachedA = minX + hw;
-          cachedB = maxX - hw;
-          startX = getEntWorldCx(ent);
-        } else {
-          cachedA = readStageWidth();
-          startX = ent.x;
-        }
-        downX = evt.clientX;
-        downY = evt.clientY;
+          const { minX, maxX } = stageBoundsX(), hw = entHalfW(ent);
+          cachedA = minX + hw; cachedB = maxX - hw; startX = getEntWorldCx(ent);
+        } else { cachedA = readStageWidth(); startX = ent.x; }
+        downX = lastMoveX = evt.clientX; downY = lastMoveY = evt.clientY;
         startY = ent.stackedOn ? computeWorldFootY(ent) : ent.y || 0;
-        lastMoveX = evt.clientX;
-        lastMoveY = evt.clientY;
-        lastMoveT = downNow;
-        moved = false;
-        petTriggered = false;
-        markActivity();
-        resetActorTransient(ent);
-
+        lastMoveT = downNow; moved = petTriggered = false;
+        markActivity(); resetActorTransient(ent);
         if (!mini) {
           clearTimeout(petTimer);
-          petTimer = setTimeout(() => {
-            if (!moved && !disposed) {
-              petTriggered = true;
-              startClip(ent, 'pet', 1100, { sym: 'heart' });
-              renderAllFrames();
-            }
-          }, 360);
+          petTimer = setTimeout(() => { if (!moved && !disposed) { petTriggered = true; startClip(ent, 'pet', 1100, { sym: 'heart' }); renderAllFrames(); } }, 360);
         }
       };
-
       const onMove = (evt) => {
         if (lastMoveT === 0) return;
-        const dxTotal = evt.clientX - downX;
-        const dyTotal = evt.clientY - downY;
+        const dxTotal = evt.clientX - downX, dyTotal = evt.clientY - downY;
         let justStarted = false;
         if (!moved && Math.hypot(dxTotal, dyTotal) > dragThreshold) {
-          moved = true;
-          justStarted = true;
-          clearTimeout(petTimer);
-          detachWithGravitySettle(ent.id);
-          if (!mini) {
-            ent.sideEdgeSnap = false;
-            ent.sidePushOriginX = null;
-            ent.sideEdgeDirectUntil = 0;
-          }
-          ent.ballisticActive = false;
-          ent.dragging = true;
-          syncDirectMotionDomAttr(ent, domNode);
-          syncMascotDragRootAttr();
+          moved = justStarted = true; clearTimeout(petTimer); detachWithGravitySettle(ent.id);
+          if (!mini) { ent.sideEdgeSnap = false; ent.sidePushOriginX = null; ent.sideEdgeDirectUntil = 0; }
+          ent.ballisticActive = false; ent.dragging = true;
+          syncDirectMotionDomAttr(ent, domNode); syncMascotDragRootAttr();
         }
         if (!moved) return;
         evt.stopPropagation?.();
-        const now = nowMs();
-        const dt = max(4, now - lastMoveT);
+        const now = nowMs(), dt = max(4, now - lastMoveT);
         ent.vx = ent.vx * 0.4 + (((evt.clientX - lastMoveX) / dt) * 16) * 0.6;
         ent.vy = ent.vy * 0.4 + (((evt.clientY - lastMoveY) / dt) * 16) * 0.6;
         ent.rot = clamp(-ent.vx * 0.7, -14, 14);
-        lastMoveX = evt.clientX;
-        lastMoveY = evt.clientY;
-        lastMoveT = now;
-
+        lastMoveX = evt.clientX; lastMoveY = evt.clientY; lastMoveT = now;
         const nextY = clamp(startY + dyTotal, -180, 0);
         if (mini) {
-          const clampedCx = clamp(startX + dxTotal, cachedA, cachedB);
-          const nextPx = max(2, clampedCx - 32);
-          ent.px = nextPx;
-          ent.lastX = round(nextPx);
-          ent.y = nextY;
-          const tx = snapCoord(nextPx, true);
-          const ty = snapCoord(nextY, true);
-          applyMiniTransform(ent, tx, ty, '39', ent.rot);
+          const nextPx = max(2, clamp(startX + dxTotal, cachedA, cachedB) - 32);
+          ent.px = nextPx; ent.lastX = round(nextPx); ent.y = nextY;
+          applyMiniTransform(ent, snapCoord(nextPx, true), snapCoord(nextY, true), '39', ent.rot);
         } else {
           const rightReserve = popoverRightWidth > 0 ? min(cachedA - 150, popoverRightWidth + 16) : 0;
-          ent.x = max(4, min(max(24, cachedA - 88 - rightReserve), startX + dxTotal));
-          ent.y = nextY;
+          ent.x = max(4, min(max(24, cachedA - 88 - rightReserve), startX + dxTotal)); ent.y = nextY;
           applyActorTransform(ent, now);
         }
-
-        if (justStarted) renderAllFrames(now);
-        else scheduleDragRender();
-
+        if (justStarted) renderAllFrames(now); else scheduleDragRender();
         if (!mini && !reducedMotion && ent.dragging && ent.y > -22) {
           for (const other of activeMainActors()) {
-            if (other === ent) continue;
-            if (!other.dragging && !other.stackedOn && other.y === 0 && abs(ent.x - other.x) < 38) {
-              if (abs(ent.vx) >= 2.0 && canTriggerPair('dragBump', now, 750)) {
-                const pushDir = ent.vx >= 0 ? 1 : -1;
-                startClip(other, 'wow', 750, { sym: 'bang', face: pushDir > 0 ? 'left' : 'right' });
-                startEntityBallistic(other, pushDir * min(5.2, abs(ent.vx) * 0.58), -2.5);
-                recordInteraction('dragBump', `${ent.id}->${other.id}`, now);
-                scheduleDragRender();
-                break;
-              } else if (abs(ent.vx) < 2.0 && canTriggerPair('dragPass', now, 1400)) {
-                gaze(other, ent.x < other.x ? 'left' : 'right', 750, false, 'note');
-                hop(other, 'wave');
-                recordInteraction('dragPass', `${ent.id}->${other.id}`, now);
-                scheduleDragRender();
-                break;
-              }
+            if (other === ent || other.dragging || other.stackedOn || other.y !== 0 || abs(ent.x - other.x) >= 38) continue;
+            if (abs(ent.vx) >= 2.0 && canTriggerPair('dragBump', now, 750)) {
+              const pushDir = ent.vx >= 0 ? 1 : -1;
+              startClip(other, 'wow', 750, { sym: 'bang', face: pushDir > 0 ? 'left' : 'right' });
+              startEntityBallistic(other, pushDir * min(5.2, abs(ent.vx) * 0.58), -2.5);
+              recordInteraction('dragBump', `${ent.id}->${other.id}`, now); scheduleDragRender(); break;
+            } else if (abs(ent.vx) < 2.0 && canTriggerPair('dragPass', now, 1400)) {
+              gaze(other, ent.x < other.x ? 'left' : 'right', 750, false, 'note'); hop(other, 'wave');
+              recordInteraction('dragPass', `${ent.id}->${other.id}`, now); scheduleDragRender(); break;
             }
           }
-          if (miniPileEnabled && ent.y > -16 && abs(ent.vx) > 1.4 && canTriggerPair('dragCrab', now, 800)) {
-            if (miniCrabs.some((mc) => !mc.act && !mc.stackedOn && abs(crabHostCenter(mc) - (ent.x + 48)) < 32)) {
-              scatterCrabsNear(ent.x + 48);
-              recordInteraction('crabScatter', ent.id, now);
-              scheduleDragRender();
-            }
+          if (miniPileEnabled && ent.y > -16 && abs(ent.vx) > 1.4 && canTriggerPair('dragCrab', now, 800) && miniCrabs.some((mc) => !mc.act && !mc.stackedOn && abs(crabHostCenter(mc) - (ent.x + 48)) < 32)) {
+            scatterCrabsNear(ent.x + 48); recordInteraction('crabScatter', ent.id, now); scheduleDragRender();
           }
         }
       };
-
       const onUp = (evt) => {
         if (lastMoveT === 0) return;
-        clearTimeout(petTimer);
-        ent.el.releasePointerCapture?.(evt.pointerId);
-        const prevMoveT = lastMoveT;
-        lastMoveT = 0;
-
+        clearTimeout(petTimer); ent.el.releasePointerCapture?.(evt.pointerId);
+        const prevMoveT = lastMoveT; lastMoveT = 0;
         if (moved) {
-          ent.dragging = false;
-          syncMascotDragRootAttr();
+          ent.dragging = false; syncMascotDragRootAttr();
           const pNow = nowMs();
-          if (pNow - prevMoveT > 35) { ent.vx = 0; ent.vy = 0; }
-          if (Math.hypot(ent.vx, ent.vy) < 4.5 && trySnapOntoTower(ent, pNow)) {
-            syncDirectMotionDomAttr(ent, domNode);
-            moved = false;
-            return;
-          }
-          if (!mini) {
-            const wallNow = Date.now();
-            if (wallNow - ent.lastThrowAt > 8000) ent.throws = 0;
-            ent.throws += 1;
-            ent.lastThrowAt = wallNow;
-          }
+          if (pNow - prevMoveT > 35) ent.vx = ent.vy = 0;
+          if (Math.hypot(ent.vx, ent.vy) < 4.5 && trySnapOntoTower(ent, pNow)) { syncDirectMotionDomAttr(ent, domNode); moved = false; return; }
+          if (!mini) { const wallNow = Date.now(); if (wallNow - ent.lastThrowAt > 8000) ent.throws = 0; ent.throws += 1; ent.lastThrowAt = wallNow; }
           const mul = mini ? 0.78 : 0.85;
-          startEntityBallistic(ent, ent.vx * mul, ent.vy * mul);
-          moved = false;
-          return;
+          startEntityBallistic(ent, ent.vx * mul, ent.vy * mul); moved = false; return;
         }
-
-        if (mini) {
-          ent.bumpUntilTick = tickIdx + 6;
-          ent.passHopUntilTick = tickIdx + 4;
-          renderAllFrames();
-        } else if (!petTriggered) {
-          triggerPoke(ent, true);
-        }
+        if (mini) { ent.bumpUntilTick = tickIdx + 6; ent.passHopUntilTick = tickIdx + 4; renderAllFrames(); }
+        else if (!petTriggered) triggerPoke(ent, true);
       };
-
       const cancelDragOnBlur = () => {
         if (lastMoveT === 0 && !ent.dragging) return;
-        clearTimeout(petTimer);
-        lastMoveT = 0;
+        clearTimeout(petTimer); lastMoveT = 0;
         if (moved || ent.dragging) {
-          moved = false;
-          ent.dragging = false;
-          ent.ballisticActive = false;
-          ent.vx = 0;
-          ent.vy = 0;
-          ent.rot = 0;
-          syncMascotDragRootAttr();
-          syncDirectMotionDomAttr(ent, domNode);
+          moved = ent.dragging = ent.ballisticActive = false; ent.vx = ent.vy = ent.rot = 0;
+          syncMascotDragRootAttr(); syncDirectMotionDomAttr(ent, domNode);
           if (!disposed) startEntityBallistic(ent, 0, 0, { noSnap: true });
         }
       };
       dragReleaseHooks.push(cancelDragOnBlur);
-
-      const onContextMenu = (evt) => {
-        if (mini || yieldMode === 'peek') return;
-        evt.preventDefault();
-        evt.stopPropagation();
-        feedActor(ent, 'donut');
-      };
-
-      ent.el.addEventListener('pointerdown', onDown);
-      ent.el.addEventListener('pointermove', onMove);
-      ent.el.addEventListener('pointerup', onUp);
-      ent.el.addEventListener('pointercancel', onUp);
+      const onContextMenu = (evt) => { if (!mini && yieldMode !== 'peek') { evt.preventDefault(); evt.stopPropagation(); feedActor(ent, 'donut'); } };
+      ent.el.addEventListener('pointerdown', onDown); ent.el.addEventListener('pointermove', onMove);
+      ent.el.addEventListener('pointerup', onUp); ent.el.addEventListener('pointercancel', onUp);
       if (!mini) ent.el.addEventListener('contextmenu', onContextMenu);
       const unbind = () => {
         clearTimeout(petTimer);
         const idx = dragReleaseHooks.indexOf(cancelDragOnBlur);
         if (idx >= 0) dragReleaseHooks.splice(idx, 1);
         if (ent.el) {
-          ent.el.removeEventListener('pointerdown', onDown);
-          ent.el.removeEventListener('pointermove', onMove);
-          ent.el.removeEventListener('pointerup', onUp);
-          ent.el.removeEventListener('pointercancel', onUp);
+          ent.el.removeEventListener('pointerdown', onDown); ent.el.removeEventListener('pointermove', onMove);
+          ent.el.removeEventListener('pointerup', onUp); ent.el.removeEventListener('pointercancel', onUp);
           if (!mini) ent.el.removeEventListener('contextmenu', onContextMenu);
         }
       };
-      ent._pointerCleanup = unbind;
-      cleanups.push(unbind);
+      ent._pointerCleanup = unbind; cleanups.push(unbind);
     };
 
     const unmountActorDom = (actor) => {
@@ -4387,7 +3903,8 @@
       win.addEventListener('focus', onWFocus);
       cleanups.push(() => { win.removeEventListener?.('blur', onWBlur); win.removeEventListener?.('focus', onWFocus); });
     }
-    const rootAttrs = [WB, PM, PP_OPEN, PERF_M, RESIZE_ATTR, IGN_RM, MOT_A];
+    const HAB_THEME_ATTRS = ['data-ag-cs-theme', 'data-ag-cs-accent', 'data-ag-cs-palette', 'data-ag-cs-light-preset'];
+    const rootAttrs = [WB, PM, PP_OPEN, PERF_M, RESIZE_ATTR, IGN_RM, MOT_A, ...HAB_THEME_ATTRS];
     if (doc?.documentElement) {
       let wasResizingAttr = Boolean(doc.documentElement.getAttribute?.(RESIZE_ATTR) === '1');
       const onRootMut = (records) => {
@@ -4398,6 +3915,7 @@
         if (resizeEnded) onStageResizeReleased();
         if (Array.isArray(records) && records.some((r) => r && (r.attributeName === IGN_RM || r.attributeName === MOT_A))) onReducedChange(reducedMq);
         if (!Array.isArray(records) || records.some((r) => !r || !r.attributeName || r.attributeName === WB || r.attributeName === PM || r.attributeName === PP_OPEN || r.attributeName === PERF_M)) syncPwr();
+        else if (records.some((r) => r && HAB_THEME_ATTRS.includes(r.attributeName)) && !isVramSleepState() && !isWindowBlurred() && !isPpOpen()) renderAllFrames();
       };
       const dBus = win && (win.__agDomBus || win.__agPrismDomBus);
       let unBus = null;
@@ -4739,7 +4257,7 @@
         for (const a of activeMainActors()) startClip(a, 'slashCompact', 2800, a.kind === 'cat' || a.kind === 'whale' ? { mirror: true } : {});
       },
       schedule(workers, partners, fP) {
-        scheduleWatchUntil = Date.now() + 18e5;
+        scheduleWatchUntil = getWallNow() + 18e5;
         renderHabitatProp(true);
         for (const w of workers) startClip(w, 'slashSchedule', 2600);
         for (const p of partners) startClip(p, 'lookNod', 2200, { face: fP(p), param: 3 });
@@ -4803,21 +4321,18 @@
       },
       'effort-tier'(p) {
         const tier = String(p?.tier || '').toLowerCase();
-        if (tier === 'high' || tier === 'xhigh') {
-          const workers = workingActors();
-          if (!workers.length) return;
-          for (const w of workers) {
-            startClip(w, 'slashBoost', 2200, { sym: 'spark' });
-            if (!reducedMotion) spawnChromaBurst(getEntWorldCx(w), computeWorldFootY(w) - 16, 6, true);
-          }
-          recordInteraction('effort-tier:' + tier, workers[0].id, nowMs());
+        if (tier !== 'high' && tier !== 'xhigh') return;
+        const workers = workingActors();
+        if (!workers.length) return;
+        for (const w of workers) {
+          startClip(w, 'slashBoost', 2200, { sym: 'spark' });
+          if (!reducedMotion) spawnChromaBurst(getEntWorldCx(w), computeWorldFootY(w) - 16, 6, true);
         }
+        recordInteraction('effort-tier:' + tier, workers[0].id, nowMs());
       },
       'vial-high'() {
-        const wallNow = Date.now();
-        if (wallNow - lastVialWarnAt < 600000) return;
-        const mains = activeMainActors();
-        if (!mains.length) return;
+        const wallNow = Date.now(), mains = activeMainActors();
+        if (wallNow - lastVialWarnAt < 600000 || !mains.length) return;
         lastVialWarnAt = wallNow;
         const leftPet = mains.reduce((best, cur) => (cur.x < best.x ? cur : best), mains[0]);
         if (leftPet.dragging || leftPet.stackedOn) return;
@@ -4827,77 +4342,37 @@
         recordInteraction('vial-high', leftPet.id, nowMs());
         later(2300, () => {
           if (!disposed && actors[leftPet.id] === leftPet && !leftPet.dragging && !leftPet.stackedOn) {
-            leftPet.x = clampActorX(origX);
-            resetHomePositions(true);
-            renderAllFrames();
+            leftPet.x = clampActorX(origX); resetHomePositions(true); renderAllFrames();
           }
         });
       },
       'aura-complete'() {
-        const now = nowMs();
-        const mains = activeMainActors();
-        if (!mains.length) {
-          crabsWave();
-          recordInteraction('aura-complete', 'minis', now);
-          return;
-        }
+        const now = nowMs(), mains = activeMainActors();
+        if (!mains.length) { crabsWave(); recordInteraction('aura-complete', 'minis', now); return; }
         duetUntil = now + 2200;
-        const cat = mains.find((a) => a.kind === 'cat');
-        const clawd = mains.find((a) => a.kind === 'clawd');
+        const cat = mains.find((a) => a.kind === 'cat'), clawd = mains.find((a) => a.kind === 'clawd');
         for (const a of mains) {
           if (a.kind === 'dragon') startClip(a, 'dragonFlame', 2000, { sym: 'spark' });
           else if (a.kind === 'whale') startClip(a, 'whaleSpout', 2000, { sym: 'heart' });
           else if (a.kind === 'cat') startClip(a, 'happy', 2000, { face: clawd ? faceToward(a, clawd) : 'left', sym: 'spark' });
           else startClip(a, 'happy', 2000, { face: cat ? faceToward(a, cat) : 'right', sym: 'heart' });
         }
-        if (!reducedMotion) {
-          mains.forEach((a) => hop(a, 'happy'));
-        }
+        if (!reducedMotion) mains.forEach((a) => hop(a, 'happy'));
         recordInteraction('aura-complete', mains.length > 2 ? 'multi' : 'clawd-cat', now);
       },
-      campSwitch() {
-        // 与 setState 自动触发 700ms 内去重，避免主代理双路调用时重复交接
-        campHandoff();
-      },
-      'model-shift'() {
-        chromaGates.tuned = true;
-        for (const w of workingActors()) gaze(w, 'left', 800, true, 'spark');
-      },
-      'vial-opened'() {
-        chromaGates.tuned = true;
-        activeMainActors().forEach((a) => gaze(a, 'left', 820, false, 'spark'));
-      },
+      campSwitch() { campHandoff(); },
+      'model-shift'() { chromaGates.tuned = true; for (const w of workingActors()) gaze(w, 'left', 800, true, 'spark'); },
+      'vial-opened'() { chromaGates.tuned = true; activeMainActors().forEach((a) => gaze(a, 'left', 820, false, 'spark')); },
       'code-copied'() {
-        chromaGates.forged = true;
-        const now = nowMs();
-        for (const w of workingActors()) {
-          w.nodY = PX;
-          w.nodUntil = now + 180;
-          w.sym = 'note';
-          w.symUntil = now + 850;
-        }
+        chromaGates.forged = true; const now = nowMs();
+        for (const w of workingActors()) { w.nodY = PX; w.nodUntil = now + 180; w.sym = 'note'; w.symUntil = now + 850; }
       },
-      'files-changed'() {
-        chromaGates.forged = true;
-        for (const w of workingActors()) startClip(w, 'salute', 780, { sym: 'spark' });
-      },
-      complete() {
-        chromaGates.forged = true;
-        celebrateDone();
-      },
-      orchestrator(p) {
-        orchestrator = !!p.on;
-        if (orchestrator) {
-          activeMainActors().forEach((a) => gaze(a, 'left', 900, true, 'spark'));
-        }
-      },
+      'files-changed'() { chromaGates.forged = true; for (const w of workingActors()) startClip(w, 'salute', 780, { sym: 'spark' }); },
+      complete() { chromaGates.forged = true; celebrateDone(); },
+      orchestrator(p) { orchestrator = !!p.on; if (orchestrator) activeMainActors().forEach((a) => gaze(a, 'left', 900, true, 'spark')); },
       streamDone(p) {
-        if (p.error) {
-          activeMainActors().forEach((a) => startClip(a, 'worry', 1500, { sym: 'sweat' }));
-          return;
-        }
-        chromaGates.forged = true;
-        celebrateDone();
+        if (p.error) { activeMainActors().forEach((a) => startClip(a, 'worry', 1500, { sym: 'sweat' })); return; }
+        chromaGates.forged = true; celebrateDone();
       },
       ripple(p) {
         const x = Number(p.x);
@@ -4905,38 +4380,23 @@
         for (const a of activeMainActors()) {
           const dir = x < a.x + 48 ? 'left' : 'right';
           gaze(a, dir, 700);
-          if (a.kind === 'cat' || a.kind === 'dragon') {
-            a.forceTwitchStart = tickIdx;
-            a.forceTwitchSide = dir === 'left' ? 'L' : 'R';
-          }
+          if (a.kind === 'cat' || a.kind === 'dragon') { a.forceTwitchStart = tickIdx; a.forceTwitchSide = dir === 'left' ? 'L' : 'R'; }
         }
       },
       send() {
-        const workers = workingActors();
-        const leader = workers[0] || null;
-        if (!leader) {
-          crabsWave();
-          return;
-        }
+        const workers = workingActors(), leader = workers[0] || null;
+        if (!leader) { crabsWave(); return; }
         for (const w of workers) startClip(w, 'salute', 900, { sym: 'spark' });
-        for (const p of activeMainActors()) {
-          if (!workers.includes(p)) startClip(p, 'lookNod', 1200, { face: faceToward(p, leader), param: 2 });
-        }
+        for (const p of activeMainActors()) if (!workers.includes(p)) startClip(p, 'lookNod', 1200, { face: faceToward(p, leader), param: 2 });
       },
       'host-sleep'(p) {
-        hostSleep = !!(p?.sleep);
-        syncHeartbeat();
-        if (hostSleep || isVramSleepState()) {
-          reclaimStageVram();
-        } else if (!isWindowBlurred()) {
-          renderAllFrames();
-        }
+        hostSleep = !!(p?.sleep); syncHeartbeat();
+        if (hostSleep || isVramSleepState()) reclaimStageVram();
+        else if (!isWindowBlurred()) renderAllFrames();
       },
       'roof-land'() {
         if (reducedMotion || dozing || yieldMode === 'peek' || isVramSleepState()) return;
-        for (const a of activeMainActors()) {
-          if (!a.dragging && !a.seq) startClip(a, 'squash', 240);
-        }
+        for (const a of activeMainActors()) if (!a.dragging && !a.seq) startClip(a, 'squash', 240);
       },
     };
     const handleNotify = (event, payload) => {
@@ -4949,75 +4409,36 @@
         if (event === 'roof-land' && !reducedMotion && !dozing && yieldMode !== 'peek' && !isVramSleepState()) renderAllFrames();
         return;
       }
-      const wasDozing = dozing;
-      markActivity();
-      if (event === 'activity') {
-        if (wasDozing) renderAllFrames();
-        return;
-      }
-      fn(pl);
-      renderAllFrames();
+      const wasDozing = dozing; markActivity();
+      if (event === 'activity') { if (wasDozing) renderAllFrames(); return; }
+      fn(pl); renderAllFrames();
     };
-
-    // 鼠标靠近舞台或切回可见标签页时，0ms 恢复 100ms 灵敏心跳
-    const onApproach = () => {
-      if (yieldMode === 'peek') return;
-      markActivity();
-    };
+    const onApproach = () => { if (yieldMode !== 'peek') markActivity(); };
     if (isFn(hostEl.addEventListener)) {
       hostEl.addEventListener('pointerenter', onApproach, { passive: true });
       hostEl.addEventListener('pointermove', onApproach, { passive: true });
-      cleanups.push(() => {
-        hostEl.removeEventListener('pointerenter', onApproach);
-        hostEl.removeEventListener('pointermove', onApproach);
-      });
+      cleanups.push(() => { hostEl.removeEventListener('pointerenter', onApproach); hostEl.removeEventListener('pointermove', onApproach); });
     }
     const onVisibilityChange = () => {
       if (disposed) return;
       syncHeartbeat();
-      if (isVramSleepState()) {
-        reclaimStageVram();
-      } else if (!isWindowBlurred()) {
-        renderAllFrames();
-      }
+      if (isVramSleepState()) reclaimStageVram(); else if (!isWindowBlurred()) renderAllFrames();
     };
     if (doc && isFn(doc.addEventListener)) {
       doc.addEventListener('visibilitychange', onVisibilityChange);
-      cleanups.push(() => {
-        doc.removeEventListener('visibilitychange', onVisibilityChange);
-      });
+      cleanups.push(() => { doc.removeEventListener('visibilitychange', onVisibilityChange); });
     }
-
     const mountOntoStack = (riderId, holderId) => {
-      const rider = getEnt(riderId);
-      const holder = getEnt(holderId);
-      if (!rider || !holder || rider.id === holder.id) return false;
-      if (!miniPileEnabled && (isMiniEnt(rider) || isMiniEnt(holder))) return false;
+      const rider = getEnt(riderId), holder = getEnt(holderId);
+      if (!rider || !holder || rider.id === holder.id || (!miniPileEnabled && (isMiniEnt(rider) || isMiniEnt(holder)))) return false;
       const top = getStackTop(holder.id);
-      if (!top || getTowerMembers(top.id).includes(rider.id)) return false;
-      const riderSubLen = getTowerMembers(rider.id).length;
-      const baseLen = getTowerMembers(top.id).length;
-      if (baseLen + riderSubLen > maxTowerDepthAllowed()) return false;
-      if (rider.stackedOn) {
-        detachWithGravitySettle(rider.id);
-      }
-      rider.flying += 1;
-      rider.ballisticActive = false;
-      rider.leap = null;
+      if (!top || getTowerMembers(top.id).includes(rider.id) || getTowerMembers(top.id).length + getTowerMembers(rider.id).length > maxTowerDepthAllowed()) return false;
+      if (rider.stackedOn) detachWithGravitySettle(rider.id);
+      rider.flying += 1; rider.ballisticActive = false; rider.leap = null;
       if (isMiniEnt(rider)) rider.act = null;
-      rider.stackedOn = top.id;
-      rider.y = 0;
-      rider.vx = 0;
-      rider.vy = 0;
-      rider.rot = 0;
-      rider.perchUntil = 0;
-      if (!isMiniEnt(rider)) {
-        rider.seq = null;
-        startClip(rider, 'happy', 900, { sym: 'heart' });
-      }
-      syncAllStackedFollowers();
-      renderAllFrames();
-      return true;
+      rider.stackedOn = top.id; rider.y = rider.vx = rider.vy = rider.rot = rider.perchUntil = 0;
+      if (!isMiniEnt(rider)) { rider.seq = null; startClip(rider, 'happy', 900, { sym: 'heart' }); }
+      syncAllStackedFollowers(); renderAllFrames(); return true;
     };
 
     const syncPeekInteractivity = () => {
@@ -5252,8 +4673,9 @@
         return target ? feedActor(target, item) : false;
       },
       setHabitatPreview(mode = 'auto') {
-        habitatPreview = ['auto', 'cactus', 'lamp', 'hourglass'].includes(mode) ? mode : 'auto';
+        habitatPreview = mode === 'auto' || HABITAT_MODES.includes(mode) ? mode : 'auto';
         renderHabitatProp(true);
+        if (!isVramSleepState() && !isWindowBlurred() && !isPpOpen()) renderAllFrames();
         return resolveHabitatMode();
       },
       onUserType(text = '') {
@@ -5261,28 +4683,23 @@
         markActivity();
         const workers = workingActors();
         if (!workers.length) return;
-        const trimmed = String(text || '').replace(/\s+$/, '');
-        if (/[?？]$/.test(trimmed)) {
-          for (const w of workers) startClip(w, 'tilt', 750, { rot: -9, sym: 'q' });
-        } else if (/[!！]$/.test(trimmed)) {
-          for (const w of workers) startClip(w, 'wow', 700, { sym: 'bang' });
+        const s = typeof text === 'string' ? text : '';
+        const tail = (s.length > 16 ? s.slice(-16) : s).trimEnd().slice(-4);
+        if (/[?？]$/.test(tail)) {
+          for (const w of workers) { startClip(w, 'tilt', 750, { rot: -9, sym: 'q' }); applyActorTransform(w, now); }
+        } else if (/[!！]$/.test(tail)) {
+          for (const w of workers) { startClip(w, 'wow', 700, { sym: 'bang' }); applyActorTransform(w, now); }
         } else {
-          for (const w of workers) {
-            w.nodY = PX; // 打字点头：整格下沉 1 格
-            w.nodUntil = now + 140;
-            w.eyeScan = 0;
-          }
+          for (const w of workers) { w.nodY = PX; w.nodUntil = now + 140; w.eyeScan = 0; }
           clearTimeout(pauseTimer);
           pauseTimer = setTimeout(() => {
             if (disposed) return;
             for (const w of workingActors()) w.eyeScan = tickIdx % 2 ? -1 : 1;
-            renderAllFrames();
-            later(500, () => {
-              for (const w of activeMainActors()) w.eyeScan = 0;
-            });
+            schedTypeRender();
+            later(500, () => { for (const w of activeMainActors()) w.eyeScan = 0; });
           }, 450);
         }
-        renderAllFrames(now);
+        schedTypeRender();
       },
       setRimLight(n = null) {
         if (disposed) return;
@@ -5303,95 +4720,60 @@
       },
       getLayoutSnapshot() {
         const now = nowMs();
+        const habMode = resolveHabitatMode(), habActor = actors.clawd || activeMainActors()[0] || null;
+        const habLight = evalActorHabLight(habActor, habMode);
         return {
-          camp,
-          mascot: mascotSpec,
-          roster: { ...roster },
-          miniPileEnabled,
-          quadEnabled,
-          reducedMotion,
-          yieldMode,
-          dozing,
-          orchestrator,
+          camp, mascot: mascotSpec, roster: { ...roster }, miniPileEnabled, quadEnabled, reducedMotion, yieldMode, dozing, orchestrator,
           rimLight: { active: rim.on, strength: round(rim.s * 100) / 100, toneKey: rim.t },
           habitat: {
-            mode: resolveHabitatMode(),
-            scheduleActive: Date.now() < scheduleWatchUntil,
+            mode: habMode,
+            lightKind: HABITAT_LIGHT_KIND[habMode] || null,
+            poolSize: HABITAT_MODES.length,
+            clawdLightStrength: habLight.strength,
+            scheduleActive: getWallNow() < scheduleWatchUntil,
           },
           towers: listAllTowers(),
-          chromaResonance: {
-            active: prismaticCoat,
-            tuned: chromaGates.tuned,
-            forged: chromaGates.forged,
-            sparkCount: chromaSparks.length,
-          },
+          chromaResonance: { active: prismaticCoat, tuned: chromaGates.tuned, forged: chromaGates.forged, sparkCount: chromaSparks.length },
           perf: {
             timerIntervalMs: currentTickMs,
             timerPaused: isHostDetached() || parked || isWindowBlurred() || isHostSleeping() || currentTickMs === 0,
             vramReclaimed,
-            canvasDraws: perfStats.canvasDraws,
-            canvasSkips: perfStats.canvasSkips,
-            domTransformWrites: perfStats.domTransformWrites,
-            domTransformSkips: perfStats.domTransformSkips,
+            canvasDraws: perfStats.canvasDraws, canvasSkips: perfStats.canvasSkips,
+            domTransformWrites: perfStats.domTransformWrites, domTransformSkips: perfStats.domTransformSkips,
           },
           lastInteraction: { ...lastInteraction },
           minis: miniCrabs.map((mc) => ({
-            id: mc.id,
-            act: mc.act && tickIdx >= mc.act.start ? mc.act.type : null,
-            x: round(mc.lastX),
-            y: round(mc.stackedOn ? computeWorldFootY(mc) : mc.y || 0),
-            worldCx: round(getEntWorldCx(mc)),
-            dir: mc.dir,
-            stackedOn: mc.stackedOn,
-            leap: !!mc.leap,
+            id: mc.id, act: mc.act && tickIdx >= mc.act.start ? mc.act.type : null, x: round(mc.lastX),
+            y: round(mc.stackedOn ? computeWorldFootY(mc) : mc.y || 0), worldCx: round(getEntWorldCx(mc)),
+            dir: mc.dir, stackedOn: mc.stackedOn, leap: !!mc.leap,
           })),
           actors: activeMainIds().map((id) => {
-            const a = actors[id];
-            const rect = a.el ? a.el.getBoundingClientRect() : null;
-            const fx = a.lastFx || {};
+            const a = actors[id], rect = a.el ? a.el.getBoundingClientRect() : null, fx = a.lastFx || {};
             return {
-              id,
-              x: a.x,
-              y: a.y,
-              footY: round(computeWorldFootY(a)),
-              worldCx: round(getEntWorldCx(a)),
-              pose: resolvePoseFor(a, now),
-              sym: a.sym && now < a.symUntil ? a.sym : null,
-              rot: effectiveRot(a, now),
-              pokeCount: a.pokeCount,
-              stackedOn: a.stackedOn,
-              leap: !!a.leap,
+              id, x: a.x, y: a.y, footY: round(computeWorldFootY(a)), worldCx: round(getEntWorldCx(a)),
+              pose: resolvePoseFor(a, now), sym: a.sym && now < a.symUntil ? a.sym : null, rot: effectiveRot(a, now),
+              pokeCount: a.pokeCount, stackedOn: a.stackedOn, leap: !!a.leap,
               rect: rect ? { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom } : null,
-              // 附加诊断字段（只读）：整数格挤压量、待机微动作与静止帧缓存快照
-              squash: a.lastSq ? { ...a.lastSq } : { w: 0, h: 0 },
-              blinkStage: fx.blinkStage || null,
-              breath: !!fx.breath,
-              earTwitch: fx.earTwitch || null,
-              clawSnap: fx.clawSnap || null,
-              glance: fx.glance || 0,
-              tick: tickIdx,
+              squash: a.lastSq ? { ...a.lastSq } : { w: 0, h: 0 }, blinkStage: fx.blinkStage || null, breath: !!fx.breath,
+              earTwitch: fx.earTwitch || null, clawSnap: fx.clawSnap || null, glance: fx.glance || 0, tick: tickIdx,
               renderCache: {
-                poseKey: a.lastRender.poseKey,
-                frameIdx: a.lastRender.frameIdx,
-                flip: a.lastRender.flip,
-                tintState: a.lastRender.tintState,
-                lastX: a.lastDomX,
-                lastY: a.lastDomY,
-                lastRot: a.lastRender.lastRot,
+                poseKey: a.lastRender.poseKey, frameIdx: a.lastRender.frameIdx, flip: a.lastRender.flip,
+                tintState: a.lastRender.tintState, lastX: a.lastDomX, lastY: a.lastDomY, lastRot: a.lastRender.lastRot,
               },
             };
           }),
         };
       },
+      getDebugState() {
+        const snap = this.getLayoutSnapshot();
+        return { ...snap, habitat: { ...snap.habitat, preview: habitatPreview } };
+      },
       park(on = true) {
         if (disposed) return;
         parked = !!on;
         syncHeartbeat();
-        if (parked) {
-          reclaimStageVram();
-        } else if (!isVramSleepState() && !isWindowBlurred()) {
-          renderAllFrames();
-        }
+        if (parked) reclaimStageVram();
+        else if (!isVramSleepState() && !isWindowBlurred()) renderAllFrames();
       },
       resume() {
         if (disposed) return;
@@ -5401,6 +4783,7 @@
       },
       syncPowerState: syncPwr,
       getHopBridge: getHopApi,
+      destroy() { this.dispose(); },
       dispose() {
         disposed = true;
         rim.on = false; rim.s = 0; rimSig = '0';
@@ -5411,6 +4794,7 @@
         if (tickTimer !== null) { clearInterval(tickTimer); tickTimer = null; }
         currentTickMs = 0;
         if (dragRafId && cAF) { try { cAF(dragRafId); } catch {} dragRafId = 0; }
+        if (typeRaf && cAF) { try { cAF(typeRaf); } catch {} typeRaf = 0; }
         dragRafPending = false;
         if (resizeRaf && cAF) { try { cAF(resizeRaf); } catch {} resizeRaf = 0; }
         clearTimeout(pauseTimer); clearTimeout(theaterTimer);
@@ -5423,67 +4807,34 @@
         } catch {}
         cleanups.forEach((fn) => fn());
         for (const n of [miniGroupEl, ...liveMains.map((a) => a.el), fxCanvas, habitatEl]) rmNode(n);
+        releaseHabitatStyle(doc, habStyleTok);
       },
     };
   }
 
   const mascotArt = {
-    source: 'ch10-rig',
-    PALETTES,
-    MINI_SPRITES,
-    MINI_ANIM_FRAMES,
-    PROPS,
-    SYMS,
-    buildClipLayers,
-    drawLayerSet,
+    source: 'ch10-rig', PALETTES, MINI_SPRITES, MINI_ANIM_FRAMES, PROPS, SYMS, buildClipLayers, drawLayerSet,
     drawMainActor(ctx, kind, poseKey, tickIdx, oxGrid, oyGrid, pxSize, opts = {}) {
       if (!ctx) return 0;
-      const pal = PALETTES[kind] || PALETTES.clawd;
       const layers = buildClipLayers(kind, poseKey, tickIdx, opts);
-      drawLayerSet(ctx, oxGrid, oyGrid, pxSize, pal, layers);
+      drawLayerSet(ctx, oxGrid, oyGrid, pxSize, PALETTES[kind] || PALETTES.clawd, layers);
       return layers.length;
     },
     drawMiniCrab(ctx, id, frameKey, oxGrid, oyGrid, pxSize) {
       if (!ctx) return 0;
-      const pal = PALETTES[id] || PALETTES.cowboy;
       const spr = frameKey && MINI_ANIM_FRAMES[id]?.[frameKey] ? MINI_ANIM_FRAMES[id][frameKey] : MINI_SPRITES[id];
       if (!spr) return 0;
-      drawLayerSet(ctx, oxGrid, oyGrid, pxSize, pal, [spr]);
+      drawLayerSet(ctx, oxGrid, oyGrid, pxSize, PALETTES[id] || PALETTES.cowboy, [spr]);
       return 1;
     },
   };
 
   return {
-    PX,
-    TICK,
-    DOZE_TICK,
-    OFFICIAL_OPEN_REF,
-    PALETTES,
-    CLAWD_PARTS,
-    CAT_PARTS,
-    DRAGON_PARTS,
-    WHALE_PARTS,
-    MINI_SPRITES,
-    MINI_ANIM_FRAMES,
-    PROPS,
-    SYMS,
-    mascotArt,
-    MASCOT_SPECIES_ORDER,
-    MASCOT_MAX_PER_SPECIES,
-    MASCOT_MAX_TOTAL,
-    parseMascotSpec,
-    encodeMascotSpec,
-    normalizeMascotValue,
-    isValidMascotValue,
-    resolveClawdStandGrid,
-    drawLayerSet,
-    renderPixelLayers,
-    buildClipLayers,
-    classifyPairEncounter,
-    stepMiniCrabCorridor,
-    evalChromaColorAt,
-    resolveGroundSeparation,
-    chooseObstacleAction,
-    mountDualMascotStage,
+    PX, TICK, DOZE_TICK, OFFICIAL_OPEN_REF, PALETTES, CLAWD_PARTS, CAT_PARTS, DRAGON_PARTS, WHALE_PARTS,
+    MINI_SPRITES, MINI_ANIM_FRAMES, PROPS, SYMS, mascotArt, MASCOT_SPECIES_ORDER, MASCOT_MAX_PER_SPECIES, MASCOT_MAX_TOTAL,
+    HABITAT_MODES, HABITAT_LIGHT_KIND, HABITAT_LIGHT_STYLE_ID, HABITAT_LIGHT_CSS, resolveHabitatModeForTime,
+    parseMascotSpec, encodeMascotSpec, normalizeMascotValue, isValidMascotValue, resolveClawdStandGrid,
+    drawLayerSet, renderPixelLayers, buildClipLayers, classifyPairEncounter, stepMiniCrabCorridor,
+    evalChromaColorAt, resolveGroundSeparation, chooseObstacleAction, mountDualMascotStage, dispose: disposeHabitatStyle,
   };
 });

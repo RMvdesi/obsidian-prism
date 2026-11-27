@@ -27,6 +27,7 @@ import {
   atomicWriteFileExclusiveSync,
   atomicWriteFileExclusiveAsync,
 } from '../../src/security/net-guard.mjs';
+import { MachineTranslateClient } from './machine-translate-client.mjs';
 
 export const SYSTEM_PROMPTS = Object.freeze({
   technical:
@@ -1226,6 +1227,35 @@ export class ThoughtTranslatorService {
     this._hasDiskFile = false;
     this._cacheEpoch = 0;
     this._config = null;
+    this._machineTransport = typeof opts.machineTransport === 'function' ? opts.machineTransport : null;
+    this._mtClient = new MachineTranslateClient({
+      getProxyMode: (overrideOpts) => {
+        const store = this.loadStore();
+        if (overrideOpts && overrideOpts.proxyMode !== undefined) return overrideOpts.proxyMode;
+        if (overrideOpts && typeof overrideOpts.customProxyUrl === 'string' && overrideOpts.customProxyUrl.trim()) {
+          return 'custom';
+        }
+        return store.proxyMode || 'auto';
+      },
+      resolveProxy: (url, overrideOpts) => this._resolveProxyForUrlAsync(url, overrideOpts),
+      sendRequest: ({ url, init, channel, proxy, engine, routeId }) =>
+        this._requestMachineRoute({ url, init, channel, proxy, engine, routeId }),
+      readResponseTextBounded: (res, maxBytes) => this._readResponseTextBounded(res, maxBytes),
+      composeAbortSignal: (ms, ext) => composeAbortSignal(ms, ext),
+      redactText: (s) => redactSecrets(s),
+      now: opts.machineClock,
+      sleep: opts.machineSleep,
+      maxConcurrency: opts.machineMaxConcurrency,
+      minIntervalMs:
+        opts.machineMinIntervalMs !== undefined
+          ? opts.machineMinIntervalMs
+          : this._hasCustomFetch && !this._machineTransport
+          ? 0
+          : 120,
+      cooldownRateLimitMs: opts.machineCooldownRateLimitMs,
+      cooldownForbiddenMs: opts.machineCooldownForbiddenMs,
+      cooldownErrorMs: opts.machineCooldownErrorMs,
+    });
   }
 
   _defaultStore() {
@@ -1468,6 +1498,7 @@ export class ThoughtTranslatorService {
 
     this._config = this._normalizeStore(nextRaw);
     this.invalidateProxyCache();
+    this._mtClient.clearCooldowns();
     const persisted = this._persistStore(this._config);
     const out = this.getSanitizedConfig();
     if (persisted && persisted.ok === false) {
@@ -2531,6 +2562,28 @@ export class ThoughtTranslatorService {
     });
   }
 
+  async _requestMachineRoute({ url, init = {}, channel = 'direct', proxy = null, engine = 'google', routeId = '' }) {
+    const safeInit = { ...(init && typeof init === 'object' ? init : {}), redirect: 'error' };
+    const useProxy = channel === 'proxy' && Boolean(proxy);
+    const isSocks5 = Boolean(useProxy && (proxy.protocol === 'socks5:' || proxy.protocol === 'socks5h:'));
+    await verifyOutboundUrlSafety(url, {
+      dnsLookup: this._dnsLookup,
+      skipDnsLookup: isSocks5 || ((this._hasCustomFetch || Boolean(this._machineTransport)) && !this._dnsLookup),
+      allowUnresolvedForProxy: useProxy,
+      allowPrivateIp: this._allowPrivateIp,
+    });
+    if (this._machineTransport) {
+      return this._machineTransport({ url, init: safeInit, channel, proxy: useProxy ? proxy : null, engine, routeId });
+    }
+    if (useProxy && !this._hasCustomFetch) {
+      return this._fetchViaProxy(url, safeInit, proxy);
+    }
+    if (!this.fetchImpl) {
+      throw new Error('Fetch unavailable in runtime');
+    }
+    return this.fetchImpl(url, safeInit);
+  }
+
   async _request(url, init = {}, proxyOverride = null) {
     const safeInit = { ...(init && typeof init === 'object' ? init : {}), redirect: 'error' };
     const proxy = !this._hasCustomFetch ? await this._resolveProxyForUrlAsync(url, proxyOverride) : null;
@@ -3079,59 +3132,15 @@ export class ThoughtTranslatorService {
           reqTimeout.cleanup();
         }
       }
-    } else if (!this.fetchImpl) {
+    } else if (!this.fetchImpl && !this._machineTransport) {
       connectivity = { ok: false, target: 'gtx', latencyMs: 0, reason: 'fetch_unavailable', error: 'Fetch unavailable' };
     } else {
-      const t0 = Date.now();
-      const reqTimeout = createManagedTimeoutSignal(timeoutMs);
-      try {
-        const res = await this._request(
-          gtxProbeUrl,
-          {
-            method: 'GET',
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            redirect: 'error',
-            signal: reqTimeout.signal,
-          },
-          proxyOverride
-        );
-        const latencyMs = Date.now() - t0;
-        if (res.ok) {
-          try { await res.body?.cancel?.(); } catch {}
-          connectivity = { ok: true, target: 'gtx', status: res.status, latencyMs, reason: 'ok' };
-        } else {
-          const bodySnippet = await this._readResponseTextBounded(res, 16384).catch(() => '');
-          if (res.status === 429) {
-            connectivity = {
-              ok: false,
-              target: 'gtx',
-              status: res.status,
-              latencyMs,
-              reason: 'rate_limited',
-              error: `HTTP 429: ${safeRedact(bodySnippet.slice(0, 160))}`,
-            };
-          } else {
-            connectivity = {
-              ok: false,
-              target: 'gtx',
-              status: res.status,
-              latencyMs,
-              reason: 'http_error',
-              error: `HTTP ${res.status}: ${safeRedact(bodySnippet.slice(0, 160))}`,
-            };
-          }
-        }
-      } catch (err) {
-        connectivity = {
-          ok: false,
-          target: 'gtx',
-          latencyMs: Date.now() - t0,
-          reason: classifyErrReason(err),
-          error: safeRedact(err?.message || String(err)),
-        };
-      } finally {
-        reqTimeout.cleanup();
-      }
+      connectivity = await this._mtClient.diagnose({
+        proxyOverride,
+        timeoutMs,
+        safeRedact,
+        classifyErrReason,
+      });
     }
 
     const suggestions = [];
@@ -3541,6 +3550,7 @@ export class ThoughtTranslatorService {
       } catch {}
     }
     this.inflight.clear();
+    this._mtClient.dispose();
   }
 
   _shouldKeepMachineParagraph(paragraph, targetLang) {
@@ -3572,46 +3582,7 @@ export class ThoughtTranslatorService {
   }
 
   async _translateMachineBatch(text, gtxTl, abortSignal) {
-    if (abortSignal?.aborted) throw new Error('Translation aborted');
-    const codeSpans = [];
-    let opTag = 'OPCODE';
-    if (/__\s*OPCODE/i.test(text)) {
-      do {
-        opTag = `OPCODE_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-      } while (text.toUpperCase().includes(opTag));
-    }
-    const masked = text.replace(/`[^`\n]+`/g, (m) => {
-      const idx = codeSpans.push(m) - 1;
-      return `__${opTag}_${idx}__`;
-    });
-    const url =
-      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(gtxTl)}&dt=t&q=` +
-      encodeURIComponent(masked);
-    const reqAbort = composeAbortSignal(9000, abortSignal);
-    try {
-      const res = await this._request(url, {
-        method: 'GET',
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        redirect: 'error',
-        signal: reqAbort.signal,
-      });
-      if (!res.ok) {
-        try { await res.body?.cancel?.(); } catch {}
-        throw new Error(`Machine translate HTTP ${res.status}`);
-      }
-      const rawJsonText = await this._readResponseTextBounded(res, 4 * 1024 * 1024);
-      const json = JSON.parse(rawJsonText);
-      const segs = Array.isArray(json?.[0]) ? json[0] : [];
-      let translated = segs.map((s) => (Array.isArray(s) && s[0] ? String(s[0]) : '')).join('');
-      const restoreRe = new RegExp(`__\\s*${opTag}\\s*_?\\s*(\\d+)\\s*__`, 'gi');
-      translated = translated.replace(restoreRe, (full, n) => {
-        const idx = Number(n);
-        return Number.isInteger(idx) && idx >= 0 && idx < codeSpans.length ? codeSpans[idx] : full;
-      });
-      return translated.trim();
-    } finally {
-      reqAbort.cleanup();
-    }
+    return this._mtClient.translateBatch(text, gtxTl, abortSignal);
   }
 
   async translateMachine(rawText, abortSignalOrLang = null, targetLang = 'zh-CN') {

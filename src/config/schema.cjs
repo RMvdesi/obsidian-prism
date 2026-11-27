@@ -170,9 +170,26 @@ function validateConfigEntry(key, value) {
   return false;
 }
 
+const _autoPerfModeConfigs = new WeakSet();
+
+function isPerformanceModeExplicit(rawConfig) {
+  if (!rawConfig || typeof rawConfig !== 'object' || Array.isArray(rawConfig)) return false;
+  if (!Object.prototype.hasOwnProperty.call(rawConfig, 'performanceMode')) return false;
+  const raw = rawConfig.performanceMode;
+  if (typeof raw !== 'string') return false;
+  const norm = raw.trim().toLowerCase();
+  return norm === 'performance' || norm === 'eco' || norm === 'balanced' || norm === 'quality';
+}
+
+function wasPerformanceModeAuto(config) {
+  return Boolean(config && typeof config === 'object' && _autoPerfModeConfigs.has(config));
+}
+
 function reconcileConfigAliases(raw) {
   const out = raw && typeof raw === 'object' ? { ...raw } : {};
   const has = (k) => Object.prototype.hasOwnProperty.call(out, k);
+  const rawPerfAuto =
+    has('performanceMode') && typeof out.performanceMode === 'string' && out.performanceMode.trim().toLowerCase() === 'auto';
 
   for (const [primary, alias] of STRING_ALIAS_PAIRS) {
     if (has(primary)) {
@@ -190,13 +207,15 @@ function reconcileConfigAliases(raw) {
     }
   }
 
+  const isFalseLike = (v) =>
+    v === false || (typeof v === 'string' && /^(?:off|false)$/i.test(v.trim()));
   for (const [boolKey, onOffKey] of BOOL_ON_OFF_ALIAS_PAIRS) {
     if (has(boolKey)) {
-      const on = out[boolKey] !== false && out[boolKey] !== 'off';
+      const on = !isFalseLike(out[boolKey]);
       out[boolKey] = on;
       out[onOffKey] = on ? 'on' : 'off';
     } else if (has(onOffKey)) {
-      const on = out[onOffKey] !== 'off' && out[onOffKey] !== false;
+      const on = !isFalseLike(out[onOffKey]);
       out[boolKey] = on;
       out[onOffKey] = on ? 'on' : 'off';
     }
@@ -249,6 +268,7 @@ function reconcileConfigAliases(raw) {
     }
   }
 
+  if (rawPerfAuto) _autoPerfModeConfigs.add(out);
   return out;
 }
 
@@ -267,5 +287,7 @@ module.exports = {
   VALIDATORS,
   normalizeMascotConfigValue,
   validateConfigEntry,
+  isPerformanceModeExplicit,
+  wasPerformanceModeAuto,
   reconcileConfigAliases,
 };

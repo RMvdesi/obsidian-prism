@@ -163,7 +163,7 @@ function createCh1Compiler({
     for (const g of globalStats.values()) {
       const lzPoolCost = g.valBytes >= 8 ? Math.ceil(g.valBytes * 0.62) + 2 : g.valBytes + 2;
       const netSave = g.totalOrig - (lzPoolCost + g.totalReplEst);
-      if ((g.totalOccs >= 2 && netSave >= 1) || (g.hasStr && g.valBytes >= 17 && !g.strVal.startsWith('^]t'))) {
+      if ((g.totalOccs >= 2 && netSave >= 1) || (g.hasStr && g.valBytes >= 13 && !g.strVal.startsWith('^]t'))) {
         const sortScore = g.totalOccs >= 2 ? netSave + Math.floor(g.valBytes * 0.25) : Math.floor(g.valBytes * 0.35) - 5;
         poolCandidates.push({ ...g, netSave, sortScore });
       }

@@ -3061,7 +3061,7 @@
   width: 40px;
   height: 32px;
   image-rendering: pixelated;
-  transition: transform 160ms steps(2, end);
+  transition: transform .1s linear;
 }
 .ag-v2-mini-crab-canvas:is(:active, [data-direct="1"]) {
   transition: none !important;

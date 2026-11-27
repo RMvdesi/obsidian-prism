@@ -1,6 +1,7 @@
 // Obsidian Prism 遥测 Scope 归一化、远程环境隔离与 Renderer LS-RPC 路由纯函数（无原型 Mixin，供 TelemetrySubsystem 调用）
 import {
   buildRendererRpcExpression,
+  buildRendererRpcCallExpression,
   extractModelLabelMap,
   normalizeRendererUserStatus,
   normalizeRendererQuotaSummary,
@@ -237,11 +238,93 @@ export function createScopedRendererClient(tel, entry, scopeKey, extraOpts = nul
     scopeKey: safeScope,
     ...(extraOpts?.strictEntry ? { strictEntry: true } : {}),
   };
+  const isSettledStatus = (st) =>
+    st === 1 ||
+    st === 'CASCADE_RUN_STATUS_1' ||
+    /IDLE|DONE|COMPLETED|CANCELLED|CANCELED|STOPPED|FAILED|ERROR/i.test(String(st || ''));
+  const buildSummaryStamp = (summary) => {
+    if (!summary || typeof summary !== 'object') return '';
+    const lm = summary.lastModifiedTime;
+    const lmStr =
+      typeof lm === 'string' || typeof lm === 'number' || typeof lm === 'bigint'
+        ? String(lm)
+        : lm && typeof lm === 'object'
+          ? `${lm.seconds ?? ''}:${lm.nanos ?? 0}`
+          : '';
+    const sc = summary.stepCount ?? summary.numTotalSteps ?? '';
+    return lmStr || sc !== '' ? `${lmStr}|${sc}` : '';
+  };
   return {
     server: { port: 0, csrf: '', pid: 0, mode: 'renderer-proxy', scopeKey: safeScope },
     call: (method, body = {}) => tel.invokeRendererLsRpc(method, body, routeOpts),
-    trajectory: (cascadeId) => tel.invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts),
+    trajectory: (cascadeId, trajOpts = null) => {
+      const cid = String(cascadeId || '').trim().toLowerCase();
+      if (!cid) return tel.invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts);
+      const bypassCache = Boolean(trajOpts && typeof trajOpts === 'object' && (trajOpts.force || trajOpts.freshContext));
+      const sumStamp = buildSummaryStamp(trajOpts?.summary || null);
+      const cacheKey = `${safeScope}::${entry?.pageId || ''}::${cid}`;
+      if (!(tel._scopedTrajCache instanceof Map)) tel._scopedTrajCache = new Map();
+      if (!(tel._scopedTrajInFlight instanceof Map)) tel._scopedTrajInFlight = new Map();
+      const now = Date.now();
+      if (!bypassCache) {
+        const hit = tel._scopedTrajCache.get(cacheKey);
+        if (hit) {
+          const stampChanged = Boolean(sumStamp && hit.sumStamp && sumStamp !== hit.sumStamp);
+          const ttl = isSettledStatus(hit.data?.status) ? 20000 : 4000;
+          if (!stampChanged && now - hit.at < ttl) {
+            return Promise.resolve(hit.data);
+          }
+        }
+        const inFlight = tel._scopedTrajInFlight.get(cacheKey);
+        if (inFlight) return inFlight;
+      }
+      const req = tel
+        .invokeRendererLsRpc('GetCascadeTrajectory', { cascadeId }, routeOpts)
+        .then((data) => {
+          tel._scopedTrajCache.delete(cacheKey);
+          tel._scopedTrajCache.set(cacheKey, { at: Date.now(), data, sumStamp });
+          while (tel._scopedTrajCache.size > 32) {
+            tel._scopedTrajCache.delete(tel._scopedTrajCache.keys().next().value);
+          }
+          return data;
+        })
+        .finally(() => {
+          if (tel._scopedTrajInFlight.get(cacheKey) === req) {
+            tel._scopedTrajInFlight.delete(cacheKey);
+          }
+        });
+      tel._scopedTrajInFlight.set(cacheKey, req);
+      return req;
+    },
   };
+}
+
+export async function evalRendererRpcOnEntry(entry, method, body = {}, timeoutMs = 12000, { useSend = false } = {}) {
+  const docGen = typeof entry.sidebarDocument === 'number' ? entry.sidebarDocument : 0;
+  const runEval = async (expression) => {
+    if (useSend) {
+      const evalRes = await entry.session.send(
+        'Runtime.evaluate',
+        { expression, awaitPromise: true, returnByValue: true },
+        timeoutMs
+      );
+      return evalRes?.result?.value;
+    }
+    return entry.session.evaluate(expression, true, timeoutMs);
+  };
+  if (entry._rendererRpcInstalledDocGen === docGen) {
+    const fastRes = await runEval(buildRendererRpcCallExpression(method, body));
+    if (!fastRes || fastRes.needInstall !== true) {
+      return fastRes;
+    }
+    entry._rendererRpcInstalledDocGen = -1;
+  }
+  const fullRes = await runEval(buildRendererRpcExpression(method, body));
+  const currentDocGen = typeof entry.sidebarDocument === 'number' ? entry.sidebarDocument : 0;
+  if (fullRes && fullRes.ok === true && currentDocGen === docGen) {
+    entry._rendererRpcInstalledDocGen = docGen;
+  }
+  return fullRes;
 }
 
 export function resolveActiveRpcScope(tel) {
@@ -268,12 +351,11 @@ export async function invokeRendererLsRpc(tel, method, body = {}, opts = null) {
   if (!candidates.length) {
     throw new Error('等待 Antigravity 主窗口连接');
   }
-  const expr = buildRendererRpcExpression(method, effectiveBody);
   const timeoutMs = method === 'Probe' ? 2600 : 12000;
   let lastErr = null;
   for (const entry of candidates) {
     try {
-      const res = await entry.session.evaluate(expr, true, timeoutMs);
+      const res = await evalRendererRpcOnEntry(entry, method, effectiveBody, timeoutMs, { useSend: false });
       if (!res || res.ok !== true) {
         lastErr = new Error(String(res?.error || 'renderer_ls_unavailable'));
         continue;

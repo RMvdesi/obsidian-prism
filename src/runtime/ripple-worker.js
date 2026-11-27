@@ -5,7 +5,7 @@
   if (root) root.__agPrismRippleWorker = api;
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this, function (G) {
   'use strict';
-  const M = Math, F = Object.freeze, PROBE_TIMEOUT_MS = 600, INIT_TIMEOUT_MS = 800, PROBE_RETRY_DELAY_MS = 1500, IDLE_SLEEP_MS = 1200;
+  const M = Math, F = Object.freeze, PROBE_TIMEOUT_MS = 1500, INIT_TIMEOUT_MS = 800, PROBE_RETRY_DELAY_MS = 2500, IDLE_SLEEP_MS = 1200;
   const mkP = (mode, g, r, c, v, f, ms, m) => F({ mode, glowDprScale: g, rippleMaxDpr: r, crystalMaxDpr: c, vialMaxDpr: v, maxFps: f, minGapMs: ms, msaa: m });
   const PERF_PROFILES = F({
     balanced: mkP('balanced', 0.7, 1.5, 1.5, 1.5, 0, 0, false),
@@ -36,7 +36,7 @@
     return Boolean(d && (d.hidden === true || ga(h, 'data-ag-cs-win-blur') === '1' || (ga(h, 'data-ag-pp-open') === '1' && /^(performance|eco)$/.test(rawPerf(d)))));
   }
 
-  const PROBE_WORKER_SRC = "'use strict';self.onmessage=e=>{var d=e?.data;if(d?.type!=='probe'||!d.canvas)return;try{var g=d.canvas.getContext('webgl2',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false}),ok=Boolean(g&&!g.isContextLost?.());g&&g.getExtension('WEBGL_lose_context')?.loseContext();self.postMessage({type:'probe',ok,reason:ok?'ok':'webgl2-null'})}catch(x){self.postMessage({type:'probe',ok:false,reason:String(x?.message||x||'probe-err')})}};";
+  const PROBE_WORKER_SRC = "'use strict';var p=m=>self.postMessage(m);p({type:'probe-ready'});self.onmessage=e=>{var d=e?.data;if(d?.type!=='probe'||!d.canvas)return p({type:'probe',ok:false,reason:'bad-probe-msg'});p({type:'probe-ack'});try{var g=d.canvas.getContext('webgl2',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false}),ok=Boolean(g&&!g.isContextLost?.());g&&g.getExtension('WEBGL_lose_context')?.loseContext();p({type:'probe',ok,reason:ok?'ok':'webgl2-null'})}catch(x){p({type:'probe',ok:false,reason:String(x?.message||x||'probe-err')})}};";
 
   const RENDER_WORKER_SRC = [
     "'use strict';var mode='glow',cv,gl,P,u={},raf=0,pa=0,dd=0,rd=0,dpr=1,fS=0,lC=0,lD=0,lA=0,iMs=1200,mF=0,fc=0,fr=0,fw=7,fh=15,fz=10,fg='',cT,aT,aC,aX,aK='';",
@@ -52,7 +52,7 @@
     "var dr=()=>{gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3)},okG=()=>gl&&P&&cv&&cv.width>0&&cv.height>0&&!gl.isContextLost?.();",
     "var pG=t=>{if(!okG())return;gl.viewport(0,0,cv.width,cv.height);gl.useProgram(P);gl.uniform2f(u.uRes,cv.width,cv.height);u1(u.uDpr,dpr);u1(u.uTime,t);for(var p of G1)u1(u[p[0]],cur[p[1]]);var h=cur.hu;if(h){u4(u.uPre0,h.pre0);u4(u.uPre1,h.pre1);u4(u.uSpecModes,h.modes);for(var p of G3)u3(u[p[0]],h[p[1]])}dr()};",
     "var pF=(p,b)=>{if(!okG()||fc<=0||fr<=0)return;gl.useProgram(P);bAtl(p.font,p.dpr);gl.viewport(0,0,cv.width,cv.height);gl.uniform2f(u.size,cv.width,cv.height);gl.uniform2f(u.grid,fc,fr);gl.uniform2f(u.cellPixels,fw*p.dpr,fh*p.dpr);for(var k of F3)u3(u[k[0]],p[k[1]]);for(var k of F4)u4(u[k[0]],p[k[1]]);u1(u.auraLift,p.auraLift);u1(u.auraPhase,p.auraPhase);u1(u.lightMode,p.lightMode);u1(u.nebulaLift,p.nLift);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,cT);if(b)gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,fc,fr,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(b));dr()};",
-    "var tk=ts=>{raf=0;if(dd||pa||!rd||mode!=='glow'||!cur.anim||cur.still)return;var n=typeof ts==='number'?ts:nw();if(!cur.continuous&&iMs>0&&lA>0&&n-lA>=iMs){cur.anim=0;sR();pm({type:'slept'});return}var g=mF>0?1e3/mF:0;if(g>0&&lD>0&&n-lD<g-.5){if(typeof requestAnimationFrame==='function')raf=requestAnimationFrame(tk);return}var dt=lC>0?Math.min(.1,Math.max(0,(n-lC)/1e3)):.016;lC=lD=n;fS+=dt*cur.speed;pG(12+fS);if(typeof requestAnimationFrame==='function')raf=requestAnimationFrame(tk)};",
+    "var tk=ts=>{raf=0;if(dd||pa||!rd||mode!=='glow'||!cur.anim||cur.still)return;var n=typeof ts==='number'?ts:nw();if(!cur.continuous&&iMs>0&&lA>0&&n-lA>=iMs){cur.anim=0;sR();pm({type:'slept'});return}var g=mF>0?1e3/mF:0;if(g>0&&lD>0&&n-lD<g*.88){if(typeof requestAnimationFrame==='function')raf=requestAnimationFrame(tk);return}var dt=lC>0?Math.min(.1,Math.max(0,(n-lC)/1e3)):.016;lC=lD=n;fS+=dt*cur.speed;pG(12+fS);if(typeof requestAnimationFrame==='function')raf=requestAnimationFrame(tk)};",
     "self.onmessage=ev=>{var m=ev?.data;if(!m||dd)return;var tp=m.type;",
     "if(tp==='init'){try{mode=m.mode||'glow';cv=m.canvas;iMs=Number(m.idleTimeoutMs)||1200;mF=Number(m.maxFps)||0;cv?.addEventListener?.('webglcontextlost',e=>{e?.preventDefault?.();sR();rd=0;pm({type:'contextlost'})});gl=cv?.getContext?.('webgl2',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false})||null;if(!gl||gl.isContextLost?.())throw new Error('webgl2-unavailable');if(mode==='field'){fc=m.cols|0;fr=m.rows|0;fw=m.cellW||7;fh=m.cellH||15;fz=m.fontSize||10;fg=m.glyphs||'';bld(m.vs,m.fs,'cells,atlas,size,grid,cellPixels,atlasCell,glyphCount,ink,wave,aura,optics,auraLift,auraPhase,lightMode,neb0,neb1,neb2,nebOpt,nebulaLift,uSpec0,uSpec1,uSpec2,uSpec3,uIdleParams,uIdleMetrics');aC2();aT=mT(1,gl.LINEAR);gl.uniform1i(u.cells,0);gl.uniform1i(u.atlas,1);u4(u.uIdleMetrics,[fw,fh,1/(m.cloudScale||100),1/(m.breathScale||280)])}else bld(m.vs,m.fs,'uRes,uDpr,uTime,uDark,uReach,uIntensity,uPresence,uPrism,uSurge,uSpeed,uSpectrum,uSemantic,uPre0,uPre1,uSpecModes,uBaseA,uBaseB,uPrismA,uPrismB,uLightA,uLightB,uSurgeLead,uChimeLead,uHotAnchor,uSemA,uSemB');if(m.pw>0&&m.ph>0){cv.width=m.pw;cv.height=m.ph;dpr=m.dpr||1}rd=1;lA=nw();pm({type:'ready'})}catch(er){sR();frG();rd=0;pm({type:'error',reason:String(er?.message||er||'init-err')})}return}",
     "if(tp==='resize'){if(!cv)return;var w=Math.max(0,m.pw|0),h=Math.max(0,m.ph|0);dpr=m.dpr||dpr||1;if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}if(mode==='field'){var c=Math.max(0,m.cols|0),r=Math.max(0,m.rows|0);if(rd&&(c!==fc||r!==fr)){fc=c;fr=r;aC2()}}else if(rd&&!pa&&w>0&&h>0&&m.syncDraw!==false)pG(12+fS);return}",
@@ -89,20 +89,26 @@
     if (!hasOff()) return Promise.resolve((pCache = F({ ok: false, reason: 'unsupported', retryable: false, checkedAt: Date.now() })));
     const tMs = M.max(10, Number(o.timeoutMs) || PROBE_TIMEOUT_MS), rMs = M.max(0, o.retryDelayMs !== undefined ? Number(o.retryDelayMs) : PROBE_RETRY_DELAY_MS);
     pPend = new Promise((res) => {
-      let done = false, tm = 0, w = null, url = '';
+      let done = false, tm = 0, w = null, url = '', sr = 0, sa = 0;
       const fin = (ok, reason) => {
         if (done) return; done = true;
         if (tm) { clearTimeout(tm); tm = 0; }
         if (w) { try { w.onmessage = w.onerror = null; w.terminate(); } catch {} if (pW === w) pW = null; w = null; }
         if (url) { revoke(url); if (pUrl === url) pUrl = ''; url = ''; }
         const r = String(reason || (ok ? 'ok' : 'failed')), retryable = !ok && r === 'timeout' && pRetries < 1;
-        if (retryable) { pRetries += 1; pRetryAt = Date.now() + rMs; } else { if (ok) pRetries = 0; pRetryAt = 0; }
-        pCache = F({ ok: Boolean(ok), reason: r, retryable, checkedAt: Date.now() }); pPend = null; res(pCache);
+        const detail = !ok && r === 'timeout' ? (sa ? 'gpu-hang' : sr ? 'no-ack' : 'no-ready') : r;
+        if (retryable) { pRetries += 1; pRetryAt = Date.now() + rMs; } else { if (ok) pRetries = 0; else fallbacks += 1; pRetryAt = 0; }
+        pCache = F({ ok: Boolean(ok), reason: r, detail, retryable, checkedAt: Date.now() }); pPend = null; res(pCache);
       };
       try {
         const Off = gApi('OffscreenCanvas'), cv = new Off(1, 1), cr = mkBlobW(PROBE_WORKER_SRC);
         w = pW = cr.worker; url = pUrl = cr.url;
-        w.onmessage = (e) => { const d = e?.data; if (d?.type === 'probe') fin(Boolean(d.ok), d.reason || (d.ok ? 'ok' : 'webgl2-null')); };
+        w.onmessage = (e) => {
+          const d = e?.data, t = d?.type;
+          if (t === 'probe-ready') sr = 1;
+          else if (t === 'probe-ack') sa = 1;
+          else if (t === 'probe') fin(Boolean(d.ok), d.reason || (d.ok ? 'ok' : 'webgl2-null'));
+        };
         w.onerror = (e) => fin(false, e?.message || 'worker-error');
         tm = setTimeout(() => fin(false, 'timeout'), tMs);
         w.postMessage({ type: 'probe', canvas: cv }, [cv]);
@@ -111,7 +117,7 @@
     return pPend;
   }
   const warmProbe = (o) => { try { probeWorkerWebGL2(o).catch(() => {}); } catch {} };
-  const getProbeStatus = () => (pCache ? { probed: true, ok: pCache.ok, reason: pCache.reason } : { probed: false, ok: false, reason: pPend ? 'probing' : 'unprobed' });
+  const getProbeStatus = () => { const c = pCache, r = c ? c.reason : pPend ? 'probing' : 'unprobed'; return { probed: !!c, ok: !!c?.ok, reason: r, detail: c?.detail || r }; };
   function resetProbeCache() {
     clrRetry();
     if (pW) { try { pW.terminate(); } catch {} pW = null; }
@@ -216,7 +222,7 @@
 
   async function mountGlowWorkerWithProbe(cv, o = {}) {
     const r = await probeWorkerWebGL2({ timeoutMs: o.probeTimeoutMs, force: o.forceProbe });
-    if (!r?.ok) { fallbacks += 1; try { o.onFallback?.(r ? r.reason : 'probe-failed'); } catch {} return null; }
+    if (!r?.ok) { if (r?.retryable) fallbacks += 1; try { o.onFallback?.(r ? r.reason : 'probe-failed'); } catch {} return null; }
     return mountGlowWorker(cv, o);
   }
 
@@ -240,7 +246,7 @@
       }
       const mk = (u) => rippleCore.mountBrandHorizonGlow(getCanvas(), { prefer2D: !!u, width: 0, height: 0, onContextLost });
       let g = mk(prefer2D);
-      if (g?.mode === 'none' && !prefer2D && isF(swapCanvas)) { try { g.dispose?.(true); } catch {} swapCanvas(); g = mk(true); }
+      if (g?.mode === 'none' && !prefer2D && getPerfMode(doc || cv0?.ownerDocument) !== 'performance' && isF(swapCanvas)) { try { g.dispose?.(true); } catch {} swapCanvas(); g = mk(true); }
       if (mgDepth > 1) lastNested = g;
       return g;
     } finally { mgDepth -= 1; }
@@ -292,7 +298,7 @@
     }
     const mk = (u) => rippleCore.createGlyphField(getCanvas(), cols, rows, waves, { prefer2D: !!u, onContextLost });
     let f = mk(prefer2D);
-    if (f?.mode === 'none' && !prefer2D && isF(swapCanvas)) { try { f.dispose?.(true); } catch {} swapCanvas(); f = mk(true); }
+    if (f?.mode === 'none' && !prefer2D && getPerfMode(cfg.doc || cv0?.ownerDocument) !== 'performance' && isF(swapCanvas)) { try { f.dispose?.(true); } catch {} swapCanvas(); f = mk(true); }
     return f;
   }
 

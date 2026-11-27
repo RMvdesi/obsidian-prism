@@ -770,47 +770,18 @@
       ap(dockGrid, btn);
     });
 
-    // 构建底部 4 枚快捷预设胶囊（双宠经典 / 四宠同台 / 全员上场 / 全员休息）
-    const STAGE_PRESETS = [
-      ['crab', 'mascotStagePresetDual', 'Classic Dual'],
-      ['swarm-team', 'optMascotSwarmTeam', 'Swarm Team'],
-      ['quad', 'mascotStagePresetQuad', 'All Four'],
-      ['quad-minis', 'optMascotQuadMinis', 'Quad + Crabs'],
-      ['off', 'mascotStagePresetOff', 'All Resting'],
-    ];
+    // 底部 4 枚快捷预设胶囊
+    const STAGE_PRESETS = [['crab', 'mascotStagePresetDual', 'Classic Dual'], ['quad', 'mascotStagePresetQuad', 'All Four'], ['quad-minis', 'optMascotQuadMinis', 'Quad + Crabs'], ['off', 'mascotStagePresetOff', 'All Resting']];
     for (const [val, i18nKey, fb] of STAGE_PRESETS) {
-      const pb = mk('button', BTN);
-      pb.type = 'button';
-      sa(pb, 'data-ag-stage-preset', val);
-      if (pb.style) {
-        O.assign(pb.style, {
-          padding: '4px 10px',
-          fontSize: '11px',
-          fontWeight: '600',
-          borderRadius: '999px',
-          border: '1px solid var(--ag-cs-border, rgba(148,163,184,0.28))',
-          cursor: 'pointer',
-          flex: '1 1 auto',
-          textAlign: 'center',
-        });
-      }
-      pb.addEventListener('click', (ev) => {
-        ev?.stopPropagation?.();
-        const nextR = parseMascotSpec(val) || { c: 0, k: 0, d: 0, w: 0, minis: false };
-        applyRosterChange(nextR, ev, val === 'swarm-team' ? 'swarm-team' : null);
-      });
-      presetBtns.push({ btn: pb, val, i18nKey, fb });
-      ap(presetRow, pb);
+      const pb = mk('button', BTN); pb.type = 'button'; sa(pb, 'data-ag-stage-preset', val);
+      if (pb.style) O.assign(pb.style, { padding: '4px 10px', fontSize: '11px', fontWeight: '600', borderRadius: '999px', border: '1px solid var(--ag-cs-border, rgba(148,163,184,0.28))', cursor: 'pointer', flex: '1 1 auto', textAlign: 'center' });
+      pb.addEventListener('click', (ev) => { ev?.stopPropagation?.(); applyRosterChange(parseMascotSpec(val) || { c: 0, k: 0, d: 0, w: 0, minis: false }, ev); });
+      presetBtns.push({ btn: pb, val, i18nKey, fb }); ap(presetRow, pb);
     }
 
-    // 同步舞台所有 DOM 文本、阵营名牌开关态与预设高亮
+    // 同步舞台文案与开关态
     const syncStageControls = () => {
-      const l = getLang();
-      const u = uiText(l) || {};
-      const r = readRoster();
-      const curRaw = typeof getCurMascot === 'function' ? getCurMascot() : '';
-      const encoded = curRaw === 'swarm-team' ? 'swarm-team' : encodeMascotSpec(r);
-      const total = r.c + r.k + r.d + r.w;
+      const l = getLang(), u = uiText(l) || {}, r = readRoster(), encoded = encodeMascotSpec(r), total = r.c + r.k + r.d + r.w;
       sa(view, 'data-mascot-val', encoded);
       backBtn.textContent = `← ${u.mascotStageBackBtn || 'Back to Settings'}`;
       titleEl.textContent = u.mascotStageTitle || 'Mascot Casting Stage';
@@ -860,58 +831,51 @@
       }
     };
 
-    // Canvas 鼠标归一化坐标映射（WebGL2 3D 精确射线拾取 + 2.5D 区域拾取双兼容）
-    const pointerToNdc = (ev) => {
-      if (!ev || !isFn(canvas.getBoundingClientRect)) return null;
-      const rect = canvas.getBoundingClientRect();
-      if (!rect || !rect.width || !rect.height) return null;
-      const u = (ev.clientX - rect.left) / rect.width;
-      const v = (ev.clientY - rect.top) / rect.height;
-      if (u < 0 || u > 1 || v < 0 || v > 1) return null;
-      return { u, v, nx: u * 2 - 1, ny: 1 - v * 2 };
+    // Canvas 坐标映射（250ms 矩形缓存，避免 pointermove 强制回流）
+    let cRect = null, cRectAt = 0;
+    const clrRect = () => { cRect = null; cRectAt = 0; };
+    const getRect = () => {
+      if (!isFn(canvas.getBoundingClientRect)) return null;
+      const t = nowMs();
+      if (cRect && t - cRectAt < 250 && cRect.width > 0 && cRect.height > 0) return cRect;
+      const r = canvas.getBoundingClientRect();
+      if (!r || !r.width || !r.height) return null;
+      cRect = r; cRectAt = t; return r;
     };
-    const hitSlotFromEvent = (ev) => {
-      const pt = pointerToNdc(ev);
+    const pointerToNdc = (ev) => {
+      const rect = ev ? getRect() : null;
+      if (!rect) return null;
+      const u = (ev.clientX - rect.left) / rect.width, v = (ev.clientY - rect.top) / rect.height;
+      return u < 0 || u > 1 || v < 0 || v > 1 ? null : { u, v, nx: u * 2 - 1, ny: 1 - v * 2 };
+    };
+    const hitSlotFromEvent = (ev, prePt = null) => {
+      const pt = prePt || pointerToNdc(ev);
       if (!pt) return -1;
-      if (webglStage && isFn(webglStage.pickSlot)) {
-        const hit3d = webglStage.pickSlot(pt.nx, pt.ny);
-        if (hit3d >= 0) return hit3d;
-      }
-      if (pt.v < 0.08) return -1;
-      return Math.max(0, Math.min(4, Math.floor(pt.u * 5)));
+      if (webglStage && isFn(webglStage.pickSlot)) { const hit3d = webglStage.pickSlot(pt.nx, pt.ny); if (hit3d >= 0) return hit3d; }
+      return pt.v < 0.08 ? -1 : Math.max(0, Math.min(4, Math.floor(pt.u * 5)));
     };
     const onCanvasPointerMove = (ev) => {
       if (!isOpen) return;
       const pt = pointerToNdc(ev);
-      if (pt) {
-        ptrNormX = pt.nx;
-        ptrNormY = pt.ny;
-        ptrInside = true;
-        webglStage?.setPointer?.(pt.nx, pt.ny, true);
-      }
-      const hit = hitSlotFromEvent(ev);
-      if (hit !== hoveredSlot) {
-        hoveredSlot = hit;
-        if (isReducedMotion()) drawStageFrame(nowMs(), true);
-      }
+      if (pt) { ptrNormX = pt.nx; ptrNormY = pt.ny; ptrInside = true; webglStage?.setPointer?.(pt.nx, pt.ny, true); }
+      const hit = pt ? hitSlotFromEvent(ev, pt) : -1;
+      if (hit !== hoveredSlot) { hoveredSlot = hit; if (isReducedMotion()) drawStageFrame(nowMs(), true); }
     };
     const onCanvasPointerLeave = () => {
-      hoveredSlot = -1;
-      ptrInside = false;
-      ptrNormX = 0;
-      ptrNormY = 0;
+      hoveredSlot = -1; ptrInside = false; ptrNormX = ptrNormY = 0;
       webglStage?.setPointer?.(0, 0, false);
       if (isOpen && isReducedMotion()) drawStageFrame(nowMs(), true);
     };
     const onCanvasClick = (ev) => {
       ev?.stopPropagation?.();
       if (!isOpen) return;
+      clrRect();
       const hit = hitSlotFromEvent(ev);
       if (hit >= 0) toggleStageSlot(hit, ev);
     };
     const bindCanvasEvents = (cv) => {
-      cv.addEventListener('pointermove', onCanvasPointerMove);
-      cv.addEventListener('pointerleave', onCanvasPointerLeave);
+      cv.addEventListener('pointermove', onCanvasPointerMove, { passive: true });
+      cv.addEventListener('pointerleave', onCanvasPointerLeave, { passive: true });
       cv.addEventListener('click', onCanvasClick);
     };
     const unbindCanvasEvents = (cv) => {
@@ -922,6 +886,7 @@
     bindCanvasEvents(canvas);
 
     const swapToFreshCanvas = () => {
+      clrRect();
       unbindCanvasEvents(canvas);
       const nextCv = createStageCanvas();
       if (canvas.parentNode) {
@@ -1195,85 +1160,44 @@
       ctx.fillStyle = light ? '#9d7f57' : '#181421';
       ctx.fillRect(mPlatX - 12, mPlatY + 70, 12, 6);
 
-      // 3c) 逐站位绘制地板光环/涟漪、单只主角像素精灵与体积聚光灯（零分身！）
+      // 3c) 逐站位绘制地板光环、主角精灵与聚光灯
       for (let i = 0; i < slotInfos.length; i++) {
         const info = slotInfos[i];
         const { sl, st, cnt, isHov, cheering, farewell, pose, sym, jumpPx, breath, blink, clipTick } = info;
         const floorY = sl.key === 'm' ? 276 : 292;
-
-        // 顶梁聚光灯罩
-        ctx.fillStyle = light ? '#5e4934' : '#283148';
-        ctx.fillRect(sl.cx - 10, 14, 20, 6);
-        ctx.fillStyle = st.light > 0.05 ? `rgba(${sl.rayB}, ${0.35 + st.light * 0.65})` : (light ? '#9c8a74' : '#1b2030');
-        ctx.fillRect(sl.cx - 7, 20, 14, 4);
-
-        // 地板柔边投影 + 阵营光环
+        ctx.fillStyle = light ? '#5e4934' : '#283148'; ctx.fillRect(sl.cx - 10, 14, 20, 6);
+        ctx.fillStyle = st.light > 0.05 ? `rgba(${sl.rayB}, ${0.35 + st.light * 0.65})` : (light ? '#9c8a74' : '#1b2030'); ctx.fillRect(sl.cx - 7, 20, 14, 4);
         if (hasRad) {
           const sh = ctx.createRadialGradient(sl.cx, floorY + 2, 5, sl.cx, floorY + 2, 44);
-          sh.addColorStop(0, light ? 'rgba(72,52,32,0.22)' : 'rgba(0,0,0,0.52)');
-          sh.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = sh;
-          ctx.fillRect(sl.cx - 46, floorY - 14, 92, 34);
+          sh.addColorStop(0, light ? 'rgba(72,52,32,0.22)' : 'rgba(0,0,0,0.52)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = sh; ctx.fillRect(sl.cx - 46, floorY - 14, 92, 34);
         }
         if (st.light > 0.03 && hasRad) {
-          const glowR = 36 + st.light * 20;
-          const gl = ctx.createRadialGradient(sl.cx, floorY + 1, 2, sl.cx, floorY + 1, glowR);
-          const aBase = light ? 0.28 : 0.44;
+          const glowR = 36 + st.light * 20, gl = ctx.createRadialGradient(sl.cx, floorY + 1, 2, sl.cx, floorY + 1, glowR), aBase = light ? 0.28 : 0.44;
           gl.addColorStop(0, `rgba(${sl.rayB}, ${(aBase * st.light).toFixed(3)})`);
           gl.addColorStop(0.55, `rgba(${sl.rayA}, ${(aBase * 0.48 * st.light).toFixed(3)})`);
           gl.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.save();
-          ctx.translate(sl.cx, floorY + 1);
-          ctx.scale(1, 0.38);
-          ctx.fillStyle = gl;
-          ctx.fillRect(-glowR, -glowR, glowR * 2, glowR * 2);
-          ctx.restore();
+          ctx.save(); ctx.translate(sl.cx, floorY + 1); ctx.scale(1, 0.38); ctx.fillStyle = gl; ctx.fillRect(-glowR, -glowR, glowR * 2, glowR * 2); ctx.restore();
         }
-
-        // 激活瞬间地板扩散双光环涟漪
         if (info.rippleProg > 0 && info.rippleProg < 1 && isFn(ctx.ellipse) && isFn(ctx.stroke)) {
           const rp = info.rippleProg;
-          ctx.save();
-          ctx.strokeStyle = `rgba(${sl.rayB}, ${((1 - rp) * 0.78).toFixed(3)})`;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(sl.cx, floorY + 1, 18 + rp * 42, 6 + rp * 15, 0, 0, Math.PI * 2);
-          ctx.stroke();
+          ctx.save(); ctx.strokeStyle = `rgba(${sl.rayB}, ${((1 - rp) * 0.78).toFixed(3)})`; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.ellipse(sl.cx, floorY + 1, 18 + rp * 42, 6 + rp * 15, 0, 0, Math.PI * 2); ctx.stroke();
           if (rp > 0.16) {
             const rp2 = (rp - 0.16) / 0.84;
-            ctx.strokeStyle = `rgba(${sl.rayA}, ${((1 - rp2) * 0.45).toFixed(3)})`;
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.ellipse(sl.cx, floorY + 1, 12 + rp2 * 32, 5 + rp2 * 11, 0, 0, Math.PI * 2);
-            ctx.stroke();
+            ctx.strokeStyle = `rgba(${sl.rayA}, ${((1 - rp2) * 0.45).toFixed(3)})`; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.ellipse(sl.cx, floorY + 1, 12 + rp2 * 32, 5 + rp2 * 11, 0, 0, Math.PI * 2); ctx.stroke();
           }
           ctx.restore();
         }
-
         const shadeAlpha = cnt === 0 && !isHov && !farewell ? (light ? 0.56 : 0.46) : 1;
-        ctx.save();
-        if (shadeAlpha < 1) ctx.globalAlpha = shadeAlpha;
-
+        ctx.save(); if (shadeAlpha < 1) ctx.globalAlpha = shadeAlpha;
         if (sl.key !== 'm') {
-          // 单只高清主角 (PX = 4)，无多只分身
-          const mainPx = 4;
-          const oxGrid = Math.round(sl.cx / mainPx) - 8;
-          const oyGrid = Math.round((floorY + jumpPx) / mainPx) - 10;
-          art.drawMainActor(ctx, sl.kind, pose, tickIdx + i, oxGrid, oyGrid, mainPx, {
-            clipTick,
-            sym,
-            breath,
-            blink,
-            noShadow: true,
-          });
+          const mainPx = 4, oxGrid = Math.round(sl.cx / mainPx) - 8, oyGrid = Math.round((floorY + jumpPx) / mainPx) - 10;
+          art.drawMainActor(ctx, sl.kind, pose, tickIdx + i, oxGrid, oyGrid, mainPx, { clipTick, sym, breath, blink, noShadow: true });
         } else {
-          // 站位 5：3 只迷你小蟹立于苔藓石台（pxSize = 2.5 -> 整格 2）
           const mPx = 2;
-          const crabDefs = [
-            { id: 'cowboy', dx: -26, dy: 0, phase: 0 },
-            { id: 'shades', dx: 26, dy: 0, phase: 1 },
-            { id: 'wizard', dx: 0, dy: cnt > 0 ? -16 : 2, phase: 2 },
-          ];
+          const crabDefs = [{ id: 'cowboy', dx: -26, dy: 0, phase: 0 }, { id: 'shades', dx: 26, dy: 0, phase: 1 }, { id: 'wizard', dx: 0, dy: cnt > 0 ? -16 : 2, phase: 2 }];
           for (const cd of crabDefs) {
             const cJump = cheering
               ? -Math.round(Math.abs(Math.sin((info.cheerProg + cd.phase * 0.18) * Math.PI * 2)) * 12)
@@ -1421,71 +1345,65 @@
       }
     };
 
-    let detachMo = null;
+    let detachMos = [];
     const stopDetachObserver = () => {
-      if (!detachMo) return;
-      try { detachMo.disconnect(); } catch {}
-      detachMo = null;
+      if (!detachMos.length) return;
+      const list = detachMos; detachMos = [];
+      for (let i = 0; i < list.length; i++) try { list[i].disconnect(); } catch {}
     };
     const startDetachObserver = () => {
       stopDetachObserver();
       const MO = win?.MutationObserver || (typeof MutationObserver === 'function' ? MutationObserver : null);
-      const watchRoot = doc.body || sec.closest?.('[role="dialog"]')?.parentNode || sec.parentNode;
-      if (!MO || !watchRoot) return;
-      try {
-        detachMo = new MO(() => {
-          if (isOpen && view.isConnected === false) closeStage();
-        });
-        detachMo.observe(watchRoot, { childList: true, subtree: true });
-      } catch {
-        detachMo = null;
+      if (!MO) return;
+      const targets = new Set();
+      for (let cur = view.parentNode || sec.parentNode, d = 0; cur && d < 24; cur = cur.parentNode, d++) {
+        if (cur.nodeType === 1 || cur === doc.body) targets.add(cur);
+        if (cur === doc.body) break;
       }
+      if (doc.body) targets.add(doc.body);
+      if (!targets.size) return;
+      const onMut = () => { if (isOpen && view.isConnected === false) closeStage(); };
+      for (const t of targets) try { const mo = new MO(onMut); mo.observe(t, { childList: true }); detachMos.push(mo); } catch {}
     };
 
     const openStage = () => {
       if (disposed || isOpen) return;
       isOpen = true;
+      clrRect();
+      win?.addEventListener?.('resize', clrRect, { passive: true });
       for (const blk of getMainBlocks()) {
         if (!blk) continue;
-        blk.hidden = true;
-        sa(blk, 'hidden', '');
+        blk.hidden = true; sa(blk, 'hidden', '');
         if (blk.style) blk.style.display = 'none';
       }
-      view.hidden = false;
-      ra(view, 'hidden');
+      view.hidden = false; ra(view, 'hidden');
       if (view.style) view.style.display = 'flex';
       const r = readRoster();
       STAGE_SLOTS.forEach((sl, idx) => {
         slotStates[idx].light = slotCountOf(r, sl.key) > 0 ? 1 : 0;
-        slotStates[idx].cheerUntil = 0;
-        slotStates[idx].farewellUntil = 0;
+        slotStates[idx].cheerUntil = slotStates[idx].farewellUntil = 0;
       });
       syncStageControls();
       doc.addEventListener?.('keydown', onDocKeyDown, true);
       doc.addEventListener?.('visibilitychange', onDocVisChange);
       startDetachObserver();
-      if (!doc.hidden) {
-        drawStageFrame(nowMs(), true);
-        if (!isReducedMotion()) rafId = reqAF(stepLoop);
-      }
+      if (!doc.hidden) { drawStageFrame(nowMs(), true); if (!isReducedMotion()) rafId = reqAF(stepLoop); }
     };
 
     const closeStage = () => {
       if (!isOpen) return;
-      isOpen = false;
-      hoveredSlot = -1;
-      ptrInside = false;
+      isOpen = false; hoveredSlot = -1; ptrInside = false;
+      clrRect();
+      win?.removeEventListener?.('resize', clrRect);
       stopDetachObserver();
       reclaimStageVram();
       doc.removeEventListener?.('keydown', onDocKeyDown, true);
       doc.removeEventListener?.('visibilitychange', onDocVisChange);
-      view.hidden = true;
-      sa(view, 'hidden', '');
+      view.hidden = true; sa(view, 'hidden', '');
       if (view.style) view.style.display = 'none';
       for (const blk of getMainBlocks()) {
         if (!blk) continue;
-        blk.hidden = false;
-        ra(blk, 'hidden');
+        blk.hidden = false; ra(blk, 'hidden');
         if (blk.style) blk.style.display = '';
       }
       if (sec.isConnected !== false) syncRoot();
@@ -1494,6 +1412,7 @@
     const disposeStage = () => {
       if (disposed) return;
       closeStage();
+      win?.removeEventListener?.('resize', clrRect);
       stopDetachObserver();
       disposed = true;
       unbindCanvasEvents(canvas);
@@ -1575,7 +1494,7 @@
     return spec.allowed.includes(val) ? { valid: true, value: val } : { valid: false };
   };
 
-  const buildSanitizedConfigExport = (currentSettings = {}, rawThoughtCfg = null, version = '1.0.8-beta.4') => {
+  const buildSanitizedConfigExport = (currentSettings = {}, rawThoughtCfg = null, version = '1.0.8-beta.5') => {
     const settings = {};
     for (const [k, spec] of O.entries(PRISM_SETTINGS_SCHEMA)) {
       if (k === 'language' && String(currentSettings[k] ?? '').trim().toLowerCase() === 'auto') {
@@ -1585,7 +1504,7 @@
       const c = sanitizeKeyVal(k, currentSettings[k]);
       settings[k] = c.valid ? c.value : spec.default;
     }
-    const out = { schema: 'obsidian-prism-config-v1', version: String(version || '1.0.8-beta.4'), exportedAt: new Date().toISOString(), settings };
+    const out = { schema: 'obsidian-prism-config-v1', version: String(version || '1.0.8-beta.5'), exportedAt: new Date().toISOString(), settings };
     const tSrc = isObj(rawThoughtCfg) && isObj(rawThoughtCfg.config) ? rawThoughtCfg.config : rawThoughtCfg;
     if (isObj(tSrc) && !isArr(tSrc) && !isFn(tSrc.then) && tSrc.ok !== false) {
       out.thought = {

@@ -1,433 +1,353 @@
 // Obsidian Prism — FastDOM Smooth Typing Caret Engine
-// Extracted from ui-runtime.js: separates measure & mutate phases with zero forced layout reflow.
+// Separates measure & mutate phases with zero forced layout reflow.
 
-(function (root) {
+(function (G) {
   'use strict';
-  const G = root || (typeof globalThis !== 'undefined' ? globalThis : window);
   if (!G) return;
 
+  const BLOCK_RE = /^(P|DIV|BLOCKQUOTE|UL|OL|LI|PRE|H[1-6]|HR)$/i;
+  const ZWSP_RE = /^[\u200b\ufeff]*$/;
+  const A_CARET = 'data-ag-cs-smooth-caret';
+  const A_HOST = 'data-ag-cs-caret-host';
+  const A_VIS = 'data-ag-cs-caret-visible';
+  const A_TYP = 'data-ag-cs-caret-typing';
+  const S_CARET = '.ag-cs-smooth-caret';
+  const M = Math;
+  const isFn = (v) => typeof v === 'function';
+  const isNum = (v) => typeof v === 'number';
+  const isEl = (n) => n?.nodeType === 1;
+  const isTxt = (n) => n?.nodeType === 3;
+  const isBr = (n) => n?.nodeName === 'BR';
+  const getDoc = () => (typeof document < 'u' ? document : null);
+  const rAF = (cb) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(cb) : 0);
+  const rectOf = (n) => (n && isFn(n.getBoundingClientRect) ? n.getBoundingClientRect() : null);
+  const rectsOf = (n) => (n && isFn(n.getClientRects) ? n.getClientRects() : null);
+  const rmAttr = (el, k) => { if (el?.hasAttribute?.(k)) el.removeAttribute(k); };
+  const isBlockEl = (n) => !!(isEl(n) && BLOCK_RE.test(n.nodeName || n.tagName || ''));
+  const isDecoEl = (n) => !!(isEl(n) && !isBr(n) && (n.getAttribute?.('contenteditable') === 'false' || n.hasAttribute?.('data-lexical-decorator')));
+  const txtOf = (n) => n.data ?? n.nodeValue ?? '';
+  const isBlankTxt = (n) => ZWSP_RE.test(txtOf(n));
+  const noEdTxt = (ed) => !(ed.textContent && !ZWSP_RE.test(ed.textContent));
+  const cnLen = (n, d = -1) => n?.childNodes?.length ?? d;
+  const newWM = () => new WeakMap();
+  const prevSib = (n) => {
+    if (!n) return null;
+    if (n.previousSibling !== undefined) return n.previousSibling;
+    const kids = n.parentNode?.childNodes;
+    if (!kids) return null;
+    for (let i = kids.length; --i > 0;) if (kids[i] === n) return kids[i - 1];
+    return null;
+  };
+
   function snapDevicePx(value, dpr = 1) {
-    const v = Number(value) || 0;
-    const d = Number.isFinite(Number(dpr)) && Number(dpr) > 0 ? Math.min(4, Number(dpr)) : 1;
-    return +(Math.round(v * d) / d).toFixed(3);
+    const v = +value || 0, n = +dpr, d = n > 0 && isFinite(n) ? M.min(4, n) : 1;
+    return +(M.round(v * d) / d).toFixed(3);
   }
 
   function createSmoothCaretController({ isDestroyed, isEnabled, setAttrIfChanged, runGuardedMut }) {
-    let caretTypingTimer = null;
-    let caretRaf = 0;
-    let pendingCaretTyping = false;
-    let pendingCaretRefreshMetrics = false;
-    let pendingCaretScroll = false;
-    let editorMetricsEpoch = 1;
-    let cachedEditors = [];
-    let lastEditorScanAt = 0;
-    const editorMetricsCache = new WeakMap();
-    let emptyCaretProbeCache = new WeakMap();
-    const caretPrevState = new WeakMap();
-    const caretNodeCache = new WeakMap();
-    const selectionSigCache = new WeakMap();
+    let tm = null, raf = 0, blinkAt = 0;
+    let pTyp = false, pRef = false, pScr = false;
+    let mEpoch = 1, sEpoch = 1, edList = [], scanAt = 0;
+    const mCache = newWM(), prevSt = newWM(), cNode = newWM(), sigCache = newWM();
+    let eCache = newWM();
+    const isDead = () => isDestroyed() || !isEnabled();
+    const cAF = () => { if (raf && typeof cancelAnimationFrame === 'function') { cancelAnimationFrame(raf); raf = 0; } };
+
+    const isQuickEmpty = (ed, fn) => {
+      const ch = ed.children, cns = ed.childNodes;
+      if (!ch && !cns) return noEdTxt(ed);
+      if (ch?.length > 1 || cns?.length > 1 || (isTxt(fn) && !isBlankTxt(fn))) return false;
+      let cur = ch?.[0] || ed.firstChild || cns?.[0] || null;
+      for (let d = 0; d < 3; d++) {
+        if (!cur || isBr(cur)) return true;
+        if (isTxt(cur)) return isBlankTxt(cur);
+        if (isDecoEl(cur)) return false;
+        const k = cur.childNodes;
+        if (!k?.length) return d < 2;
+        if (k.length > 1) return false;
+        cur = k[0];
+      }
+      return false;
+    };
+
+    const hasContent = (ed) => {
+      if (!ed.childNodes) return !noEdTxt(ed);
+      const st = [ed];
+      for (let seen = 0; st.length && seen < 64;) {
+        const list = st.pop().childNodes;
+        for (let i = list ? list.length : 0; i--;) {
+          const ch = list[i];
+          if (!ch) continue;
+          if (++seen >= 64) return true;
+          if (isTxt(ch)) { if (!isBlankTxt(ch)) return true; }
+          else if (isEl(ch)) {
+            if (isDecoEl(ch)) return true;
+            if (ch.childNodes?.length) st.push(ch);
+          }
+        }
+      }
+      return false;
+    };
 
     function teardown() {
-      if (caretTypingTimer) {
-        clearTimeout(caretTypingTimer);
-        caretTypingTimer = null;
-      }
-      if (caretRaf && typeof cancelAnimationFrame === 'function') {
-        cancelAnimationFrame(caretRaf);
-        caretRaf = 0;
-      }
-      pendingCaretTyping = false;
-      pendingCaretRefreshMetrics = false;
-      pendingCaretScroll = false;
-      cachedEditors = [];
-      lastEditorScanAt = 0;
-      if (typeof document === 'undefined') return;
-      document.querySelectorAll('.ag-cs-smooth-caret').forEach((n) => n.remove());
-      document.querySelectorAll('[data-ag-cs-smooth-caret]').forEach((n) => n.removeAttribute('data-ag-cs-smooth-caret'));
-      document.querySelectorAll('[data-ag-cs-caret-host]').forEach((n) => n.removeAttribute('data-ag-cs-caret-host'));
+      if (tm) { clearTimeout(tm); tm = null; }
+      cAF();
+      blinkAt = scanAt = 0;
+      pTyp = pRef = pScr = false;
+      edList = [];
+      const doc = getDoc();
+      if (!doc) return;
+      doc.querySelectorAll(S_CARET).forEach((n) => n.remove());
+      for (const a of [A_CARET, A_HOST]) doc.querySelectorAll(`[${a}]`).forEach((n) => n.removeAttribute(a));
     }
 
-    function bumpMetricsEpoch() {
-      editorMetricsEpoch += 1;
-      lastEditorScanAt = 0;
-      emptyCaretProbeCache = new WeakMap();
-    }
+    function bumpMetricsEpoch() { mEpoch += 1; scanAt = 0; eCache = newWM(); }
+    function invalidateSelection() { sEpoch += 1; }
 
-    function getCachedEditorMetrics(ed, forceRefresh = false) {
-      let rec = editorMetricsCache.get(ed);
-      if (rec && !forceRefresh && rec.epoch === editorMetricsEpoch) return rec;
-      const cs = typeof getComputedStyle === 'function' ? getComputedStyle(ed) : null;
-      const padL = parseFloat(cs?.paddingLeft || '8') || 8;
-      const padT = parseFloat(cs?.paddingTop || '8') || 8;
-      const fontSize = parseFloat(cs?.fontSize || '14') || 14;
-      const lineH = parseFloat(cs?.lineHeight || '22') || fontSize * 1.5 || 22;
-      const estGlyphH = Math.max(16, Math.min(24, Math.round(fontSize * 1.28)));
-      const defaultH = Math.max(16, Math.min(28, lineH));
-      const estEmptyTopOffset = padT + Math.max(0, Math.round((defaultH - estGlyphH) / 2));
-      rec = { padL, padT, fontSize, lineH, estGlyphH, defaultH, estEmptyTopOffset, epoch: editorMetricsEpoch };
-      editorMetricsCache.set(ed, rec);
+    function getMetrics(ed, force) {
+      let rec = mCache.get(ed);
+      if (rec && !force && rec[3] === mEpoch) return rec;
+      const cs = isFn(getComputedStyle) ? getComputedStyle(ed) : null;
+      const pf = (k, d) => parseFloat(cs?.[k]) || d;
+      const fs = pf('fontSize', 14), gh = M.max(16, M.min(24, M.round(fs * 1.28)));
+      const dh = M.max(16, M.min(28, pf('lineHeight', fs * 1.5)));
+      rec = [pf('paddingLeft', 8), gh, pf('paddingTop', 8) + M.max(0, M.round((dh - gh) / 2)), mEpoch];
+      mCache.set(ed, rec);
       return rec;
     }
 
-    function measureEditorCaretBox(ed, refreshMetrics = false) {
-      if (!ed) return null;
-      const edRect = ed.getBoundingClientRect();
-      const { padL, estGlyphH, estEmptyTopOffset } = getCachedEditorMetrics(ed, refreshMetrics);
-
-      const checkScrollBounds = (box) => {
-        if (!box || !box.collapsed) return box;
-        if ((ed.scrollHeight || 0) > (ed.clientHeight || 0) + 2 && edRect.height > 0) {
-          if (box.top < edRect.top - 4 || box.top + box.height > edRect.bottom + 6) {
-            return { collapsed: false };
+    function measureBox(doc, ed, refresh, hasSel, range, isCol) {
+      const edR = rectOf(ed), [padL, gh, emptyTop] = getMetrics(ed, refresh), NO_BOX = { collapsed: false };
+      const mkBox = (left, top, height) => {
+        if ((ed.scrollHeight || 0) > (ed.clientHeight || 0) + 2 && edR.height > 0 && (top < edR.top - 4 || top + height > edR.bottom + 6)) return NO_BOX;
+        return { collapsed: true, left, top, height };
+      };
+      const mkR = (r, l) => mkBox(l ?? r.left, r.top, r.height);
+      const saveProbe = (r) => {
+        if (r && r.height > 0 && r.height < 36 && edR.height > 0) eCache.set(ed, [r.left - edR.left, r.top - edR.top, r.height, mEpoch]);
+      };
+      const okR = (r, rt) => !!(r && r.height > 0 && ((rt ? r.right : r.left) > 0 || r.top > 0));
+      const rRect = (rg) => { const rs = rectsOf(rg); return rs?.length ? rs[rs.length - 1] : rectOf(rg); };
+      const elRect = (el, deco) => {
+        const ok = (r) => r && r.height > 0 && r.right > 0 && (deco || (isNum(r.width) ? r.width > 0 : !isNum(r.left) || r.right > r.left));
+        const rs = rectsOf(el);
+        if (rs) for (let i = rs.length; i--;) if (ok(rs[i])) return rs[i];
+        const b = rectOf(el);
+        return ok(b) ? b : null;
+      };
+      const boxAfter = (pr) => { const h = M.min(gh, pr.height || gh); return mkBox(pr.right, pr.top + M.max(0, (pr.height - h) / 2), h); };
+      const inlineRight = (el, blk) => {
+        if (!isEl(el) || isBr(el) || (!blk && isBlockEl(el))) return null;
+        const pr = elRect(el, isDecoEl(el));
+        return pr ? boxAfter(pr) : null;
+      };
+      let prevRect = null;
+      const findPrev = (start, inc) => {
+        prevRect = null;
+        if (!inc && (!start || start === ed || isBlockEl(start))) return null;
+        for (let cur = start, chk = inc, s = 0; cur && cur !== ed && s < 24; s++) {
+          if (chk) {
+            chk = 0;
+            if (isTxt(cur)) { if (!isBlankTxt(cur)) return cur; }
+            else if (isEl(cur)) {
+              if (isBr(cur) || isBlockEl(cur)) return null;
+              const d = isDecoEl(cur);
+              if ((prevRect = elRect(cur, d))) return cur;
+              if (d) return null;
+            }
           }
+          const pv = prevSib(cur);
+          if (pv) { cur = pv; chk = 1; continue; }
+          const p = cur.parentNode;
+          if (!p || p === ed || isBlockEl(p)) return null;
+          cur = p;
         }
-        return box;
+        return null;
+      };
+      const prevEnd = (start, inc) => {
+        const n = findPrev(start, inc);
+        if (!n) return null;
+        if (isEl(n)) return boxAfter(prevRect);
+        if (isTxt(n) && isFn(doc.createRange)) {
+          const str = txtOf(n);
+          let end = str.length;
+          while (end && ZWSP_RE.test(str[end - 1])) end--;
+          if (!end) return null;
+          try {
+            const tr = doc.createRange();
+            const tryAt = (st, rt) => { tr.setStart(n, st); tr.setEnd(n, end); const r = rRect(tr); return okR(r, rt) ? mkR(r, rt ? r.right : r.left) : null; };
+            return tryAt(end) || tryAt(end - 1, 1);
+          } catch {}
+        }
+        return null;
       };
 
-      const cacheEmptyProbe = (boxRect) => {
-        if (boxRect && boxRect.height > 0 && boxRect.height < 36 && edRect.height > 0) {
-          emptyCaretProbeCache.set(ed, {
-            dx: boxRect.left - edRect.left,
-            dy: boxRect.top - edRect.top,
-            height: boxRect.height,
-            epoch: editorMetricsEpoch,
-          });
-        }
-      };
-
-      if (typeof document !== 'undefined' && typeof document.getSelection === 'function') {
-        const sel = document.getSelection();
-        if (sel && sel.rangeCount > 0) {
-          const range = typeof sel.getRangeAt === 'function' ? sel.getRangeAt(0) : null;
-          const isCol0 = range && typeof range.collapsed === 'boolean' ? range.collapsed : Boolean(sel.isCollapsed);
-          if (!isCol0) return { collapsed: false };
-          if (range && ed.contains && ed.contains(range.startContainer)) {
-            const rects = typeof range.getClientRects === 'function' ? range.getClientRects() : [];
-            const r0 =
-              rects && rects.length > 0
-                ? rects[rects.length - 1]
-                : typeof range.getBoundingClientRect === 'function'
-                ? range.getBoundingClientRect()
-                : null;
-            if (r0 && r0.height > 0 && (r0.left > 0 || r0.top > 0)) {
-              return checkScrollBounds({ collapsed: true, left: r0.left, top: r0.top, height: r0.height });
-            }
-
-            const sc = range.startContainer;
-            const so = range.startOffset;
-            if (sc?.nodeName === 'BR' && typeof sc.getBoundingClientRect === 'function') {
-              const brRect = sc.getBoundingClientRect();
-              if (brRect && brRect.height > 0 && (brRect.left > 0 || brRect.top > 0)) {
-                if (!ed.textContent) cacheEmptyProbe(brRect);
-                return checkScrollBounds({ collapsed: true, left: brRect.left, top: brRect.top, height: brRect.height });
+      if (hasSel) {
+        if (!isCol) return NO_BOX;
+        if (range && ed.contains?.(range.startContainer)) {
+          const sc = range.startContainer, so = range.startOffset, scIsEl = isEl(sc), scn = scIsEl ? sc.childNodes : null;
+          // Guard 1 & 2: 芯片内部对齐右侧；元素级光标紧邻内联芯片/元素后先于 getClientRects() 对齐右侧
+          const chip = (scIsEl ? sc : sc?.parentElement || sc?.parentNode)?.closest?.('[contenteditable="false"],[data-lexical-decorator]');
+          let box = chip && chip !== ed && ed.contains(chip) ? inlineRight(chip, 1) : scn && so > 0 ? inlineRight(scn[so - 1]) : null;
+          if (box) return box;
+          // Guard 3: 文本/ZWSP offset===0 或空白文本的假矩形交叉校验
+          const r0 = rRect(range);
+          if (okR(r0)) {
+            if (!so || (isTxt(sc) && isBlankTxt(sc))) {
+              const pv = findPrev(sc);
+              if (isEl(pv) && prevRect && M.abs(r0.top - prevRect.top) < M.max(gh, prevRect.height) && r0.left < prevRect.right - 2) {
+                return mkR(r0, prevRect.right + 1);
               }
             }
-            if (sc && sc.nodeType === 1) {
-              const childAt = sc.childNodes?.[so];
-              if (childAt?.nodeName === 'BR' && typeof childAt.getBoundingClientRect === 'function') {
-                const brRect = childAt.getBoundingClientRect();
-                if (brRect && brRect.height > 0 && (brRect.left > 0 || brRect.top > 0)) {
-                  if (sc.childNodes.length <= 1 && !ed.textContent) cacheEmptyProbe(brRect);
-                  return checkScrollBounds({ collapsed: true, left: brRect.left, top: brRect.top, height: brRect.height });
-                }
-              }
-              const childPrev = so > 0 ? sc.childNodes?.[so - 1] : null;
-              if (childPrev?.nodeName === 'BR' && typeof childPrev.getBoundingClientRect === 'function') {
-                const brRect = childPrev.getBoundingClientRect();
-                if (brRect && brRect.height > 0 && (brRect.left > 0 || brRect.top > 0)) {
-                  const isManagedEmptyLine =
-                    (typeof childPrev.hasAttribute === 'function' && childPrev.hasAttribute('data-lexical-managed-linebreak')) ||
-                    sc.childNodes.length === 1;
-                  const scRect = typeof sc.getBoundingClientRect === 'function' ? sc.getBoundingClientRect() : null;
-                  const lineLeft = scRect && scRect.left > 0 ? scRect.left : brRect.left;
-                  const lineTop = isManagedEmptyLine ? brRect.top : brRect.bottom;
-                  const box = { collapsed: true, left: lineLeft, top: lineTop, height: brRect.height };
-                  if (isManagedEmptyLine && sc.childNodes.length <= 1 && !ed.textContent) cacheEmptyProbe(box);
-                  return checkScrollBounds(box);
-                }
-              }
-              if (typeof sc.getBoundingClientRect === 'function' && sc !== ed) {
-                const scRect = sc.getBoundingClientRect();
-                if (scRect && (scRect.left > 0 || scRect.top > 0)) {
-                  return checkScrollBounds({
-                    collapsed: true,
-                    left: scRect.left,
-                    top: scRect.top,
-                    height: Math.min(estGlyphH, scRect.height || estGlyphH),
-                  });
-                }
-              }
-            }
+            return mkR(r0);
+          }
+          const brBox = (n, sgl) => {
+            const r = isBr(n) ? rectOf(n) : null;
+            if (!okR(r)) return null;
+            if ((!sgl || scn?.length <= 1) && isQuickEmpty(ed, sc)) saveProbe(r);
+            return mkR(r);
+          };
+          if ((box = brBox(sc) || (scIsEl && brBox(scn?.[so], 1)))) return box;
+          const cp = scIsEl && so > 0 ? scn?.[so - 1] : null, br = isBr(cp) ? rectOf(cp) : null;
+          if (okR(br)) {
+            const mg = cp.hasAttribute?.('data-lexical-managed-linebreak') || scn?.length === 1;
+            const sr = rectOf(sc), left = sr?.left > 0 ? sr.left : br.left, top = mg ? br.top : br.bottom;
+            if (mg && scn?.length <= 1 && isQuickEmpty(ed, sc)) saveProbe({ left, top, height: br.height });
+            return mkBox(left, top, br.height);
+          }
+          // Guard 4: 元素边界/空内联 span/ZWSP 前驱（折行芯片或普通文本）测距
+          if ((box = cp ? prevEnd(cp, 1) : (scIsEl && !so) || (isTxt(sc) && isBlankTxt(sc)) ? prevEnd(sc) : null)) return box;
+          if (scIsEl && sc !== ed && !so) {
+            const sr = rectOf(sc);
+            if (sr && (sr.left > 0 || sr.top > 0)) return mkBox(sr.left, sr.top, M.min(gh, sr.height || gh));
           }
         }
       }
 
-      const cached = emptyCaretProbeCache.get(ed);
-      if (cached && cached.epoch === editorMetricsEpoch) {
-        return checkScrollBounds({
-          collapsed: true,
-          left: edRect.left + cached.dx,
-          top: edRect.top + cached.dy,
-          height: cached.height,
-        });
-      }
-
-      return checkScrollBounds({
-        collapsed: true,
-        left: edRect.left + padL,
-        top: edRect.top + estEmptyTopOffset,
-        height: estGlyphH,
-      });
+      if (hasContent(ed)) return NO_BOX;
+      const cached = eCache.get(ed);
+      return cached && cached[3] === mEpoch ? mkBox(edR.left + cached[0], edR.top + cached[1], cached[2]) : mkBox(edR.left + padL, edR.top + emptyTop, gh);
     }
 
-    function resolveComposerEditors(activeEl, refreshMetrics) {
+    function resolveEditors(doc, ae, refresh) {
       const now = Date.now();
-      const activeIsEditable = Boolean(
-        activeEl && (activeEl.isContentEditable || activeEl.getAttribute?.('contenteditable') === 'true')
-      );
-      const cacheValid =
-        !refreshMetrics &&
-        cachedEditors.length > 0 &&
-        now - lastEditorScanAt < 1200 &&
-        cachedEditors.every((e) => e && e.isConnected !== false) &&
-        (!activeIsEditable || cachedEditors.includes(activeEl));
-      if (cacheValid) return cachedEditors;
-      cachedEditors = Array.from(document.querySelectorAll('[data-testid="agent-input-box"] [contenteditable="true"]'));
-      lastEditorScanAt = now;
-      return cachedEditors;
+      if (!refresh && edList.length && now - scanAt < 1200 && edList.every((e) => e && e.isConnected !== false) && (!(ae?.isContentEditable || ae?.getAttribute?.('contenteditable') === 'true') || edList.includes(ae))) return edList;
+      edList = [...doc.querySelectorAll('[data-testid="agent-input-box"] [contenteditable="true"]')];
+      scanAt = now;
+      return edList;
     }
 
-    function measureSnapshot(refreshMetrics = false, checkScroll = true) {
-      if (isDestroyed() || !isEnabled() || typeof document === 'undefined') return null;
-      const activeEl = document.activeElement;
-      const editors = resolveComposerEditors(activeEl, refreshMetrics);
-      if (editors.length === 0) return null;
-      const sel = typeof document.getSelection === 'function' ? document.getSelection() : null;
-      const list = [];
+    function measureSnapshot(refresh, checkScroll = true) {
+      const doc = getDoc();
+      if (isDead() || !doc) return null;
+      const ae = doc.activeElement, editors = resolveEditors(doc, ae, refresh);
+      if (!editors.length) return null;
+      const sel = isFn(doc.getSelection) ? doc.getSelection() : null, list = [];
       for (const ed of editors) {
         const host = ed.parentElement;
         if (!host) continue;
-        const isFocused = activeEl === ed || Boolean(activeEl && ed.contains && ed.contains(activeEl));
-        if (!isFocused) {
-          selectionSigCache.delete(ed);
-          const cachedCaret = caretNodeCache.get(host);
-          const caretVis = cachedCaret && cachedCaret.isConnected !== false
-            ? cachedCaret.getAttribute?.('data-ag-cs-caret-visible') === '1'
-            : Boolean(host.querySelector?.('.ag-cs-smooth-caret[data-ag-cs-caret-visible="1"]'));
-          if (!host.hasAttribute?.('data-ag-cs-caret-host') || ed.hasAttribute?.('data-ag-cs-smooth-caret') || caretVis) {
-            list.push({ ed, host, isFocused: false, measured: null, hostRect: null, clientLeft: 0, clientTop: 0, scrollLeft: 0, scrollTop: 0, isNowEmpty: true });
-          }
+        const focused = ae === ed || !!(ae && ed.contains?.(ae));
+        if (!focused) {
+          sigCache.delete(ed);
+          const cc = cNode.get(host);
+          const vis = cc && cc.isConnected !== false ? cc.getAttribute?.(A_VIS) === '1' : !!host.querySelector?.(`${S_CARET}[${A_VIS}="1"]`);
+          if (!host.hasAttribute?.(A_HOST) || ed.hasAttribute?.(A_CARET) || vis) list.push([ed, host]);
           continue;
         }
         let scrolledOnly = false;
-        const rc = sel ? sel.rangeCount || 0 : 0;
-        const r0 = rc > 0 && typeof sel.getRangeAt === 'function' ? sel.getRangeAt(0) : null;
-        const isCol = r0 && typeof r0.collapsed === 'boolean' ? r0.collapsed : rc > 0 ? Boolean(sel.isCollapsed) : true;
-        const fNode = r0 && r0.endContainer !== undefined ? r0.endContainer : rc > 0 ? sel.focusNode : null;
-        const fOff = r0 && typeof r0.endOffset === 'number' ? r0.endOffset : rc > 0 ? sel.focusOffset : -1;
-        const childCnt = ed.childNodes ? ed.childNodes.length : 0;
-        const textSig =
-          fNode && typeof fNode.nodeValue === 'string'
-            ? fNode.nodeValue.length
-            : (ed.firstChild && typeof ed.firstChild.textContent === 'string' ? ed.firstChild.textContent.length : (ed.textContent || '').length);
-        const prevSig = selectionSigCache.get(ed);
-        const alreadySynced = Boolean(prevSig) && (ed.hasAttribute?.('data-ag-cs-smooth-caret') || prevSig.hidden);
-        let sameSelection = false;
-        if (!refreshMetrics && alreadySynced) {
-          sameSelection =
-            prevSig.epoch === editorMetricsEpoch &&
-            prevSig.rc === rc &&
-            prevSig.isCollapsed === isCol &&
-            prevSig.focusNode === fNode &&
-            prevSig.focusOffset === fOff &&
-            prevSig.childCnt === childCnt &&
-            prevSig.textSig === textSig;
-          // Zero forced-reflow fast path: skip scrollLeft/scrollTop DOM layout reads unless scroll was flagged or selection actually changed!
-          if (sameSelection && !checkScroll) continue;
-        }
-        const edScrollLeft = ed.scrollLeft || 0;
-        const edScrollTop = ed.scrollTop || 0;
-        const hostScrollLeft = host.scrollLeft || 0;
-        const hostScrollTop = host.scrollTop || 0;
-        if (!refreshMetrics && alreadySynced && sameSelection) {
-          const sameScroll =
-            prevSig.edScrollLeft === edScrollLeft &&
-            prevSig.edScrollTop === edScrollTop &&
-            prevSig.hostScrollLeft === hostScrollLeft &&
-            prevSig.hostScrollTop === hostScrollTop;
-          if (sameScroll) continue;
+        const rc = sel?.rangeCount || 0;
+        const r0 = rc && isFn(sel.getRangeAt) ? sel.getRangeAt(0) : null;
+        const col = r0?.collapsed ?? (rc ? !!sel.isCollapsed : true);
+        const fn = r0?.endContainer ?? (rc ? sel.focusNode : null);
+        const fo = isNum(r0?.endOffset) ? r0.endOffset : rc ? sel.focusOffset : -1;
+        const cc = ed.children?.length ?? cnLen(ed, 0);
+        const fp = fn && fn !== ed ? fn.parentNode : null, gp = fp && fp !== ed ? fp.parentNode : null;
+        const lLen = typeof fn?.nodeValue === 'string' ? fn.nodeValue.length : cnLen(fn, cc);
+        const pn = fn && fn !== ed ? (isEl(fn) && fo > 0 ? fn.childNodes?.[fo - 1] || null : prevSib(fn) || (fp && !isBlockEl(fp) ? prevSib(fp) : null)) : null;
+        const pk = pn && pn !== ed && !isTxt(pn) ? cnLen(pn, 0) : 0;
+        const pSig = !pn || pn === ed ? -1 : isTxt(pn) ? txtOf(pn).length : `${pk}:${!isBlockEl(pn) && (isDecoEl(pn) || pk <= 8) && typeof pn.textContent === 'string' ? pn.textContent.length : 0}`;
+        const sigStr = [mEpoch, sEpoch, rc, col ? 1 : 0, fo, cc, lLen, cnLen(fp), cnLen(gp), pSig].join(':');
+        const prev = sigCache.get(ed);
+        const same = !refresh && !!prev && (ed.hasAttribute?.(A_CARET) || prev[4]) && prev[0] === sigStr && prev[1] === fn && prev[2] === pn;
+        if (same && !checkScroll) continue;
+        const hsl = host.scrollLeft || 0, hst = host.scrollTop || 0;
+        const scKey = `${ed.scrollLeft || 0},${ed.scrollTop || 0},${hsl},${hst}`;
+        if (same) {
+          if (prev[3] === scKey) continue;
           scrolledOnly = true;
         }
-        const measured = measureEditorCaretBox(ed, refreshMetrics);
-        const hostRect = measured && measured.collapsed ? host.getBoundingClientRect() : null;
-        selectionSigCache.set(ed, {
-          epoch: editorMetricsEpoch,
-          rc,
-          isCollapsed: isCol,
-          focusNode: fNode,
-          focusOffset: fOff,
-          childCnt,
-          textSig,
-          edScrollLeft,
-          edScrollTop,
-          hostScrollLeft,
-          hostScrollTop,
-          hidden: !(measured && measured.collapsed && hostRect),
-        });
-        const clientLeft = host.clientLeft || 0;
-        const clientTop = host.clientTop || 0;
-        const cleanText = (ed.textContent || '').replace(/\u200b/g, '');
-        const isNowEmpty = cleanText.length === 0 && ed.querySelectorAll('p, div').length <= 1;
-        list.push({
-          ed,
-          host,
-          isFocused,
-          measured,
-          hostRect,
-          clientLeft,
-          clientTop,
-          scrollLeft: hostScrollLeft,
-          scrollTop: hostScrollTop,
-          isNowEmpty,
-          scrolledOnly,
-        });
+        const measured = measureBox(doc, ed, refresh, rc > 0, r0, col);
+        const hostRect = measured?.collapsed ? rectOf(host) : null;
+        sigCache.set(ed, [sigStr, fn, pn, scKey, !(measured?.collapsed && hostRect)]);
+        list.push([ed, host, focused, measured, hostRect, host.clientLeft || 0, host.clientTop || 0, hsl, hst, isQuickEmpty(ed, fn), scrolledOnly]);
       }
       return list;
     }
 
-    function applyMutations(snapshotList, isTypingEvent = false) {
-      if (isDestroyed() || !isEnabled()) {
-        teardown();
-        return;
-      }
-      if (!snapshotList || snapshotList.length === 0 || typeof document === 'undefined') return;
+    function applyMutations(snapList, isTyping) {
+      if (isDead()) { teardown(); return; }
+      const doc = getDoc();
+      if (!snapList?.length || !doc) return;
       runGuardedMut(() => {
-        for (const item of snapshotList) {
-          const { ed, host, isFocused, measured, hostRect, clientLeft, clientTop, scrollLeft, scrollTop, isNowEmpty, scrolledOnly } = item;
-          setAttrIfChanged(host, 'data-ag-cs-caret-host', '1');
-          let caret = caretNodeCache.get(host);
-          if (!caret || caret.parentElement !== host) caret = host.querySelector('.ag-cs-smooth-caret');
+        const dpr = (typeof window < 'u' && +window.devicePixelRatio) || 1;
+        for (const [ed, host, focused, measured, hostRect, cl, ct, sl, st, empty, scrolledOnly] of snapList) {
+          setAttrIfChanged(host, A_HOST, '1');
+          let caret = cNode.get(host);
+          if (!caret || caret.parentElement !== host) caret = host.querySelector(S_CARET);
           if (!caret) {
-            caret = document.createElement('div');
-            caret.className = 'ag-cs-smooth-caret';
+            caret = doc.createElement('div');
+            caret.className = S_CARET.slice(1);
             caret.setAttribute('aria-hidden', 'true');
             caret.setAttribute('data-ag-no-i18n', '');
             host.appendChild(caret);
           }
-          caretNodeCache.set(host, caret);
+          cNode.set(host, caret);
+          if (!focused || !measured?.collapsed || !hostRect) { rmAttr(caret, A_VIS); rmAttr(ed, A_CARET); continue; }
 
-          if (!measured || !measured.collapsed || !hostRect) {
-            if (caret.hasAttribute('data-ag-cs-caret-visible')) caret.removeAttribute('data-ag-cs-caret-visible');
-            if (ed.hasAttribute('data-ag-cs-smooth-caret')) ed.removeAttribute('data-ag-cs-smooth-caret');
-            continue;
-          }
+          const x = snapDevicePx(measured.left - hostRect.left - cl + sl, dpr);
+          const y = snapDevicePx(measured.top - hostRect.top - ct + st, dpr);
+          const h = M.max(15, snapDevicePx(measured.height || 18, dpr));
+          const prev = prevSt.get(caret), cs = caret.style, tr = `translate3d(${x}px, ${y}px, 0)`, hs = `${h}px`;
+          const moved = !prev || prev[0] !== x || prev[1] !== y;
 
-          const rawDpr = (typeof window !== 'undefined' && Number(window.devicePixelRatio)) || 1;
-          const x = snapDevicePx(measured.left - hostRect.left - clientLeft + scrollLeft, rawDpr);
-          const y = snapDevicePx(measured.top - hostRect.top - clientTop + scrollTop, rawDpr);
-          const h = Math.max(15, snapDevicePx(measured.height || 18, rawDpr));
-          const wasVisible = caret.getAttribute('data-ag-cs-caret-visible') === '1';
-          const prev = caretPrevState.get(caret);
-          const clearedToEmpty = Boolean(prev && prev.empty === false && isNowEmpty);
-
-          if ((isFocused && !wasVisible) || clearedToEmpty || scrolledOnly) {
-            caret.style.transition = 'none';
-            caret.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-            caret.style.height = `${h}px`;
-            if (typeof requestAnimationFrame === 'function') {
-              requestAnimationFrame(() => {
-                if (caret.isConnected) caret.style.transition = '';
-              });
-            } else {
-              caret.style.transition = '';
-            }
+          if (caret.getAttribute(A_VIS) !== '1' || (prev && !prev[3] && empty) || scrolledOnly) {
+            cs.transition = 'none'; cs.transform = tr; cs.height = hs;
+            if (!rAF(() => { if (caret.isConnected) cs.transition = ''; })) cs.transition = '';
           } else {
-            if (!prev || prev.x !== x || prev.y !== y) {
-              caret.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-            }
-            if (!prev || prev.h !== h) {
-              caret.style.height = `${h}px`;
-            }
+            if (moved) cs.transform = tr;
+            if (!prev || prev[2] !== h) cs.height = hs;
           }
-          caretPrevState.set(caret, { x, y, h, empty: isNowEmpty });
-
-          if (isFocused) {
-            setAttrIfChanged(caret, 'data-ag-cs-caret-visible', '1');
-            setAttrIfChanged(ed, 'data-ag-cs-smooth-caret', '1');
-            if (isTypingEvent) {
-              setAttrIfChanged(caret, 'data-ag-cs-caret-typing', '1');
-              if (caretTypingTimer) clearTimeout(caretTypingTimer);
-              caretTypingTimer = setTimeout(() => {
-                caretTypingTimer = null;
-                if (caret.isConnected) caret.removeAttribute('data-ag-cs-caret-typing');
-              }, 420);
-            } else if (prev && (prev.x !== x || prev.y !== y) && typeof caret.getAnimations === 'function') {
-              for (const anim of caret.getAnimations()) {
-                if (anim && anim.animationName === 'ag-cs-caret-blink') anim.currentTime = 0;
-              }
-            }
-          } else {
-            if (caret.hasAttribute('data-ag-cs-caret-visible')) caret.removeAttribute('data-ag-cs-caret-visible');
-            if (ed.hasAttribute('data-ag-cs-smooth-caret')) ed.removeAttribute('data-ag-cs-smooth-caret');
+          prevSt.set(caret, [x, y, h, empty]);
+          setAttrIfChanged(caret, A_VIS, '1');
+          setAttrIfChanged(ed, A_CARET, '1');
+          const now = Date.now(), ms = isTyping ? 420 : prev && moved && now - blinkAt >= 60 ? 220 : 0;
+          if (ms) {
+            blinkAt = now;
+            setAttrIfChanged(caret, A_TYP, '1');
+            if (tm) clearTimeout(tm);
+            tm = setTimeout(() => { tm = null; if (caret.isConnected) caret.removeAttribute(A_TYP); }, ms);
           }
         }
       });
     }
 
-    function sync(isTypingEvent = false, refreshMetrics = false, checkScroll = true) {
-      if (isDestroyed() || !isEnabled()) {
-        teardown();
-        return;
-      }
-      const snap = measureSnapshot(refreshMetrics, checkScroll);
-      applyMutations(snap, isTypingEvent);
+    function sync(isTyping, refresh, checkScroll = true) {
+      if (isDead()) { teardown(); return; }
+      applyMutations(measureSnapshot(refresh, checkScroll), isTyping);
     }
 
-    function queue(isTyping = false, immediate = false, refreshMetrics = false, isScroll = false) {
-      if (isDestroyed() || !isEnabled()) return;
-      if (isTyping) pendingCaretTyping = true;
-      if (refreshMetrics) pendingCaretRefreshMetrics = true;
-      if (isScroll) pendingCaretScroll = true;
-      if (immediate) {
-        if (caretRaf && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(caretRaf);
-          caretRaf = 0;
-        }
-        const typingNow = pendingCaretTyping || isTyping;
-        const refreshNow = pendingCaretRefreshMetrics || refreshMetrics;
-        const scrollNow = pendingCaretScroll || isScroll;
-        pendingCaretTyping = false;
-        pendingCaretRefreshMetrics = false;
-        pendingCaretScroll = false;
-        sync(typingNow, refreshNow, scrollNow);
-        return;
-      }
-      if (caretRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(caretRaf);
-      if (typeof requestAnimationFrame === 'function') {
-        caretRaf = requestAnimationFrame(() => {
-          caretRaf = 0;
-          const typingNow = pendingCaretTyping;
-          const refreshNow = pendingCaretRefreshMetrics;
-          const scrollNow = pendingCaretScroll;
-          pendingCaretTyping = false;
-          pendingCaretRefreshMetrics = false;
-          pendingCaretScroll = false;
-          sync(typingNow, refreshNow, scrollNow);
-        });
-      }
+    function queue(isTyping, immediate, refresh, isScroll) {
+      if (isDead()) return;
+      pTyp ||= !!isTyping; pRef ||= !!refresh; pScr ||= !!isScroll;
+      cAF();
+      const run = () => { const t = pTyp, r = pRef, s = pScr; pTyp = pRef = pScr = false; sync(t, r, s); };
+      immediate ? run() : (raf = rAF(() => { raf = 0; run(); }));
     }
 
-    return {
-      teardown,
-      bumpMetricsEpoch,
-      measureSnapshot,
-      applyMutations,
-      sync,
-      queue,
-    };
+    return { teardown, bumpMetricsEpoch, invalidateSelection, measureSnapshot, applyMutations, sync, queue };
   }
 
   const api = { createSmoothCaretController, snapDevicePx };
   if (typeof module === 'object' && module.exports) module.exports = api;
   G.__agPrismSmoothCaret = api;
-})(typeof globalThis !== 'undefined' ? globalThis : window);
+})(typeof globalThis < 'u' ? globalThis : window);

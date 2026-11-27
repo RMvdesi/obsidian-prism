@@ -930,7 +930,7 @@ enum InstallerCore {
     }
 
     static func generateLauncherInfoPlist(version: String) -> String {
-        let safeShort = xmlEscape(version.isEmpty ? "1.0.8-beta.4" : version)
+        let safeShort = xmlEscape(version.isEmpty ? "1.0.8-beta.5" : version)
         let numericParts = version.split(separator: "-").first.map(String.init) ?? "1.0.8"
         let safeBundleVer = xmlEscape(numericParts.isEmpty ? "1.0.8" : numericParts)
         return """

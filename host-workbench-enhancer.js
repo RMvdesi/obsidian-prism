@@ -343,7 +343,7 @@
     // Dedicated timer/rAF sets for non-Diff animations (strictly decoupled from Channel 6 Inline Diff)
     const nonDiffAnimTimers = new Set();
     const ovSecAnimRafs = new Set();
-    let scrollGlideRaf = 0, scrollGlideCleanup = null, scrollBlurTimer = 0, scrollBlurCv = null, scrollBlurTarget = null, lastAmbientSyncAt = 0, ambientThrottleTimer = 0;
+    let scrollGlideRaf = 0, scrollGlideCleanup = null, lastAmbientSyncAt = 0, ambientThrottleTimer = 0;
     let sidebarMoreExpanded = false, sidebarMoreBtn = null;
 
     const stats = {
@@ -820,9 +820,26 @@ if (!pre || !resp) return false;
 for (let cur = pre; cur && cur !== resp; cur = cur.parentElement) if (cur.nextElementSibling) return true;
 return false;
 }
-function syncCodeBlocks() {
+const S_PRE_HOST = '[data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]';
+function collectScopedPres(scanScopes) {
+if (!scanScopes || !scanScopes.length) return qa(doc, '[data-testid="planner-response-text"] pre, [data-testid="agent-response"] pre, [data-testid="artifact-view"] pre');
+const out = [], seen = new Set();
+const addPre = (p) => { if (p && !seen.has(p) && cl(p, S_PRE_HOST)) { seen.add(p); out.push(p); } };
+for (let i = 0; i < scanScopes.length; i++) {
+const sc = scanScopes[i];
+if (!sc || sc.isConnected === false) continue;
+if (tagU(sc) === 'PRE') { addPre(sc); continue; }
+const upPre = cl(sc, 'pre');
+if (upPre) { addPre(upPre); continue; }
+if (typeof sc.querySelectorAll === 'function') for (const p of qa(sc, 'pre')) addPre(p);
+}
+return out;
+}
+function syncCodeBlocks(scanScopes = null, activeConv = null) {
 if (isDead() || !doc?.querySelectorAll) return;
-const views = findAllConvViews(), convScopes = views.length > 0 ? views : [findPrimaryConvView()].filter(Boolean);
+const pres = collectScopedPres(scanScopes);
+if (!pres.length) return;
+const convScopes = activeConv && activeConv.isConnected !== false ? [activeConv] : (() => { const vs = findAllConvViews(); return vs.length > 0 ? vs : [findPrimaryConvView()].filter(Boolean); })();
 const streamingPres = new Set(), lastRespByConv = new Map();
 let defaultLastResp = null, anyConvRunning = false;
 for (let v = 0; v < convScopes.length; v++) {
@@ -837,9 +854,7 @@ if (tailPre && !hasFollowingSiblingInResp(tailPre, lr)) streamingPres.add(tailPr
 }
 }
 }
-const pres = qa(doc, '[data-testid="planner-response-text"] pre, [data-testid="agent-response"] pre, [data-testid="artifact-view"] pre');
-if (!pres.length) return;
-const curLang = lastSyncedLang || String(getLang() || ''), isHot = anyConvRunning || Boolean(scrollBlurCv);
+const curLang = lastSyncedLang || String(getLang() || ''), isHot = anyConvRunning || Boolean(getDomBus()?.isBusy?.());
 const AF = 'data-ag-cs-code-folded', AS = 'data-ag-cs-code-sticky', AR = 'data-ag-cs-rich-pre';
 mut(() => {
 for (let i = 0; i < pres.length; i++) {
@@ -849,7 +864,7 @@ const prevRec = preSyncCache.get(pre);
 const recValid = prevRec && prevRec.lang === curLang && ga(prevRec.header, AS) === '1' && (prevRec.lineCount < MIN_CODE_FOLD_LINES || (prevRec.btn && prevRec.btn.isConnected !== false && prevRec.btn.parentElement));
 if (recValid && prevRec.sealed) continue;
 const prevBody = prevRec?.body, curCn = prevBody?.childNodes?.length || 0;
-if (recValid && prevBody && prevRec.cn === curCn && (scrollBlurCv || (isHot && prevRec.stamp === getPreBodyStamp(prevBody)))) continue;
+if (recValid && prevBody && prevRec.cn === curCn && isHot && prevRec.stamp === getPreBodyStamp(prevBody)) continue;
 let hasDirectDiv = false;
 for (const c of pre.children || []) { if (tagU(c) === 'DIV') { hasDirectDiv = true; break; } }
 if (hasDirectDiv) setA(pre, AR, '1'); else if (ha(pre, AR)) ra(pre, AR);
@@ -1463,7 +1478,8 @@ return true;
       return false;
     }
 
-    function syncSubagentRunningAmbient(force = false) {
+    const AMB_SEL = '[data-testid="subagent-node"],[data-testid="running-row"],[data-testid="background-task-row"],[data-testid="step-plan"],[data-testid="overview-panel"],[data-ag-cs-overview-shell="1"]';
+    function syncSubagentRunningAmbient(force = false, scanScopes = null) {
 if (isDead() || !doc?.querySelectorAll) return;
 const now = Date.now();
 if (!force && now - lastAmbientSyncAt < 120) {
@@ -1476,7 +1492,19 @@ return;
 if (ambientThrottleTimer) { clearTimeout(ambientThrottleTimer); nonDiffAnimTimers.delete(ambientThrottleTimer); ambientThrottleTimer = 0; }
 lastAmbientSyncAt = now;
 const SP = '[data-testid="status-loading-spinner"], [data-testid="status-task-running"]';
-const matched = qa(doc, '[data-testid="subagent-node"],[data-testid="running-row"],[data-testid="background-task-row"],[data-testid="step-plan"],[data-testid="overview-panel"],[data-ag-cs-overview-shell="1"]');
+let matched;
+if (!force && scanScopes && scanScopes.length > 0) {
+const seen = new Set();
+matched = [];
+for (let i = 0; i < scanScopes.length; i++) {
+const sc = scanScopes[i];
+if (!sc || sc.isConnected === false) continue;
+if (isM(sc, AMB_SEL) && !seen.has(sc)) { seen.add(sc); matched.push(sc); }
+if (typeof sc.querySelectorAll === 'function') for (const el of qa(sc, AMB_SEL)) if (!seen.has(el)) { seen.add(el); matched.push(el); }
+}
+} else {
+matched = qa(doc, AMB_SEL);
+}
 if (!matched.length) return;
 const rows = [], sps = [], ovPanels = [], ovShells = [];
 for (let i = 0; i < matched.length; i++) {
@@ -1880,45 +1908,9 @@ if (jumpUserTurn(ev.key === 'ArrowUp' ? -1 : 1, ev.target)) ev.preventDefault?.(
 }
 } catch {}
 }
-function armScrollBlurEnd() {
-if (scrollBlurTimer) { clearTimeout(scrollBlurTimer); nonDiffAnimTimers.delete(scrollBlurTimer); }
-scrollBlurTimer = setTimeout(() => { nonDiffAnimTimers.delete(scrollBlurTimer); scrollBlurTimer = 0; scrollBlurTarget = null; const targetCv = scrollBlurCv; scrollBlurCv = null; if (targetCv && !isDead() && ha(targetCv, 'data-ag-scrolling')) mut(() => ra(targetCv, 'data-ag-scrolling')); }, 150);
-nonDiffAnimTimers.add(scrollBlurTimer);
-}
-function resolveScrollScope(t) {
-if (!isM(t, S_VP) && ga(t, 'data-testid') !== 'autoscroll-viewport' && !((t.scrollHeight || 0) > (t.clientHeight || 0) + 1 || (t.scrollTop || 0) > 0)) return null;
-let scope = cl(t, S_PANE_SCOPE);
-if (!scope) for (let cur = t.parentElement; cur && cur !== doc.body && cur !== doc.documentElement; cur = cur.parentElement) { if (isM(cur, S_PANE_STOP)) break; if (qs(cur, '.agy-scroll-bottom, [data-ag-cs-overview-shell="1"]')) { scope = cur; break; } }
-return scope && qs(scope, '.agy-scroll-bottom, [data-ag-cs-overview-shell="1"]') ? scope : null;
-}
-function applyScrollScope(scope, t) {
-if (isDead() || !scope) return;
-if (scrollBlurCv && scrollBlurCv !== scope && ha(scrollBlurCv, 'data-ag-scrolling')) { const oldCv = scrollBlurCv; mut(() => ra(oldCv, 'data-ag-scrolling')); }
-if (scrollBlurCv !== scope || ga(scope, 'data-ag-scrolling') !== '1') mut(() => setA(scope, 'data-ag-scrolling', '1'));
-scrollBlurCv = scope; scrollBlurTarget = t;
-armScrollBlurEnd();
-}
-function onWinScrollPassive(ev) {
-if (isDead()) return;
-const t = ev?.target;
-if (!t || t === doc || t === win || t === doc.body || t === doc.documentElement) return;
-if (scrollBlurTarget === t && scrollBlurCv && ga(scrollBlurCv, 'data-ag-scrolling') === '1') { armScrollBlurEnd(); return; }
-const bus = getDomBus();
-if (bus?.measure && bus?.mutate) {
-bus.measure('enh:scroll', () => {
-if (isDead()) return;
-const sc = resolveScrollScope(t);
-if (sc) bus.mutate('enh:scroll', () => applyScrollScope(sc, t));
-});
-return;
-}
-const sc = resolveScrollScope(t);
-if (sc) applyScrollScope(sc, t);
-}
 if (win && typeof win.addEventListener === 'function') {
 win.addEventListener('click', onDocClickCapture, true);
 win.addEventListener('keydown', onWinKeyDown);
-win.addEventListener('scroll', onWinScrollPassive, { capture: true, passive: true });
 }
 // ── Public Lifecycle API ───────────────────────────────────────────────
 function sync(flags = null) {
@@ -1931,13 +1923,16 @@ Boolean(flags.f) ||
 const curLang = String(getLang() || '');
 const langChanged = Boolean(lastSyncedLang && curLang !== lastSyncedLang);
 lastSyncedLang = curLang;
+const rawRoots = hasFlags && Array.isArray(flags.dirtyAddedRoots) ? flags.dirtyAddedRoots.filter((n) => n && n.isConnected !== false) : [];
+const activeConv = hasFlags && flags.activeConv && flags.activeConv.isConnected !== false ? flags.activeConv : null;
+const scanScopes = isFull || langChanged ? null : rawRoots.length ? rawRoots : activeConv ? [activeConv] : null;
 if (isFull || flags.c || flags.l || flags.r || flags.s) syncCascadeChange(true);
 if (isFull || flags.t || flags.r || flags.l) syncSidecarThemeBridge(false);
 if (isFull || flags.c || flags.l || flags.b || flags.r || flags.t || langChanged) {
-syncCodeBlocks();
+syncCodeBlocks(scanScopes, activeConv);
 syncNavRails();
 }
-if (isFull || flags.o || flags.c || flags.l || flags.b || flags.r || flags.t || langChanged) syncSubagentRunningAmbient(Boolean(isFull || flags.o));
+if (isFull || flags.o || flags.c || flags.l || flags.b || flags.r || flags.t || langChanged) syncSubagentRunningAmbient(Boolean(isFull || flags.o), flags?.o ? null : scanScopes);
 if (isFull || flags.s || flags.r || flags.t || langChanged) syncSidebarOverflowTools();
 if (isFull || flags.o || flags.c || flags.b || flags.r) syncPermissionsMenuState();
 if (isFull || flags.g || flags.o || flags.r) syncSettingsDialogChrome(doc, mut, setA);
@@ -1948,6 +1943,7 @@ t: tFn,
 getLang,
 runGuardedMut: mut,
 setAttrIfChanged: setA,
+...(scanScopes ? { scope: scanScopes } : {}),
 });
 } catch {}
 }
@@ -1970,11 +1966,9 @@ nonDiffAnimTimers.clear();
 if (typeof win?.cancelAnimationFrame === 'function') { for (const rid of ovSecAnimRafs) { try { win.cancelAnimationFrame(rid); } catch {} } }
 ovSecAnimRafs.clear();
 try { win?.__agPrismInlineDiff?.unbindHooks?.(); } catch {}
-ambientThrottleTimer = 0; scrollBlurTarget = null;
-if (scrollBlurTimer) { try { clearTimeout(scrollBlurTimer); } catch {} nonDiffAnimTimers.delete(scrollBlurTimer); scrollBlurTimer = 0; }
-if (scrollBlurCv) { const scv = scrollBlurCv; scrollBlurCv = null; if (ha(scv, 'data-ag-scrolling')) mut(() => ra(scv, 'data-ag-scrolling')); }
+ambientThrottleTimer = 0;
 if (win && typeof win.removeEventListener === 'function') {
-try { win.removeEventListener('click', onDocClickCapture, true); win.removeEventListener('keydown', onWinKeyDown); win.removeEventListener('scroll', onWinScrollPassive, { capture: true, passive: true }); } catch {}
+try { win.removeEventListener('click', onDocClickCapture, true); win.removeEventListener('keydown', onWinKeyDown); } catch {}
 }
 pruneUnsubs(iframeUnsubscribers, true, boundIframes);
 iframeSizeCache = new WeakMap();

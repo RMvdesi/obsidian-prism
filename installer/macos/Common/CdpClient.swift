@@ -140,7 +140,7 @@ final class PluginManifest {
         let manifestPath = (baseDir as NSString).appendingPathComponent("manifest.json")
         let text = try String(contentsOfFile: manifestPath, encoding: .utf8)
         let raw = try MiniJson.parseObject(text)
-        let version = raw["version"]?.stringValue ?? "1.0.8-beta.4"
+        let version = raw["version"]?.stringValue ?? "1.0.8-beta.5"
         let styleId = raw["styleId"]?.stringValue ?? "ag-prism-css"
         let settingBinding = raw["settingBinding"]?.stringValue ?? "__agPrismSetting"
         let removeExpression = raw["removeExpression"]?.stringValue ?? ""
@@ -825,6 +825,18 @@ enum CdpHelper {
             }
         }
         return reconcileConfigAliases(cfg)
+    }
+
+    static func resolvePerfModeAutoTag(baseDir: String) -> Int {
+        let cfgPath = (baseDir as NSString).appendingPathComponent("config.json")
+        guard let text = try? String(contentsOfFile: cfgPath, encoding: .utf8),
+              let raw = try? MiniJson.parseObject(text),
+              let pmStr = raw["performanceMode"]?.stringValue else {
+            return 1
+        }
+        let norm = pmStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if norm == "performance" || norm == "eco" || norm == "balanced" || norm == "quality" { return 0 }
+        return norm == "auto" ? 2 : 1
     }
 
     static func validateConfigEntry(manifest: PluginManifest, key: String, value: JsonValue) -> Bool {
@@ -1881,48 +1893,34 @@ enum CdpHelper {
         nextCfg["binding"] = .string(manifest.settingBinding)
         if !codeHash.isEmpty { nextCfg["codeHash"] = .string(codeHash) }
         nextCfg["__fromFile"] = .bool(true)
+        let pmAuto = resolvePerfModeAutoTag(baseDir: baseDir)
+        if pmAuto > 0 { nextCfg["__pmAuto"] = .int(Int64(pmAuto)) }
         let cfgJson = MiniJson.stringify(.object(nextCfg), pretty: false)
         let verJson = MiniJson.stringifyString(manifest.version)
         let hashJson = MiniJson.stringifyString(codeHash)
         var sb = ""
         sb.reserveCapacity(cfgJson.count + 768)
-        sb.append("(() => {\n")
-        sb.append("    const nextCfg = ")
-        sb.append(cfgJson)
-        sb.append(";\n")
-        sb.append("    const api = window.__agPrism || window.__agClaudeStyle;\n")
-        sb.append("    if (!api || api.version !== ")
-        sb.append(verJson)
-        sb.append(" || typeof api.refreshConfig !== 'function') return { ok: false, refreshed: false };\n")
-        sb.append("    if (")
-        sb.append(hashJson)
-        sb.append(" && api.codeHash && api.codeHash !== ")
-        sb.append(hashJson)
-        sb.append(") return { ok: false, refreshed: false };\n")
-        sb.append("    api.refreshConfig(nextCfg);\n")
-        sb.append("    const liveState = typeof api.getState === 'function' ? api.getState() : null;\n")
-        sb.append("    const effectiveCfg = (liveState && liveState.cfg) || nextCfg;\n")
-        sb.append("    try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("    try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("    try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("    try { window.__agPrismInlineDiff?.sync?.(effectiveCfg); } catch {}\n")
-        sb.append("    try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n")
-        sb.append("    if (effectiveCfg && effectiveCfg.sidebarStudio !== 'on') {\n")
-        sb.append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n")
-        sb.append("      try { window.__agPrismSidebar?.destroy?.(); } catch {}\n")
-        sb.append("      try { delete window.__agPrismSidebar; } catch {}\n")
-        sb.append("      try { if (document.documentElement) ['data-ag-prism-mode', 'data-ag-prism-chat-kind', 'data-ag-prism-chat-telemetry', 'data-ag-cs-space', 'data-ag-cs-space-palette', 'data-ag-cs-space-accent'].forEach((a) => document.documentElement.removeAttribute(a)); } catch {}\n")
-        sb.append("    } else {\n")
-        sb.append("      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n")
-        sb.append("    }\n")
-        sb.append("    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'tr' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n")
-        sb.append("    if (document.documentElement) {\n")
-        sb.append("      if (effectiveCfg && effectiveCfg.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n")
-        sb.append("      else document.documentElement.removeAttribute('data-ag-prism-thought-view');\n")
-        sb.append("      document.documentElement.setAttribute('data-ag-prism-sidebar-studio', effectiveCfg && effectiveCfg.sidebarStudio === 'on' ? 'on' : 'off');\n")
-        sb.append("    }\n")
-        sb.append("    return { ok: true, refreshed: true, state: liveState };\n")
-        sb.append("  })()")
+        sb.append("(() => {\n    const nextCfg = \(cfgJson);\n    const api = window.__agPrism || window.__agClaudeStyle;\n    if (!api || api.version !== \(verJson) || typeof api.refreshConfig !== 'function') return { ok: false, refreshed: false };\n    if (\(hashJson) && api.codeHash && api.codeHash !== \(hashJson)) return { ok: false, refreshed: false };\n" +
+            "    if (nextCfg.__pmAuto) try { (window.__agDomBus || globalThis.__agDomBus)?.resolveAutoBootPerfMode?.(nextCfg, window); } catch {}\n" +
+            "    api.refreshConfig(nextCfg);\n    const liveState = typeof api.getState === 'function' ? api.getState() : null;\n" +
+            "    const effectiveCfg = (liveState && liveState.cfg) || nextCfg;\n" +
+            "    try { window.__agPrismTelemetry?.sync?.(effectiveCfg); } catch {}\n" +
+            "    try { window.__agPrismEffortSlider?.sync?.(effectiveCfg); } catch {}\n" +
+            "    try { window.__agPrismThought?.sync?.(effectiveCfg); } catch {}\n" +
+            "    try { window.__agPrismInlineDiff?.sync?.(effectiveCfg); } catch {}\n" +
+            "    try { if (effectiveCfg.omniModule === 'off') window.__agPrismOmni?.destroy?.(); else window.__agPrismOmni?.sync?.(effectiveCfg, window.__agPrismOmniServerMeta || null); } catch {}\n" +
+            "    if (effectiveCfg && effectiveCfg.sidebarStudio !== 'on') {\n" +
+            "      try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {}\n" +
+            "      try { window.__agPrismSidebar?.destroy?.(); } catch {}\n      try { delete window.__agPrismSidebar; } catch {}\n" +
+            "      try { if (document.documentElement) ['data-ag-prism-mode', 'data-ag-prism-chat-kind', 'data-ag-prism-chat-telemetry', 'data-ag-cs-space', 'data-ag-cs-space-palette', 'data-ag-cs-space-accent'].forEach((a) => document.documentElement.removeAttribute(a)); } catch {}\n" +
+            "    } else { try { window.__agPrismSidebar?.sync?.(effectiveCfg, window.__agPrismSidebarMeta || null); } catch {} }\n" +
+            "    try { const hiMode = effectiveCfg.hostLocalization; const hiLang = effectiveCfg.language; const navL = String((typeof navigator !== 'undefined' && ((navigator.languages && navigator.languages[0]) || navigator.language)) || '').trim(); if (hiMode === 'off') window.__agPrismHostI18n?.setMode?.('off'); else if (hiMode === 'on') window.__agPrismHostI18n?.setMode?.('on'); else if ((hiLang && hiLang !== 'zh-CN' && hiLang !== 'tr' && hiLang !== 'auto') || ((!hiLang || hiLang === 'auto') && navL && !/^(?:zh(?:$|-(?:cn|hans|sg)(?:-|$))|tr(?:$|-))/i.test(navL))) window.__agPrismHostI18n?.destroy?.(); else window.__agPrismHostI18n?.setMode?.('auto'); } catch {}\n" +
+            "    if (document.documentElement) {\n" +
+            "      if (effectiveCfg && effectiveCfg.thoughtTranslate && effectiveCfg.thoughtTranslate !== 'off') document.documentElement.setAttribute('data-ag-prism-thought-view', effectiveCfg.thoughtView === 'bilingual' ? 'bilingual' : 'immersive');\n" +
+            "      else document.documentElement.removeAttribute('data-ag-prism-thought-view');\n" +
+            "      document.documentElement.setAttribute('data-ag-prism-sidebar-studio', effectiveCfg && effectiveCfg.sidebarStudio === 'on' ? 'on' : 'off');\n" +
+            "    }\n    return { ok: true, refreshed: true, state: liveState };\n  })()"
+        )
         return sb
     }
 
@@ -2212,51 +2210,51 @@ enum CdpHelper {
         initCfg["binding"] = .string(manifest.settingBinding)
         initCfg["codeHash"] = .string(codeHash)
         initCfg["__fromFile"] = .bool(true)
+        let pmAuto = resolvePerfModeAutoTag(baseDir: baseDir)
+        if pmAuto > 0 { initCfg["__pmAuto"] = .int(Int64(pmAuto)) }
 
         let styleIdJson = MiniJson.stringifyString(manifest.styleId)
         let verJson = MiniJson.stringifyString(manifest.version)
         var sb = ""
         sb.reserveCapacity(css.count + bundle.count + 4608)
-        sb.append("(() => {\n")
-        sb.append("    const css = ")
+        sb.append("(() => {\n    const css = ")
         sb.append(MiniJson.stringifyString(css))
-        sb.append(";\n")
-        sb.append("    const migrateLegacyStorage = () => {\n")
-        sb.append("      try {\n")
-        sb.append("        if (typeof localStorage === 'undefined' || !localStorage) return;\n")
-        sb.append("        const legacyRaw = localStorage.getItem('ag-claude-style:config');\n")
-        sb.append("        const v3Raw = localStorage.getItem('agClaudeStyle.settings.v3');\n")
-        sb.append("        const prismRaw = localStorage.getItem('ag-prism:config');\n")
-        sb.append("        if (!prismRaw && (legacyRaw || v3Raw)) localStorage.setItem('ag-prism:config', legacyRaw || v3Raw);\n")
-        sb.append("        if (!v3Raw && (prismRaw || legacyRaw)) localStorage.setItem('agClaudeStyle.settings.v3', prismRaw || legacyRaw);\n")
-        sb.append("      } catch {}\n")
-        sb.append("    };\n")
-        sb.append("    const cleanupLegacyResidue = () => {\n")
-        sb.append("      try { const oldStyle = document.getElementById('ag-claude-style-css'); if (oldStyle) oldStyle.remove(); } catch {}\n")
-        sb.append("      try { const oldApi = window.__agClaudeStyle; if (oldApi && (!window.__agPrism || Number(oldApi.version) <= 2)) { if (typeof oldApi.destroy === 'function') oldApi.destroy(); delete window.__agClaudeStyle; } } catch {}\n")
-        sb.append("    };\n")
-        sb.append("    const stripForeignMount = () => {\n")
-        sb.append("      try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n")
-        sb.append("      try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n")
-        sb.append("      try { window.__agPrismThought?.destroy?.(); } catch {}\n")
-        sb.append("      try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n")
-        sb.append("      try { window.__agPrismInlineDiff?.destroy?.(); } catch {}\n")
-        sb.append("      try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n")
-        sb.append("      try { window.__agPrismOmni?.destroy?.(); } catch {}\n")
-        sb.append("      try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n")
-        sb.append("      try { document.querySelectorAll?.('.ag-cs-ctx-menu, .ag-cs-ctx-toast')?.forEach?.((el) => el.remove()); } catch {}\n")
-        sb.append("      try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}\n")
-        sb.append("      try { document.documentElement?.removeAttribute?.('data-ag-cs-model-menu'); document.querySelectorAll?.('[data-ag-cs-aux-dual],[data-ag-cs-model-overlay]').forEach((el) => { el.removeAttribute('data-ag-cs-aux-dual'); el.removeAttribute('data-ag-cs-model-overlay'); }); } catch {}\n")
-        sb.append("      try { window.__agPrism?.destroy?.(); } catch {}\n")
-        sb.append("      try { document.getElementById(")
+        sb.append(
+            ";\n    const migrateLegacyStorage = () => {\n      try {\n" +
+            "        if (typeof localStorage === 'undefined' || !localStorage) return;\n" +
+            "        const legacyRaw = localStorage.getItem('ag-claude-style:config');\n" +
+            "        const v3Raw = localStorage.getItem('agClaudeStyle.settings.v3');\n" +
+            "        const prismRaw = localStorage.getItem('ag-prism:config');\n" +
+            "        if (!prismRaw && (legacyRaw || v3Raw)) localStorage.setItem('ag-prism:config', legacyRaw || v3Raw);\n" +
+            "        if (!v3Raw && (prismRaw || legacyRaw)) localStorage.setItem('agClaudeStyle.settings.v3', prismRaw || legacyRaw);\n" +
+            "      } catch {}\n    };\n" +
+            "    const cleanupLegacyResidue = () => {\n" +
+            "      try { const oldStyle = document.getElementById('ag-claude-style-css'); if (oldStyle) oldStyle.remove(); } catch {}\n" +
+            "      try { const oldApi = window.__agClaudeStyle; if (oldApi && (!window.__agPrism || Number(oldApi.version) <= 2)) { if (typeof oldApi.destroy === 'function') oldApi.destroy(); delete window.__agClaudeStyle; } } catch {}\n" +
+            "    };\n    const stripForeignMount = () => {\n" +
+            "      try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n" +
+            "      try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n" +
+            "      try { window.__agPrismThought?.destroy?.(); } catch {}\n" +
+            "      try { document.querySelectorAll?.('[data-testid=\"prism-thought-ai-config\"]')?.forEach?.((el) => el.remove()); } catch {}\n" +
+            "      try { window.__agPrismInlineDiff?.destroy?.(); } catch {}\n" +
+            "      try { document.querySelectorAll?.('.ag-cs-inline-diff-box, .ag-cs-diff-ctx-menu')?.forEach?.((el) => el.remove()); } catch {}\n" +
+            "      try { window.__agPrismOmni?.destroy?.(); } catch {}\n" +
+            "      try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n" +
+            "      try { document.querySelectorAll?.('.ag-cs-ctx-menu, .ag-cs-ctx-toast')?.forEach?.((el) => el.remove()); } catch {}\n" +
+            "      try { window.__agPrismHostI18n?.destroy?.(); document.documentElement?.removeAttribute?.('data-ag-prism-host-i18n'); } catch {}\n" +
+            "      try { document.documentElement?.removeAttribute?.('data-ag-cs-model-menu'); document.querySelectorAll?.('[data-ag-cs-aux-dual],[data-ag-cs-model-overlay]').forEach((el) => { el.removeAttribute('data-ag-cs-aux-dual'); el.removeAttribute('data-ag-cs-model-overlay'); }); } catch {}\n" +
+            "      try { window.__agPrism?.destroy?.(); } catch {}\n      try { document.getElementById("
+        )
         sb.append(styleIdJson)
-        sb.append(")?.remove(); } catch {}\n")
-        sb.append("      try { document.getElementById('ag-claude-style-css')?.remove(); } catch {}\n")
-        sb.append("      try { document.getElementById('ag-prism-settings-v101-css')?.remove(); } catch {}\n")
-        sb.append("      try { document.getElementById('ag-prism-omni-css')?.remove(); } catch {}\n")
-        sb.append("      try { document.getElementById('ag-prism-inline-diff-css')?.remove(); } catch {}\n")
-        sb.append("      try { if (document.documentElement) document.documentElement.removeAttribute('data-ag-prism'); } catch {}\n")
-        sb.append("      try { delete window.__agPrismThought; delete globalThis.__agPrismThought; delete window.__agPrismThoughtSettingsUi; delete globalThis.__agPrismThoughtSettingsUi; delete window.__agPrismInlineDiff; delete globalThis.__agPrismInlineDiff; delete window.__agPrismInlineDiffFactory; delete globalThis.__agPrismInlineDiffFactory; delete window.__agPrismInlineDiffResolve; delete window.__agPrismOmni; delete window.__agPrismContextMenu; delete globalThis.__agPrismContextMenu; delete window.__agPrism; delete window.__agClaudeStyle; } catch {}\n")
+        sb.append(
+            ")?.remove(); } catch {}\n" +
+            "      try { document.getElementById('ag-claude-style-css')?.remove(); } catch {}\n" +
+            "      try { document.getElementById('ag-prism-settings-v101-css')?.remove(); } catch {}\n" +
+            "      try { document.getElementById('ag-prism-omni-css')?.remove(); } catch {}\n" +
+            "      try { document.getElementById('ag-prism-inline-diff-css')?.remove(); } catch {}\n" +
+            "      try { if (document.documentElement) document.documentElement.removeAttribute('data-ag-prism'); } catch {}\n" +
+            "      try { delete window.__agPrismThought; delete globalThis.__agPrismThought; delete window.__agPrismThoughtSettingsUi; delete globalThis.__agPrismThoughtSettingsUi; delete window.__agPrismInlineDiff; delete globalThis.__agPrismInlineDiff; delete window.__agPrismInlineDiffFactory; delete globalThis.__agPrismInlineDiffFactory; delete window.__agPrismInlineDiffResolve; delete window.__agPrismOmni; delete window.__agPrismContextMenu; delete globalThis.__agPrismContextMenu; delete window.__agPrism; delete window.__agClaudeStyle; } catch {}\n"
+        )
         sb.append("    };\n")
         sb.append(
             "    const hasDomWorkbenchMarkers = () => {\n      try {\n" +
@@ -2306,33 +2304,26 @@ enum CdpHelper {
             "        if (document.head) applyStyle();\n        else document.addEventListener('DOMContentLoaded', applyStyle, { once: true });\n        const bootCfg = "
         )
         sb.append(MiniJson.stringify(.object(initCfg), pretty: false))
-        sb.append(";\n        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n")
-        sb.append("        const bundleUnchanged = Boolean(\n")
-        sb.append("          existingPrism &&\n")
-        sb.append("          existingPrism.version === ")
-        sb.append(verJson)
-        sb.append(" &&\n")
-        sb.append("          existingPrism.codeHash === bootCfg.codeHash &&\n")
-        sb.append("          typeof existingPrism.refreshConfig === 'function'\n")
-        sb.append("        );\n")
-        sb.append("        if (bundleUnchanged) {\n")
-        sb.append("          existingPrism.refreshConfig(bootCfg);\n")
-        sb.append("        } else {\n")
-        sb.append("          try { existingPrism?.destroy?.(); } catch {}\n")
-        sb.append("          try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n")
-        sb.append("          try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n")
-        sb.append("          try { window.__agPrismThought?.destroy?.(); } catch {}\n")
-        sb.append("          try { window.__agPrismOmni?.destroy?.(); } catch {}\n")
-        sb.append("          try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n")
-        sb.append("          try { document.querySelectorAll('[data-ag-prism-fallback=\"1\"]').forEach((n) => n.remove()); } catch {}\n")
-        sb.append("          ")
-        sb.append(bundle)
-        sb.append("\n")
-        sb.append("          if (typeof globalThis.__agCsUiMain === 'function') {\n")
-        sb.append("            globalThis.__agCsUiMain(bootCfg);\n")
-        sb.append("          }\n")
-        sb.append("        }\n")
         sb.append(
+            ";\n        const existingPrism = window.__agPrism || window.__agClaudeStyle;\n" +
+            "        const autoPm = () => { try { (window.__agDomBus || globalThis.__agDomBus)?.resolveAutoBootPerfMode?.(bootCfg, window); } catch {} };\n" +
+            "        const bundleUnchanged = Boolean(\n          existingPrism &&\n          existingPrism.version === "
+        )
+        sb.append(verJson)
+        sb.append(
+            " &&\n          existingPrism.codeHash === bootCfg.codeHash &&\n          typeof existingPrism.refreshConfig === 'function'\n        );\n" +
+            "        if (bundleUnchanged) {\n          autoPm();\n          existingPrism.refreshConfig(bootCfg);\n        } else {\n" +
+            "          try { existingPrism?.destroy?.(); } catch {}\n" +
+            "          try { window.__agPrismTelemetry?.destroy?.(); } catch {}\n" +
+            "          try { window.__agPrismEffortSlider?.destroy?.(); } catch {}\n" +
+            "          try { window.__agPrismThought?.destroy?.(); } catch {}\n" +
+            "          try { window.__agPrismOmni?.destroy?.(); } catch {}\n" +
+            "          try { window.__agPrismContextMenu?.destroy?.(); } catch {}\n" +
+            "          try { document.querySelectorAll('[data-ag-prism-fallback=\"1\"]').forEach((n) => n.remove()); } catch {}\n          "
+        )
+        sb.append(bundle)
+        sb.append(
+            "\n          autoPm();\n          if (typeof globalThis.__agCsUiMain === 'function') {\n            globalThis.__agCsUiMain(bootCfg);\n          }\n        }\n" +
             "        migrateLegacyStorage();\n" +
             "        if (window.__agClaudeStyle && !window.__agPrism) window.__agPrism = window.__agClaudeStyle;\n" +
             "        else if (window.__agPrism) window.__agClaudeStyle = window.__agPrism;\n" +

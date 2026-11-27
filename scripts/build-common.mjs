@@ -290,6 +290,9 @@ function collectNativePluginEntries(activeConfigFile) {
   walkSubDir('src');
   walkSubDir('vendor');
   walkSubDir('sidecars');
+  for (const sub of Array.isArray(cdp.SYNC_SUBDIRS) ? cdp.SYNC_SUBDIRS : []) {
+    walkSubDir(sub);
+  }
   return entries;
 }
 

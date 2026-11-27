@@ -105,12 +105,13 @@ test('W7-1: 5 core overlays restore frosted-glass backdrop-filter while disablin
 });
 
 test('W7-2: default animations restore smooth GPU linear/ease-in-out (0 low-FPS steps()) and win-blur freeze is scoped strictly to performance/eco', () => {
-  // Default animations must be smooth (only allowed steps() is pixel mini-crab transition steps(2,end))
+  // Default animations must be smooth (strictly 0 steps() anywhere in style.css; mini-crab aligns to TICK=100ms with linear)
   const stepLines = cssLines.filter((l) => /steps\(/i.test(l));
-  assert.equal(stepLines.length, 1, `only pixel mini-crab transition may use steps(), found: ${stepLines.join(' | ')}`);
+  assert.equal(stepLines.length, 0, `style.css must have strictly 0 steps() usages, found: ${stepLines.join(' | ')}`);
+  const miniCrabLine = cssLines.find((l) => l.includes('.ag-v2-mini-crab-canvas{')) || '';
   assert.ok(
-    stepLines[0].includes('.ag-v2-mini-crab-canvas') && stepLines[0].includes('transition:transform .16s steps(2,end)'),
-    'sole steps() usage must be .ag-v2-mini-crab-canvas pixel transition'
+    miniCrabLine.includes('transition:transform .1s linear'),
+    '.ag-v2-mini-crab-canvas must align to TICK=100ms with smooth transition:transform .1s linear'
   );
 
   // Explicit smooth timing checks on restored running & skeleton animations
@@ -147,9 +148,9 @@ test('W7-2: default animations restore smooth GPU linear/ease-in-out (0 low-FPS 
   const requiredPausedSelectors = [
     '.shimmer-text-mask',
     '.shimmer-text-content',
-    '[class*="animate-spin"]',
-    '[class*="animate-pulse"]',
-    '[class*="animate-bounce"]',
+    '.animate-spin',
+    '.animate-pulse',
+    '.animate-bounce',
     '[class*="agentStateCaret"]',
     '[data-ag-cs-sonar="1"]',
     '[data-ag-overview-running="1"]::after',

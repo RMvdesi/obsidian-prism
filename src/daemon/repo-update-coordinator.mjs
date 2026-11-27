@@ -170,7 +170,9 @@ export async function executeGitPullHotReload(upd, gitState, actionName = 'pull'
 
     let hotReloaded = false;
     if (updated) {
-      copyUpdatedRuntimeFromRepo(repoDir, upd.rootDir, cdp.SYNC_ROOT_FILES);
+      copyUpdatedRuntimeFromRepo(repoDir, upd.rootDir, cdp.SYNC_ROOT_FILES, {
+        syncSubdirs: cdp.SYNC_SUBDIRS,
+      });
     }
     upd.invokeRebuildBundle({ forceReloadCdp: updated });
     const latestCdp = upd.getCdp();

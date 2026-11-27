@@ -5,6 +5,14 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const {
+  DEFAULT_SYNC_SUBDIRS,
+  SYNC_SRC_ALLOWED_EXTS,
+  isSafeManagedRelPath,
+  shouldExcludeSyncRelPath,
+  normalizeSyncSubdirs,
+  collectManagedSubdirFiles,
+} = require('../utils/sync-manifest.cjs');
 
 const INSTALL_MANIFEST_FILENAME = 'install-manifest.json';
 const INSTALL_MANIFEST_SCHEMA_VERSION = 2;
@@ -40,13 +48,13 @@ const DEFAULT_OBSOLETE_PATHS = Object.freeze([
   'vendor/wallpaper/studio-ui/studio.js',
   'vendor/wallpaper/wallpaper-hud.js',
   'vendor/wallpaper/wallpaper-procedural.js',
-  // 已彻底退役的旧版 app.asar 补丁脚本
+  // 已彻底退役的旧版 app.asar 补丁与旧多通道注入文件
   'tools/patch-asar.cjs',
+  'src/channels/inject-runtime-channels.cjs',
+  // 历史已迁移至 docs/CONTRIBUTORS.md 的根目录旧副本（安全清理老插件目录残留）
+  'CONTRIBUTORS.md',
 ]);
 const ATOMIC_UPGRADE_RETRY_BACKOFFS_MS = Object.freeze([100, 250, 500]);
-
-const EXCLUDED_SYNC_PREFIXES = Object.freeze(['assets/screenshots']);
-const EXCLUDED_SYNC_NAMES = new Set(['.ds_store', '__pycache__', '.daemon.pid', '.watch.pid', '.watch.lock']);
 
 function computeBufferSha256(buf) {
   const raw = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf ?? ''), 'utf8');
@@ -55,38 +63,6 @@ function computeBufferSha256(buf) {
 
 function computeFileSha256(filePath) {
   return computeBufferSha256(fs.readFileSync(filePath));
-}
-
-function isSafeManagedRelPath(relPath, { allowTrailingSlash = false } = {}) {
-  if (typeof relPath !== 'string' || relPath.length === 0 || relPath.trim() !== relPath) return false;
-  if (/[\0\r\n]/.test(relPath)) return false;
-  const unified = relPath.replace(/\\/g, '/');
-  if (unified.startsWith('/') || /^[a-zA-Z]:/.test(unified) || unified.includes(':')) return false;
-  const hasTrailing = unified.endsWith('/');
-  if (hasTrailing && !allowTrailingSlash) return false;
-  const core = hasTrailing ? unified.slice(0, -1) : unified;
-  if (!core || core.endsWith('/')) return false;
-  for (const seg of core.split('/')) {
-    if (!seg || seg === '.' || seg === '..') return false;
-  }
-  const normalized = path.posix.normalize(core);
-  return normalized === core && !normalized.startsWith('../') && !normalized.startsWith('/');
-}
-
-function shouldExcludeSyncRelPath(relPath) {
-  if (typeof relPath !== 'string' || !relPath.trim()) return true;
-  const norm = relPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase();
-  if (!norm) return true;
-  for (const prefix of EXCLUDED_SYNC_PREFIXES) {
-    if (norm === prefix || norm.startsWith(`${prefix}/`)) return true;
-  }
-  for (const seg of norm.split('/')) {
-    if (!seg) continue;
-    if (EXCLUDED_SYNC_NAMES.has(seg)) return true;
-    if (seg.endsWith('.log') || seg.endsWith('.tmp') || /\.tmp\.[a-z0-9._-]+$/i.test(seg)) return true;
-    if (seg.startsWith('.staging-') || seg.startsWith('.rollback-')) return true;
-  }
-  return false;
 }
 
 function normalizeProtectedRule(rule) {
@@ -552,11 +528,16 @@ module.exports = {
   USER_OWNED_ASSET_PATHS,
   PURGE_DATA_FILES,
   DEFAULT_OBSOLETE_PATHS,
+  DEFAULT_SYNC_SUBDIRS,
+  SYNC_SUBDIRS: DEFAULT_SYNC_SUBDIRS,
+  SYNC_SRC_ALLOWED_EXTS,
   ATOMIC_UPGRADE_RETRY_BACKOFFS_MS,
   computeBufferSha256,
   computeFileSha256,
   isSafeManagedRelPath,
   shouldExcludeSyncRelPath,
+  normalizeSyncSubdirs,
+  collectManagedSubdirFiles,
   isProtectedUserPath,
   mergeProtectedUserPaths,
   classifyObsoleteCandidate,

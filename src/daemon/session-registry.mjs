@@ -262,6 +262,7 @@ export class SessionRegistry {
           sidebarVerifiedDocument: -1,
           sidebarHostContextId: null,
           sidebarDocument: 0,
+          _rendererRpcInstalledDocGen: -1,
           lastOmniExpr: '',
           lastVerifyAt: 0,
           healthyStreak: 0,
@@ -301,6 +302,7 @@ export class SessionRegistry {
         entry.sidebarVerifiedDocument = -1;
         entry.sidebarHostContextId = null;
         entry.sidebarDocument += 1;
+        entry._rendererRpcInstalledDocGen = -1;
         entry.inlineDiffSkipped = false;
         entry.wallpaperSkipped = false;
         resetEntryForNewDocument(entry);

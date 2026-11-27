@@ -150,6 +150,13 @@ test('Compile-time css-flatten.cjs: semantic equivalence across @media/@supports
   assert.ok(flatGuarded.includes('html[x] .card [data-x=":is(p,q)&{;}"]{content:"& { ; }";background:url(https://cdn.example/x;y&z.png);}'));
   assert.ok(flatGuarded.includes('html[x] .card :is(.ok,::-moz-bad){opacity:.5;}'), 'forgiving :is() with vendor pseudo must not expand');
 
+  // 6b) computeSelectorSpecificity handles :is([a],[b]) & :where([a]) without double-counting, and foldDescendantList preserves cascade order across interleaved specificities
+  assert.equal(cssFlatten.computeSelectorSpecificity(':is([data-a="1"],[data-b="2"])'), 1000);
+  assert.equal(cssFlatten.computeSelectorSpecificity(':where([data-a="1"],[data-b="2"])'), 0);
+  const cascadeCss = '.box{& .a{color:red}& #mid{color:blue}& .b{color:green}}';
+  const flatCascade = flattenNestedCss(cascadeCss);
+  assert.ok(flatCascade.indexOf('.box .a') < flatCascade.indexOf('.box #mid') && flatCascade.indexOf('.box #mid') < flatCascade.indexOf('.box .b'), 'Interleaved specificities must preserve source cascade order');
+
   // 7) Real repository style.css compile-time flattening via packCssJsExpr: single-block flat CSS, 0 bucket markers, 0 bare &, smaller LZSS than bucketed
   const rawStyleCss = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
   const minStyleCss = cssPack.minifyCss(rawStyleCss);
@@ -167,7 +174,7 @@ test('Compile-time css-flatten.cjs: semantic equivalence across @media/@supports
   assert.ok(unpackedCss.includes('html[data-ag-cs-style]'), 'Flattened CSS must retain root scope selectors');
   assert.ok(unpackedCss.includes('div[role="dialog"]') && unpackedCss.includes('#ag-cs-settings-sec'), 'Single-block CSS must always ship nested dialog & settings rules unconditionally');
   assert.ok(unpackedCss.includes('@keyframes ag-cs-orbit-spin'), 'Flattened CSS must preserve @keyframes verbatim');
-  assert.ok(unpackedCss.includes('@property --_fa'), 'Flattened CSS must preserve @property verbatim');
+  assert.ok(unpackedCss.includes('@property --ag-origin-x'), 'Flattened CSS must preserve @property verbatim');
   assert.ok(unpackedCss.includes('data-ag-cs-perf-mode="performance"'), 'Flattened CSS must include performance-mode blur degradation rules');
   assert.equal(unpackedCss.includes('data-ag-perf-busy="1"'), false, 'Flattened CSS must not strip overlay blur on transient data-ag-perf-busy');
 });
@@ -293,18 +300,22 @@ test('dom-bus.js Single Root Observer, streaming low-priority throttling (160-20
     assert.equal(l.opts?.capture, true, `${l.type} listener must be capture: true`);
   }
 
-  // Trigger scroll -> immediate data-ag-perf-busy="1", still busy at 90ms, released after ~200ms
+  // Trigger scroll -> immediate in-memory isBusy()/isPerfBusy() without writing data-ag-perf-busy onto <html>
   win.dispatchEvent({ type: 'scroll' });
-  assert.equal(html.getAttribute('data-ag-perf-busy'), '1');
+  assert.equal(html.hasAttribute('data-ag-perf-busy'), false, 'Scroll busy must remain pure in-memory and never mutate <html> attribute');
   assert.equal(bus.isBusy(), true);
+  assert.equal(bus.isPerfBusy(), true);
   await new Promise((r) => setTimeout(r, 90));
-  assert.equal(html.getAttribute('data-ag-perf-busy'), '1', 'Busy flag must remain held before 200ms idle');
+  assert.equal(bus.isBusy(), true, 'Busy flag must remain held before 200ms idle');
+  assert.equal(html.hasAttribute('data-ag-perf-busy'), false);
   await new Promise((r) => setTimeout(r, 150));
-  assert.equal(html.hasAttribute('data-ag-perf-busy'), false, 'Busy flag must auto-release 200ms after scroll stops');
+  assert.equal(bus.isBusy(), false, 'Busy flag must auto-release 200ms after scroll stops');
+  assert.equal(html.hasAttribute('data-ag-perf-busy'), false);
 
-  // Streaming active -> sets busy, high-priority delivers synchronously, low-priority throttles (~180ms)
+  // Streaming active -> sets in-memory busy, high-priority delivers synchronously, low-priority throttles (~180ms)
   bus.setStreaming(true);
-  assert.equal(html.getAttribute('data-ag-perf-busy'), '1');
+  assert.equal(bus.isBusy(), true);
+  assert.equal(html.hasAttribute('data-ag-perf-busy'), false, 'Streaming busy must not mutate <html> data-ag-perf-busy');
   const rootMo = observers[observers.length - 1];
   rootMo.emit([{ type: 'childList' }]); // first low-priority executes (elapsed > waitMs since 0)
   const lowAfterFirst = lowBatches.length;
@@ -317,7 +328,8 @@ test('dom-bus.js Single Root Observer, streaming low-priority throttling (160-20
   assert.equal(lowBatches[lowBatches.length - 1], 3, 'Coalesced low-priority batch must contain all 3 queued mutations');
 
   bus.setStreaming(false);
-  assert.equal(html.hasAttribute('data-ag-perf-busy'), false, 'Clearing streaming releases data-ag-perf-busy');
+  assert.equal(bus.isBusy(), false, 'Clearing streaming releases in-memory busy state');
+  assert.equal(html.hasAttribute('data-ag-perf-busy'), false);
 
   // Unsubscribing all disconnects root observer
   unsubHigh();
@@ -479,6 +491,32 @@ test('Lossless performanceMode: schema aliases, __agPrismPerfCaps() caps, zero m
     if (prevSet === undefined) delete globalThis.__agPrismSettingsExtBeta4; else globalThis.__agPrismSettingsExtBeta4 = prevSet;
   }
 
+  // 4b) applyPerformanceMode is idempotent and skips redundant attribute/dataset writes when unchanged
+  {
+    let setAttrCalls = 0;
+    let datasetWrites = 0;
+    let curAttr = null;
+    let curDataset = undefined;
+    const mockHtml = {
+      dataset: Object.defineProperty({}, 'agCsPerfMode', {
+        get: () => curDataset,
+        set: (v) => { datasetWrites += 1; curDataset = v; },
+      }),
+      getAttribute: (k) => (k === 'data-ag-cs-perf-mode' ? curAttr : null),
+      setAttribute: (k, v) => { if (k === 'data-ag-cs-perf-mode') { setAttrCalls += 1; curAttr = String(v); curDataset = String(v); } },
+    };
+    const mockDoc = { documentElement: mockHtml, hidden: false };
+    const idempBus = domBusMod.createInstance(mockDoc, {});
+    idempBus.applyPerformanceMode('balanced', mockDoc, {});
+    assert.equal(setAttrCalls, 1);
+    assert.equal(datasetWrites, 0, 'real-DOM dataset already synced by setAttribute must not be redundantly rewritten');
+    idempBus.applyPerformanceMode('balanced', mockDoc, {});
+    idempBus.applyPerformanceMode('balanced', mockDoc, {});
+    assert.equal(setAttrCalls, 1, 'unchanged performanceMode must trigger 0 extra attribute writes');
+    assert.equal(datasetWrites, 0);
+    idempBus.dispose(mockDoc, {});
+  }
+
   // 5) Full REMOVE_EXPRESSION teardown cleans __agPrismDomBus, __agPrismPerfCaps, data-ag-perf-busy, data-ag-cs-perf-mode & data-ag-cs-stream-active
   html.setAttribute('data-ag-perf-busy', '1');
   html.setAttribute('data-ag-cs-perf-mode', 'performance');
@@ -522,9 +560,13 @@ test('Issue #97 flexible model selector width, Blink CSS pruning, scoped motion=
   // Narrow collapse guard still intact so telemetry/right buttons never break
   assert.ok(css.includes('&[data-t~="1"] [data-testid="model-selector-trigger"]>span:not(.ag-cs-model-glyph):not(.ag-pp-mini-keycap)'));
 
-  // Blink content-visibility legacy guards + bleed exemption + non-flickering performance/motion=off blur suppression
+  // Blink content-visibility legacy guards + bleed exemption + sticky-safe pre/turn exclusion (PR #138) + non-flickering performance/motion=off blur suppression
+  const flatCss = cssFlatten.flattenNestedCss(css);
   assert.ok(css.includes('[data-testid="conversation-row-history"]:not([data-ag-cs-bleed="1"]){content-visibility:auto;contain-intrinsic-size:auto 44px;'));
-  assert.ok(/pre:not\(:last-child\):not\(\[data-ag-cs-bleed="1"\]\)\{content-visibility:auto;contain-intrinsic-size:auto 180px;?\}/.test(css));
+  assert.equal(/\[data-markdown-root\]\s*pre[^\n{]*\{[^}]*content-visibility:\s*auto/.test(css), false, 'style.css must not apply content-visibility:auto on markdown pre blocks (preserves sticky headers)');
+  assert.equal(/\[data-markdown-root\]\s*pre[^{]*\{[^}]*content-visibility:\s*auto/.test(flatCss), false, 'flattened CSS must not apply content-visibility:auto on markdown pre blocks');
+  assert.equal(/div\.flex\.items-start[^\n{]*\{[^\n}]*content-visibility:\s*auto/.test(css), false, 'style.css must not apply content-visibility:auto on whole turn items');
+  assert.equal(/div\.flex\.items-start(?::not\([^)]*\))*\{[^}]*content-visibility:\s*auto/.test(flatCss), false, 'flattened CSS must not apply content-visibility:auto directly on whole turn items');
   assert.ok(css.includes(':is([data-ag-cs-perf-mode="performance"],[data-ag-cs-motion="off"])'));
   assert.equal(css.includes('data-ag-perf-busy="1"'), false, 'style.css must not toggle backdrop-filter on transient perf-busy');
   assert.equal(css.includes('data-ag-cs-stream-active="1"'), false, 'style.css must not toggle backdrop-filter on transient stream-active');
@@ -552,4 +594,44 @@ test('Issue #97 flexible model selector width, Blink CSS pruning, scoped motion=
   const refBytes = Buffer.byteLength(cdp.buildConfigRefreshExpression({ performanceMode: 'performance' }), 'utf8');
   assert.ok(ch1Bytes < 390000, `Ch1 auto ${ch1Bytes} B must stay < 390,000 B`);
   assert.ok(refBytes < 4096, `configRefresh ${refBytes} B must stay < 4,096 B`);
+});
+
+test('Conversation viewport stability: bottom-16 content-visibility exemption & crab 75cqh bottom clearance parity', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  const flat = cssFlatten.flattenNestedCss(css);
+
+  // 1) Remove sticky-breaking whole-turn & markdown pre content-visibility:auto (PR #138),
+  //    while keeping expanded thinking/tool/step virtualization scoped outside bottom 16 turns (PR #127)
+  //    so dynamic takeover/ask_question viewport height changes never trigger Chromium DisplayLock blanking.
+  const turnCvAnchor =
+    '[data-testid="conversation-view"] [data-testid="autoscroll-viewport"] .relative.flex.flex-col>div.flex.items-start:not(:nth-last-child(-n+16)):not([data-ag-cs-bleed="1"])';
+  assert.equal(
+    flat.includes(`html[data-ag-cs-style] ${turnCvAnchor}{content-visibility:auto`),
+    false,
+    'flattened CSS must not apply content-visibility:auto directly on whole turn rows'
+  );
+  assert.equal(
+    flat.includes('[data-markdown-root] pre:not(:last-child):not([data-ag-cs-bleed="1"]){content-visibility:auto'),
+    false,
+    'flattened CSS must not apply content-visibility:auto on markdown pre blocks'
+  );
+  assert.ok(
+    flat.includes(`html[data-ag-cs-style] ${turnCvAnchor} :is([data-testid="thinking-collapsible-trigger"],[data-testid="tool-group-collapsible"],[data-testid="worked-for-collapsible"])[aria-expanded="true"]+div:not([data-ag-cs-bleed="1"]){content-visibility:auto;contain-intrinsic-size:auto 140px`),
+    'flattened CSS must scope expanded thinking/tool body content-visibility:auto inside >16-from-bottom turns'
+  );
+  assert.ok(
+    flat.includes(`html[data-ag-cs-style] ${turnCvAnchor} :is([data-testid="tool-group-collapsible"],[data-testid="worked-for-collapsible"])[aria-expanded="true"]+div:not([data-ag-cs-bleed="1"]) .flex.flex-col>div.flex.flex-row:not(:last-child):not([data-ag-cs-bleed="1"]){content-visibility:auto;contain-intrinsic-size:auto 26px`),
+    'flattened CSS must scope expanded tool-group step rows content-visibility:auto inside >16-from-bottom turns'
+  );
+
+  // 2) Eliminate double-counted native 48px spacer and recalibrate native 75cqh turn min-height under 76px crab clearance
+  const crabNonChat = 'html[data-ag-cs-style][data-ag-cs-has-crab="1"]:not([data-ag-prism-mode="chat"])';
+  assert.ok(
+    flat.includes(`${crabNonChat} [data-testid="conversation-view"] [data-testid="autoscroll-viewport"] .relative.flex.flex-col+.h-px+div[style*="height"]{height:0 !important`),
+    'flattened CSS must zero out duplicate native 48px bottom spacer when crab clearance is active'
+  );
+  assert.ok(
+    flat.includes(`${crabNonChat} [data-testid="conversation-view"] [data-testid="autoscroll-viewport"] .relative.flex.flex-col>div.flex.items-start[style*="75cqh"]{min-height:max(0px,calc(75cqh - 77px)) !important`),
+    'flattened CSS must recalibrate native 75cqh last-turn min-height to keep total footprint at 75cqh'
+  );
 });

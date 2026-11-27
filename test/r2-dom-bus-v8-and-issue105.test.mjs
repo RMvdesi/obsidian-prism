@@ -500,9 +500,13 @@ test('MO convergence into dom-bus & offscreen skipping across host-i18n, omni-cl
   assert.equal(bus.isSkipped(skippedBtn), true);
 
   const inst = hostI18nMod.mountHostI18n({ root: env.win, doc: env.doc, mode: 'on', rafFn: (fn) => { fn(); return 1; } });
-  // Only 1 shared MutationObserver created by dom-bus, NOT 2 separate MOs (main + winBlur)
+  // Separate isolated MOs in dom-bus: 1 subtree rootMo (0 root-attr pollution) + 1 subtree:false rootAttrMo
   const activeMos = env.mos.filter((m) => m.connected);
-  assert.equal(activeMos.length, 1, 'host-i18n dom + winBlur observers must converge into single dom-bus root MO');
+  assert.equal(activeMos.length, 2, 'host-i18n dom (subtree) & winBlur (root-attr subtree:false) must isolate into rootMo + rootAttrMo');
+  const subtreeMo = activeMos.find((m) => m.opts?.subtree === true);
+  const rootAttrMo = activeMos.find((m) => m.opts?.subtree === false && m.opts?.attributes === true);
+  assert.ok(subtreeMo && !subtreeMo.opts?.attributes, 'Global subtree rootMo must have zero root-attribute pollution');
+  assert.ok(rootAttrMo && rootAttrMo.opts?.childList === false, 'Root-attribute MO must observe with subtree:false and childList:false');
   assert.equal(skippedTxt.nodeValue, 'Settings', 'Skipped offscreen content-visibility subtree must not be scanned/mutated');
   const clsProbe = env.doc.createElement('div', { class: '  foo\t ag-cs-panel \n bar  ' });
   assert.equal(hostI18nMod.isPrismOwnedElement(clsProbe), true);

@@ -30,9 +30,69 @@ function parseTagAttrs(raw) {
   return attrs;
 }
 
+// 无正则多轮剥离注释与 <script>/<style> 块直至不动点，避免嵌套拼接残留与 ReDoS
+function stripHtmlCommentsAndRawBlocks(html) {
+  let cur = String(html || '');
+  while (true) {
+    const lower = cur.toLowerCase();
+    let out = '';
+    let i = 0;
+    let changed = false;
+    while (i < cur.length) {
+      const lt = cur.indexOf('<', i);
+      if (lt < 0) {
+        out += cur.slice(i);
+        break;
+      }
+      out += cur.slice(i, lt);
+      if (cur.startsWith('<!--', lt)) {
+        const end = cur.indexOf('-->', lt + 4);
+        if (end >= 0) {
+          i = end + 3;
+          changed = true;
+          continue;
+        }
+      } else {
+        const tag = lower.startsWith('<script', lt) ? 'script' : lower.startsWith('<style', lt) ? 'style' : '';
+        if (tag) {
+          const nextCh = cur[lt + 1 + tag.length] || '';
+          if (nextCh === '>' || /\s/.test(nextCh) || nextCh === '/') {
+            const openEnd = cur.indexOf('>', lt + 1 + tag.length);
+            if (openEnd >= 0) {
+              const closeToken = `</${tag}`;
+              let searchFrom = openEnd + 1;
+              let closeEnd = -1;
+              while (searchFrom < lower.length) {
+                const closeIdx = lower.indexOf(closeToken, searchFrom);
+                if (closeIdx < 0) break;
+                let after = closeIdx + closeToken.length;
+                while (after < cur.length && /\s/.test(cur[after])) after += 1;
+                if (cur[after] === '>') {
+                  closeEnd = after + 1;
+                  break;
+                }
+                searchFrom = closeIdx + closeToken.length;
+              }
+              if (closeEnd >= 0) {
+                i = closeEnd;
+                changed = true;
+                continue;
+              }
+            }
+          }
+        }
+      }
+      out += '<';
+      i = lt + 1;
+    }
+    if (!changed) return out;
+    cur = out;
+  }
+}
+
 // 零外部依赖轻量只读 HTML 解析器（仅构建只读节点树用于 CSS 选择器查询）
 export function parseHtmlToReadonlyDoc(html) {
-  const clean = String(html || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  const clean = stripHtmlCommentsAndRawBlocks(html);
   const root = { tag: '#document', attrs: Object.create(null), classes: new Set(), parent: null, children: [] };
   const allElements = [];
   const stack = [root];

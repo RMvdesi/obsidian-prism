@@ -1020,7 +1020,8 @@ test('CSS.highlights engine highlights bare URLs & paths with ZERO TextNode spli
 
   setCaretHit(origTextNode, 10);
   para.dispatchEvent(new FakeEvent('mousemove', { bubbles: true, clientX: 80, clientY: 20 }));
-  assert.equal(document.documentElement.getAttribute('data-ag-omni-hover-token'), '1');
+  assert.equal(para.getAttribute('data-ag-omni-hover-token'), '1');
+  assert.equal(document.documentElement.hasAttribute('data-ag-omni-hover-token'), false, 'Hover token cursor must be scoped to local element, never <html>');
 
   // Left-clicking at token coordinates opens native host Browser Tab
   para.dispatchEvent(new FakeEvent('click', { bubbles: true, cancelable: true, button: 0, clientX: 80, clientY: 20 }));
@@ -1451,11 +1452,13 @@ test('pointermove takes 0-rAF fast path over non-highlighted DOM, ignores [role=
   hlPara.dispatchEvent(new FakeEvent('mousemove', { bubbles: true, clientX: 80, clientY: 20 }));
   assert.equal(rafCalls, 1, 'Pointer over highlighted parent element must schedule 1 rAF');
   await new Promise((r) => queueMicrotask(r));
-  assert.equal(document.documentElement.getAttribute('data-ag-omni-hover-token'), '1');
+  assert.equal(hlPara.getAttribute('data-ag-omni-hover-token'), '1');
+  assert.equal(document.documentElement.hasAttribute('data-ag-omni-hover-token'), false, 'Hover token cursor must never pollute <html>');
 
   // Moving back onto plain element clears hover cursor synchronously with 0 new rAF
   plainPara.dispatchEvent(new FakeEvent('mousemove', { bubbles: true, clientX: 40, clientY: 30 }));
   assert.equal(rafCalls, 1, 'Leaving highlighted element to ordinary region must not schedule extra rAF');
+  assert.equal(hlPara.getAttribute('data-ag-omni-hover-token'), null);
   assert.equal(document.documentElement.getAttribute('data-ag-omni-hover-token'), null);
 
   // 2) Unmarked [role="dialog"], #ag-cs-settings-sec, sidebar rows, smooth caret & mascot nodes are ignored

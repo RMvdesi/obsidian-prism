@@ -11,6 +11,36 @@ import { TrajectoryReader } from './trajectory-reader.mjs';
 import { QuotaForceRefreshGuard } from '../../../../src/daemon/quota-guard.mjs';
 
 const SERVICE = '/exa.language_server_pb.LanguageServerService/';
+const MAX_PROXY_BYTES = 8 * 1024 * 1024;
+const PROXY_BYTES_EXACT_MARGIN = 512 * 1024;
+const NON_TRANSPORT_PROXY_ERR_RE = /超过采集上限|Invalid cascadeId|Unsupported renderer RPC|会话暂时没有可用统计|会话统计分页|后台已重新连接/i;
+
+function estimateJsonBytes(root, stopAt) {
+  if (root === null || root === undefined) return 4;
+  const stack = [root];
+  let est = 0;
+  while (stack.length > 0) {
+    const cur = stack.pop();
+    const t = typeof cur;
+    if (cur === null || cur === undefined) est += 4;
+    else if (t === 'string') est += Buffer.byteLength(cur, 'utf8') + 2;
+    else if (t === 'number' || t === 'bigint') est += 10;
+    else if (t === 'boolean') est += cur ? 4 : 5;
+    else if (Array.isArray(cur)) {
+      est += 2 + cur.length;
+      for (let i = cur.length - 1; i >= 0; i -= 1) stack.push(cur[i]);
+    } else if (t === 'object') {
+      est += 2;
+      const keys = Object.keys(cur);
+      for (let i = keys.length - 1; i >= 0; i -= 1) {
+        const k = keys[i], v = cur[k];
+        if (v !== undefined) { est += k.length + 4; stack.push(v); }
+      }
+    }
+    if (est > stopAt) return est;
+  }
+  return est;
+}
 
 export function serverFromPorts(logPorts, processes) {
   const list = Array.isArray(processes) ? processes : [processes];
@@ -78,6 +108,8 @@ export class AntigravityClient {
   retryAt = 0;
   discoveryFailures = 0;
   discoveryError = null;
+  _lastOsDiscoveryAt = 0;
+  _proxyCdpPort = null;
 
   setRendererRpc(fn) {
     this.rendererRpc = typeof fn === 'function' ? fn : null;
@@ -124,6 +156,7 @@ export class AntigravityClient {
     const next = typeof port === 'function' ? port : (Number.isInteger(Number(port)) && Number(port) > 0 ? Number(port) : null);
     if (next !== this.cdpPort) {
       this.cdpPort = next;
+      if (this.server?.mode === 'renderer-proxy') { this.discoveredAt = 0; this._lastOsDiscoveryAt = 0; this._proxyCdpPort = null; }
     }
   }
 
@@ -141,7 +174,7 @@ export class AntigravityClient {
     if (slot.discovering) return slot.discovering;
     if (!force && slot.discoveryError && this.now() < slot.retryAt) throw slot.discoveryError;
     slot.lastScanAt = this.now();
-    slot.discovering = this.discoverNow(scope, slot)
+    slot.discovering = this.discoverNow(scope, slot, force)
       .then(server => {
         slot.discoveredAt = this.now();
         slot.discoveryFailures = 0;
@@ -161,7 +194,8 @@ export class AntigravityClient {
     return slot.discovering;
   }
 
-  async discoverNow(scope = 'local', slot = this) {
+  async discoverNow(scope = 'local', slot = this, force = false) {
+    const prevServer = slot.server;
     slot.server = null;
     const cdpPort = this._resolveCdpPort();
     // 远程/独立 scope 严禁扫描本机日志或连接本机 HTTP LS，仅通过对应渲染器通道探测
@@ -178,6 +212,15 @@ export class AntigravityClient {
       }
       throw new Error(`远程窗口 ${scope} 渲染器通道暂不可用`);
     }
+    // 120s TTL 到期后优先用轻量 Probe 复用既有 renderer-proxy，满 15m 再重扫 OS 进程表
+    const nowTs = this.now();
+    if (!force && prevServer?.mode === 'renderer-proxy' && typeof this.rendererRpc === 'function' && (slot._proxyCdpPort ?? null) === (cdpPort ?? null) && slot._lastOsDiscoveryAt > 0 && nowTs - slot._lastOsDiscoveryAt < 900000) {
+      try {
+        const probe = await this.rendererRpc('Probe', {});
+        if (probe && probe.available) { slot.server = prevServer; slot.discoveredAt = this.now(); return slot.server; }
+      } catch {}
+    }
+    slot._lastOsDiscoveryAt = nowTs;
     const paths = this.paths(), logs = [], files = [...new Set(paths.logCandidates || [paths.log])];
     for (const file of files) {
       try {
@@ -207,6 +250,7 @@ export class AntigravityClient {
           const probe = await this.rendererRpc('Probe', {});
           if (probe && probe.available) {
             slot.server = { port: 0, csrf: '', pid: cdpPort || 1, mode: 'renderer-proxy' };
+            slot._proxyCdpPort = cdpPort ?? null;
             slot.discoveredAt = this.now();
             return slot.server;
           }
@@ -243,6 +287,7 @@ export class AntigravityClient {
           if (probe && probe.available) {
             const firstPid = Array.isArray(parsed) && parsed[0]?.ProcessId ? Number(parsed[0].ProcessId) : (cdpPort || 1);
             slot.server = { port: 0, csrf: '', pid: firstPid, mode: 'renderer-proxy' };
+            slot._proxyCdpPort = cdpPort ?? null;
             slot.discoveredAt = this.now();
             return slot.server;
           }
@@ -408,8 +453,13 @@ export class AntigravityClient {
 
     const req = (async () => {
       const data = await this.rendererRpc('GetCascadeTrajectory', { cascadeId });
-      const bytes = Buffer.byteLength(JSON.stringify(data || {}));
-      if (bytes > 8 * 1024 * 1024) throw new Error('接口响应超过采集上限');
+      let bytes = estimateJsonBytes(data || {}, MAX_PROXY_BYTES + PROXY_BYTES_EXACT_MARGIN);
+      if (bytes >= MAX_PROXY_BYTES - PROXY_BYTES_EXACT_MARGIN && bytes <= MAX_PROXY_BYTES + PROXY_BYTES_EXACT_MARGIN) {
+        bytes = Buffer.byteLength(JSON.stringify(data || {}));
+      }
+      if (bytes > MAX_PROXY_BYTES) {
+        throw Object.assign(new Error('接口响应超过采集上限'), { nonTransport: true, code: 'PROXY_PAYLOAD_LIMIT' });
+      }
       const fetchedAt = this.now();
       const ctxSig = this._proxyContextSig(data);
       const lastStepMs = this._proxyLastStepMs(data);
@@ -470,6 +520,7 @@ export class AntigravityClient {
         if (method === 'RetrieveUserQuotaSummary') this._quotaForceRefreshGuard?.recordSuccess(res);
         return res;
       } catch (error) {
+        if (error?.nonTransport === true || NON_TRANSPORT_PROXY_ERR_RE.test(String(error?.message || ''))) throw error;
         if (slot.server === server) {
           slot.server = null;
           slot.discoveryError = error;

@@ -449,6 +449,9 @@ test('v2.34.0 follow-up fixes: usage-core stepCount/hours, renderer-proxy 120s d
   assert.equal(processScans, 1);
   nowMs += 70_000;
   await client.discover();
+  assert.equal(processScans, 1);
+  nowMs += 800_000;
+  await client.discover();
   assert.equal(processScans, 2);
   client.dispose();
 

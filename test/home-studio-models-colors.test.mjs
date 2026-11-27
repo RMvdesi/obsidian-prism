@@ -356,3 +356,114 @@ test('Issue #82 hygiene: home-studio-panel.js keeps LF, 0 BOM, 0 forbidden words
   assert.equal(/八方旅人|octopath/i.test(panelText), false, '0 forbidden words');
   assert.equal(panelText.includes(':has('), false, '0 :has( in home-studio-panel.js');
 });
+
+test('Issue #143: Home Studio decouples non-scrolling .ag-cs-home-panel shell from scrolling .ag-cs-home-panel-body and preserves .ag-cs-prism-rim-cv across tab redraws', () => {
+  const styleCss = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  const homePanelLine = styleCss.split('\n').find((l) => l.startsWith('.ag-cs-home-panel{')) || '';
+  assert.ok(homePanelLine.includes('overflow:hidden;'), '.ag-cs-home-panel outer shell must be non-scrolling (overflow:hidden)');
+  assert.equal(homePanelLine.includes('overflow-y:auto'), false, '.ag-cs-home-panel outer shell must not scroll directly');
+  assert.equal(homePanelLine.includes('padding:14px'), false, 'padding:14px must move into .ag-cs-home-panel-body');
+  assert.equal(homePanelLine.includes('gap:12px'), false, 'gap:12px must move into .ag-cs-home-panel-body');
+  assert.ok(
+    styleCss.includes('& .ag-cs-home-panel>.ag-cs-prism-rim-cv{position:absolute!important;inset:0!important;'),
+    '.ag-cs-home-panel>.ag-cs-prism-rim-cv direct child rim positioning must remain intact'
+  );
+  const scrollbarLine = styleCss.split('\n').find((l) => l.includes('::-webkit-scrollbar{width:6px;')) || '';
+  assert.ok(scrollbarLine.includes('.ag-cs-home-panel-body,'), 'custom scrollbar selector must target .ag-cs-home-panel-body');
+  assert.equal(scrollbarLine.includes('.ag-cs-home-panel,'), false, 'custom scrollbar selector must not target outer .ag-cs-home-panel shell');
+
+  const src = fs.readFileSync(path.join(ROOT, 'home-studio-panel.js'), 'utf8');
+  const usageCore = require(path.join(ROOT, 'usage-core.js'));
+  const html = makeRichDomNode('html');
+  html.isConnected = true;
+  const head = makeRichDomNode('head');
+  const body = makeRichDomNode('body');
+  const home = makeRichDomNode('div', { class: 'agy-home' });
+  const greeting = makeRichDomNode('div', { 'data-testid': 'home-greeting' });
+  home.appendChild(greeting);
+  body.appendChild(home);
+  html.appendChild(head);
+  html.appendChild(body);
+
+  const clickHandlers = new WeakMap();
+  const scrollListeners = [];
+  const fakeDoc = {
+    documentElement: html,
+    head,
+    body,
+    title: 'obsidian-prism',
+    createElement: (t) => {
+      const n = makeRichDomNode(t);
+      n.addEventListener = (ev, fn) => {
+        if (ev === 'click') clickHandlers.set(n, fn);
+        if (ev === 'scroll') scrollListeners.push({ node: n, ev });
+      };
+      return n;
+    },
+    createElementNS: (_ns, t) => makeRichDomNode(t),
+    getElementById: (id) => html.querySelector(`#${id}`),
+    querySelector: (s) => html.querySelector(s),
+    querySelectorAll: (s) => html.querySelectorAll(s),
+  };
+
+  const sb = {
+    document: fakeDoc,
+    window: null,
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    requestAnimationFrame: () => 0,
+    cancelAnimationFrame() {},
+    setTimeout,
+    clearTimeout,
+    Map, Set, Array, Object, Math, Number, String, Boolean, Date, JSON, Promise,
+  };
+  sb.window = sb;
+  sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+
+  const ctl = sb.__agPrismHomeStudioPanel.createHomeStudioPanelController({
+    usageCore,
+    isDestroyed: () => false,
+    getHomeLayout: () => 'studio',
+    getLang: () => 'en',
+    uiText: () => ({}),
+    getDisplayName: () => '',
+    ensureHooks: () => null,
+    canMountRealCanvas: () => false,
+    setAttrIfChanged: (el, k, v) => el.setAttribute(k, v),
+    runGuardedMut: (fn) => fn(),
+  });
+
+  ctl.renderHomePanel();
+  const styleEl = fakeDoc.getElementById('ag-prism-studio-v101-css');
+  assert.ok(
+    styleEl?.textContent.includes('.ag-cs-home-panel-body{display:flex;flex-direction:column;gap:12px;box-sizing:border-box;flex:auto;min-height:0;padding:14px;overflow:hidden auto}'),
+    'STUDIO_EXTRA_CSS must define .ag-cs-home-panel-body inner scroll container styles'
+  );
+
+  const panel = home.querySelector('.ag-cs-home-panel');
+  const panelBody = panel?.querySelector('.ag-cs-home-panel-body');
+  assert.ok(panel && panelBody, 'Panel shell and inner scroll body must both mount');
+  assert.equal(panelBody.parentElement, panel, '.ag-cs-home-panel-body must be a direct child of .ag-cs-home-panel');
+  assert.equal(panelBody.querySelector('.ag-cs-home-panel-head')?.parentElement, panelBody, 'Panel content must render inside .ag-cs-home-panel-body');
+
+  // Attach prism rim canvas directly to outer .ag-cs-home-panel shell (as prism-rim-canvas.js does)
+  const rimCv = makeRichDomNode('canvas', { class: 'ag-cs-prism-rim-cv' });
+  panel.appendChild(rimCv);
+
+  // Switch across Models -> Quotas -> Overview and force redraw: rim canvas must remain intact on outer shell
+  clickHandlers.get(panelBody.querySelector('[data-tab="models"]'))();
+  assert.equal(rimCv.parentElement, panel, 'Switching to Models tab must never remove .ag-cs-prism-rim-cv from .ag-cs-home-panel');
+  assert.ok(panel.children.includes(rimCv) && panel.children.includes(panelBody));
+
+  clickHandlers.get(panelBody.querySelector('[data-tab="quotas"]'))();
+  assert.equal(rimCv.parentElement, panel, 'Switching to Quotas tab must never remove .ag-cs-prism-rim-cv from .ag-cs-home-panel');
+
+  clickHandlers.get(panelBody.querySelector('[data-tab="overview"]'))();
+  ctl.renderHomePanel(true);
+  assert.equal(rimCv.parentElement, panel, 'Forced redraw must never remove .ag-cs-prism-rim-cv from .ag-cs-home-panel');
+  assert.equal(panel.querySelector('.ag-cs-home-panel-body'), panelBody, '.ag-cs-home-panel-body container must be reused across redraws');
+  assert.equal(scrollListeners.length, 0, 'Decoupled shell/body solution must attach 0 scroll listeners');
+
+  ctl.unmountPanelSeat();
+  assert.equal(home.querySelector('.ag-cs-home-panel'), null);
+});

@@ -122,6 +122,8 @@ export class PrismDaemonCompatBase {
   set _configConvergenceDirty(v) { this._s().channelOrchestrator._configConvergenceDirty = v; }
   get _safeSidebarFileCache() { return this._s().channelOrchestrator._safeSidebarFileCache; }
   set _safeSidebarFileCache(v) { this._s().channelOrchestrator._safeSidebarFileCache = v; }
+  get _clientFileExistsCache() { return this._s().channelOrchestrator._clientFileExistsCache; }
+  set _clientFileExistsCache(v) { this._s().channelOrchestrator._clientFileExistsCache = v; }
 
   get swarmSessions() { return this._s().channelOrchestrator.swarmManager.swarmSessions; }
   set swarmSessions(v) { this._s().channelOrchestrator.swarmManager.swarmSessions = v; }
@@ -257,6 +259,16 @@ export class PrismDaemonCompatBase {
   set _usageCacheDirty(v) { this._s().telemetrySubsystem._usageCacheDirty = v; }
   get _usageCacheTimer() { return this._s().telemetrySubsystem._usageCacheTimer; }
   set _usageCacheTimer(v) { this._s().telemetrySubsystem._usageCacheTimer = v; }
+  get _usageCacheFlushPromise() { return this._s().telemetrySubsystem._usageCacheFlushPromise; }
+  set _usageCacheFlushPromise(v) { this._s().telemetrySubsystem._usageCacheFlushPromise = v; }
+  get _usageCacheFlushEpoch() { return this._s().telemetrySubsystem._usageCacheFlushEpoch; }
+  set _usageCacheFlushEpoch(v) { this._s().telemetrySubsystem._usageCacheFlushEpoch = v; }
+  get _usageCacheFlushGen() { return this._s().telemetrySubsystem._usageCacheFlushGen; }
+  set _usageCacheFlushGen(v) { this._s().telemetrySubsystem._usageCacheFlushGen = v; }
+  get _scopedTrajCache() { return this._s().telemetrySubsystem._scopedTrajCache; }
+  set _scopedTrajCache(v) { this._s().telemetrySubsystem._scopedTrajCache = v; }
+  get _scopedTrajInFlight() { return this._s().telemetrySubsystem._scopedTrajInFlight; }
+  set _scopedTrajInFlight(v) { this._s().telemetrySubsystem._scopedTrajInFlight = v; }
   get _lastTelemetryActivityAt() { return this._s().telemetrySubsystem._lastTelemetryActivityAt; }
   set _lastTelemetryActivityAt(v) { this._s().telemetrySubsystem._lastTelemetryActivityAt = v; }
   get _telemetryInFlight() { return this._s().telemetrySubsystem._telemetryInFlight; }

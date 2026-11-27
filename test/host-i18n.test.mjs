@@ -399,15 +399,15 @@ function createTestEnv(initialTime = 1000) {
   };
 }
 
-test('dictionary hygiene: vendor/host-i18n/zh-CN.json has 4763 exact + 405 patterns, zero private terms, compact JSON, and safe regexes', () => {
+test('dictionary hygiene: vendor/host-i18n/zh-CN.json has 4789 exact + 459 patterns, zero private terms, compact JSON, and safe regexes', () => {
   const dictPath = path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json');
   const raw = fs.readFileSync(dictPath, 'utf8');
   assert.equal(raw.includes('\n  '), false, 'zh-CN.json must be compact JSON without pretty-print indentation');
 
   const dict = JSON.parse(raw);
   const exactKeys = Object.keys(dict.exact || {});
-  assert.equal(exactKeys.length, 4763);
-  assert.equal((dict.patterns || []).length, 405);
+  assert.equal(exactKeys.length, 4789);
+  assert.equal((dict.patterns || []).length, 459);
   assert.equal(dict.exact['Unlock the power of agent swarms.'], '解锁智能体 Swarm 协作的强大能力。');
   assert.ok(
     dict.exact["Live view of the native swarm board, roster and @mention graph for the current conversation's swarm."]?.includes('Swarm'),
@@ -1524,17 +1524,26 @@ test('[P1-A] Layer 3 handles childList (textContent) ping-pong and ignores singl
   inst.destroy();
 });
 
-test('[P1-B] expanded safety boundaries block pills, thinking trigger, orchestrator selector, ces-/ag-anim-, and deep >128 trees', () => {
+test('[P1-B] expanded safety boundaries block pills, thinking body panel, orchestrator selector, ces-/ag-anim-, and deep >128 trees while allowing thinking trigger title', () => {
   const env = createTestEnv();
-  const dict = { exact: { Settings: '设置', Save: '保存', Copy: '复制', Auto: '自动' }, patterns: [] };
+  const dict = {
+    exact: { Settings: '设置', Save: '保存', Copy: '复制', Auto: '自动' },
+    patterns: [{ regex: '^Thought\\s+for\\s+(\\d+(?:\\.\\d+)?)\\s*s$', replacement: '已思考 $1 秒' }],
+  };
 
   const convView = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
   const pillBtn = env.makeEl('button', { attrs: { 'data-testid': 'entity-pill' }, text: 'Settings' });
-  const thinkTrigger = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Save' });
+  const thinkWrap = env.makeEl('div');
+  const thinkTrigger = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Thought for 23s' });
+  const thinkBody = env.makeEl('div');
+  const thinkBodyPara = env.makeEl('p', { text: 'Save' });
+  const thinkOverlay = env.makeEl('div', { className: 'ag-prism-thought-overlay', attrs: { 'data-op-thought': '1' }, text: 'Settings' });
+  thinkBody.append(thinkBodyPara, thinkOverlay);
+  thinkWrap.append(thinkTrigger, thinkBody);
   const msgBubble = env.makeEl('div', { attrs: { 'data-testid': 'user-message-bubble' } });
   msgBubble.append(env.makeEl('button', { text: 'Settings' }));
   const realChromeBtn = env.makeEl('button', { text: 'Copy' });
-  convView.append(pillBtn, thinkTrigger, msgBubble, realChromeBtn);
+  convView.append(pillBtn, thinkWrap, msgBubble, realChromeBtn);
 
   const orchSel = env.makeEl('button', { attrs: { 'data-testid': 'model-selector-orchestrator' }, text: 'Auto' });
   const cesBox = env.makeEl('div', { className: 'ces-panel' });
@@ -1557,7 +1566,9 @@ test('[P1-B] expanded safety boundaries block pills, thinking trigger, orchestra
 
   const inst = runtime.mountHostI18n({ root: env.win, doc: env.doc, dict, mode: 'on' });
   assert.equal(pillBtn.textContent, 'Settings');
-  assert.equal(thinkTrigger.textContent, 'Save');
+  assert.equal(thinkTrigger.textContent, '已思考 23 秒');
+  assert.equal(thinkBodyPara.textContent, 'Save', 'Expanded thinking body panel must stay strictly protected');
+  assert.equal(thinkOverlay.textContent, 'Settings', 'Thought translator overlay must stay strictly protected');
   assert.equal(msgBubble.textContent, 'Settings');
   assert.equal(orchSel.textContent, 'Auto');
   assert.equal(cesBox.textContent, 'Settings');
@@ -1689,7 +1700,8 @@ test('[P2-2 & P2-4] ReDoS patterns complete in linear time, English sentences ar
 
   // Ordinary English sentences must not be partially corrupted by anchored patterns #52-#56, #79, #142, #143
   assert.equal(engine.translate('Build takes 5 minutes to finish'), null);
-  assert.equal(engine.translate('My task finished'), null);
+  assert.equal(engine.translate('My task finished yesterday'), null);
+  assert.equal(engine.translate('Run MOSS server finished'), 'Run MOSS server 已完成');
   assert.equal(engine.translate('When ready, It requires Docker to be installed.'), null);
   assert.equal(engine.translate('5 minutes'), '5 分钟');
   assert.equal(engine.translate('Timer has expired'), '定时器已到期');
@@ -1701,9 +1713,12 @@ test('[P2-2 & P2-4] ReDoS patterns complete in linear time, English sentences ar
   assert.equal(engine.translate('It requires ' + 'a '.repeat(5000) + 'X'), null);
   assert.equal(engine.translate('Save ' + 'a '.repeat(5000) + 'Ctrl+S'), null);
   assert.equal(engine.translate('Settings' + ' '.repeat(600)), null);
-  for (const idx of [52, 53, 54, 55, 56, 79, 83, 142, 143]) {
+  for (const idx of [52, 53, 54, 55, 56, 79, 83, 142, 143, 195, 196, 197, 198]) {
     const re = new RegExp(dict.patterns[idx].regex);
     re.test(' '.repeat(30000) + 'finished');
+    re.test(' '.repeat(30000) + 'X');
+    re.test('a' + ' '.repeat(30000) + 'X');
+    re.test('a '.repeat(5000) + 'X');
     re.test('It requires ' + 'a '.repeat(2000) + '!');
   }
   const elapsed = performance.now() - t0;
@@ -2805,11 +2820,12 @@ test('Issue #80: host-i18n exempts orchestrator-picker-row/effort and data-ag-cs
   inst.destroy();
 });
 
-test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collapsible, changed-files-card-header/review) translates while data-markdown-root, bare prose & thinking-collapsible-trigger stay strictly protected', () => {
+test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collapsible, thinking trigger title, changed-files-card-header/review) translates while data-markdown-root, bare prose & thinking body panel stay strictly protected', () => {
   const env = createTestEnv();
   const dict = {
     exact: { Review: '审查', Settings: '设置', Save: '保存' },
     patterns: [
+      { regex: '^Thought\\s+for\\s+(\\d+(?:\\.\\d+)?)\\s*s$', replacement: '已思考 $1 秒' },
       { regex: '^Worked\\s+for\\s+(\\d+(?:\\.\\d+)?)\\s*s$', replacement: '已运行 $1 秒' },
       { regex: '^Worked\\s+for\\s+(\\d+)\\s*m$', replacement: '已运行 $1 分钟' },
       { regex: '^(\\d+) files? changed$', replacement: '$1 个文件已修改' },
@@ -2825,8 +2841,14 @@ test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collap
   const workedSpan = env.makeEl('span', { text: 'Worked for 54s' });
   workedBtn.append(workedSpan);
 
-  // Thinking collapsible trigger MUST remain protected (owned by thought-translator)
-  const thinkBtn = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Save' });
+  // Thinking collapsible trigger title translates cleanly while its expanded body panel & overlay stay strictly protected
+  const thinkSection = env.makeEl('div');
+  const thinkBtn = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Thought for 23s' });
+  const thinkPanel = env.makeEl('div');
+  const thinkRawP = env.makeEl('p', { text: 'Save' });
+  const thinkOverlay = env.makeEl('div', { className: 'ag-prism-thought-overlay', attrs: { 'data-op-thought': '1' }, text: 'Settings' });
+  thinkPanel.append(thinkRawP, thinkOverlay);
+  thinkSection.append(thinkBtn, thinkPanel);
 
   // Bare prose directly inside agent-response (legacy layout without data-markdown-root) -> MUST stay untouched
   const bareProse = env.makeEl('p', { text: 'Settings' });
@@ -2837,7 +2859,7 @@ test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collap
   const mdBtn = env.makeEl('button', { text: 'Save' });
   mdRoot.append(mdPara, mdBtn);
 
-  stepList.append(workedBtn, thinkBtn, bareProse, mdRoot);
+  stepList.append(workedBtn, thinkSection, bareProse, mdRoot);
 
   // 2) Changed files card header + review button -> MUST translate, while file list row outside header stays untouched
   const turnCards = env.makeEl('div', { attrs: { 'data-testid': 'turn-cards-container' } });
@@ -2870,11 +2892,13 @@ test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collap
 
   // Turn chrome translated cleanly
   assert.equal(workedSpan.textContent, '已运行 54 秒');
+  assert.equal(thinkBtn.textContent, '已思考 23 秒');
   assert.equal(cfCount.textContent, '3 个文件已修改');
   assert.equal(cfReviewSpan.textContent, '审查');
 
-  // Prose, bare text, file rows & thinking trigger remain 100% protected
-  assert.equal(thinkBtn.textContent, 'Save');
+  // Prose, bare text, file rows & thinking body/overlay remain 100% protected
+  assert.equal(thinkRawP.textContent, 'Save');
+  assert.equal(thinkOverlay.textContent, 'Settings');
   assert.equal(bareProse.textContent, 'Settings');
   assert.equal(mdPara.textContent, 'Review');
   assert.equal(mdBtn.textContent, 'Save');
@@ -2888,6 +2912,1151 @@ test('Issue #99: Antigravity v2.35 agent-response turn chrome (worked-for-collap
   // Lossless destroy() restores all turn chrome cleanly
   inst.destroy();
   assert.equal(workedSpan.textContent, 'Worked for 2m');
+  assert.equal(thinkBtn.textContent, 'Thought for 23s');
   assert.equal(cfCount.textContent, '3 files changed');
   assert.equal(cfReviewSpan.textContent, 'Review');
+});
+
+test('v2.35.2 pure-local 0ms tool-step i18n: non-button step-rows/step-index, combo phrases (0 half-ZH/EN), thinking trigger title vs protected body, and strict code/file/diff/terminal isolation', () => {
+  const env = createTestEnv();
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'));
+
+  const conv = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const agentResp = env.makeEl('div', { attrs: { 'data-testid': 'agent-response' } });
+
+  // Non-button header triggers & step-plan-chip
+  const workedDiv = env.makeEl('div', { attrs: { 'data-testid': 'worked-for-collapsible' }, text: 'Worked for 54s' });
+  const planChip = env.makeEl('div', { attrs: { 'data-testid': 'step-plan-chip' }, text: '4/4 steps' });
+  const groupDiv = env.makeEl('div', { attrs: { 'data-testid': 'tool-group-collapsible' } });
+  const combo1 = env.makeEl('span', { text: 'Explored, ran commands, edited files' });
+  const combo2 = env.makeEl('span', { text: 'Explored files, ran commands' });
+  const combo3 = env.makeEl('span', { text: 'Explored, edited file' });
+  const combo4 = env.makeEl('span', { text: 'Ran commands, edited files' });
+  const combo5 = env.makeEl('span', { text: 'Explored 3 files, ran 2 commands, edited 1 file' });
+  groupDiv.append(combo1, combo2, combo3, combo4, combo5);
+
+  // Non-button [data-step-rows="true"] & [data-step-index] tool step titles
+  const stepRows = env.makeEl('div', { attrs: { 'data-step-rows': 'true' } });
+  const rowAsk = env.makeEl('div', { attrs: { 'data-step-index': '0' } });
+  const rowAskText = env.makeEl('span', { text: 'Asking 4 questions' });
+  rowAsk.append(rowAskText);
+
+  const rowWait = env.makeEl('div', { attrs: { 'data-step-index': '1' } });
+  const rowWaitText = env.makeEl('span', { text: 'Waiting for user input' });
+  rowWait.append(rowWaitText);
+
+  const rowBoard1 = env.makeEl('div', { attrs: { 'data-step-index': '2' } });
+  const rowBoard1Text = env.makeEl('span', { text: 'Read 1 message from board' });
+  rowBoard1.append(rowBoard1Text);
+
+  const rowBoardN = env.makeEl('div', { attrs: { 'data-step-index': '3' } });
+  const rowBoardNText = env.makeEl('span', { text: 'Read 5 messages from board' });
+  rowBoardN.append(rowBoardNText);
+
+  const rowPosted = env.makeEl('div', { attrs: { 'data-step-index': '4' } });
+  const rowPostedText = env.makeEl('span', { text: 'Posted #12 to board' });
+  rowPosted.append(rowPostedText);
+
+  const rowKilled = env.makeEl('div', { attrs: { 'data-step-index': '5' } });
+  const rowKilledText = env.makeEl('span', { text: 'Killed worker w1-fix' });
+  rowKilled.append(rowKilledText);
+
+  const rowRan = env.makeEl('div', { attrs: { 'data-step-index': '6' } });
+  const rowRanText = env.makeEl('span', { text: 'Ran npm test' });
+  const rowRanCmd = env.makeEl('code', { text: 'Ran npm test' });
+  const rowTermOut = env.makeEl('div', { attrs: { 'data-testid': 'terminal-output' }, text: 'Waiting for user input' });
+  const rowBgCmd = env.makeEl('div', { attrs: { 'data-testid': 'background-task-command' }, text: 'Settings' });
+  rowRan.append(rowRanText, rowRanCmd, rowTermOut, rowBgCmd);
+
+  // Split <span> verb + protected file entity chip + inline diff + markdown + pre inside [data-step-index]
+  const rowSplit = env.makeEl('div', { attrs: { 'data-step-index': '7' } });
+  const verbRead = env.makeEl('span', { text: 'Read' });
+  const filePathChip = env.makeEl('span', { attrs: { 'data-file-path': 'vendor/host-i18n/zh-CN.json' }, text: 'Settings' });
+  const fileHrefChip = env.makeEl('span', { attrs: { 'data-file-href': 'file:///a/b.js' }, text: 'Edited' });
+  const omniPathChip = env.makeEl('span', { attrs: { 'data-omni-path': 'src/index.js' }, text: 'Read' });
+  const entityPill = env.makeEl('span', { attrs: { 'data-testid': 'entity-pill' }, text: 'Ran' });
+  const inlineDiff = env.makeEl('div', { attrs: { 'data-ag-cs-inline-diff': '1' }, text: 'Asking 4 questions' });
+  const preBlock = env.makeEl('pre', { text: 'Posted #12 to board' });
+  const mdInsideStep = env.makeEl('div', { attrs: { 'data-markdown-root': 'true' } });
+  const mdInsideText = env.makeEl('span', { text: 'Explored files, ran commands' });
+  mdInsideStep.append(mdInsideText);
+  rowSplit.append(verbRead, filePathChip, fileHrefChip, omniPathChip, entityPill, inlineDiff, preBlock, mdInsideStep);
+
+  // Thinking collapsible trigger + expanded panel inside [data-step-index]
+  const rowThink = env.makeEl('div', { attrs: { 'data-step-index': '8' } });
+  const thinkTrig = env.makeEl('div', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Thought for 23s' });
+  const thinkPanel = env.makeEl('div');
+  const thinkProse = env.makeEl('span', { text: 'Waiting for user input' });
+  const thinkOverlay = env.makeEl('div', { className: 'ag-prism-thought-overlay', attrs: { 'data-op-thought': '1' }, text: 'Asking 4 questions' });
+  thinkPanel.append(thinkProse, thinkOverlay);
+  rowThink.append(thinkTrig, thinkPanel);
+
+  stepRows.append(rowAsk, rowWait, rowBoard1, rowBoardN, rowPosted, rowKilled, rowRan, rowSplit, rowThink);
+  agentResp.append(workedDiv, planChip, groupDiv, stepRows);
+  conv.append(agentResp);
+  env.doc.body.append(conv);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // All v2.35.2 tool-step chrome & combo phrases translate cleanly with zero half-ZH/half-EN
+  assert.equal(workedDiv.textContent, '已运行 54 秒');
+  assert.equal(planChip.textContent, '4 / 4 步');
+  assert.equal(combo1.textContent, '已探索文件、运行命令、编辑文件');
+  assert.equal(combo2.textContent, '已探索文件、运行命令');
+  assert.equal(combo3.textContent, '已探索、编辑文件');
+  assert.equal(combo4.textContent, '已运行命令、编辑文件');
+  assert.equal(combo5.textContent, '已探索 3 个文件、运行 2 个命令、编辑 1 个文件');
+  assert.equal(rowAskText.textContent, '正在询问 4 个问题');
+  assert.equal(rowWaitText.textContent, '正在等待用户输入');
+  assert.equal(rowBoard1Text.textContent, '已从消息板读取 1 条消息');
+  assert.equal(rowBoardNText.textContent, '已从消息板读取 5 条消息');
+  assert.equal(rowPostedText.textContent, '已发布 #12 到消息板');
+  assert.equal(rowKilledText.textContent, '已终止成员 w1-fix');
+  assert.equal(rowRanText.textContent, '已运行 npm test');
+  assert.equal(verbRead.textContent, '已读取');
+  assert.equal(thinkTrig.textContent, '已思考 23 秒');
+
+  // Protected regions inside [data-step-rows]/[data-step-index] remain 100% untouched
+  assert.equal(rowRanCmd.textContent, 'Ran npm test', '<code> inside step must stay untouched');
+  assert.equal(rowTermOut.textContent, 'Waiting for user input', 'terminal-output inside step must stay untouched');
+  assert.equal(rowBgCmd.textContent, 'Settings', 'background-task-command inside step must stay untouched');
+  assert.equal(filePathChip.textContent, 'Settings', '[data-file-path] must stay untouched');
+  assert.equal(fileHrefChip.textContent, 'Edited', '[data-file-href] must stay untouched');
+  assert.equal(omniPathChip.textContent, 'Read', '[data-omni-path] must stay untouched');
+  assert.equal(entityPill.textContent, 'Ran', 'entity-pill must stay untouched');
+  assert.equal(inlineDiff.textContent, 'Asking 4 questions', '[data-ag-cs-inline-diff] must stay untouched');
+  assert.equal(preBlock.textContent, 'Posted #12 to board', '<pre> inside step must stay untouched');
+  assert.equal(mdInsideText.textContent, 'Explored files, ran commands', '[data-markdown-root] inside step must stay untouched');
+  assert.equal(thinkProse.textContent, 'Waiting for user input', 'Expanded thinking body must stay untouched');
+  assert.equal(thinkOverlay.textContent, 'Asking 4 questions', 'Thought overlay must stay untouched');
+
+  // Lossless restore on destroy()
+  inst.destroy();
+  assert.equal(combo1.textContent, 'Explored, ran commands, edited files');
+  assert.equal(rowAskText.textContent, 'Asking 4 questions');
+  assert.equal(rowBoard1Text.textContent, 'Read 1 message from board');
+  assert.equal(rowRanText.textContent, 'Ran npm test');
+  assert.equal(verbRead.textContent, 'Read');
+  assert.equal(thinkTrig.textContent, 'Thought for 23s');
+});
+
+test('content-visibility: auto offscreen reveal (domBus.isSkipped + contentvisibilityautostatechange) incrementally translates historical turns with zero leak, and PR #120 skips Prism overlays on contextmenu', () => {
+  const domBusMod = require(path.join(ROOT, 'src', 'runtime', 'dom-bus.js'));
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'));
+
+  // Part 1: domBus.isSkipped skips offscreen historical turn, then contentvisibilityautostatechange (!skipped) reveals & translates it incrementally
+  const env = createTestEnv(1000);
+  const elListeners = new WeakMap();
+  const patchElEvents = (el) => {
+    el.addEventListener = (ev, fn) => {
+      let m = elListeners.get(el);
+      if (!m) { m = new Map(); elListeners.set(el, m); }
+      if (!m.has(ev)) m.set(ev, new Set());
+      m.get(ev).add(fn);
+    };
+    el.removeEventListener = (ev, fn) => { elListeners.get(el)?.get(ev)?.delete(fn); };
+    el.dispatchEvent = (e) => {
+      for (const fn of [...(elListeners.get(el)?.get(e.type) || [])]) fn(e);
+      env.doc.dispatchEvent(e);
+    };
+    return el;
+  };
+
+  const bus = domBusMod.createInstance(env.doc, env.win);
+  env.win.__agDomBus = bus;
+  env.win.__agPrismDomBus = bus;
+
+  const conv = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const histTurn = patchElEvents(env.makeEl('div', { attrs: { 'data-step-rows': 'true' } }));
+  const histStep = env.makeEl('div', { attrs: { 'data-step-index': '0' } });
+  const histAsk = env.makeEl('span', { text: 'Asking 4 questions' });
+  const histThink = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger' }, text: 'Thought for 23s' });
+  const histMd = env.makeEl('div', { attrs: { 'data-markdown-root': '' } });
+  const histMdSpan = env.makeEl('span', { text: 'Asking 4 questions' });
+  histMd.append(histMdSpan);
+  histStep.append(histAsk, histThink, histMd);
+  histTurn.append(histStep);
+  conv.append(histTurn);
+
+  // Prism overlay portal & attribute should be skipped on both scan and contextmenu (PR #120)
+  const portal = env.makeEl('div', { id: 'ag-prism-overlay-portal' });
+  const portalBtn = env.makeEl('button', { text: 'Settings' });
+  portal.append(portalBtn);
+  const overlayAttrEl = env.makeEl('div', { attrs: { 'data-ag-prism-overlay': '1' } });
+  const overlayAttrBtn = env.makeEl('button', { text: 'Save' });
+  overlayAttrEl.append(overlayAttrBtn);
+  env.doc.body.append(conv, portal, overlayAttrEl);
+
+  // Mark histTurn as offscreen skipped before mount
+  const unsubSeed = bus.observeVisibility(histTurn, () => {}, { doc: env.doc, io: false });
+  histTurn.dispatchEvent({ type: 'contentvisibilityautostatechange', skipped: true, target: histTurn });
+  assert.equal(bus.isSkipped(histTurn), true);
+  assert.equal(bus.isSkipped(histAsk), true);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // While offscreen skipped, histTurn is untouched; Prism overlays are strictly untouched
+  assert.equal(histAsk.textContent, 'Asking 4 questions');
+  assert.equal(histThink.textContent, 'Thought for 23s');
+  assert.equal(portalBtn.textContent, 'Settings', '#ag-prism-overlay-portal must be ignored');
+  assert.equal(overlayAttrBtn.textContent, 'Save', '[data-ag-prism-overlay] must be ignored');
+
+  // Scroll back into viewport -> skipped:false triggers incremental catch-up scan
+  histTurn.dispatchEvent({ type: 'contentvisibilityautostatechange', skipped: false, target: histTurn });
+  env.advanceTime(50);
+  assert.equal(bus.isSkipped(histTurn), false);
+  assert.equal(histAsk.textContent, '正在询问 4 个问题', 'Revealed historical step must translate on scroll-back');
+  assert.equal(histThink.textContent, '已思考 23 秒', 'Revealed thinking trigger title must translate on scroll-back');
+  assert.equal(histMdSpan.textContent, 'Asking 4 questions', 'Markdown prose inside revealed turn must remain untouched');
+
+  // PR #120: contextmenu inside #ag-prism-overlay-portal, [data-ag-prism-overlay], or defaultPrevented must early-return with 0 timers
+  env.timers.clear();
+  env.doc.dispatchEvent({ type: 'contextmenu', target: portalBtn, defaultPrevented: false });
+  env.doc.dispatchEvent({ type: 'contextmenu', target: overlayAttrBtn, defaultPrevented: false });
+  env.doc.dispatchEvent({ type: 'contextmenu', target: histAsk, defaultPrevented: true });
+  assert.equal(env.timers.size, 0, 'Prism overlay / defaultPrevented contextmenu must not schedule float scan');
+
+  // destroy() releases document contentvisibilityautostatechange listener & domBus visibility hooks cleanly
+  const cvCountBeforeDestroy = env.docListeners.get('contentvisibilityautostatechange:true')?.size || 0;
+  assert.equal(cvCountBeforeDestroy, 2, 'Both domBus and host-i18n register capture contentvisibilityautostatechange');
+  inst.destroy();
+  unsubSeed();
+  assert.equal(env.docListeners.get('contentvisibilityautostatechange:true')?.size || 0, 1, 'host-i18n must detach its own capture listener on destroy()');
+  assert.equal(bus.getDebugState().visibilityObservedCount, 0);
+  bus.destroy(env.doc, env.win);
+  assert.equal(env.docListeners.get('contentvisibilityautostatechange:true')?.size || 0, 0, 'domBus destroy() detaches remaining capture listener');
+
+  // Verify vendor/host-i18n/tr.json has 0 CJK characters in all translated outputs
+  const trDict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'tr.json'), 'utf8'));
+  const cjkRe = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+  for (const [k, v] of Object.entries(trDict.exact || {})) {
+    assert.equal(cjkRe.test(String(v)), false, `tr.json exact value must contain 0 CJK: ${k} => ${v}`);
+  }
+  for (const p of trDict.patterns || []) {
+    assert.equal(cjkRe.test(String(p.replacement)), false, `tr.json pattern replacement must contain 0 CJK: ${p.regex} => ${p.replacement}`);
+  }
+});
+
+test('N1 hardening: nested/testid thinking panels stay blocked, step arg chips (Search/Output/Settings/font-mono/title/right-of-verb) stay uncorrupted, Task Log data-uri whitelist works without leaking file URIs, live residual patterns & tr.json parity pass, and cvUnsubs avoids descendant slot waste', () => {
+  const zhDict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'));
+  const trDict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'tr.json'), 'utf8'));
+  const domBusMod = require(path.join(ROOT, 'src', 'runtime', 'dom-bus.js'));
+
+  // 1) tr.json full parity with zh-CN.json (exact keys + pattern regexes) + 0 CJK + zero half-TR/EN combos
+  const trExactKeys = new Set(Object.keys(trDict.exact || {}));
+  for (const k of Object.keys(zhDict.exact || {})) {
+    assert.equal(trExactKeys.has(k), true, `tr.json missing exact key: ${k}`);
+  }
+  const trPatternRegexes = new Set((trDict.patterns || []).map((p) => p.regex));
+  for (const p of zhDict.patterns || []) {
+    assert.equal(trPatternRegexes.has(p.regex), true, `tr.json missing pattern: ${p.regex}`);
+  }
+  const zhEng = runtime.createHostI18nEngine(zhDict);
+  const trEng = runtime.createHostI18nEngine(trDict);
+
+  // Live residual patterns (4 categories) in both zh-CN and tr
+  assert.equal(zhEng.translate('Run MOSS server finished'), 'Run MOSS server 已完成');
+  assert.equal(zhEng.translate('Agent finished'), '智能体已完成');
+  assert.equal(zhEng.translate('finished'), '已完成');
+  assert.equal(zhEng.translate('npm test · Exited with code 1'), 'npm test · 退出码 1');
+  assert.equal(zhEng.translate('Ran npm test · Exited with code 1'), '已运行 npm test · 退出码 1');
+  assert.equal(zhEng.translate('Exited with code 0'), '退出码 0');
+  assert.equal(zhEng.translate('BuildTask: Notification timeout reached'), 'BuildTask：通知已超时');
+
+  assert.equal(trEng.translate('Run MOSS server finished'), 'Run MOSS server tamamlandı');
+  assert.equal(trEng.translate('Agent finished'), 'Ajan tamamlandı');
+  assert.equal(trEng.translate('npm test · Exited with code 1'), 'npm test · Çıkış kodu 1');
+  assert.equal(trEng.translate('Ran npm test · Exited with code 1'), 'Çalıştırıldı: npm test · Çıkış kodu 1');
+  assert.equal(trEng.translate('Exited with code 1'), 'Çıkış kodu 1');
+  assert.equal(trEng.translate('BuildTask: Notification timeout reached'), 'BuildTask: Bildirim zaman aşımına ulaştı');
+  assert.equal(trEng.translate('Explored 3 files, ran 2 commands, edited 1 file'), '3 dosya incelendi, 2 komut çalıştırıldı, 1 dosya düzenlendi');
+  assert.equal(trEng.translate('Explored, ran commands, edited files'), 'Dosyalar incelendi, komutlar çalıştırıldı, dosyalar düzenlendi');
+  assert.equal(trEng.translate('Ran 2 commands'), '2 komut çalıştırıldı');
+  assert.equal(trEng.translate('Read 1 message from board'), 'Panodan 1 mesaj okundu');
+  assert.equal(trEng.translate('4/4 steps'), '4 / 4 adım');
+  assert.equal(trEng.translate('Thought for <1s'), '<1 sn düşündü');
+  assert.equal(trEng.translate('Thought for less than a second'), '1 saniyeden az düşündü');
+  assert.equal(trEng.translate('Worked for <1s'), '<1 sn çalıştı');
+
+  // 2) DOM hardening: nested/testid/aria-controls thinking panels, step arg protection, and Task Log data-uri exact exception
+  const env = createTestEnv(1000);
+  const conv = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const agentResp = env.makeEl('div', { attrs: { 'data-testid': 'agent-response' } });
+  const stepRows = env.makeEl('div', { attrs: { 'data-step-rows': 'true' } });
+
+  // 2a) Multi-layer wrapped thinking panel with custom data-testid (no data-markdown-root/.prose)
+  const thinkStep = env.makeEl('div', { attrs: { 'data-step-index': '0' } });
+  const thinkCard1 = env.makeEl('div');
+  const thinkHdr1 = env.makeEl('div', { className: 'hdr-wrap' });
+  const thinkTrig1 = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger', 'aria-controls': 'think-body-ctrl' }, text: 'Thought for 12s' });
+  thinkHdr1.append(thinkTrig1);
+  const thinkBodyOuter1 = env.makeEl('div', { attrs: { 'data-testid': 'thinking-custom-body' } });
+  const thinkBodyInner1 = env.makeEl('div');
+  const thinkBodyPara1 = env.makeEl('p', { text: 'Settings' });
+  const thinkBodyBtn1 = env.makeEl('button', { text: 'Cancel' });
+  thinkBodyInner1.append(thinkBodyPara1, thinkBodyBtn1);
+  thinkBodyOuter1.append(thinkBodyInner1);
+  thinkCard1.append(thinkHdr1, thinkBodyOuter1);
+
+  // Sibling second thinking card must still translate its own trigger while blocking its aria-controls body
+  const thinkCard2 = env.makeEl('div');
+  const thinkTrig2 = env.makeEl('button', { attrs: { 'data-testid': 'thinking-collapsible-trigger', 'aria-controls': 'think-panel-2' }, text: 'Thought for <1s' });
+  const spacer = env.makeEl('div', { className: 'divider' });
+  const thinkPanelByCtrl = env.makeEl('div', { id: 'think-panel-2' });
+  const thinkCtrlSpan = env.makeEl('span', { text: 'Waiting for user input' });
+  thinkPanelByCtrl.append(thinkCtrlSpan);
+  thinkCard2.append(thinkTrig2, spacer, thinkPanelByCtrl);
+  thinkStep.append(thinkCard1, thinkCard2);
+
+  // 2b) Step row argument protection vs legitimate step headers & buttons
+  const argStep = env.makeEl('div', { attrs: { 'data-step-index': '1' } });
+  const monoSearch = env.makeEl('span', { className: 'font-mono text-xs', text: 'Search' });
+  const monoRead = env.makeEl('span', { className: 'font-mono', text: 'Read' });
+  const titlePathArg = env.makeEl('span', { attrs: { title: 'src/components/Settings.ts' }, text: 'Settings' });
+  const titleCmdArg = env.makeEl('span', { attrs: { title: 'npm test --watch' }, text: 'Output' });
+  const bareSearch = env.makeEl('span', { text: 'Search' });
+  const bareOutput = env.makeEl('span', { text: 'Output' });
+  const bareCancel = env.makeEl('span', { text: 'Cancel' });
+  const bareBranch = env.makeEl('span', { text: 'Branch main' });
+  const bareError = env.makeEl('span', { text: 'Error' });
+  const bareDone = env.makeEl('span', { text: 'Done' });
+  const bareStatus = env.makeEl('span', { text: 'Status' });
+  const bareFiles = env.makeEl('span', { text: 'Files' });
+  const bareRun = env.makeEl('span', { text: 'Run' });
+  const realStepCancelBtn = env.makeEl('button', { text: 'Cancel' });
+  argStep.append(monoSearch, monoRead, titlePathArg, titleCmdArg, bareSearch, bareOutput, bareCancel, bareBranch, bareError, bareDone, bareStatus, bareFiles, bareRun, realStepCancelBtn);
+
+  // 2c) Split verb + right-hand bare filename chips (including filename literally named "Read" / "Settings" / "Output")
+  const verbArgRow1 = env.makeEl('div', { attrs: { 'data-step-index': '2' } });
+  const vEdited = env.makeEl('span', { text: 'Edited' });
+  const argNamedRead = env.makeEl('span', { text: 'Read' });
+  verbArgRow1.append(vEdited, argNamedRead);
+
+  const verbArgRow2 = env.makeEl('div', { attrs: { 'data-step-index': '3' } });
+  const vRead = env.makeEl('span', { text: 'Read' });
+  const argNamedSettings = env.makeEl('button', { text: 'Settings' });
+  verbArgRow2.append(vRead, argNamedSettings);
+
+  // 2d) Task Log exact data-uri button exception + Analyzed prefix vs protected file data-uri buttons/links
+  const uriRow = env.makeEl('div', { attrs: { 'data-step-index': '4' } });
+  const vAnalyzed = env.makeEl('span', { text: 'Analyzed' });
+  const taskLogBtn = env.makeEl('button', {
+    attrs: { 'data-uri': 'file:///tmp/.system_generated/tasks/task-910.log#L0-231', title: 'file:///tmp/.system_generated/tasks/task-910.log' },
+    text: 'Task Log',
+  });
+  const fileUriSettingsBtn = env.makeEl('button', { attrs: { 'data-uri': 'file:///repo/src/Settings.ts' }, text: 'Settings' });
+  const fileUriLogBtn = env.makeEl('button', { attrs: { 'data-uri': 'file:///tmp/task-910.log' }, text: 'task-910.log' });
+  const fileUriAnchor = env.makeEl('a', { attrs: { 'data-uri': 'file:///tmp/task-910.log' }, text: 'Task Log' });
+  const fileUriBothAttrs = env.makeEl('button', { attrs: { 'data-uri': 'file:///tmp/task-910.log', 'data-file-path': 'task-910.log' }, text: 'Task Log' });
+  uriRow.append(vAnalyzed, taskLogBtn, fileUriSettingsBtn, fileUriLogBtn, fileUriAnchor, fileUriBothAttrs);
+
+  // 2e) Live residual step status suffixes inside [data-step-index]
+  const liveRow = env.makeEl('div', { attrs: { 'data-step-index': '5' } });
+  const liveFin = env.makeEl('span', { text: 'Run MOSS server finished' });
+  const liveExit = env.makeEl('span', { text: 'npm test · Exited with code 1' });
+  const liveTimeout = env.makeEl('span', { text: 'BuildTask: Notification timeout reached' });
+  liveRow.append(liveFin, liveExit, liveTimeout);
+
+  stepRows.append(thinkStep, argStep, verbArgRow1, verbArgRow2, uriRow, liveRow);
+  agentResp.append(stepRows);
+  conv.append(agentResp);
+  env.doc.body.append(conv);
+
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+
+  // Thinking trigger titles translate while nested/testid/aria-controls bodies remain 100% untouched
+  assert.equal(thinkTrig1.textContent, '已思考 12 秒');
+  assert.equal(thinkBodyPara1.textContent, 'Settings', 'Nested thinking body with data-testid must stay untouched');
+  assert.equal(thinkBodyBtn1.textContent, 'Cancel', 'Button inside nested thinking body must stay untouched');
+  assert.equal(thinkTrig2.textContent, '已思考 <1 秒', 'Second sibling thinking card trigger must still translate');
+  assert.equal(thinkCtrlSpan.textContent, 'Waiting for user input', 'aria-controls thinking body must stay untouched');
+
+  // Step arguments stay uncorrupted while true controls & step verbs translate
+  assert.equal(monoSearch.textContent, 'Search');
+  assert.equal(monoRead.textContent, 'Read');
+  assert.equal(titlePathArg.textContent, 'Settings');
+  assert.equal(titlePathArg.getAttribute('title'), 'src/components/Settings.ts');
+  assert.equal(titleCmdArg.textContent, 'Output');
+  assert.equal(bareSearch.textContent, 'Search');
+  assert.equal(bareOutput.textContent, 'Output');
+  assert.equal(bareCancel.textContent, 'Cancel');
+  assert.equal(bareBranch.textContent, 'Branch main');
+  assert.equal(bareError.textContent, 'Error');
+  assert.equal(bareDone.textContent, 'Done');
+  assert.equal(bareStatus.textContent, 'Status');
+  assert.equal(bareFiles.textContent, 'Files');
+  assert.equal(bareRun.textContent, 'Run');
+  assert.equal(realStepCancelBtn.textContent, '取消', 'Genuine <button> control inside step still translates');
+  assert.equal(vEdited.textContent, '已编辑');
+  assert.equal(argNamedRead.textContent, 'Read', 'Filename chip right of Edited must not be translated');
+  assert.equal(vRead.textContent, '已读取');
+  assert.equal(argNamedSettings.textContent, 'Settings', 'File chip button right of Read must not be translated');
+
+  // Task Log with data-uri translates cleanly; all other data-uri nodes stay strictly protected
+  assert.equal(vAnalyzed.textContent, '已分析');
+  assert.equal(taskLogBtn.textContent, '任务日志');
+  assert.equal(taskLogBtn.getAttribute('title'), 'file:///tmp/.system_generated/tasks/task-910.log', 'Path title on data-uri Task Log must stay untouched');
+  assert.equal(fileUriSettingsBtn.textContent, 'Settings');
+  assert.equal(fileUriLogBtn.textContent, 'task-910.log');
+  assert.equal(fileUriAnchor.textContent, 'Task Log');
+  assert.equal(fileUriBothAttrs.textContent, 'Task Log');
+
+  // Live residual step suffixes translate cleanly
+  assert.equal(liveFin.textContent, 'Run MOSS server 已完成');
+  assert.equal(liveExit.textContent, 'npm test · 退出码 1');
+  assert.equal(liveTimeout.textContent, 'BuildTask：通知已超时');
+
+  inst.destroy();
+  assert.equal(taskLogBtn.textContent, 'Task Log', 'destroy() must restore Task Log losslessly');
+  assert.equal(liveFin.textContent, 'Run MOSS server finished');
+  assert.equal(liveExit.textContent, 'npm test · Exited with code 1');
+  assert.equal(liveTimeout.textContent, 'BuildTask: Notification timeout reached');
+
+  // 2f) Turkish locale also translates Task Log button with data-uri and restores cleanly
+  const trInst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict: trDict,
+    locale: 'tr',
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+  assert.equal(taskLogBtn.textContent, 'Görev günlüğü');
+  assert.equal(fileUriSettingsBtn.textContent, 'Settings');
+  assert.equal(liveFin.textContent, 'Run MOSS server tamamlandı');
+  assert.equal(liveExit.textContent, 'npm test · Çıkış kodu 1');
+  assert.equal(liveTimeout.textContent, 'BuildTask: Bildirim zaman aşımına ulaştı');
+  trInst.destroy();
+  assert.equal(taskLogBtn.textContent, 'Task Log');
+
+  // 3) P2-1: cvUnsubs must NOT register redundant strong refs on skipped non-cv descendants
+  const cvEnv = createTestEnv(1000);
+  const elListeners = new WeakMap();
+  const patchEl = (el) => {
+    el.addEventListener = (ev, fn) => {
+      let m = elListeners.get(el);
+      if (!m) { m = new Map(); elListeners.set(el, m); }
+      if (!m.has(ev)) m.set(ev, new Set());
+      m.get(ev).add(fn);
+    };
+    el.removeEventListener = (ev, fn) => { elListeners.get(el)?.get(ev)?.delete(fn); };
+    el.dispatchEvent = (e) => {
+      for (const fn of [...(elListeners.get(el)?.get(e.type) || [])]) fn(e);
+      cvEnv.doc.dispatchEvent(e);
+    };
+    return el;
+  };
+  const bus = domBusMod.createInstance(cvEnv.doc, cvEnv.win);
+  cvEnv.win.__agDomBus = bus;
+  cvEnv.win.__agPrismDomBus = bus;
+
+  const cvConv = cvEnv.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const skippedTurn = patchEl(cvEnv.makeEl('div', { attrs: { 'data-step-rows': 'true' } }));
+  const descendants = [];
+  for (let i = 0; i < 30; i++) {
+    const row = cvEnv.makeEl('div', { attrs: { 'data-step-index': String(i) } });
+    const sp = cvEnv.makeEl('span', { text: 'Asking 4 questions' });
+    row.append(sp);
+    skippedTurn.append(row);
+    descendants.push(sp);
+  }
+  cvConv.append(skippedTurn);
+  cvEnv.doc.body.append(cvConv);
+
+  const unsubSeed = bus.observeVisibility(skippedTurn, () => {}, { doc: cvEnv.doc, io: false });
+  skippedTurn.dispatchEvent({ type: 'contentvisibilityautostatechange', skipped: true, target: skippedTurn });
+  assert.equal(bus.isSkipped(descendants[0]), true);
+
+  const cvInst = runtime.mountHostI18n({
+    root: cvEnv.win,
+    doc: cvEnv.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: cvEnv.nowFn,
+    setTimeoutFn: cvEnv.setTimeoutFn,
+    clearTimeoutFn: cvEnv.clearTimeoutFn,
+    rafFn: cvEnv.rafFn,
+    cancelRafFn: cvEnv.cancelRafFn,
+  });
+  // Trigger mutations directly on 15 descendants while ancestor turn is still skipped
+  for (let i = 0; i < 15; i++) {
+    const extra = cvEnv.makeEl('span', { text: 'Waiting for user input' });
+    skippedTurn.children[i].append(extra);
+  }
+  cvEnv.advanceTime(50);
+  assert.equal(bus.getDebugState().visibilityObservedCount, 1, 'Document capture handler is active; 0 redundant descendant visibility observers may be registered');
+
+  // Reveal ancestor -> translates all descendants incrementally
+  skippedTurn.dispatchEvent({ type: 'contentvisibilityautostatechange', skipped: false, target: skippedTurn });
+  cvEnv.advanceTime(50);
+  assert.equal(descendants[0].textContent, '正在询问 4 个问题');
+  assert.equal(descendants[29].textContent, '正在询问 4 个问题');
+
+  cvInst.destroy();
+  unsubSeed();
+  assert.equal(bus.getDebugState().visibilityObservedCount, 0);
+
+  // Fallback path (no doc.addEventListener): deduplicates all descendants onto the single skipped ancestor cvRoot
+  const fbEnv = createTestEnv(1000);
+  const fbBus = domBusMod.createInstance(fbEnv.doc, fbEnv.win);
+  fbEnv.win.__agDomBus = fbBus;
+  const fbTurn = patchEl(fbEnv.makeEl('div', { attrs: { 'data-step-rows': 'true' } }));
+  for (let i = 0; i < 10; i++) {
+    const r = fbEnv.makeEl('div', { attrs: { 'data-step-index': String(i) } });
+    r.append(fbEnv.makeEl('span', { text: 'Asking 4 questions' }));
+    fbTurn.append(r);
+  }
+  fbEnv.doc.body.append(fbTurn);
+  const fbSeed = fbBus.observeVisibility(fbTurn, () => {}, { doc: fbEnv.doc, io: false });
+  fbTurn.dispatchEvent({ type: 'contentvisibilityautostatechange', skipped: true, target: fbTurn });
+  const savedAdd = fbEnv.doc.addEventListener;
+  fbEnv.doc.addEventListener = undefined;
+  const fbInst = runtime.mountHostI18n({
+    root: fbEnv.win,
+    doc: fbEnv.doc,
+    dict: zhDict,
+    mode: 'on',
+    nowFn: fbEnv.nowFn,
+    setTimeoutFn: fbEnv.setTimeoutFn,
+    clearTimeoutFn: fbEnv.clearTimeoutFn,
+    rafFn: fbEnv.rafFn,
+    cancelRafFn: fbEnv.cancelRafFn,
+  });
+  for (let i = 0; i < 10; i++) fbTurn.children[i].append(fbEnv.makeEl('span', { text: 'Waiting for user input' }));
+  fbEnv.advanceTime(50);
+  assert.equal(fbBus.getDebugState().visibilityObservedCount, 1, 'Fallback observeVisibility must deduplicate onto skipped ancestor cvRoot, not register 10 descendants');
+  fbEnv.doc.addEventListener = savedAdd;
+  fbInst.destroy();
+  fbSeed();
+  assert.equal(fbBus.getDebugState().visibilityObservedCount, 0);
+  fbBus.destroy(fbEnv.doc, fbEnv.win);
+  bus.destroy(cvEnv.doc, cvEnv.win);
+});
+
+test('Visible blurred-window cold scan drains pendingNodes step rows cleanly while preserving hidden=true and performance-tier hibernation', () => {
+  const dict = {
+    exact: {
+      Settings: '设置',
+      Save: '保存',
+      'Asking 4 questions': '正在询问 4 个问题',
+      'Waiting for user input': '正在等待用户输入',
+    },
+    patterns: [],
+  };
+
+  function buildLargeTreeWithSteps(env, buttonCount = 190, stepCount = 30) {
+    const header = env.makeEl('div');
+    const btns = [];
+    for (let i = 0; i < buttonCount; i++) {
+      const b = env.makeEl('button', { text: 'Settings' });
+      btns.push(b);
+      header.append(b);
+    }
+    const convView = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+    const stepList = env.makeEl('div', { attrs: { 'data-step-rows': 'true' } });
+    const steps = [];
+    for (let i = 0; i < stepCount; i++) {
+      const row = env.makeEl('div', { attrs: { 'data-step-index': String(i) } });
+      const sp = env.makeEl('span', { text: i % 2 === 0 ? 'Asking 4 questions' : 'Waiting for user input' });
+      row.append(sp);
+      stepList.append(row);
+      steps.push(sp);
+    }
+    convView.append(stepList);
+    env.doc.body.append(header, convView);
+    return { btns, steps };
+  }
+
+  // 1a. Hot-inject / cold-boot on visible but unfocused window (data-ag-cs-win-blur="1", hidden=false, default balanced tier)
+  const blurBootEnv = createTestEnv(1000);
+  blurBootEnv.doc.documentElement.setAttribute('data-ag-cs-win-blur', '1');
+  const tree1a = buildLargeTreeWithSteps(blurBootEnv);
+  const inst1a = runtime.mountHostI18n({
+    root: blurBootEnv.win,
+    doc: blurBootEnv.doc,
+    dict,
+    mode: 'auto',
+    nowFn: blurBootEnv.nowFn,
+    setTimeoutFn: blurBootEnv.setTimeoutFn,
+    clearTimeoutFn: blurBootEnv.clearTimeoutFn,
+    rafFn: blurBootEnv.rafFn,
+    cancelRafFn: blurBootEnv.cancelRafFn,
+  });
+  assert.equal(tree1a.btns[0].textContent, '设置', 'Initial visible-blur sync budget translates top controls');
+  blurBootEnv.advanceTime(1300);
+  assert.equal(tree1a.btns.filter((b) => b.textContent === '设置').length, 190, 'All deferred header buttons must drain');
+  assert.equal(
+    tree1a.steps.filter((s) => s.textContent === '正在询问 4 个问题' || s.textContent === '正在等待用户输入').length,
+    30,
+    'All deferred conversation step rows in pendingNodes must drain cleanly even under data-ag-cs-win-blur="1"'
+  );
+  assert.equal(blurBootEnv.observerInstances[0].connected, false, 'After initial drain completes, MO disconnects under win-blur');
+  assert.equal(blurBootEnv.timers.size, 0, '0 rAF/timers remain after drain + Layer 2b window under win-blur');
+
+  // Subsequent mutations while still blurred still stay hibernated until focus
+  const lateBtn1a = blurBootEnv.makeEl('button', { text: 'Save' });
+  blurBootEnv.doc.body.append(lateBtn1a);
+  blurBootEnv.advanceTime(100);
+  assert.equal(lateBtn1a.textContent, 'Save', 'Regular post-boot mutation still hibernates under win-blur');
+  blurBootEnv.doc.documentElement.removeAttribute('data-ag-cs-win-blur');
+  blurBootEnv.win.dispatchEvent({ type: 'focus' });
+  blurBootEnv.advanceTime(100);
+  assert.equal(lateBtn1a.textContent, '保存', 'Focus wake catches up missed DOM after win-blur');
+  inst1a.destroy();
+
+  // 1b. Mid-drain blur transition (focused on frame 0, then data-ag-cs-win-blur="1" arrives before rAF flush)
+  const midBlurEnv = createTestEnv(1000);
+  const tree1b = buildLargeTreeWithSteps(midBlurEnv);
+  const inst1b = runtime.mountHostI18n({
+    root: midBlurEnv.win,
+    doc: midBlurEnv.doc,
+    dict,
+    mode: 'on',
+    nowFn: midBlurEnv.nowFn,
+    setTimeoutFn: midBlurEnv.setTimeoutFn,
+    clearTimeoutFn: midBlurEnv.clearTimeoutFn,
+    rafFn: midBlurEnv.rafFn,
+    cancelRafFn: midBlurEnv.cancelRafFn,
+  });
+  const syncDone1b = tree1b.steps.filter((s) => s.textContent !== 'Asking 4 questions' && s.textContent !== 'Waiting for user input').length;
+  assert.ok(syncDone1b < 30, 'Step rows exceed initial 160-node budget and are queued into pendingNodes');
+  midBlurEnv.doc.documentElement.setAttribute('data-ag-cs-win-blur', '1');
+  const midBlurObs = midBlurEnv.observerInstances.find((o) => o.options?.attributeFilter?.includes('data-ag-cs-win-blur'));
+  midBlurObs?.cb([{ type: 'attributes', attributeName: 'data-ag-cs-win-blur' }]);
+  midBlurEnv.flushObservers();
+  midBlurEnv.advanceTime(200);
+  assert.equal(
+    tree1b.steps.filter((s) => s.textContent === '正在询问 4 个问题' || s.textContent === '正在等待用户输入').length,
+    30,
+    'Mid-drain win-blur must NOT drop pendingNodes step rows half-translated'
+  );
+  assert.equal(midBlurEnv.observerInstances[0].connected, false, 'MO disconnects once pendingNodes finish draining under win-blur');
+  assert.equal(midBlurEnv.timers.size, 0);
+  inst1b.destroy();
+
+  // 2. document.hidden === true must ALWAYS hibernate immediately (both on mount and mid-drain)
+  const hiddenEnv = createTestEnv(1000);
+  hiddenEnv.doc.hidden = true;
+  const treeHidden = buildLargeTreeWithSteps(hiddenEnv, 10, 5);
+  const instHidden = runtime.mountHostI18n({
+    root: hiddenEnv.win,
+    doc: hiddenEnv.doc,
+    dict,
+    mode: 'on',
+    nowFn: hiddenEnv.nowFn,
+    setTimeoutFn: hiddenEnv.setTimeoutFn,
+    clearTimeoutFn: hiddenEnv.clearTimeoutFn,
+    rafFn: hiddenEnv.rafFn,
+    cancelRafFn: hiddenEnv.cancelRafFn,
+  });
+  hiddenEnv.advanceTime(200);
+  assert.equal(treeHidden.btns.filter((b) => b.textContent === '设置').length, 0, 'Hidden doc must perform 0 initial scan');
+  assert.equal(treeHidden.steps.filter((s) => s.textContent === '正在询问 4 个问题').length, 0);
+  assert.equal(hiddenEnv.timers.size, 0, 'Hidden doc must schedule 0 timers/rAF');
+  hiddenEnv.doc.hidden = false;
+  hiddenEnv.doc.dispatchEvent({ type: 'visibilitychange' });
+  hiddenEnv.advanceTime(100);
+  assert.equal(treeHidden.btns[0].textContent, '设置', 'Restoring visibility translates pending UI');
+  assert.equal(treeHidden.steps[0].textContent, '正在询问 4 个问题');
+  instHidden.destroy();
+
+  const hiddenMidEnv = createTestEnv(1000);
+  const treeHiddenMid = buildLargeTreeWithSteps(hiddenMidEnv);
+  const instHiddenMid = runtime.mountHostI18n({
+    root: hiddenMidEnv.win,
+    doc: hiddenMidEnv.doc,
+    dict,
+    mode: 'on',
+    nowFn: hiddenMidEnv.nowFn,
+    setTimeoutFn: hiddenMidEnv.setTimeoutFn,
+    clearTimeoutFn: hiddenMidEnv.clearTimeoutFn,
+    rafFn: hiddenMidEnv.rafFn,
+    cancelRafFn: hiddenMidEnv.cancelRafFn,
+  });
+  hiddenMidEnv.doc.hidden = true;
+  hiddenMidEnv.doc.dispatchEvent({ type: 'visibilitychange' });
+  assert.equal(hiddenMidEnv.timers.size, 0, 'Becoming hidden mid-drain must cancel rAF immediately');
+  assert.equal(treeHiddenMid.steps[29].textContent, 'Waiting for user input', 'Hidden mid-drain must halt immediately');
+  hiddenMidEnv.doc.hidden = false;
+  hiddenMidEnv.doc.dispatchEvent({ type: 'visibilitychange' });
+  hiddenMidEnv.advanceTime(200);
+  assert.equal(treeHiddenMid.steps[29].textContent, '正在等待用户输入', 'Unhiding resumes and finishes all steps');
+  instHiddenMid.destroy();
+
+  // 3. performance tier keeps strict win-blur power-saving hibernation (on mount and mid-drain)
+  const perfEnv = createTestEnv(1000);
+  perfEnv.doc.documentElement.setAttribute('data-ag-cs-perf-mode', 'performance');
+  perfEnv.doc.documentElement.setAttribute('data-ag-cs-win-blur', '1');
+  const treePerf = buildLargeTreeWithSteps(perfEnv, 10, 5);
+  const instPerf = runtime.mountHostI18n({
+    root: perfEnv.win,
+    doc: perfEnv.doc,
+    dict,
+    mode: 'on',
+    nowFn: perfEnv.nowFn,
+    setTimeoutFn: perfEnv.setTimeoutFn,
+    clearTimeoutFn: perfEnv.clearTimeoutFn,
+    rafFn: perfEnv.rafFn,
+    cancelRafFn: perfEnv.cancelRafFn,
+  });
+  perfEnv.advanceTime(200);
+  assert.equal(treePerf.btns.filter((b) => b.textContent === '设置').length, 0, 'performance tier under win-blur must skip cold scan');
+  assert.equal(perfEnv.timers.size, 0);
+  perfEnv.doc.documentElement.removeAttribute('data-ag-cs-win-blur');
+  perfEnv.win.dispatchEvent({ type: 'focus' });
+  perfEnv.advanceTime(100);
+  assert.equal(treePerf.btns[0].textContent, '设置', 'Clearing win-blur wakes performance tier');
+  assert.equal(treePerf.steps[0].textContent, '正在询问 4 个问题');
+  instPerf.destroy();
+
+  const perfMidEnv = createTestEnv(1000);
+  perfMidEnv.doc.documentElement.setAttribute('data-ag-cs-perf-mode', 'performance');
+  const treePerfMid = buildLargeTreeWithSteps(perfMidEnv);
+  const instPerfMid = runtime.mountHostI18n({
+    root: perfMidEnv.win,
+    doc: perfMidEnv.doc,
+    dict,
+    mode: 'on',
+    nowFn: perfMidEnv.nowFn,
+    setTimeoutFn: perfMidEnv.setTimeoutFn,
+    clearTimeoutFn: perfMidEnv.clearTimeoutFn,
+    rafFn: perfMidEnv.rafFn,
+    cancelRafFn: perfMidEnv.cancelRafFn,
+  });
+  perfMidEnv.doc.documentElement.setAttribute('data-ag-cs-win-blur', '1');
+  const perfBlurObs = perfMidEnv.observerInstances.find((o) => o.options?.attributeFilter?.includes('data-ag-cs-win-blur'));
+  perfBlurObs?.cb([{ type: 'attributes', attributeName: 'data-ag-cs-win-blur' }]);
+  perfMidEnv.advanceTime(200);
+  assert.equal(perfMidEnv.timers.size, 0, 'performance tier must halt mid-drain rAF immediately on win-blur');
+  assert.equal(treePerfMid.steps[29].textContent, 'Waiting for user input');
+  perfMidEnv.doc.documentElement.removeAttribute('data-ag-cs-win-blur');
+  perfMidEnv.win.dispatchEvent({ type: 'focus' });
+  perfMidEnv.advanceTime(200);
+  assert.equal(treePerfMid.steps[29].textContent, '正在等待用户输入', 'Focus wake completes remaining steps on performance tier');
+  instPerfMid.destroy();
+});
+
+test('ReDoS regression: isStepPlainTextAllowed and looksLikeStepPathOrCmd handle 50k adversarial inputs in < 50ms with 100% semantic parity', () => {
+  const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'vendor', 'host-i18n', 'zh-CN.json'), 'utf8'));
+
+  // 1) Semantic parity checks for isStepPlainTextAllowed
+  const allowedPlain = [
+    'Thought for 12s',
+    'Worked for 54s',
+    'Thinking...',
+    'Thinking…',
+    'Thought process',
+    'Asking 4 questions',
+    'Waiting for user input',
+    'Explored 3 files, ran 2 commands',
+    'Ran npm test',
+    'Running build',
+    'Edited foo.js',
+    'Read 1 message from board',
+    'Analyzed src/index.js',
+    'Searched files',
+    'Viewed file',
+    'Listed directory',
+    'Checked status',
+    'Deleted temp.txt',
+    'Posted #12 to board',
+    'Killed worker w1',
+    'Worked',
+    'Timed 5s',
+    'Timer has expired',
+    '4/4 steps',
+    '3 tasks running',
+    'Outside of Project',
+    'Inside of Project',
+    'Task Log',
+    'Task Logs',
+    'Agent finished',
+    'Process exited',
+    'Exited with code -1',
+    'Notification timeout reached',
+    'finished',
+    'Finished',
+    'Run MOSS server finished',
+    'npm test · Exited with code 1',
+    'BuildTask: Notification timeout reached',
+  ];
+  for (const s of allowedPlain) {
+    assert.equal(runtime.isStepPlainTextAllowed(s), true, `Expected step plain text allowed: ${s}`);
+  }
+  const blockedPlain = [
+    '',
+    'Settings',
+    'Save',
+    'unfinished',
+    'My task finished yesterday',
+    'npm test · Exited with code abc',
+    'BuildTask: Notification timeout reached soon',
+    'a'.repeat(261) + ' finished',
+  ];
+  for (const s of blockedPlain) {
+    assert.equal(runtime.isStepPlainTextAllowed(s), false, `Expected step plain text blocked: ${s.slice(0, 40)}`);
+  }
+
+  // 2) Semantic parity checks for looksLikeStepPathOrCmd
+  const matchedPathsOrCmds = [
+    'C:\\repo\\file.js',
+    '/usr/local/bin/node',
+    './run.sh',
+    '../package.json',
+    '~/notes.md',
+    'npm test --watch',
+    'git status',
+    'src/components/Settings.ts',
+    'a/b',
+    'foo\\bar',
+    'cmd --flag-1',
+    'task --dry_run',
+  ];
+  for (const s of matchedPathsOrCmds) {
+    assert.equal(runtime.looksLikeStepPathOrCmd(s), true, `Expected step path/cmd matched: ${s}`);
+  }
+  const nonPathsOrCmds = [
+    '',
+    'Settings',
+    'Task Log',
+    'foo --',
+    'foo --.bar',
+    'a'.repeat(261) + '/b',
+    'npm ' + 'a'.repeat(260),
+  ];
+  for (const s of nonPathsOrCmds) {
+    assert.equal(runtime.looksLikeStepPathOrCmd(s), false, `Expected non-path/cmd: ${s.slice(0, 40)}`);
+  }
+
+  // 3) 50,000-char adversarial ReDoS stress tests (each individual call < 50ms)
+  const advInputs = [
+    'a' + ' '.repeat(50000) + 'b',
+    ' '.repeat(50000) + 'b',
+    'a'.repeat(50000) + '!',
+  ];
+  for (const input of advInputs) {
+    const tPlain0 = performance.now();
+    assert.equal(runtime.isStepPlainTextAllowed(input), false);
+    const plainElapsed = performance.now() - tPlain0;
+    assert.ok(plainElapsed < 50, `isStepPlainTextAllowed took ${plainElapsed.toFixed(2)}ms on 50k input`);
+
+    const tPath0 = performance.now();
+    assert.equal(runtime.looksLikeStepPathOrCmd(input), false);
+    const pathElapsed = performance.now() - tPath0;
+    assert.ok(pathElapsed < 50, `looksLikeStepPathOrCmd took ${pathElapsed.toFixed(2)}ms on 50k input`);
+  }
+
+  // 4) Full DOM mountHostI18n execution path (translateTextNode + isStepArgElementSelf + translateAttributes)
+  const env = createTestEnv(1000);
+  const conv = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+  const stepRow = env.makeEl('div', { attrs: { 'data-step-index': '0' } });
+  const spans = advInputs.map((txt) => env.makeEl('span', { attrs: { title: txt }, text: txt }));
+  const pathTitleSpan = env.makeEl('span', { attrs: { title: 'src/components/Settings.ts' }, text: 'Settings' });
+  const normalTitleBtn = env.makeEl('button', { attrs: { title: 'Settings' }, text: 'Save' });
+  stepRow.append(...spans, pathTitleSpan, normalTitleBtn);
+  conv.append(stepRow);
+  env.doc.body.append(conv);
+
+  const tDom0 = performance.now();
+  const inst = runtime.mountHostI18n({
+    root: env.win,
+    doc: env.doc,
+    dict,
+    mode: 'on',
+    nowFn: env.nowFn,
+    setTimeoutFn: env.setTimeoutFn,
+    clearTimeoutFn: env.clearTimeoutFn,
+    rafFn: env.rafFn,
+    cancelRafFn: env.cancelRafFn,
+  });
+  const domElapsed = performance.now() - tDom0;
+  assert.ok(domElapsed < 50, `mountHostI18n on 50k adversarial step nodes took ${domElapsed.toFixed(2)}ms`);
+
+  for (let i = 0; i < advInputs.length; i++) {
+    assert.equal(spans[i].textContent, advInputs[i]);
+    assert.equal(spans[i].getAttribute('title'), advInputs[i]);
+  }
+  assert.equal(pathTitleSpan.getAttribute('title'), 'src/components/Settings.ts');
+  assert.equal(pathTitleSpan.textContent, 'Settings');
+  assert.equal(normalTitleBtn.getAttribute('title'), '设置');
+  assert.equal(normalTitleBtn.textContent, '保存');
+
+  inst.destroy();
+});
+
+test('Sidebar chrome (Projects/Conversations/Pinned/Coordinator) translates in on/auto modes, Base UI portals translate synchronously without flash, and sidebar click rescans conversation-view with O(1) non-sidebar/off bailout', () => {
+  const dict = {
+    exact: {
+      Projects: '项目列表',
+      Conversations: '会话列表',
+      Pinned: '已置顶',
+      Coordinator: '协调器',
+      Collapse: '收起',
+      Rename: '重命名',
+      Delete: '删除',
+      Review: '审查',
+      Save: '保存',
+      Settings: '设置',
+    },
+    patterns: [],
+  };
+
+  for (const activeMode of ['on', 'auto']) {
+    const env = createTestEnv(1000);
+    const sidebarList = env.makeEl('div', { attrs: { 'data-testid': 'conversation-list-sidebar' } });
+    const projHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' } });
+    const projBtn = env.makeEl('button', { text: 'Projects' });
+    projHdr.append(projBtn);
+    const convHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' } });
+    const convH2 = env.makeEl('h2', { text: 'Conversations' });
+    convHdr.append(convH2);
+    const pinnedHdr = env.makeEl('div', { attrs: { 'data-testid': 'pinned-section-header' }, text: 'Pinned' });
+    const coordHdr = env.makeEl('div', { attrs: { 'data-testid': 'coordinator-section-header' }, text: 'Coordinator' });
+    const projNameBtn = env.makeEl('button', { attrs: { 'data-testid': 'project-header' }, text: 'Projects' });
+    const wsSwitcher = env.makeEl('button', { attrs: { 'data-testid': 'workspace-switcher' }, text: 'Settings' });
+    const convRow = env.makeEl('button', { attrs: { 'data-testid': 'conversation-row-sidebar' }, text: 'Save' });
+    const collapseBtn = env.makeEl('button', { text: 'Collapse' });
+    const prismBtn = env.makeEl('button', { attrs: { 'data-ag-owned': '1' }, text: 'Settings' });
+    sidebarList.append(projHdr, convHdr, pinnedHdr, coordHdr, projNameBtn, wsSwitcher, convRow, collapseBtn, prismBtn);
+
+    const convView = env.makeEl('div', { attrs: { 'data-testid': 'conversation-view' } });
+    const reviewBtn = env.makeEl('button', { text: 'Review' });
+    convView.append(reviewBtn);
+
+    const outsideBtn = env.makeEl('button', { text: 'Settings' });
+    env.doc.body.append(sidebarList, convView, outsideBtn);
+
+    const inst = runtime.mountHostI18n({
+      root: env.win,
+      doc: env.doc,
+      dict,
+      mode: activeMode,
+      nowFn: env.nowFn,
+      setTimeoutFn: env.setTimeoutFn,
+      clearTimeoutFn: env.clearTimeoutFn,
+      rafFn: env.rafFn,
+      cancelRafFn: env.cancelRafFn,
+    });
+
+    // Advance past auto-mode Layer 2b timers so timer assertions are deterministic
+    if (activeMode === 'auto') env.advanceTime(1300);
+
+    // 1) Sidebar chrome translates cleanly while user rows/headers/Prism controls remain protected
+    assert.equal(projBtn.textContent, '项目列表');
+    assert.equal(convH2.textContent, '会话列表');
+    assert.equal(pinnedHdr.textContent, '已置顶');
+    assert.equal(coordHdr.textContent, '协调器');
+    assert.equal(collapseBtn.textContent, '收起');
+    assert.equal(projNameBtn.textContent, 'Projects', 'User project-header must remain protected');
+    assert.equal(wsSwitcher.textContent, 'Settings', 'User workspace-switcher must remain protected');
+    assert.equal(convRow.textContent, 'Save', 'User conversation-row-sidebar title must remain protected');
+    assert.equal(prismBtn.textContent, 'Settings', 'Prism-owned sidebar button must remain protected');
+
+    // 2) Dynamically mounted Base UI floating menu portal translates synchronously in MO microtask (0-frame flash, no rAF needed)
+    const basePortal = env.makeEl('div', { attrs: { 'data-base-ui-portal': '' } });
+    const focusGuard = env.makeEl('span', { attrs: { 'data-base-ui-focus-guard': '' }, text: 'Save' });
+    const menu = env.makeEl('div', { attrs: { role: 'menu' } });
+    const renameItem = env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Rename' });
+    const deleteItem = env.makeEl('div', { attrs: { role: 'menuitem' }, text: 'Delete' });
+    menu.append(renameItem, deleteItem);
+    basePortal.append(focusGuard, menu);
+    env.doc.body.append(basePortal);
+    env.flushObservers();
+    // Assert BEFORE advancing timers / rAF — proves synchronous zero-flash translation inside MO callback
+    assert.equal(renameItem.textContent, '重命名');
+    assert.equal(deleteItem.textContent, '删除');
+    assert.equal(focusGuard.textContent, 'Save', 'Base UI focus guard must stay untouched');
+
+    // 2b) Dynamically appended sidebar section-header (both direct and nested wrapper) translates while user rows stay untouched
+    const dynHdr = env.makeEl('div', { attrs: { 'data-testid': 'section-header' }, text: 'Conversations' });
+    const dynUserRow = env.makeEl('button', { attrs: { 'data-testid': 'conversation-row-sidebar' }, text: 'Projects' });
+    const nestedWrap = env.makeEl('div');
+    sidebarList.append(dynHdr, dynUserRow, nestedWrap);
+    env.flushObservers();
+    assert.equal(dynHdr.textContent, '会话列表');
+    assert.equal(dynUserRow.textContent, 'Projects');
+
+    const nestedBtn = env.makeEl('button', { text: 'Collapse' });
+    nestedWrap.append(nestedBtn);
+    env.flushObservers();
+    assert.equal(nestedBtn.textContent, '收起');
+
+    // 3) Clicking non-sidebar buttons must O(1) bail out without scheduling any timer
+    env.advanceTime(50);
+    assert.equal(env.timers.size, 0);
+    env.doc.dispatchEvent({ type: 'click', target: outsideBtn });
+    env.doc.dispatchEvent({ type: 'click', target: reviewBtn });
+    env.doc.dispatchEvent({ type: 'click', target: prismBtn });
+    assert.equal(env.timers.size, 0, 'Non-sidebar / Prism clicks must O(1) bail out with 0 timers');
+
+    // 4) Left-clicking a conversation row rescans conversation-view even if pointerenter fires immediately after
+    reviewBtn.firstChild._nodeValue = 'Review';
+    env.doc.dispatchEvent({ type: 'click', target: convRow });
+    assert.ok(env.timers.size >= 1, 'Sidebar conversation row click schedules rescan');
+    env.advanceTime(5);
+    env.doc.dispatchEvent({ type: 'pointerenter', target: outsideBtn });
+    env.advanceTime(120);
+    assert.equal(reviewBtn.textContent, '审查');
+
+    // 5) Capture click listener is registered and cleanly removed on destroy() (0 leaks + lossless restore)
+    assert.ok((env.docListeners.get('click:true')?.size || 0) >= 1, 'capture click listener must be registered');
+    inst.destroy();
+    assert.equal(env.docListeners.get('click:true')?.size || 0, 0, 'capture click listener must be removed on destroy()');
+    assert.equal(env.timers.size, 0);
+    assert.equal(projBtn.textContent, 'Projects');
+    assert.equal(convH2.textContent, 'Conversations');
+    assert.equal(pinnedHdr.textContent, 'Pinned');
+    assert.equal(coordHdr.textContent, 'Coordinator');
+    assert.equal(collapseBtn.textContent, 'Collapse');
+    assert.equal(dynHdr.textContent, 'Conversations');
+    assert.equal(nestedBtn.textContent, 'Collapse');
+    assert.equal(renameItem.textContent, 'Rename');
+    assert.equal(deleteItem.textContent, 'Delete');
+  }
+
+  // 6) In off mode, clicking sidebar conversation row must O(1) bail out with 0 timers while sidebar chrome restoration works
+  const offEnv = createTestEnv(1000);
+  const offSidebar = offEnv.makeEl('div', { attrs: { 'data-testid': 'conversation-list-sidebar' } });
+  const offHdr = offEnv.makeEl('div', { attrs: { 'data-testid': 'section-header' }, text: '项目列表' });
+  const offRow = offEnv.makeEl('button', { attrs: { 'data-testid': 'conversation-row-sidebar' }, text: '项目列表' });
+  offSidebar.append(offHdr, offRow);
+  offEnv.doc.body.append(offSidebar);
+
+  const offInst = runtime.mountHostI18n({
+    root: offEnv.win,
+    doc: offEnv.doc,
+    dict,
+    mode: 'off',
+    nowFn: offEnv.nowFn,
+    setTimeoutFn: offEnv.setTimeoutFn,
+    clearTimeoutFn: offEnv.clearTimeoutFn,
+    rafFn: offEnv.rafFn,
+    cancelRafFn: offEnv.cancelRafFn,
+  });
+  assert.equal(offHdr.textContent, 'Projects');
+  assert.equal(offRow.textContent, '项目列表', 'off mode must still protect user conversation row');
+  assert.equal(offEnv.timers.size, 0);
+  offEnv.doc.dispatchEvent({ type: 'click', target: offRow });
+  assert.equal(offEnv.timers.size, 0, 'off mode click must O(1) bail out with 0 timers');
+  offInst.destroy();
+  assert.equal(offEnv.docListeners.get('click:true')?.size || 0, 0);
+});
+
+test('External localization auto-yield for agy-powertools (__agyLocalization): auto yields initially and on delayed Layer 2b injection, while explicit on takes control', () => {
+  const dict = { exact: { Settings: '设置', Save: '保存' }, patterns: [] };
+
+  // 1) Initial Layer 1 auto-yield when __agyLocalization is present
+  const envAuto = createTestEnv(1000);
+  envAuto.win.__agyLocalization = { version: '1.0.0' };
+  const btnAuto = envAuto.makeEl('button', { text: 'Settings' });
+  envAuto.doc.body.append(btnAuto);
+
+  const l1 = runtime.detectLayer1External(envAuto.win, envAuto.doc);
+  assert.equal(l1.hit, true);
+  assert.equal(l1.provider, 'agy-powertools');
+  assert.equal(l1.detail, 'global:__agyLocalization');
+
+  const instAuto = runtime.mountHostI18n({
+    root: envAuto.win,
+    doc: envAuto.doc,
+    dict,
+    mode: 'auto',
+    nowFn: envAuto.nowFn,
+    setTimeoutFn: envAuto.setTimeoutFn,
+    clearTimeoutFn: envAuto.clearTimeoutFn,
+    rafFn: envAuto.rafFn,
+    cancelRafFn: envAuto.cancelRafFn,
+  });
+  const stAuto = instAuto.getStatus();
+  assert.equal(stAuto.active, false);
+  assert.equal(stAuto.status, 'yielded');
+  assert.equal(stAuto.yielded, true);
+  assert.equal(stAuto.detectedProvider, 'agy-powertools');
+  assert.equal(btnAuto.textContent, 'Settings', 'auto mode must leave UI untouched when __agyLocalization is present');
+  instAuto.destroy();
+
+  // 2) Delayed Layer 2b arrival of __agyLocalization rolls back cleanly in auto mode
+  const envLate = createTestEnv(1000);
+  const btnLate = envLate.makeEl('button', { text: 'Settings' });
+  envLate.doc.body.append(btnLate);
+  const instLate = runtime.mountHostI18n({
+    root: envLate.win,
+    doc: envLate.doc,
+    dict,
+    mode: 'auto',
+    nowFn: envLate.nowFn,
+    setTimeoutFn: envLate.setTimeoutFn,
+    clearTimeoutFn: envLate.clearTimeoutFn,
+    rafFn: envLate.rafFn,
+    cancelRafFn: envLate.cancelRafFn,
+  });
+  assert.equal(instLate.getStatus().status, 'active');
+  assert.equal(btnLate.textContent, '设置');
+  envLate.win.__agyLocalization = { active: true };
+  envLate.advanceTime(500);
+  const stLate = instLate.getStatus();
+  assert.equal(stLate.status, 'yielded');
+  assert.equal(stLate.yielded, true);
+  assert.equal(stLate.detectedProvider, 'agy-powertools');
+  assert.equal(btnLate.textContent, 'Settings', 'Delayed __agyLocalization must roll back translated text losslessly');
+  instLate.destroy();
+
+  // 3) Explicit mode="on" overrides auto-yield and keeps user in control
+  const envOn = createTestEnv(1000);
+  envOn.win.__agyLocalization = { active: true };
+  const btnOn = envOn.makeEl('button', { text: 'Save' });
+  envOn.doc.body.append(btnOn);
+  const instOn = runtime.mountHostI18n({
+    root: envOn.win,
+    doc: envOn.doc,
+    dict,
+    mode: 'on',
+    nowFn: envOn.nowFn,
+    setTimeoutFn: envOn.setTimeoutFn,
+    clearTimeoutFn: envOn.clearTimeoutFn,
+    rafFn: envOn.rafFn,
+    cancelRafFn: envOn.cancelRafFn,
+  });
+  envOn.advanceTime(1300);
+  const stOn = instOn.getStatus();
+  assert.equal(stOn.active, true);
+  assert.equal(stOn.status, 'active');
+  assert.equal(stOn.yielded, false);
+  assert.equal(btnOn.textContent, '保存', 'Explicit mode="on" must translate even when __agyLocalization exists');
+  instOn.destroy();
+  assert.equal(btnOn.textContent, 'Save');
 });

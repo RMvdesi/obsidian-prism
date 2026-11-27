@@ -282,21 +282,33 @@ test('R2 Task 3: compile cache hook, sharded .bundle-cache/ + legacy cleanup, fa
     assert.equal(fs.existsSync(legacyFile), false, 'Writing sharded cache must clean up legacy .bundle-cache.json');
     assert.equal(fs.existsSync(path.join(shardDir, 'ch-periodicPicker.json')), false, 'Full Ch8 must not be precompiled on boot');
 
-    // 模拟冷启热命中：连续 3 次刷新 require.cache 冷模块加载，验证 fast stat 通道命中且中位数 < 15ms
+    // 模拟冷启热命中：连续 3 次刷新 require.cache 冷模块加载，验证 fast stat 通道命中、0 次子进程派生且中位数 < 15ms
+    const cpMod = require('child_process');
+    const origExecFileSync = cpMod.execFileSync;
+    let warmSpawnCount = 0;
+    cpMod.execFileSync = (...a) => {
+      warmSpawnCount += 1;
+      return origExecFileSync.apply(cpMod, a);
+    };
     const hitSamples = [];
     let lastHitExpr = '';
     let lastSt = null;
-    for (let i = 0; i < 3; i++) {
-      const cdpFresh = loadFreshCdp(path.join(pluginDir, 'cdp.js'));
-      const t0 = performance.now();
-      lastHitExpr = cdpFresh.buildInjectExpression(cdpFresh.DEFAULT_CONFIG, { cachePath: shardDir });
-      hitSamples.push(performance.now() - t0);
-      lastSt = cdpFresh.getBundleCacheStats();
-      assert.equal(lastHitExpr, coldExpr);
-      assert.equal(lastSt.diskHits, 1);
-      assert.equal(lastSt.diskFastStatHits, 1, 'Ch1 warm hit must use fast stat verification path');
-      assert.equal(lastSt.compileUnifiedRuns, 0);
+    try {
+      for (let i = 0; i < 3; i++) {
+        const cdpFresh = loadFreshCdp(path.join(pluginDir, 'cdp.js'));
+        const t0 = performance.now();
+        lastHitExpr = cdpFresh.buildInjectExpression(cdpFresh.DEFAULT_CONFIG, { cachePath: shardDir });
+        hitSamples.push(performance.now() - t0);
+        lastSt = cdpFresh.getBundleCacheStats();
+        assert.equal(lastHitExpr, coldExpr);
+        assert.equal(lastSt.diskHits, 1);
+        assert.equal(lastSt.diskFastStatHits, 1, 'Ch1 warm hit must use fast stat verification path');
+        assert.equal(lastSt.compileUnifiedRuns, 0);
+      }
+    } finally {
+      cpMod.execFileSync = origExecFileSync;
     }
+    assert.equal(warmSpawnCount, 0, 'Warm fast-stat Ch1 cache hit across module reloads must spawn 0 child processes');
     const maxMedianHitMs = process.env.CI ? 150 : 15;
     const medianHitMs = hitSamples.slice().sort((a, b) => a - b)[1];
     assert.ok(
@@ -519,6 +531,15 @@ test('R2 Task 5: 24h zero-footprint residency (telemetry dirty-diff, poll backof
     flushUsageDiskCache(tel);
     const stat2 = fs.statSync(usageFile);
     assert.equal(stat2.mtimeMs, stat1.mtimeMs);
+
+    // 写盘失败时 _usageCacheDirty 必须保持 true 以便重试
+    const badFile = path.join(tmpDir, 'as-dir-conflict');
+    fs.mkdirSync(badFile, { recursive: true });
+    const telFail = { _usageCacheFile: badFile, _usageCacheDirty: false, _usageCacheTimer: null, _usageDiskCache: null };
+    putUsageDiskCache(telFail, guid, 11, 1700000100, rec, 'local');
+    assert.equal(telFail._usageCacheDirty, true);
+    flushUsageDiskCache(telFail);
+    assert.equal(telFail._usageCacheDirty, true, 'Failed flush must retain _usageCacheDirty=true for retry');
 
     // 2) daemon-loop 24h 退避（MISSING_CDP -> 20s, 全窗 HEALTHY_BACKOFF -> 25s）+ listPages 60s 默认兜底
     const daemon = new PrismDaemon({

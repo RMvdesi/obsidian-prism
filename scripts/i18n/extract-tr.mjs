@@ -95,11 +95,47 @@ writeChunks('ui', inlineUi);
 const host = JSON.parse(fs.readFileSync(path.join(root, 'vendor/host-i18n/zh-CN.json'), 'utf8'));
 const exact = Object.fromEntries(Object.keys(host.exact || {}).map((key) => [`exact:${key}`, key]));
 writeChunks('host-exact', exact);
-function hintFor(regex) {
+// 线性显式扫描替换未转义捕获组，避免正则嵌套转义引发 ReDoS 回溯
+function replaceCaptureGroups(input) {
+  let out = '';
   let groupIndex = 0;
-  let hint = String(regex)
-    .replace(/^\^|\$$/g, '')
-    .replace(/\((?!\?)(?:\\.|[^)])*\)/g, () => `$${++groupIndex}`)
+  let i = 0;
+  while (i < input.length) {
+    if (input[i] === '\\' && i + 1 < input.length) {
+      out += input.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (input[i] === '(' && input[i + 1] !== '?') {
+      let j = i + 1;
+      let closed = false;
+      while (j < input.length) {
+        if (input[j] === '\\' && j + 1 < input.length) {
+          j += 2;
+        } else if (input[j] === ')') {
+          closed = true;
+          j += 1;
+          break;
+        } else {
+          j += 1;
+        }
+      }
+      if (!closed) {
+        out += input.slice(i);
+        break;
+      }
+      out += `$${++groupIndex}`;
+      i = j;
+      continue;
+    }
+    out += input[i];
+    i += 1;
+  }
+  return out;
+}
+
+function hintFor(regex) {
+  let hint = replaceCaptureGroups(String(regex).replace(/^\^|\$$/g, ''))
     .replace(/\\s\*/g, ' ')
     .replace(/\\s\+/g, ' ')
     .replace(/\\d\+/g, 'number')

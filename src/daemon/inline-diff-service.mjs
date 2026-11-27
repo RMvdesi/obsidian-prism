@@ -25,17 +25,51 @@ import {
   parseInlineUnifiedDiff,
 } from './inline-diff-filter.mjs';
 
-const INLINE_DIFF_CACHE_MAX = 48;
+const INLINE_DIFF_CACHE_MAX = 128;
 const INLINE_DIFF_MAX_CONCURRENCY = 3;
 const INLINE_DIFF_MAX_QUEUE = 16;
+const INLINE_DIFF_GIT_TTL_MS = 2500;
+const INLINE_DIFF_GIT_META_CACHE_MAX = 128;
+const INLINE_DIFF_GIT_STATUS_MAX_BUFFER = 256 * 1024;
 const INLINE_DIFF_MAX_GIT_CONFIG_BYTES = 64 * 1024;
 const INLINE_DIFF_UNSAFE_GIT_CONFIG_FILTER_RE = /(^|\r?\n)\s*\[filter\s+/i;
 const INLINE_DIFF_UNSAFE_GIT_CONFIG_FSMONITOR_RE = /\bfsmonitor\s*=/i;
 
 const inlineDiffLruCache = new Map();
 const inlineDiffInFlight = new Map();
+const gitRootTtlCache = new Map();
+const gitConfigSafeCache = new Map();
+const repoStatusTtlCache = new Map();
+const repoStatusInFlight = new Map();
+const inlineDiffStats = {
+  gitExecCount: 0,
+  rootCacheHits: 0,
+  statusCacheHits: 0,
+  statusInFlightDedups: 0,
+};
 let inlineDiffActiveCount = 0;
 const inlineDiffWaitQueue = [];
+
+export function getInlineDiffStats() {
+  return {
+    ...inlineDiffStats,
+    cacheSize: inlineDiffLruCache.size,
+    cacheMax: INLINE_DIFF_CACHE_MAX,
+    gitRootCacheSize: gitRootTtlCache.size,
+    repoStatusCacheSize: repoStatusTtlCache.size,
+  };
+}
+
+export function clearInlineDiffCaches() {
+  inlineDiffLruCache.clear();
+  gitRootTtlCache.clear();
+  gitConfigSafeCache.clear();
+  repoStatusTtlCache.clear();
+  inlineDiffStats.gitExecCount = 0;
+  inlineDiffStats.rootCacheHits = 0;
+  inlineDiffStats.statusCacheHits = 0;
+  inlineDiffStats.statusInFlightDedups = 0;
+}
 
 function resolveSafeGitCwd() {
   const tmp = os.tmpdir();
@@ -75,6 +109,7 @@ function execGitInlineDiff(
     'diff.external=',
     ...args,
   ];
+  inlineDiffStats.gitExecCount += 1;
   return new Promise((resolve) => {
     execFile(
       'git',
@@ -200,7 +235,35 @@ function readGitIndexMtimeSafe(realGitDir) {
   }
 }
 
-function findGitRootFast(startDir) {
+function setBoundedTtlEntry(map, key, val, maxSize = INLINE_DIFF_GIT_META_CACHE_MAX) {
+  if (map.has(key)) map.delete(key);
+  while (map.size >= maxSize) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+  map.set(key, val);
+}
+
+function findGitRootFast(startDir, { noCache = false } = {}) {
+  const dirKey = normalizeComparablePath(startDir);
+  const now = Date.now();
+  if (!noCache && dirKey) {
+    const cached = gitRootTtlCache.get(dirKey);
+    if (cached && now - cached.at < INLINE_DIFF_GIT_TTL_MS && cached.res?.status === 'ok') {
+      try {
+        const gst = fs.lstatSync(path.join(cached.res.root, '.git'));
+        if (!gst.isSymbolicLink() && (gst.isDirectory() || gst.isFile())) {
+          const indexMtimeMs = readGitIndexMtimeSafe(cached.res.gitDir);
+          if (indexMtimeMs !== null) {
+            inlineDiffStats.rootCacheHits += 1;
+            return { ...cached.res, indexMtimeMs };
+          }
+        }
+      } catch {}
+      gitRootTtlCache.delete(dirKey);
+    }
+  }
   let cur = startDir;
   for (let depth = 0; depth < 24 && cur; depth += 1) {
     const gitMarker = path.join(cur, '.git');
@@ -243,7 +306,9 @@ function findGitRootFast(startDir) {
       if (!commonGitDir) return { status: 'invalid' };
       const indexMtimeMs = readGitIndexMtimeSafe(realGitDir);
       if (indexMtimeMs === null) return { status: 'invalid' };
-      return { status: 'ok', root: realCur, gitDir: realGitDir, commonGitDir, indexMtimeMs };
+      const res = { status: 'ok', root: realCur, gitDir: realGitDir, commonGitDir, indexMtimeMs };
+      if (!noCache && dirKey) setBoundedTtlEntry(gitRootTtlCache, dirKey, { at: now, res });
+      return res;
     }
 
     if (gst.isFile()) {
@@ -273,7 +338,9 @@ function findGitRootFast(startDir) {
       if (!commonGitDir) return { status: 'invalid' };
       const indexMtimeMs = readGitIndexMtimeSafe(realGitDir);
       if (indexMtimeMs === null) return { status: 'invalid' };
-      return { status: 'ok', root: realCur, gitDir: realGitDir, commonGitDir, indexMtimeMs };
+      const res = { status: 'ok', root: realCur, gitDir: realGitDir, commonGitDir, indexMtimeMs };
+      if (!noCache && dirKey) setBoundedTtlEntry(gitRootTtlCache, dirKey, { at: now, res });
+      return res;
     }
 
     return { status: 'invalid' };
@@ -281,10 +348,11 @@ function findGitRootFast(startDir) {
   return { status: 'none' };
 }
 
-function hasUnsafeGitConfig(gitDir, commonGitDir = null) {
+function hasUnsafeGitConfig(gitDir, commonGitDir = null, { noCache = false } = {}) {
   const dirs = [];
   if (gitDir) dirs.push(gitDir);
   if (commonGitDir && commonGitDir !== gitDir) dirs.push(commonGitDir);
+  const now = Date.now();
   for (const dir of dirs) {
     const cfgPath = path.join(dir, 'config');
     let st;
@@ -295,16 +363,98 @@ function hasUnsafeGitConfig(gitDir, commonGitDir = null) {
       return true;
     }
     if (st.isSymbolicLink() || !st.isFile() || st.size > INLINE_DIFF_MAX_GIT_CONFIG_BYTES) return true;
+    const cfgKey = normalizeComparablePath(cfgPath);
+    const sig = `${st.mtimeMs}:${st.size}`;
+    if (!noCache && cfgKey) {
+      const hit = gitConfigSafeCache.get(cfgKey);
+      if (hit && hit.sig === sig && now - hit.at < INLINE_DIFF_GIT_TTL_MS) {
+        if (hit.unsafe) return true;
+        continue;
+      }
+    }
     const content = readSmallNoFollowFileSync(cfgPath, INLINE_DIFF_MAX_GIT_CONFIG_BYTES);
     if (typeof content !== 'string') return true;
-    if (
+    const unsafe =
       INLINE_DIFF_UNSAFE_GIT_CONFIG_FILTER_RE.test(content) ||
-      INLINE_DIFF_UNSAFE_GIT_CONFIG_FSMONITOR_RE.test(content)
-    ) {
-      return true;
-    }
+      INLINE_DIFF_UNSAFE_GIT_CONFIG_FSMONITOR_RE.test(content);
+    if (!noCache && cfgKey) setBoundedTtlEntry(gitConfigSafeCache, cfgKey, { at: now, sig, unsafe });
+    if (unsafe) return true;
   }
   return false;
+}
+
+function parsePorcelainZStatus(stdout) {
+  const changed = new Set();
+  const untracked = new Set();
+  if (!stdout) return { changed, untracked };
+  const parts = stdout.split('\0');
+  for (let i = 0; i < parts.length; i += 1) {
+    const rec = parts[i];
+    if (!rec || rec.length < 4) continue;
+    const xy = rec.slice(0, 2);
+    const rel = rec.slice(3).replace(/\\/g, '/');
+    if (xy === '??') {
+      untracked.add(rel);
+    } else if (xy !== '!!') {
+      changed.add(rel);
+      if (xy[0] === 'R' || xy[0] === 'C' || xy[1] === 'R' || xy[1] === 'C') {
+        i += 1;
+        if (i < parts.length && parts[i]) changed.add(parts[i].replace(/\\/g, '/'));
+      }
+    }
+  }
+  return { changed, untracked };
+}
+
+async function getRepoGitStatusSnapshot(realRepoRoot, indexMtimeMs, { timeoutMs, noCache = false, fileMtimeMs = 0 } = {}) {
+  const repoKey = normalizeComparablePath(realRepoRoot);
+  const now = Date.now();
+  if (!noCache && repoKey) {
+    const cached = repoStatusTtlCache.get(repoKey);
+    if (
+      cached &&
+      now - cached.at < INLINE_DIFF_GIT_TTL_MS &&
+      cached.indexMtimeMs === indexMtimeMs &&
+      !cached.truncated &&
+      !(fileMtimeMs > cached.startedAt)
+    ) {
+      inlineDiffStats.statusCacheHits += 1;
+      return cached;
+    }
+    const inflight = repoStatusInFlight.get(repoKey);
+    if (inflight && !(fileMtimeMs > inflight.startedAt)) {
+      inlineDiffStats.statusInFlightDedups += 1;
+      return inflight.promise;
+    }
+  }
+  const startedAt = Date.now();
+  const promise = execGitInlineDiff(
+    ['-C', realRepoRoot, 'status', '--porcelain=v1', '-z', '-uall'],
+    { timeoutMs, maxBuffer: INLINE_DIFF_GIT_STATUS_MAX_BUFFER }
+  ).then((res) => {
+    const truncated = res.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+    const ok = Boolean(res.ok && !truncated);
+    const parsed = ok ? parsePorcelainZStatus(res.stdout) : { changed: new Set(), untracked: new Set() };
+    const snap = {
+      at: Date.now(),
+      startedAt,
+      indexMtimeMs,
+      ok,
+      truncated,
+      changed: parsed.changed,
+      untracked: parsed.untracked,
+    };
+    if (!noCache && repoKey && ok) setBoundedTtlEntry(repoStatusTtlCache, repoKey, snap, 64);
+    return snap;
+  });
+  if (!noCache && repoKey) {
+    const entry = { startedAt, promise };
+    repoStatusInFlight.set(repoKey, entry);
+    promise.finally(() => {
+      if (repoStatusInFlight.get(repoKey) === entry) repoStatusInFlight.delete(repoKey);
+    });
+  }
+  return promise;
 }
 
 function getInlineDiffCached(cacheKey) {
@@ -381,6 +531,7 @@ function projectInlineDiffEntry(rawEntry, { maxDiffLines, maxSnapshotLines, maxL
       lines: parsed.lines,
     };
     if (parsed.cumulativeDiff) projected.cumulativeDiff = true;
+    if (Number.isInteger(parsed.focusHunk) && parsed.focusHunk >= 0) projected.focusHunk = parsed.focusHunk;
     return projected;
   }
   const textLines = rawEntry.rawText.length > 0 ? rawEntry.rawText.split('\n') : [];
@@ -464,7 +615,7 @@ export async function readSafeInlineDiff(rawUri, opts = {}) {
   let gitRelPath = '';
   let gitIndexMtimeMs = 0;
   let isNonGit = false;
-  const fastGit = findGitRootFast(dir);
+  const fastGit = findGitRootFast(dir, { noCache: Boolean(opts?.noCache) });
   if (fastGit.status === 'invalid') {
     return { ok: false, reason: 'outside_git_repo', error: 'outside_git_repo' };
   }
@@ -497,7 +648,7 @@ export async function readSafeInlineDiff(rawUri, opts = {}) {
     isNonGit = true;
   }
 
-  const skipGitSubprocess = isNonGit || hasUnsafeGitConfig(realGitDir, realCommonGitDir);
+  const skipGitSubprocess = isNonGit || hasUnsafeGitConfig(realGitDir, realCommonGitDir, { noCache: Boolean(opts?.noCache) });
   const wantCommitFallback = !isNonGit && (hintAdd > 0 || hintDel > 0) && !hintIsCreated ? 1 : 0;
   const rawCacheKey = `${realPath}|${st.mtimeMs}|${st.size}|${isNonGit ? 'nogit' : gitIndexMtimeMs}|${skipGitSubprocess ? 1 : 0}|${wantCommitFallback}|${maxReadBytes}|${gitMaxBuffer}`;
   const projectionOpts = { maxDiffLines, maxSnapshotLines, maxLineChars, hintAdd, hintDel, hintIsCreated, expand };
@@ -514,42 +665,55 @@ export async function readSafeInlineDiff(rawUri, opts = {}) {
 
   const fetchRaw = () =>
     runWithInlineDiffSemaphore(async () => {
+      let repoStatusSnap = null;
       if (!skipGitSubprocess) {
-        let diffRes = await execGitInlineDiff(
-          ['-C', realRepoRoot, 'diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=2', '--', gitRelPath],
-          { timeoutMs: diffTimeoutMs, maxBuffer: gitMaxBuffer }
-        );
-        let rawDiff = diffRes.ok || diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? diffRes.stdout : '';
-        let bufferTruncated = diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+        repoStatusSnap = await getRepoGitStatusSnapshot(realRepoRoot, gitIndexMtimeMs, {
+          timeoutMs: revParseTimeoutMs,
+          noCache: Boolean(opts?.noCache),
+          fileMtimeMs: st.mtimeMs,
+        });
+        const hasReliableSnap = Boolean(repoStatusSnap && repoStatusSnap.ok && !repoStatusSnap.truncated);
+        const knownUntracked = hasReliableSnap && repoStatusSnap.untracked.has(gitRelPath);
+        const knownChanged = hasReliableSnap && repoStatusSnap.changed.has(gitRelPath);
+        const needDiffQuery = !hasReliableSnap || knownChanged || Boolean(wantCommitFallback && !knownUntracked);
 
-        if (!diffRes.ok && !rawDiff.trim()) {
-          diffRes = await execGitInlineDiff(
-            ['-C', realRepoRoot, 'diff', '--cached', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=2', '--', gitRelPath],
+        if (needDiffQuery) {
+          let diffRes = await execGitInlineDiff(
+            ['-C', realRepoRoot, 'diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=2', '--', gitRelPath],
             { timeoutMs: diffTimeoutMs, maxBuffer: gitMaxBuffer }
           );
-          rawDiff = diffRes.ok || diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? diffRes.stdout : '';
-          bufferTruncated = diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
-        }
+          let rawDiff = diffRes.ok || diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? diffRes.stdout : '';
+          let bufferTruncated = diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
 
-        if (!rawDiff.trim() && wantCommitFallback) {
-          const logRes = await execGitInlineDiff(
-            ['-C', realRepoRoot, 'log', '-n', '1', '-p', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=2', '--', gitRelPath],
-            { timeoutMs: diffTimeoutMs, maxBuffer: gitMaxBuffer }
-          );
-          if (logRes.ok || logRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-            rawDiff = logRes.stdout || '';
-            bufferTruncated = logRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+          if (!diffRes.ok && !rawDiff.trim()) {
+            diffRes = await execGitInlineDiff(
+              ['-C', realRepoRoot, 'diff', '--cached', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=2', '--', gitRelPath],
+              { timeoutMs: diffTimeoutMs, maxBuffer: gitMaxBuffer }
+            );
+            rawDiff = diffRes.ok || diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? diffRes.stdout : '';
+            bufferTruncated = diffRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
           }
-        }
 
-        if (rawDiff.trim()) {
-          const probeParsed = parseInlineUnifiedDiff(rawDiff, { maxLines: 1, maxLineChars: 32 });
-          if (probeParsed.ok === false || probeParsed.blocked) {
-            return { ok: false, reason: 'blocked', error: 'blocked' };
+          if (!rawDiff.trim() && wantCommitFallback) {
+            const logRes = await execGitInlineDiff(
+              ['-C', realRepoRoot, 'log', '-n', '1', '-p', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=2', '--', gitRelPath],
+              { timeoutMs: diffTimeoutMs, maxBuffer: gitMaxBuffer }
+            );
+            if (logRes.ok || logRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+              rawDiff = logRes.stdout || '';
+              bufferTruncated = logRes.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+            }
           }
-          if (probeParsed.isBinary) return { ok: true, kind: 'binary', fileName };
-          if (probeParsed.lines.length > 0) {
-            return { ok: true, kind: 'git-diff', fileName, rawDiff, bufferTruncated };
+
+          if (rawDiff.trim()) {
+            const probeParsed = parseInlineUnifiedDiff(rawDiff, { maxLines: 1, maxLineChars: 32 });
+            if (probeParsed.ok === false || probeParsed.blocked) {
+              return { ok: false, reason: 'blocked', error: 'blocked' };
+            }
+            if (probeParsed.isBinary) return { ok: true, kind: 'binary', fileName };
+            if (probeParsed.lines.length > 0) {
+              return { ok: true, kind: 'git-diff', fileName, rawDiff, bufferTruncated };
+            }
           }
         }
       }
@@ -589,13 +753,17 @@ export async function readSafeInlineDiff(rawUri, opts = {}) {
 
       let isUntracked = false;
       if (!skipGitSubprocess) {
-        const statusRes = await execGitInlineDiff(
-          ['-C', realRepoRoot, 'status', '--porcelain', '-uall', '--', gitRelPath],
-          { timeoutMs: revParseTimeoutMs, maxBuffer: 64 * 1024 }
-        );
-        if (statusRes.ok && statusRes.stdout) {
-          const firstLine = statusRes.stdout.replace(/^[\r\n]+/, '').split(/\r?\n/, 1)[0] || '';
-          if (firstLine.startsWith('?? ')) isUntracked = true;
+        if (repoStatusSnap && repoStatusSnap.ok && !repoStatusSnap.truncated) {
+          isUntracked = repoStatusSnap.untracked.has(gitRelPath);
+        } else {
+          const statusRes = await execGitInlineDiff(
+            ['-C', realRepoRoot, 'status', '--porcelain', '-uall', '--', gitRelPath],
+            { timeoutMs: revParseTimeoutMs, maxBuffer: 64 * 1024 }
+          );
+          if (statusRes.ok && statusRes.stdout) {
+            const firstLine = statusRes.stdout.replace(/^[\r\n]+/, '').split(/\r?\n/, 1)[0] || '';
+            if (firstLine.startsWith('?? ')) isUntracked = true;
+          }
         }
       }
 

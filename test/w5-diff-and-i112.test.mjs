@@ -711,7 +711,7 @@ test('W5-3: non-Git normal source/SKILL.md returns safe bounded snapshot while s
     assert.ok(commitFbRes.lines.some((l) => l.kind === 'add' && l.text === 'const added_a = 101;'));
     assert.equal(commitFbRes.lines.some((l) => l.kind === 'add' && l.text === 'const line_1 = 1;'), false, 'Old unchanged lines must NOT be painted green');
 
-    // Cumulative working-tree diff (<= maxLines) focuses best-matching hunk first on default view, preserves natural order on expand/no-hints
+    // Cumulative working-tree diff preserves strict ascending line-number order and flags best-matching hunk via focusHunk
     const cumFile = path.join(gitRepo, 'cum-focus.js');
     const cumBase = Array.from({ length: 60 }, (_, i) => `const row_${i + 1} = ${i + 1};`);
     fs.writeFileSync(cumFile, cumBase.join('\n') + '\n', 'utf8');
@@ -724,17 +724,20 @@ test('W5-3: non-Git normal source/SKILL.md returns safe bounded snapshot while s
     assert.equal(cumFocused.mode, 'git-diff');
     assert.equal(cumFocused.cumulativeDiff, true);
     assert.equal(cumFocused.focused, true);
+    assert.equal(cumFocused.focusHunk, 1, 'Best-matching +1/-1 trailing hunk must be flagged via focusHunk=1 without reordering');
     assert.equal(cumFocused.truncated, false);
     assert.equal(cumFocused.additions, 21);
     assert.equal(cumFocused.deletions, 21);
     const hitIdx = cumFocused.lines.findIndex((l) => l.text === 'const step_hit = 999;');
     const bulkIdx = cumFocused.lines.findIndex((l) => l.text === 'const bulk_1 = 100;');
-    assert.ok(hitIdx > 0 && bulkIdx > hitIdx, `Best-matching +1/-1 hunk must be prioritized first (hit=${hitIdx}, bulk=${bulkIdx})`);
+    assert.ok(bulkIdx > 0 && hitIdx > bulkIdx, `Natural ascending line order must be preserved (bulk=${bulkIdx}, hit=${hitIdx})`);
     const cumExpanded = await readSafeInlineDiff(cumFile, { hints: { additions: 1, deletions: 1 }, expand: true });
     assert.equal(cumExpanded.cumulativeDiff, true);
+    assert.equal(cumExpanded.focusHunk, 1);
     assert.ok(cumExpanded.lines.findIndex((l) => l.text === 'const bulk_1 = 100;') < cumExpanded.lines.findIndex((l) => l.text === 'const step_hit = 999;'));
     const cumNoHint = await readSafeInlineDiff(cumFile);
     assert.equal(Boolean(cumNoHint.cumulativeDiff), false);
+    assert.equal(cumNoHint.focusHunk, undefined);
     assert.ok(cumNoHint.lines.findIndex((l) => l.text === 'const bulk_1 = 100;') < cumNoHint.lines.findIndex((l) => l.text === 'const step_hit = 999;'));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

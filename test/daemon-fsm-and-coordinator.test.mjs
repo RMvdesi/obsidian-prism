@@ -1045,3 +1045,118 @@ test('RpcDispatcher handleMetricsBinding sanitizes secrets in catch error payloa
   assert.ok(resolvedPayload.error.includes('<REDACTED>'));
   assert.ok(resolvedPayload.error.includes('***REDACTED***'));
 });
+
+test('Session heal: probe timeout backs off without closing live session until 3 consecutive timeouts, then resets on recovery', async () => {
+  const logs = [];
+  const daemon = makeMinimalDaemon();
+  daemon.log = (m) => logs.push(m);
+  let shouldTimeout = true;
+  let injectCount = 0;
+  const { entry } = makeMockEntry({
+    evalHandler: async (expr) => {
+      if (expr === daemon.injectExpr) {
+        injectCount += 1;
+        return { status: 'ok' };
+      }
+      if (shouldTimeout) throw new Error('CDP Runtime.evaluate timeout');
+      return {
+        ready: true,
+        isHostDom: true,
+        href: 'vscode-file://vscode-app/workbench.html',
+        title: 'Antigravity',
+        prismAttr: cdp.PLUGIN_VERSION,
+        hasPrism: true,
+        hasRepoBridge: true,
+        hasThoughtBridge: true,
+        hasUsageBridge: true,
+        codeHash: daemon.codeHash,
+      };
+    },
+  });
+  daemon.sessionRegistry.sessions.set(entry.wsUrl, entry);
+
+  // 1st & 2nd forced timeouts keep session alive and set backoff
+  const t1 = await daemon.verifyAndHealEntry(entry, true);
+  assert.equal(t1.alive, true);
+  assert.equal(t1.timedOut, true);
+  assert.equal(entry.session.closed, false);
+  assert.equal(daemon.sessionRegistry.sessions.has(entry.wsUrl), true);
+  assert.equal(entry.probeTimeoutStreak, 1);
+
+  // Non-forced tick during backoff skips probing completely
+  const skipRes = await daemon.verifyAndHealEntry(entry, false);
+  assert.equal(skipRes.skipped, true);
+  assert.equal(skipRes.timedOut, true);
+
+  // 2nd timeout -> still alive
+  const t2 = await daemon.verifyAndHealEntry(entry, true);
+  assert.equal(t2.alive, true);
+  assert.equal(entry.probeTimeoutStreak, 2);
+  assert.equal(entry.session.closed, false);
+  assert.equal(injectCount, 0, 'Timeout must not trigger Ch1 reinjection storm');
+
+  // Probe recovers -> streak & backoff reset to 0
+  shouldTimeout = false;
+  const okRes = await daemon.verifyAndHealEntry(entry, true);
+  assert.equal(okRes.alive, true);
+  assert.equal(okRes.ready, true);
+  assert.equal(entry.probeTimeoutStreak, 0);
+  assert.equal(entry.probeTimeoutBackoffUntil, 0);
+
+  // 3 consecutive timeouts -> closes & removes session with explicit log
+  shouldTimeout = true;
+  await daemon.verifyAndHealEntry(entry, true);
+  await daemon.verifyAndHealEntry(entry, true);
+  const t3 = await daemon.verifyAndHealEntry(entry, true);
+  assert.equal(t3.alive, false);
+  assert.equal(entry.session.closed, true);
+  assert.equal(daemon.sessionRegistry.sessions.has(entry.wsUrl), false);
+  assert.ok(logs.some((l) => l.includes('Health probe timeout (1/3)')));
+  assert.ok(logs.some((l) => l.includes('repeated probe timeouts')));
+});
+
+test('RelaunchGuard: resetShortcutBackoff(no-port) preserves 5-minute shortcut throttle across 20 ticks', async () => {
+  const { RelaunchGuard } = await import('../src/daemon/relaunch-guard.mjs');
+  let syncCalls = 0;
+  const logs = [];
+  const rg = new RelaunchGuard({
+    rootDir: ROOT_DIR,
+    noPortRelaunchThresholdMs: 8000,
+    shortcutCheckIntervalMs: 300000,
+    relaunchHooks: {
+      syncShortcuts: async () => {
+        syncCalls += 1;
+        return { matched: 1, patched: [], skipped: [], alreadySet: ['a.lnk'] };
+      },
+      detectHost: async () => null,
+    },
+    isRunning: () => true,
+    hasLoopTimer: () => true,
+    log: (m) => logs.push(m),
+  });
+
+  for (let i = 0; i < 20; i += 1) {
+    rg.resetShortcutBackoff('no-port');
+    await rg.handleMissingCdpPort();
+  }
+  assert.equal(syncCalls, 1, '20 consecutive no-port ticks within 5 minutes must sync shortcuts at most once');
+  assert.ok(logs.filter((l) => l.includes('Reset shortcut backoff')).length <= 1, 'Must not spam no-port backoff reset logs every tick');
+});
+
+test('readCliPollIntervalMs parses valid integer pollIntervalMs within [500, 60000] and rejects invalid values', async () => {
+  const { readCliPollIntervalMs } = await import('../src/daemon/index.mjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'prism-poll-ms-'));
+  try {
+    assert.equal(readCliPollIntervalMs(tmp), undefined);
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({ pollIntervalMs: 3500 }), 'utf8');
+    assert.equal(readCliPollIntervalMs(tmp), 3500);
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({ pollIntervalMs: 100 }), 'utf8');
+    assert.equal(readCliPollIntervalMs(tmp), undefined);
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({ pollIntervalMs: 70000 }), 'utf8');
+    assert.equal(readCliPollIntervalMs(tmp), undefined);
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({ pollIntervalMs: 1200.5 }), 'utf8');
+    assert.equal(readCliPollIntervalMs(tmp), undefined);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

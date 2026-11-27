@@ -1266,3 +1266,790 @@ test('#257: Velvet stream feathering — Layer A block reveal, Layer B 5-bucket 
     globalThis.cancelAnimationFrame = prevCaf;
   }
 });
+
+test('smooth-caret invalidates stale cache on inline decorator mount with 0 full ed.textContent reads, supports invalidateSelection, and aligns collapsed element boundary to inline pill right edge', () => {
+  const smoothCaretMod = require('../smooth-caret.js');
+  const prevDoc = globalThis.document;
+  const prevWin = globalThis.window;
+  const prevGetCs = globalThis.getComputedStyle;
+  const prevRaf = globalThis.requestAnimationFrame;
+
+  const hostKids = [];
+  const makeEl = (tag) => {
+    const attrs = new Map();
+    const el = {
+      tagName: tag.toUpperCase(),
+      nodeName: tag.toUpperCase(),
+      nodeType: 1,
+      className: '',
+      style: {},
+      isConnected: true,
+      parentNode: null,
+      childNodes: [],
+      setAttribute(k, v) { attrs.set(k, String(v)); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      hasAttribute(k) { return attrs.has(k); },
+      removeAttribute(k) { attrs.delete(k); },
+      remove() { this.isConnected = false; },
+      appendChild(c) { c.parentNode = el; el.childNodes.push(c); return c; },
+    };
+    return el;
+  };
+
+  const trailingSpace = { nodeType: 3, nodeValue: ' ', textContent: ' ', parentNode: null };
+  let decoText = '';
+  const decoSpan = makeEl('span');
+  decoSpan.setAttribute('contenteditable', 'false');
+  decoSpan.setAttribute('data-lexical-decorator', 'true');
+  Object.defineProperty(decoSpan, 'textContent', { get: () => decoText });
+  decoSpan.getBoundingClientRect = () => ({ left: 620, right: 691, top: 937, bottom: 954, width: 71, height: 17 });
+  const textWrapSpan = makeEl('span');
+  textWrapSpan.appendChild(trailingSpace);
+  const pNode = makeEl('p');
+  pNode.appendChild(decoSpan);
+  pNode.appendChild(textWrapSpan);
+  pNode.getBoundingClientRect = () => ({ left: 620, right: 1340, top: 937, bottom: 954, width: 720, height: 17 });
+
+  const host = makeEl('div');
+  host.clientLeft = 0;
+  host.clientTop = 0;
+  host.scrollLeft = 0;
+  host.scrollTop = 0;
+  host.getBoundingClientRect = () => ({ left: 612, top: 925, width: 738, height: 40 });
+  host.appendChild = (ch) => { ch.isConnected = true; hostKids.push(ch); return ch; };
+  host.querySelector = (sel) => (sel.startsWith('.ag-cs-smooth-caret') ? hostKids.find((c) => c.className === 'ag-cs-smooth-caret') || null : null);
+
+  let fullEdTextReads = 0;
+  let caretLeft = 623;
+  let useCollapsedBoundary = false;
+  let clientRects = () => [{ left: caretLeft, top: 935, height: 17 }];
+
+  const ed = makeEl('div');
+  ed.parentElement = host;
+  ed.scrollLeft = 0;
+  ed.scrollTop = 0;
+  ed.scrollHeight = 40;
+  ed.clientHeight = 40;
+  ed.appendChild(pNode);
+  ed.firstChild = pNode;
+  Object.defineProperty(ed, 'textContent', { get: () => { fullEdTextReads += 1; return decoText + ' '; } });
+  ed.contains = (n) => n === trailingSpace || n === textWrapSpan || n === pNode || n === decoSpan;
+  ed.querySelectorAll = () => [];
+  ed.getBoundingClientRect = () => ({ left: 612, right: 1350, top: 925, bottom: 965, width: 738, height: 40 });
+
+  globalThis.window = { devicePixelRatio: 1 };
+  globalThis.getComputedStyle = () => ({ paddingLeft: '8px', paddingTop: '10px', fontSize: '14px', lineHeight: '22px' });
+  globalThis.requestAnimationFrame = (cb) => { cb(); return 1; };
+  globalThis.document = {
+    activeElement: ed,
+    createElement: (tag) => makeEl(tag),
+    getSelection: () => {
+      const container = useCollapsedBoundary ? pNode : trailingSpace;
+      const offset = 1;
+      return {
+        rangeCount: 1,
+        isCollapsed: true,
+        focusNode: container,
+        focusOffset: offset,
+        getRangeAt: () => ({
+          collapsed: true,
+          startContainer: container,
+          startOffset: offset,
+          endContainer: container,
+          endOffset: offset,
+          getClientRects: clientRects,
+          getBoundingClientRect: () => ({ left: 0, top: 0, height: 0 }),
+        }),
+      };
+    },
+    querySelectorAll: (sel) => {
+      if (sel.includes('[contenteditable="true"]')) return [ed];
+      if (sel === '.ag-cs-smooth-caret') return hostKids;
+      return [];
+    },
+  };
+
+  try {
+    const ctl = smoothCaretMod.createSmoothCaretController({
+      isDestroyed: () => false,
+      isEnabled: () => true,
+      setAttrIfChanged(el, k, v) { if (el.getAttribute(k) !== v) el.setAttribute(k, v); },
+      runGuardedMut: (fn) => fn(),
+    });
+
+    // 1. Focusin before React decorator content mounts: trailing space sits at left=623 (dx=11px)
+    ctl.sync(false, false);
+    const caret = host.querySelector('.ag-cs-smooth-caret');
+    assert.equal(caret.style.transform, 'translate3d(11px, 10px, 0)');
+
+    // 2. Decorator mounts "gmail": focusNode/focusOffset/ed.childNodes.length stay identical; local prevNode sig detects mount with 0 ed.textContent reads
+    decoText = 'gmail';
+    decoSpan.appendChild({ nodeType: 3, nodeValue: 'gmail' });
+    caretLeft = 694;
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(82px, 10px, 0)', 'Smooth caret must re-measure when decorator text mounts before same trailing text node');
+    assert.equal(fullEdTextReads, 0, 'Decorator detection must stay O(1) with strictly 0 full ed.textContent reads');
+
+    // 3. Icon-only decorator resize with unchanged textContent: invalidateSelection forces re-measure
+    caretLeft = 710;
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(98px, 10px, 0)', 'invalidateSelection must bypass selectionSigCache even when text length stays constant');
+
+    // 4. Collapsed element boundary directly after inline decorator span with empty clientRects()
+    useCollapsedBoundary = true;
+    clientRects = () => [];
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(79px, 12px, 0)', 'Element boundary after inline pill must align to pill.right (691 - 612 = 79px) rather than paragraph left');
+    assert.equal(fullEdTextReads, 0, 'Collapsed element boundary alignment must execute 0 full ed.textContent reads');
+
+    ctl.teardown();
+  } finally {
+    globalThis.document = prevDoc;
+    globalThis.window = prevWin;
+    globalThis.getComputedStyle = prevGetCs;
+    globalThis.requestAnimationFrame = prevRaf;
+  }
+});
+
+test('smooth-caret aligns trailing ZWSP/BOM text node after inline Quote pill and fails safe to native caret before emptyCaretProbeCache on non-empty/decorator editors', () => {
+  const smoothCaretMod = require('../smooth-caret.js');
+  const prevDoc = globalThis.document;
+  const prevWin = globalThis.window;
+  const prevGetCs = globalThis.getComputedStyle;
+  const prevRaf = globalThis.requestAnimationFrame;
+
+  const hostKids = [];
+  const makeEl = (tag) => {
+    const attrs = new Map();
+    const el = {
+      tagName: tag.toUpperCase(),
+      nodeName: tag.toUpperCase(),
+      nodeType: 1,
+      className: '',
+      style: {},
+      isConnected: true,
+      parentNode: null,
+      childNodes: [],
+      setAttribute(k, v) { attrs.set(k, String(v)); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      hasAttribute(k) { return attrs.has(k); },
+      removeAttribute(k) { attrs.delete(k); },
+      remove() { this.isConnected = false; },
+      appendChild(c) { c.parentNode = el; el.childNodes.push(c); return c; },
+    };
+    return el;
+  };
+  const makeTxt = (v) => ({ nodeType: 3, nodeValue: v, data: v, parentNode: null });
+
+  const host = makeEl('div');
+  host.clientLeft = 0;
+  host.clientTop = 0;
+  host.scrollLeft = 0;
+  host.scrollTop = 0;
+  host.getBoundingClientRect = () => ({ left: 600, top: 900, width: 720, height: 60 });
+  host.appendChild = (ch) => { ch.isConnected = true; hostKids.push(ch); return ch; };
+  host.querySelector = (sel) => (sel.startsWith('.ag-cs-smooth-caret') ? hostKids.find((c) => c.className === 'ag-cs-smooth-caret') || null : null);
+
+  const ed = makeEl('div');
+  ed.parentElement = host;
+  ed.scrollLeft = 0;
+  ed.scrollTop = 0;
+  ed.scrollHeight = 60;
+  ed.clientHeight = 60;
+  ed.getBoundingClientRect = () => ({ left: 600, right: 1320, top: 900, bottom: 960, width: 720, height: 60 });
+  ed.contains = (n) => { for (let c = n; c; c = c.parentNode) if (c === ed) return true; return false; };
+  ed.querySelectorAll = () => [];
+
+  let selState = { rangeCount: 0, isCollapsed: true };
+  globalThis.window = { devicePixelRatio: 1 };
+  globalThis.getComputedStyle = () => ({ paddingLeft: '8px', paddingTop: '10px', fontSize: '14px', lineHeight: '22px' });
+  globalThis.requestAnimationFrame = (cb) => { cb(); return 1; };
+  globalThis.document = {
+    activeElement: ed,
+    createElement: (tag) => makeEl(tag),
+    getSelection: () => selState,
+    querySelectorAll: (sel) => {
+      if (sel.includes('[contenteditable="true"]')) return [ed];
+      if (sel === '.ag-cs-smooth-caret') return hostKids;
+      return [];
+    },
+  };
+
+  const setCollapsedSel = (container, offset, rects = []) => {
+    selState = {
+      rangeCount: 1,
+      isCollapsed: true,
+      focusNode: container,
+      focusOffset: offset,
+      getRangeAt: () => ({
+        collapsed: true,
+        startContainer: container,
+        startOffset: offset,
+        endContainer: container,
+        endOffset: offset,
+        getClientRects: () => rects,
+        getBoundingClientRect: () => ({ left: 0, top: 0, height: 0 }),
+      }),
+    };
+  };
+
+  try {
+    const ctl = smoothCaretMod.createSmoothCaretController({
+      isDestroyed: () => false,
+      isEnabled: () => true,
+      setAttrIfChanged(el, k, v) { if (el.getAttribute(k) !== v) el.setAttribute(k, v); },
+      runGuardedMut: (fn) => fn(),
+    });
+
+    // Seed emptyCaretProbeCache on a genuinely empty editor (<p><br></p>)
+    const emptyP = makeEl('p');
+    const br = makeEl('br');
+    br.setAttribute('data-lexical-managed-linebreak', 'true');
+    br.getBoundingClientRect = () => ({ left: 612, top: 914, right: 612, bottom: 932, width: 0, height: 18 });
+    emptyP.appendChild(br);
+    ed.appendChild(emptyP);
+    setCollapsedSel(emptyP, 0, []);
+    ctl.sync(false, false);
+    const caret = host.querySelector('.ag-cs-smooth-caret');
+    assert.equal(caret.getAttribute('data-ag-cs-caret-visible'), '1');
+    assert.equal(caret.style.transform, 'translate3d(12px, 14px, 0)');
+
+    // Confirm genuine empty editor still uses emptyCaretProbeCache when selection has no range
+    selState = { rangeCount: 0, isCollapsed: true };
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.getAttribute('data-ag-cs-caret-visible'), '1', 'True empty editor must preserve emptyCaretProbeCache experience');
+    assert.equal(caret.style.transform, 'translate3d(12px, 14px, 0)');
+
+    // Edge 1a: Collapsed caret in direct trailing ZWSP (\u200b) Text node after Cmd+L Quote pill with empty clientRects
+    ed.childNodes = [];
+    const p1 = makeEl('p');
+    const quotePill = makeEl('span');
+    quotePill.setAttribute('contenteditable', 'false');
+    quotePill.setAttribute('data-lexical-decorator', 'true');
+    quotePill.appendChild(makeTxt('Quote: foo.ts:12'));
+    quotePill.getBoundingClientRect = () => ({ left: 612, right: 742, top: 913, bottom: 931, width: 130, height: 18 });
+    const zwspDirect = makeTxt('\u200b');
+    p1.appendChild(quotePill);
+    p1.appendChild(zwspDirect);
+    ed.appendChild(p1);
+    setCollapsedSel(zwspDirect, 1, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.getAttribute('data-ag-cs-caret-visible'), '1');
+    assert.equal(caret.style.transform, 'translate3d(142px, 13px, 0)', 'Edge 1a: ZWSP text node after Quote pill must align to pill.right (742 - 600 = 142px)');
+
+    // Edge 1b: Wrapped BOM (\ufeff) Text node inside <span> preceded by zero-width empty shell <span>
+    const emptyShell = makeEl('span');
+    emptyShell.getBoundingClientRect = () => ({ left: 612, right: 612, top: 913, bottom: 931, width: 0, height: 18 });
+    const bomWrap = makeEl('span');
+    const bomTxt = makeTxt('\ufeff');
+    bomWrap.appendChild(bomTxt);
+    p1.childNodes = [];
+    p1.appendChild(quotePill);
+    p1.appendChild(emptyShell);
+    p1.appendChild(bomWrap);
+    setCollapsedSel(bomTxt, 0, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.getAttribute('data-ag-cs-caret-visible'), '1');
+    assert.equal(caret.style.transform, 'translate3d(142px, 13px, 0)', 'Edge 1b: Wrapped BOM text node must walk across empty inline shell to Quote pill right edge');
+
+    // Edge 1c + Edge 2a: ZWSP on a second paragraph must NOT snap to previous paragraph's Quote pill, and must fail safe to native caret instead of emptyCaretProbeCache (12, 14)
+    const p2 = makeEl('p');
+    const p2Zwsp = makeTxt('\u200b');
+    p2.appendChild(p2Zwsp);
+    ed.appendChild(p2);
+    setCollapsedSel(p2Zwsp, 0, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.hasAttribute('data-ag-cs-caret-visible'), false, 'Edge 1c/2: Non-empty editor with unmeasurable ZWSP on line 2 must yield to native caret rather than jumping to pill or emptyCaretProbeCache');
+    assert.equal(ed.hasAttribute('data-ag-cs-smooth-caret'), false, 'Native caret must be restored when smooth-caret fails safe');
+
+    // Edge 2b: Editor containing an unmeasured inline decorator (contenteditable="false") with empty rects fails safe to native caret
+    ed.childNodes = [];
+    const pDecoOnly = makeEl('p');
+    const unmeasuredDeco = makeEl('span');
+    unmeasuredDeco.setAttribute('contenteditable', 'false');
+    unmeasuredDeco.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
+    const afterUnmeasured = makeTxt('\u200b');
+    pDecoOnly.appendChild(unmeasuredDeco);
+    pDecoOnly.appendChild(afterUnmeasured);
+    ed.appendChild(pDecoOnly);
+    setCollapsedSel(afterUnmeasured, 1, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.hasAttribute('data-ag-cs-caret-visible'), false, 'Edge 2b: Unmeasured decorator pill must fail safe to native caret instead of projecting onto emptyCaretProbeCache');
+    assert.equal(ed.hasAttribute('data-ag-cs-smooth-caret'), false);
+
+    // Edge 2c: Non-empty plain text with empty range rects fails safe to native caret instead of emptyCaretProbeCache
+    ed.childNodes = [];
+    const pTxt = makeEl('p');
+    const helloTxt = makeTxt('hello world');
+    pTxt.appendChild(helloTxt);
+    ed.appendChild(pTxt);
+    setCollapsedSel(helloTxt, 5, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.hasAttribute('data-ag-cs-caret-visible'), false, 'Edge 2c: Non-empty text with empty range rects must fail safe to native caret');
+    assert.equal(ed.hasAttribute('data-ag-cs-smooth-caret'), false);
+
+    // Edge 2d: Clearing back to a genuinely empty editor (<p>\u200b</p>) cleanly resumes emptyCaretProbeCache
+    ed.childNodes = [];
+    const pCleared = makeEl('p');
+    const clearedZwsp = makeTxt('\u200b');
+    pCleared.appendChild(clearedZwsp);
+    ed.appendChild(pCleared);
+    setCollapsedSel(clearedZwsp, 0, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.getAttribute('data-ag-cs-caret-visible'), '1', 'Edge 2d: Truly empty ZWSP-only editor must resume smooth emptyCaretProbeCache');
+    assert.equal(caret.style.transform, 'translate3d(12px, 14px, 0)');
+
+    ctl.teardown();
+  } finally {
+    globalThis.document = prevDoc;
+    globalThis.window = prevWin;
+    globalThis.getComputedStyle = prevGetCs;
+    globalThis.requestAnimationFrame = prevRaf;
+  }
+});
+
+test('ui-runtime invalidates smooth-caret selection and queues lightweight caret sync on in-editor decorator mount without waking composer clearance scan', () => {
+  const vm = require('node:vm');
+  const cdp = require(path.join(ROOT_DIR, 'cdp.js'));
+  const uiSrc = fs.readFileSync(path.join(ROOT_DIR, 'ui-runtime.js'), 'utf8');
+  const mos = [];
+  const makeNode = (tag, attrsObj = {}) => {
+    const attrs = new Map(Object.entries(attrsObj));
+    const el = {
+      nodeType: 1,
+      tagName: tag.toUpperCase(),
+      nodeName: tag.toUpperCase(),
+      className: '',
+      classList: { add() {}, remove() {}, contains: () => false, toggle: () => false },
+      style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => '' },
+      childNodes: [],
+      children: [],
+      isConnected: true,
+      parentNode: null,
+      parentElement: null,
+      offsetHeight: 80,
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      setAttribute(k, v) { attrs.set(k, String(v)); },
+      hasAttribute(k) { return attrs.has(k); },
+      removeAttribute(k) { attrs.delete(k); },
+      appendChild(c) {
+        c.parentNode = c.parentElement = el;
+        el.childNodes.push(c);
+        if (c.nodeType === 1) el.children.push(c);
+        return c;
+      },
+      matches(sel) {
+        if (sel.includes('agent-input-box')) return attrs.get('data-testid') === 'agent-input-box';
+        if (sel.includes('contenteditable="true"')) return attrs.get('contenteditable') === 'true';
+        return false;
+      },
+      closest(sel) {
+        for (let c = el; c && c.nodeType === 1; c = c.parentElement) if (c.matches?.(sel)) return c;
+        return null;
+      },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 80, right: 400, bottom: 80 }),
+      checkVisibility: () => true,
+    };
+    return el;
+  };
+  const html = makeNode('html');
+  const body = makeNode('body');
+  const ib = makeNode('div', { 'data-testid': 'agent-input-box' });
+  const card = makeNode('div');
+  const ed = makeNode('div', { contenteditable: 'true' });
+  const p = makeNode('p');
+  const deco = makeNode('span', { contenteditable: 'false', 'data-lexical-decorator': 'true' });
+  p.appendChild(deco);
+  ed.appendChild(p);
+  card.appendChild(ed);
+  ib.appendChild(card);
+  body.appendChild(ib);
+  html.appendChild(body);
+
+  let invalidateCalls = 0;
+  let queueCalls = 0;
+  let offsetReads = 0;
+  Object.defineProperty(card, 'offsetHeight', { get() { offsetReads += 1; return 80; } });
+
+  class MockMO {
+    constructor(cb) { this.cb = cb; this.active = false; this.target = null; mos.push(this); }
+    observe(target) { this.active = true; this.target = target; }
+    disconnect() { this.active = false; }
+    takeRecords() { return []; }
+    emit(recs) { if (this.active) this.cb(recs, this); }
+  }
+
+  const doc = {
+    nodeType: 9,
+    documentElement: html,
+    head: makeNode('head'),
+    body,
+    hidden: false,
+    readyState: 'complete',
+    activeElement: ed,
+    hasFocus: () => true,
+    createElement: (t) => makeNode(t),
+    getElementById: () => null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const win = {
+    document: doc,
+    location: { href: 'vscode-file://vscode-app/index.html', pathname: '/c/test' },
+    navigator: { language: 'en' },
+    devicePixelRatio: 1,
+    innerWidth: 1280,
+    innerHeight: 800,
+    performance: { now: () => 1000 },
+    setTimeout: () => 1,
+    clearTimeout() {},
+    setInterval: () => 1,
+    clearInterval() {},
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame() {},
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', position: 'static', getPropertyValue: () => '' }),
+    MutationObserver: MockMO,
+    IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} },
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    addEventListener() {},
+    removeEventListener() {},
+    __agPrismSmoothCaret: {
+      createSmoothCaretController: () => ({
+        teardown() {},
+        bumpMetricsEpoch() {},
+        invalidateSelection() { invalidateCalls += 1; },
+        measureSnapshot: () => [],
+        applyMutations() {},
+        sync() {},
+        queue() { queueCalls += 1; },
+      }),
+    },
+    Map, Set, WeakMap, WeakSet, Array, Object, Math, Number, String, Boolean, Promise, RegExp, JSON, Error,
+  };
+  win.window = win.globalThis = win.self = win;
+  vm.runInNewContext(uiSrc, win);
+  win.__agCsUiMain({ ...cdp.DEFAULT_CONFIG, smoothCaret: true, mascot: 'off' });
+
+  invalidateCalls = 0;
+  queueCalls = 0;
+  offsetReads = 0;
+  const rootMo = mos.find((m) => m.active && m.target === html);
+  assert.ok(rootMo, 'ui-runtime root MO must be active');
+
+  // React mounts text content inside an inline Lexical decorator span inside [contenteditable="true"]
+  const pillTxt = { nodeType: 3, nodeValue: 'gmail', parentNode: deco };
+  deco.appendChild(pillTxt);
+  rootMo.emit([{ type: 'childList', target: deco, addedNodes: [pillTxt], removedNodes: [] }]);
+  assert.equal(invalidateCalls, 1, 'In-editor decorator text mount must invoke smoothCaretCtl.invalidateSelection()');
+  assert.equal(queueCalls, 1, 'In-editor decorator mount must queue lightweight caret sync without full composer sync');
+  assert.equal(offsetReads, 0, 'In-editor decorator mount must NOT trigger measureCrabClearanceAll layout reads');
+
+  win.__agPrism.destroy();
+});
+
+test('smooth-caret hardens inline chip guards: inside-chip closest alignment, pre-rect element boundary, offset-0/ZWSP bogus rect cross-check, wrapped multi-rect chips, and bounded text-predecessor range without full editor scans', () => {
+  const smoothCaretMod = require('../smooth-caret.js');
+  const prevDoc = globalThis.document;
+  const prevWin = globalThis.window;
+  const prevGetCs = globalThis.getComputedStyle;
+  const prevRaf = globalThis.requestAnimationFrame;
+
+  const hostKids = [];
+  let fullEdTextReads = 0;
+  let edQsaCalls = 0;
+  let hotQsCalls = 0;
+
+  const makeEl = (tag) => {
+    const attrs = new Map();
+    const el = {
+      tagName: tag.toUpperCase(),
+      nodeName: tag.toUpperCase(),
+      nodeType: 1,
+      className: '',
+      style: {},
+      isConnected: true,
+      parentNode: null,
+      parentElement: null,
+      childNodes: [],
+      setAttribute(k, v) { attrs.set(k, String(v)); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      hasAttribute(k) { return attrs.has(k); },
+      removeAttribute(k) { attrs.delete(k); },
+      remove() { this.isConnected = false; },
+      appendChild(c) {
+        c.parentNode = el;
+        c.parentElement = el;
+        el.childNodes.push(c);
+        return c;
+      },
+      matches(sel) {
+        return String(sel)
+          .split(',')
+          .map((s) => s.trim())
+          .some((tok) => {
+            if (tok === '[contenteditable="false"]') return attrs.get('contenteditable') === 'false';
+            if (tok === '[data-lexical-decorator]') return attrs.has('data-lexical-decorator');
+            return false;
+          });
+      },
+      closest(sel) {
+        for (let c = el; c && c.nodeType === 1; c = c.parentElement || c.parentNode) {
+          if (c.matches?.(sel)) return c;
+        }
+        return null;
+      },
+      querySelector() {
+        hotQsCalls += 1;
+        return null;
+      },
+      querySelectorAll() {
+        hotQsCalls += 1;
+        return [];
+      },
+    };
+    return el;
+  };
+  const makeTxt = (v) => ({ nodeType: 3, nodeValue: v, data: v, parentNode: null, parentElement: null });
+
+  const host = makeEl('div');
+  host.clientLeft = 0;
+  host.clientTop = 0;
+  host.scrollLeft = 0;
+  host.scrollTop = 0;
+  host.getBoundingClientRect = () => ({ left: 600, top: 900, width: 720, height: 80 });
+  host.appendChild = (ch) => { ch.isConnected = true; ch.parentElement = host; hostKids.push(ch); return ch; };
+  host.querySelector = (sel) => (sel.startsWith('.ag-cs-smooth-caret') ? hostKids.find((c) => c.className === 'ag-cs-smooth-caret') || null : null);
+
+  const ed = makeEl('div');
+  ed.setAttribute('contenteditable', 'true');
+  ed.parentElement = host;
+  ed.scrollLeft = 0;
+  ed.scrollTop = 0;
+  ed.scrollHeight = 80;
+  ed.clientHeight = 80;
+  ed.getBoundingClientRect = () => ({ left: 600, right: 1320, top: 900, bottom: 980, width: 720, height: 80 });
+  ed.contains = (n) => { for (let c = n; c; c = c.parentNode) if (c === ed) return true; return false; };
+  Object.defineProperty(ed, 'textContent', {
+    get() {
+      fullEdTextReads += 1;
+      return 'forbidden-full-scan';
+    },
+  });
+  ed.querySelector = () => {
+    hotQsCalls += 1;
+    return null;
+  };
+  ed.querySelectorAll = () => {
+    edQsaCalls += 1;
+    return [];
+  };
+
+  let selState = { rangeCount: 0, isCollapsed: true };
+  let tempRangeRectResolver = () => [];
+  globalThis.window = { devicePixelRatio: 1 };
+  globalThis.getComputedStyle = () => ({ paddingLeft: '8px', paddingTop: '10px', fontSize: '14px', lineHeight: '22px' });
+  globalThis.requestAnimationFrame = (cb) => { cb(); return 1; };
+  globalThis.document = {
+    activeElement: ed,
+    createElement: (tag) => makeEl(tag),
+    createRange: () => {
+      const r = {
+        startContainer: null,
+        startOffset: 0,
+        endContainer: null,
+        endOffset: 0,
+        setStart(n, o) { this.startContainer = n; this.startOffset = o; },
+        setEnd(n, o) { this.endContainer = n; this.endOffset = o; },
+        getClientRects() { return tempRangeRectResolver(this); },
+        getBoundingClientRect() {
+          const rs = tempRangeRectResolver(this);
+          return rs && rs.length ? rs[rs.length - 1] : { left: 0, right: 0, top: 0, height: 0 };
+        },
+      };
+      return r;
+    },
+    getSelection: () => selState,
+    querySelectorAll: (sel) => {
+      if (sel.includes('[contenteditable="true"]')) return [ed];
+      if (sel === '.ag-cs-smooth-caret') return hostKids;
+      return [];
+    },
+  };
+
+  const setCollapsedSel = (container, offset, rects = []) => {
+    selState = {
+      rangeCount: 1,
+      isCollapsed: true,
+      focusNode: container,
+      focusOffset: offset,
+      getRangeAt: () => ({
+        collapsed: true,
+        startContainer: container,
+        startOffset: offset,
+        endContainer: container,
+        endOffset: offset,
+        getClientRects: () => rects,
+        getBoundingClientRect: () => (rects.length ? rects[rects.length - 1] : { left: 0, top: 0, height: 0 }),
+      }),
+    };
+  };
+
+  try {
+    const ctl = smoothCaretMod.createSmoothCaretController({
+      isDestroyed: () => false,
+      isEnabled: () => true,
+      setAttrIfChanged(el, k, v) { if (el.getAttribute(k) !== v) el.setAttribute(k, v); },
+      runGuardedMut: (fn) => fn(),
+    });
+
+    // Guard 1: caret reported inside a non-editable chip aligns to the chip's right edge & centers vertically on tall pills
+    const p1 = makeEl('p');
+    p1.getBoundingClientRect = () => ({ left: 612, right: 1300, top: 910, bottom: 934, width: 688, height: 24 });
+    const chip = makeEl('span');
+    chip.setAttribute('contenteditable', 'false');
+    chip.setAttribute('data-lexical-decorator', 'true');
+    chip.getBoundingClientRect = () => ({ left: 612, right: 760, top: 910, bottom: 934, width: 148, height: 24 });
+    const chipInner = makeEl('span');
+    const chipTxt = makeTxt('Quote: app.ts:10');
+    chipInner.appendChild(chipTxt);
+    chip.appendChild(chipInner);
+    p1.appendChild(chip);
+    ed.appendChild(p1);
+
+    setCollapsedSel(chipTxt, 5, [{ left: 640, top: 913, height: 18 }]);
+    ctl.sync(false, false);
+    const caret = host.querySelector('.ag-cs-smooth-caret');
+    assert.ok(caret);
+    // Tall pill (h=24, gh=18): top = 910 + (24-18)/2 = 913 -> y=13px, x = 760 - 600 = 160px
+    assert.equal(caret.style.transform, 'translate3d(160px, 13px, 0)', 'Guard 1: caret inside non-editable chip must snap to chip right edge');
+    assert.equal(caret.style.height, '18px');
+
+    // Guard 2: element-level caret immediately after inline chip overrides bogus range.getClientRects()
+    chip.getBoundingClientRect = () => ({ left: 612, right: 760, top: 913, bottom: 931, width: 148, height: 18 });
+    setCollapsedSel(p1, 1, [{ left: 612, top: 913, height: 18 }]);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(160px, 13px, 0)', 'Guard 2: element boundary after inline chip must override stale paragraph-left clientRect');
+
+    // Guard 2 negative: block-level <p> preceding element cursor on editor root must NOT snap to block's right edge (1300)
+    setCollapsedSel(ed, 1, [{ left: 612, top: 935, height: 18 }]);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(12px, 35px, 0)', 'Guard 2 must ignore block elements like <p> and trust range rect');
+
+    // Guard 3a: text node at offset===0 following inline chip cross-checks bogus same-line rect (612 < 760 - 2) -> pr.right + 1
+    const afterSpan = makeEl('span');
+    const afterTxt = makeTxt('hello');
+    afterSpan.appendChild(afterTxt);
+    p1.appendChild(afterSpan);
+    setCollapsedSel(afterTxt, 0, [{ left: 612, top: 913, height: 18 }]);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(161px, 13px, 0)', 'Guard 3a: offset===0 bogus rect left of same-line chip must snap to pr.right + 1 (161px)');
+
+    // Guard 3b: ZWSP text node at offset===1 with bogus same-line rect also cross-checks against chip.right -> pr.right + 1
+    const zwspAfter = makeTxt('\u200b');
+    p1.childNodes = [];
+    p1.appendChild(chip);
+    p1.appendChild(zwspAfter);
+    setCollapsedSel(zwspAfter, 1, [{ left: 612, top: 913, height: 18 }]);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(161px, 13px, 0)', 'Guard 3b: ZWSP bogus same-line rect must snap to pr.right + 1 (161px)');
+
+    // Guard 3c: wrapped next-line rect (deltaY >= max(gh, pr.height)) must NOT snap back to chip on previous line
+    setCollapsedSel(zwspAfter, 0, [{ left: 612, top: 938, height: 18 }]);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(12px, 38px, 0)', 'Guard 3c: next-line rect must not snap to preceding line chip');
+
+    // Guard 3d: accurate rect already at chip right edge (760 >= 760 - 2) stays untouched
+    setCollapsedSel(zwspAfter, 0, [{ left: 760, top: 913, height: 18 }]);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(160px, 13px, 0)', 'Guard 3d: valid rect at chip right edge must not be shifted');
+
+    // Guard 4a: wrapped multi-rect chip uses last non-zero getClientRects() entry rather than union bounding box
+    const wrappedChip = makeEl('span');
+    wrappedChip.setAttribute('contenteditable', 'false');
+    wrappedChip.setAttribute('data-lexical-decorator', 'true');
+    wrappedChip.getBoundingClientRect = () => ({ left: 612, right: 1200, top: 913, bottom: 953, width: 588, height: 40 });
+    wrappedChip.getClientRects = () => [
+      { left: 612, right: 1200, top: 913, bottom: 931, width: 588, height: 18 },
+      { left: 612, right: 708, top: 935, bottom: 953, width: 96, height: 18 },
+      { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 },
+    ];
+    const wrappedZwsp = makeTxt('\u200b');
+    p1.childNodes = [];
+    p1.appendChild(wrappedChip);
+    p1.appendChild(wrappedZwsp);
+    setCollapsedSel(wrappedZwsp, 1, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(108px, 35px, 0)', 'Guard 4a: wrapped multi-rect chip must align to last non-zero line rect (708 - 600 = 108px, 935 - 900 = 35px)');
+
+    // Guard 4b-i: empty inline span after plain text measures end of preceding text via temp Range (collapsed hit)
+    const plainTxt = makeTxt('hello');
+    const emptyInline = makeEl('span');
+    p1.childNodes = [];
+    p1.appendChild(plainTxt);
+    p1.appendChild(emptyInline);
+    tempRangeRectResolver = (r) => (r.startContainer === plainTxt && r.startOffset === 5 && r.endOffset === 5 ? [{ left: 668, top: 913, height: 18 }] : []);
+    setCollapsedSel(emptyInline, 0, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(68px, 13px, 0)', 'Guard 4b-i: empty span after plain text must align to end of preceding text via temp Range');
+
+    // Guard 4b-ii: ZWSP after plain text with trailing ZWSP falls back to last visible char range [end-1, end]
+    const plainWithTailZwsp = makeTxt('hello\u200b');
+    const trailingZwsp = makeTxt('\u200b');
+    p1.childNodes = [];
+    p1.appendChild(plainWithTailZwsp);
+    p1.appendChild(trailingZwsp);
+    tempRangeRectResolver = (r) =>
+      r.startContainer === plainWithTailZwsp && r.startOffset === 4 && r.endOffset === 5
+        ? [{ left: 660, right: 669, top: 913, height: 18 }]
+        : [];
+    setCollapsedSel(trailingZwsp, 1, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.style.transform, 'translate3d(69px, 13px, 0)', 'Guard 4b-ii: ZWSP after text must fall back to last visible char right edge (669 - 600 = 69px)');
+
+    // Guard 4b-iii: bounded walk must NEVER cross block boundary (<p>) to snap to previous paragraph text
+    const p2 = makeEl('p');
+    const p2EmptySpan = makeEl('span');
+    p2EmptySpan.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
+    p2.appendChild(p2EmptySpan);
+    ed.appendChild(p2);
+    setCollapsedSel(p2EmptySpan, 0, []);
+    ctl.invalidateSelection();
+    ctl.sync(false, false);
+    assert.equal(caret.hasAttribute('data-ag-cs-caret-visible'), false, 'Guard 4b-iii: empty span on paragraph 2 must never cross block boundary to paragraph 1 text');
+    assert.equal(ed.hasAttribute('data-ag-cs-smooth-caret'), false);
+
+    // Performance & anti-regression invariants
+    assert.equal(fullEdTextReads, 0, 'Must perform strictly 0 full ed.textContent reads across all 4 guards');
+    assert.equal(edQsaCalls, 0, 'Must perform strictly 0 ed.querySelectorAll("*") calls');
+    assert.equal(hotQsCalls, 0, 'Must perform strictly 0 hot-path querySelector/querySelectorAll calls');
+
+    ctl.teardown();
+  } finally {
+    globalThis.document = prevDoc;
+    globalThis.window = prevWin;
+    globalThis.getComputedStyle = prevGetCs;
+    globalThis.requestAnimationFrame = prevRaf;
+  }
+});

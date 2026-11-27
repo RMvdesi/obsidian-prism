@@ -187,3 +187,61 @@ test('home-ripple-host pause-safe clock prevents time-teleport on wake and smoot
   assert.ok(glowAfterWake - glowBeforeSleep <= 20, `Horizon glow animation clock must not teleport on wake (delta=${glowAfterWake - glowBeforeSleep}ms)`);
   ctl.unmount();
 });
+
+test('home-ripple-host wake() stays idempotent when paused/reduced-motion while already sleeping (0 attribute flip)', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'home-ripple-host.js'), 'utf8');
+  let attrChanges = 0;
+  let reduced = false;
+  const hostAttrs = new Map();
+  const makeHostEl = () => ({
+    style: {}, isConnected: true, className: '', children: [],
+    setAttribute(k, v) { if (hostAttrs.get(k) !== String(v)) { hostAttrs.set(k, String(v)); attrChanges += 1; } },
+    getAttribute(k) { return hostAttrs.has(k) ? hostAttrs.get(k) : null; },
+    hasAttribute(k) { return hostAttrs.has(k); },
+    removeAttribute(k) { if (hostAttrs.delete(k)) attrChanges += 1; },
+    appendChild(c) { this.children.push(c); return c; },
+    insertBefore(c) { this.children.unshift(c); return c; },
+    remove() { this.isConnected = false; },
+  });
+  const fakeCanvas = { width: 800, height: 400, style: {}, isConnected: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }), getContext: () => null, getAttribute: () => null, setAttribute() {}, removeAttribute() {} };
+  const fakeHome = { isConnected: true, style: {}, clientWidth: 800, clientHeight: 400, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }), insertBefore() {}, appendChild() {}, addEventListener() {}, removeEventListener() {}, querySelector: () => null, getAttribute: () => null, setAttribute() {}, removeAttribute() {} };
+  const fakeDoc = {
+    hidden: false,
+    documentElement: { getAttribute: () => null, classList: { contains: () => false } },
+    body: { classList: { contains: () => false } },
+    createElement: (tag) => (tag === 'canvas' ? { ...fakeCanvas } : makeHostEl()),
+    querySelector: (sel) => (sel.includes('agy-home') ? fakeHome : null),
+    querySelectorAll: () => [], addEventListener() {}, removeEventListener() {},
+  };
+  const rafs = [];
+  const sb = {
+    window: null, document: fakeDoc, performance: { now: () => 1000 },
+    requestAnimationFrame: (cb) => { rafs.push(cb); return rafs.length; },
+    cancelAnimationFrame() {},
+    getComputedStyle: () => ({ color: '#fff', backgroundColor: '#000', fontFamily: 'monospace', getPropertyValue: () => '' }),
+    ResizeObserver: class { observe() {} disconnect() {} },
+    setTimeout: () => 0, clearTimeout() {}, Math, Number, String, Boolean, Array, Object, Map, Set,
+  };
+  sb.window = sb; sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+  const ctl = sb.__agPrismHomeRippleHost.createHomeRippleController({
+    rippleCore: {
+      RIPPLE: { cellWidth: 16, cellHeight: 24 }, parseCssColorToRgb: () => null,
+      createWaveField: () => ({ advance() {}, active: () => false, disturb() {}, skimmer() {} }),
+      createGlyphField: () => ({ mode: '2d', busy: () => false, needsDraw: () => false, draw() {}, invalidate() {}, setCalmZones() {}, dispose() {} }),
+      mountBrandHorizonGlow: () => ({ mode: '2d', resize() {}, draw() {}, clear() {}, invalidate() {}, dispose() {} }),
+    },
+    isDestroyed: () => false, isAllowed: () => true, isDarkTheme: () => true, motionReduced: () => reduced,
+    getMinFrameGapMs: () => 0, getAmbientIntensity: () => 1, getAccentTone: () => 'cobalt',
+    setAttrIfChanged(el, k, v) { if (el.getAttribute(k) !== String(v)) el.setAttribute(k, String(v)); },
+    onPointerPressMascot() {},
+  });
+  ctl.sync(fakeHome);
+  while (rafs.length) rafs.shift()(1016);
+  reduced = true;
+  ctl.getMount().wake();
+  const flipsBefore = attrChanges;
+  for (let i = 0; i < 5; i++) ctl.getMount().wake();
+  assert.equal(attrChanges, flipsBefore, 'repeated wake() while paused/sleeping must perform 0 data-ripple-sleep attribute flips');
+  ctl.unmount();
+});
