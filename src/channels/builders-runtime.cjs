@@ -43,6 +43,7 @@ function createRuntimeChannelBuilders({ rootDir, readConfig, bundleCache }) {
   function readCompiledTelemetryAssets(opts = null) {
     const rels = [
       'vial-core.js',
+      'src/runtime/pulse-card-layout.js',
       'pulse-vial-bridge.js',
       'vendor/pulse-dashboard/inline-fallback.js',
     ];
@@ -63,10 +64,13 @@ function createRuntimeChannelBuilders({ rootDir, readConfig, bundleCache }) {
       fileEntries,
       opts,
       compileFn: () => {
-        const vialMin = minifySingleSource(fs.readFileSync(absPaths[0], 'utf8'), { allowMemberProps: false });
-        const bridgeMin = minifySingleSource(minifyEmbeddedCssTemplate(fs.readFileSync(absPaths[1], 'utf8')), { allowMemberProps: false });
-        const fallbackMin = minifySingleSource(minifyEmbeddedCssTemplate(fs.readFileSync(absPaths[2], 'utf8')), { allowMemberProps: false });
-        const minRuntime = [vialMin, bridgeMin, fallbackMin].join(';\n');
+        const combined = [
+          fs.readFileSync(absPaths[0], 'utf8'),
+          minifyEmbeddedCssTemplate(fs.readFileSync(absPaths[1], 'utf8')),
+          minifyEmbeddedCssTemplate(fs.readFileSync(absPaths[2], 'utf8')),
+          minifyEmbeddedCssTemplate(fs.readFileSync(absPaths[3], 'utf8')),
+        ].join(';\n');
+        const minRuntime = minifySingleSource(combined, { allowMemberProps: false });
         const codeHash = computeHash(minRuntime);
         return { minRuntime, codeHash };
       },
@@ -112,7 +116,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
           }
         });
       } catch {}
-      for (const k of ['__agPrismTelemetry','__agVialCore','__agCsPulseVialBridge','__agCsPulseBridgeInst']) {
+      for (const k of ['__agPrismTelemetry','__agVialCore','__agCsPulseCardLayout','__agCsPulseVialBridge','__agCsPulseBridgeInst']) {
         try { delete window[k]; } catch {}
         try { delete globalThis[k]; } catch {}
       }
@@ -156,6 +160,8 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
       }
       const vc = globalThis.__agVialCore || window.__agVialCore;
       if (vc) { try { window.__agVialCore = vc; globalThis.__agVialCore = vc; } catch {} }
+      const pl = globalThis.__agCsPulseCardLayout || window.__agCsPulseCardLayout;
+      if (pl) { try { window.__agCsPulseCardLayout = pl; globalThis.__agCsPulseCardLayout = pl; } catch {} }
       const pv = globalThis.__agCsPulseVialBridge || window.__agCsPulseVialBridge;
       if (pv) { try { window.__agCsPulseVialBridge = pv; globalThis.__agCsPulseVialBridge = pv; } catch {} }
       try { mounted?.sync?.(effectiveCfg); } catch {}

@@ -785,6 +785,15 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
     cChip.dispatchEvent({ type: 'click' });
     assert.equal(xCard.hidden, true, 'second click on pinned chip closes card');
 
+    // Clicking speed chip opens unified #context-card (legacy #speed-card removed) while keeping #ttft & #latest-rate anchors
+    assert.equal(sr.getElementById('speed-card'), null, 'legacy standalone #speed-card popover must be removed');
+    assert.ok(sr.getElementById('ttft') && sr.getElementById('latest-rate'), 'DOM fallback anchors #ttft and #latest-rate must remain');
+    const sChip = sr.querySelector('[data-card="speed"]');
+    sChip.dispatchEvent({ type: 'click' });
+    assert.equal(xCard.hidden, false, 'clicking speed chip must open unified #context-card');
+    sChip.dispatchEvent({ type: 'click' });
+    assert.equal(xCard.hidden, true, 'second click on speed chip must close unified #context-card');
+
     // 4) Settings panel telemetryQuotaMode switch updates html attr, persists & live-syncs bar to both mode
     const sec = env.doc.createElement('div');
     sec.setAttribute('data-body-built', '1');

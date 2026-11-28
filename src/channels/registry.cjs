@@ -303,7 +303,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'telemetry', channelNumber: 13, order: 130, tier: 'runtime', topLevelPack: true, staticRuntimePack: true,
     label: 'Telemetry Bar & Physical Vial', configKeys: ['telemetryModule', 'telemetryQuotaMode', 'language'],
-    files: ['vial-core.js', 'pulse-vial-bridge.js', 'vendor/pulse-dashboard/inline-fallback.js'],
+    files: ['vial-core.js', 'src/runtime/pulse-card-layout.js', 'pulse-vial-bridge.js', 'vendor/pulse-dashboard/inline-fallback.js'],
     mountGlobal: '__agPrismTelemetry', respectSkippedByLiveCfg: true, budgetBytes: 128 * 1024,
     probeLines: [
       'hasTelemetry: Boolean((window.__agPrismTelemetry || globalThis.__agPrismTelemetry) && (window.__agVialCore || globalThis.__agVialCore) && (window.__agCsPulseVialBridge || globalThis.__agCsPulseVialBridge))',

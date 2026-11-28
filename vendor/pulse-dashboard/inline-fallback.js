@@ -163,7 +163,7 @@ const doc=gD();let first=null;
 for(const it of insts.values()){if(!isConn(doc,it.host))continue;if(!first)first=it;if(it.host.id===PRISM_BAR_ID)return it;}
 return first;
 };
-const isCardOpen=it=>!!(it&&((it.xCard&&!it.xCard.hidden)||(it.sCard&&!it.sCard.hidden)));
+const isCardOpen=it=>!!(it&&it.xCard&&!it.xCard.hidden);
 const resolveActiveInst=()=>{
 const doc=gD();
 for(const it of insts.values())if(isConn(doc,it.host)&&isCardOpen(it))return it;
@@ -363,7 +363,7 @@ hasHost=true;
 const clrHover=it=>{if(it){it.hOpenTm=cT(it.hOpenTm);it.hCloseTm=cT(it.hCloseTm);}};
 const disposeInst=(it,notifyBridge=true)=>{
 if(!it)return;clrHover(it);it.pinned=null;it.hoverOpen=false;detachTierRec(it);
-try{if(it.xCard)it.xCard.hidden=true;if(it.sCard)it.sCard.hidden=true;if(notifyBridge)emitB(gW(),{event:'dispose',host:it.host});}catch{}
+try{if(it.xCard)it.xCard.hidden=true;if(notifyBridge)emitB(gW(),{event:'dispose',host:it.host});}catch{}
 try{it.host.remove();}catch{}
 if(activeHost===it.host)activeHost=null;
 instByHost.delete(it.host);insts.delete(it.anc);
@@ -466,9 +466,9 @@ const g=qGrp(qGs,model,gW()),gn=g?.name||g?.id||'',w5=qWin(g?.windows?.['5h']||g
 let s5=!!w5,sW=!!wW;if(quotaMode!=='both'&&w5&&wW){if(wW.r<w5.r)s5=false;else sW=false;}
 const setQ=(chip,id,w0,lbl,vis)=>{
 if(!chip)return;
-if(!w0){chip.hidden=true;rA(chip,DW);rA(chip,'title');sT(id,'—');return;}
+if(!w0){chip.hidden=true;rA(chip,DW);rA(chip,'aria-label');sT(id,'—');return;}
 const p=Math.round(w0.r*100),e=qEta(w0.t);
-chip.hidden=!vis;sT(id,`${p}%`);wLvl(chip,w0.r);sA(chip,'title',`${gn?gn+' · ':''}${lbl} ${p}%${e?` (${e})`:''}`);
+chip.hidden=!vis;sT(id,`${p}%`);wLvl(chip,w0.r);sA(chip,'aria-label',`${gn?gn+' · ':''}${lbl} ${p}%${e?` (${e})`:''}`);
 };
 setQ(it.fChip,'five-balance',w5,t.fiveShort,s5);setQ(it.wChip,'week-balance',wW,t.weekShort,sW);
 if(!s5&&!sW)sA(fbEl,'data-no-q','1');else rA(fbEl,'data-no-q');
@@ -516,8 +516,8 @@ anc.appendChild(el);return true;
 const allChips=it=>[it.fChip,it.wChip,it.cChip,it.sChip,it.xChip];
 const closeCards=(it,notify=false)=>{
 if(!it)return false;clrHover(it);it.pinned=null;it.hoverOpen=false;
-if((!it.xCard||it.xCard.hidden)&&(!it.sCard||it.sCard.hidden))return false;
-if(it.xCard)it.xCard.hidden=true;if(it.sCard)it.sCard.hidden=true;
+if(!it.xCard||it.xCard.hidden)return false;
+it.xCard.hidden=true;
 for(const c of allChips(it))sA(c,AE_A,'false');
 if(notify)emitB(gW(),{event:'card',host:it.host,open:false});
 return true;
@@ -525,7 +525,7 @@ return true;
 const openCard=(it,card,btn,pin)=>{
 if(!it||!card)return;clrHover(it);activeHost=it.host;
 for(const o of insts.values())if(o!==it)closeCards(o,false);
-it.sCard.hidden=it.xCard.hidden=true;
+it.xCard.hidden=true;
 for(const c of allChips(it))sA(c,AE_A,'false');
 card.hidden=false;if(btn)sA(btn,AE_A,'true');
 it.pinned=pin?card:null;it.hoverOpen=!pin;void refreshInst(it);
@@ -553,21 +553,21 @@ const sr=host.attachShadow({mode:'open'});sr.appendChild(E('style',{text:SHADOW_
 const t0=gStr(),btn=(c,k,ex)=>E('button',{type:'button',cls:'chip','data-card':c,...ex},k),dl=rows=>E('dl',null,rows.flatMap(([k,id])=>[E('dt',{'data-fb-i18n':k,text:t0[k]}),E('dd',{id,text:'—'})]));
 const qChip=(k,k2,id)=>btn(k,[E('span',{'data-i18n':k,'data-fb-i18n':k2,text:t0[k2]}),E('strong',{id,text:'—'})],{[AE_A]:'false',hidden:true});
 const fChip=qChip('five','fiveShort','five-balance'),wChip=qChip('week','weekShort','week-balance'),
-sChip=btn('speed',[E('span',{cls:'rounds dim',id:'rounds',text:'—'}),E('strong',{id:'tps',text:'—'}),E('span',{cls:'dim',text:'tok/s'})]),
+sChip=btn('speed',[E('span',{cls:'rounds dim',id:'rounds',text:'—'}),E('strong',{id:'tps',text:'—'}),E('span',{cls:'dim',text:'tok/s'})],{[AE_A]:'false'}),
 cChip=btn('cache',[E('span',{cls:'cache-total',id:'cache-total',text:'—'}),E('span',{cls:'sub-badge',id:'subagent-badge',hidden:true,text:''}),E('span',{cls:'dim',text:'·'}),E('span',{'data-i18n':'cache','data-fb-i18n':'cache',text:t0.cache}),E('strong',{id:'cache-rate',text:'—'})],{[AE_A]:'false'}),
 xChip=btn('context',[E('span',{cls:'context-ring',id:'context-ring'}),E('span',{cls:'context-label dim','data-i18n':'contextShort',text:'Ctx'}),E('strong',{id:'context-percent',text:'0%'})],{[AE_A]:'false'}),
-sCard=E('section',{cls:'card',id:'speed-card',hidden:true},[E('div',{cls:'heading'},[E('span',{'data-fb-i18n':'speedHeading',text:t0.speedHeading})]),dl([['ttft','ttft'],['latestRate','latest-rate']])]),
+sMeta=E('div',{hidden:true},[E('span',{id:'ttft',text:'—'}),E('span',{id:'latest-rate',text:'—'})]),
 xCard=E('section',{cls:'card context-card',id:'context-card',hidden:true},[E('div',{cls:'heading'},[E('span',{'data-fb-i18n':'ctxHeading',text:t0.ctxHeading})]),E('strong',{id:'context-summary',text:t0.summary(0,100)}),E('p',{id:'context-tokens',text:'— / 512K tok'}),E('div',{cls:'track',id:'context-track'},[E('i',{id:'context-fill'})]),dl([['curModel','context-model'],['fiveQuota','context-five-quota'],['weekQuota','context-week-quota'],['speedHeading','context-speed'],['cache','context-cache']]),E('p',{cls:'footnote',id:'context-note',hidden:true,text:''})]);
-sr.appendChild(E('div',{cls:'bar'},[fChip,wChip,sChip,cChip,xChip]));sr.appendChild(sCard);sr.appendChild(xCard);
+sr.appendChild(E('div',{cls:'bar'},[fChip,wChip,sChip,cChip,xChip]));sr.appendChild(sMeta);sr.appendChild(xCard);
 
-const it={...mkTier(anc,host),sr,fChip,wChip,sChip,cChip,xChip,sCard,xCard,pinned:null,hoverOpen:false,hOpenTm:null,hCloseTm:null,cid:null,snap:null,lastGroups:null,reqGen:0};
+const it={...mkTier(anc,host),sr,fChip,wChip,sChip,cChip,xChip,xCard,pinned:null,hoverOpen:false,hOpenTm:null,hCloseTm:null,cid:null,snap:null,lastGroups:null,reqGen:0};
 const markAct=()=>{activeHost=host;};on(host,'pointerdown',markAct);on(host,'focusin',markAct);
 const tog=(card,b)=>{if(!card.hidden&&it.pinned===card)closeCards(it,true);else openCard(it,card,b,true);};
 const onEnter=b=>{it.hCloseTm=cT(it.hCloseTm);if(!it.pinned&&xCard.hidden&&it.hOpenTm===null&&mode!=='off')it.hOpenTm=stTm(()=>{it.hOpenTm=null;if(mode!=='off'&&isConn(gD(),it.host)&&!it.pinned&&xCard.hidden)openCard(it,xCard,b,false);},HOVER_OPEN_MS);};
 const onLeave=()=>{it.hOpenTm=cT(it.hOpenTm);if(!it.pinned&&it.hoverOpen&&!xCard.hidden&&it.hCloseTm===null)it.hCloseTm=stTm(()=>{it.hCloseTm=null;if(!it.pinned&&it.hoverOpen&&!xCard.hidden)closeCards(it,true);},HOVER_CLOSE_MS);};
 const onCardEnter=()=>{it.hCloseTm=cT(it.hCloseTm);};
 const onCardDown=()=>{if(it.hoverOpen&&!xCard.hidden){clrHover(it);it.pinned=xCard;it.hoverOpen=false;}};
-for(const c of allChips(it)){for(const ev of['pointerenter','mouseenter'])on(c,ev,()=>onEnter(c));for(const ev of['pointerleave','mouseleave'])on(c,ev,onLeave);on(c,'click',e=>{e?.stopPropagation?.();tog(c===sChip?sCard:xCard,c);});}
+for(const c of allChips(it)){for(const ev of['pointerenter','mouseenter'])on(c,ev,()=>onEnter(c));for(const ev of['pointerleave','mouseleave'])on(c,ev,onLeave);on(c,'click',e=>{e?.stopPropagation?.();tog(xCard,c);});}
 for(const ev of['pointerenter','mouseenter'])on(xCard,ev,onCardEnter);for(const ev of['pointerleave','mouseleave'])on(xCard,ev,onLeave);on(xCard,'pointerdown',onCardDown);
 
 seatIn(anc,host);insts.set(anc,it);instByHost.set(host,it);syncHostAttrs(host);attachTierRec(it);

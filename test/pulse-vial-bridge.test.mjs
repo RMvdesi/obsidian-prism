@@ -1927,7 +1927,8 @@ test('inline-fallback renders 5h and weekly quota chips in composer bar, hides u
     assert.equal(wChip.hidden, false);
     assert.equal(sr.getElementById('week-balance').textContent, '34%');
     assert.equal(wChip.getAttribute('data-warn'), '1', '<= 35% must mark data-warn="1"');
-    assert.ok((wChip.getAttribute('title') || '').includes('周 34%'));
+    assert.equal(wChip.getAttribute('title'), null, 'quota chip must not show redundant native title tooltip');
+    assert.ok((wChip.getAttribute('aria-label') || '').includes('周 34%'));
     assert.match(sr.getElementById('context-five-quota').textContent, /^92% · /);
     assert.match(sr.getElementById('context-week-quota').textContent, /^34% · /);
 

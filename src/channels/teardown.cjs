@@ -258,6 +258,7 @@ const REMOVE_EXPRESSION = `(() => {
   delete globalThis.__agVialCore;
   delete globalThis.__agMotionEngine;
   delete globalThis.__agAnimatedIcons;
+  delete globalThis.__agCsPulseCardLayout;
   delete globalThis.__agCsPulseVialBridge;
   delete globalThis.__agCsRippleCore;
   delete globalThis.__agCsUsageCore;

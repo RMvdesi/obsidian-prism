@@ -375,7 +375,7 @@ const TELEMETRY_REMOVE_EXPRESSION = `(() => {
       }
     });
   } catch {}
-  for (const k of ['__agPrismTelemetry','__agVialCore','__agCsPulseVialBridge','__agCsPulseBridgeInst','__agPrismMetricsBridge','__agPulseExternalBridge']) {
+  for (const k of ['__agPrismTelemetry','__agVialCore','__agCsPulseCardLayout','__agCsPulseVialBridge','__agCsPulseBridgeInst','__agPrismMetricsBridge','__agPulseExternalBridge']) {
     try { delete window[k]; } catch {}
     try { delete globalThis[k]; } catch {}
   }
