@@ -409,11 +409,16 @@ const EFFORT_SLIDER_REMOVE_EXPRESSION = `(() => {
 
 const WORKBENCH_ENHANCER_REMOVE_EXPRESSION = `(() => {
   try { (window.__agPrism || window.__agClaudeStyle)?.detachHostEnhancer?.(); } catch {}
+  try { (window.__agPrismPermIcons || globalThis.__agPrismPermIcons)?.destroy?.(document); } catch {}
+  try { document.getElementById?.('ag-prism-perm-icons-css')?.remove?.(); } catch {}
+  try { document.querySelectorAll?.('[data-ag-perm-preset]')?.forEach?.((n) => n.removeAttribute('data-ag-perm-preset')); } catch {}
   try {
     document.querySelectorAll?.('.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-nav-outline-trigger,.ag-cs-sb-more-wrap')?.forEach?.((n) => n.remove());
   } catch {}
   try { delete window.__agPrismHostEnhancer; } catch {}
   try { delete globalThis.__agPrismHostEnhancer; } catch {}
+  try { delete window.__agPrismPermIcons; } catch {}
+  try { delete globalThis.__agPrismPermIcons; } catch {}
   return { ok: true, status: 'off' };
 })()`;
 
