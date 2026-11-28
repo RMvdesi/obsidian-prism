@@ -657,3 +657,76 @@ test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 
     'CdpClient.swift updateConfigBatch must not construct predictable .tmp paths'
   );
 });
+
+test('settings-panel PRISM_SETTINGS_SCHEMA stays 100% in sync with all 47 user-facing keys in CONFIG_SCHEMA', () => {
+  const settingsPanel = require(path.join(ROOT, 'settings-panel.js'));
+  const cfgSchema = cdp.CONFIG_SCHEMA;
+  const panelSchema = settingsPanel.PRISM_SETTINGS_SCHEMA;
+
+  const INTERNAL_ALIASES = new Set(['lang', 'homeMode', 'ripple', 'composer', 'promptStyle', 'sidebar']);
+  const DAEMON_ONLY_KEYS = new Set(['pollIntervalMs', 'autoPromptCdpRelaunch', 'autoRelaunchOnBareLaunch']);
+
+  // Verify exclusion sets match schema.cjs metadata exactly
+  const actualAliases = Object.entries(cfgSchema).filter(([, s]) => Boolean(s.aliasOf)).map(([k]) => k).sort();
+  const actualDaemonOnly = Object.entries(cfgSchema).filter(([, s]) => s.inValidators === false).map(([k]) => k).sort();
+  assert.deepEqual(actualAliases, [...INTERNAL_ALIASES].sort(), 'Internal alias exclusion list must match schema.cjs aliasOf keys');
+  assert.deepEqual(actualDaemonOnly, [...DAEMON_ONLY_KEYS].sort(), 'Daemon-only exclusion list must match schema.cjs inValidators:false keys');
+
+  for (const excluded of [...INTERNAL_ALIASES, ...DAEMON_ONLY_KEYS]) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(panelSchema, excluded),
+      false,
+      `PRISM_SETTINGS_SCHEMA must exclude internal/daemon-only key '${excluded}'`
+    );
+  }
+
+  const expectedUserFacingKeys = Object.keys(cfgSchema)
+    .filter((k) => !INTERNAL_ALIASES.has(k) && !DAEMON_ONLY_KEYS.has(k))
+    .sort();
+  assert.deepEqual(
+    Object.keys(panelSchema).sort(),
+    expectedUserFacingKeys,
+    'PRISM_SETTINGS_SCHEMA keys must match all user-facing keys in CONFIG_SCHEMA 1:1'
+  );
+
+  for (const key of expectedUserFacingKeys) {
+    const cfgSpec = cfgSchema[key];
+    const panelSpec = panelSchema[key];
+    assert.ok(panelSpec, `PRISM_SETTINGS_SCHEMA missing '${key}'`);
+    assert.equal(panelSpec.default, cfgSpec.default, `PRISM_SETTINGS_SCHEMA.${key}.default must match CONFIG_SCHEMA.${key}.default`);
+
+    if (cfgSpec.type === 'string') {
+      assert.equal(panelSpec.type, 'string', `PRISM_SETTINGS_SCHEMA.${key}.type must be 'string'`);
+      assert.equal(panelSpec.maxLength || 160, cfgSpec.maxLength || 160, `PRISM_SETTINGS_SCHEMA.${key}.maxLength must match CONFIG_SCHEMA`);
+      assert.equal(cdp.validateConfigEntry(key, panelSpec.default), true);
+    } else if (cfgSpec.type === 'boolean') {
+      assert.deepEqual([...panelSpec.allowed].sort(), [false, true], `PRISM_SETTINGS_SCHEMA.${key}.allowed must be boolean [true, false]`);
+      for (const val of panelSpec.allowed) {
+        assert.equal(cdp.validateConfigEntry(key, val), true, `CONFIG_SCHEMA must accept ${key}=${JSON.stringify(val)}`);
+      }
+    } else if (cfgSpec.type === 'enum') {
+      assert.ok(Array.isArray(panelSpec.allowed) && panelSpec.allowed.length > 0, `PRISM_SETTINGS_SCHEMA.${key}.allowed must be non-empty array`);
+      const legacyMap = cfgSpec.legacyMap ? { ...cfgSpec.legacyMap } : {};
+      if (key === 'mascot') legacyMap.dual = 'crab';
+
+      const expectedCanonical = cfgSpec.values.filter((v) => !Object.prototype.hasOwnProperty.call(legacyMap, v)).sort();
+      assert.deepEqual(
+        [...panelSpec.allowed].sort(),
+        expectedCanonical,
+        `PRISM_SETTINGS_SCHEMA.${key}.allowed must match canonical CONFIG_SCHEMA.${key}.values`
+      );
+      for (const [legacyVal, targetVal] of Object.entries(legacyMap)) {
+        assert.equal(
+          panelSpec.aliases?.[legacyVal],
+          targetVal,
+          `PRISM_SETTINGS_SCHEMA.${key}.aliases['${legacyVal}'] must map to '${targetVal}'`
+        );
+      }
+      for (const val of panelSpec.allowed) {
+        assert.equal(cdp.validateConfigEntry(key, val), true, `CONFIG_SCHEMA must accept ${key}=${JSON.stringify(val)}`);
+      }
+    } else {
+      assert.fail(`Unexpected CONFIG_SCHEMA.${key}.type: ${cfgSpec.type}`);
+    }
+  }
+});
