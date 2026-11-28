@@ -1005,4 +1005,21 @@ test('style.css hygiene & PR #10 / P0-1 / P0-2 CSS contracts (0 :has(), 0 non-AS
     css.includes('html[data-ag-cs-model-menu="1"] :is([data-ag-cs-model-submenu="1"],[data-testid="context-menu-submenu-popup"]){z-index:65 !important;}'),
     'style.css must elevate PR #10 model submenu & context-menu-submenu-popup to z-index:65 above overlay z-index:60'
   );
+  assert.ok(
+    css.includes('&[data-ag-cs-row-running="1"]:not([data-selected="true"]){') &&
+      css.includes('background-image:none !important;'),
+    'style.css must decouple background-running unselected sidebar rows from the selected gradient wash'
+  );
+  assert.ok(
+    css.includes('&[data-selected="true"][data-ag-cs-row-running="1"]{') &&
+      css.includes('@keyframes ag-cs-row-breathe') &&
+      css.includes('@keyframes ag-cs-row-bar') &&
+      css.includes('@keyframes ag-cs-row-sheen'),
+    'style.css must animate only the active selected running sidebar row with breathing glow and sheen'
+  );
+  assert.ok(
+    css.includes('& [data-ag-cs-row-running="1"]::after,') &&
+      css.includes(':is([data-testid="conversation-row-sidebar"],.agy-sidebar-row)[data-ag-cs-row-running="1"]::after'),
+    'style.css must pause/disable selected running row sheen on win-blur, motion=off/subtle, and prefers-reduced-motion'
+  );
 });
