@@ -689,7 +689,9 @@ test('Scenario 4 (未知老版 / 未来新版 Fiber 失效): 零挂载、不设 
 });
 
 
-test('Scenario 5 (多触发器分屏 + 自定义模型 + 双 Observer 防互激 + 体积红线): 全部契约达成', async () => {
+test('Scenario 5 (多触发器分屏 + 自定义模型 + 双 Observer 防互激 + 体积红线): 全部契约达成', (t) => {
+  const { timers } = t.mock;
+  timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
   const env = createSimEnv();
 
   // 1) 多触发器分屏：子代理触发器在前且被包裹在 [data-testid="subagent-tab-conversation"]，主触发器在后；panel 自带独立 Fiber
@@ -746,12 +748,13 @@ test('Scenario 5 (多触发器分屏 + 自定义模型 + 双 Observer 防互激 
   for (let i = 0; i < 20; i++) mo.trigger([{ type: 'childList', target: glyphNode, addedNodes: [] }]);
   assert.equal(ctl.getState().perfStats.executedScans, baseScans, 'Ignored glyph mutations must execute 0 scans');
 
+  // Keep the entire synthetic mutation burst inside one 32ms throttle window.
   for (let i = 0; i < 30; i++) mo.trigger([{ type: 'childList', target: flashRow.row, addedNodes: [] }]);
-  const afterImmediate = ctl.getState().perfStats.executedScans;
-  assert.ok(afterImmediate <= baseScans + 1, `Expected at most 1 immediate scan on open, got ${afterImmediate - baseScans}`);
-  await new Promise((r) => setTimeout(r, 60));
-  const afterWindow = ctl.getState().perfStats.executedScans;
-  assert.ok(afterWindow <= baseScans + 2, `30 burst mutations inside open menu must coalesce into <=2 scans, got ${afterWindow - baseScans}`);
+  assert.equal(ctl.getState().perfStats.executedScans, baseScans + 1, 'Opening the panel must scan immediately');
+  timers.tick(31);
+  assert.equal(ctl.getState().perfStats.executedScans, baseScans + 1, 'No rescan before the 32ms window ends');
+  timers.tick(1);
+  assert.equal(ctl.getState().perfStats.executedScans, baseScans + 2, 'The remaining mutations must coalesce into one rescan');
 
   // 2b) 菜单刚从 DOM 移除时（仅触发外层 body childList），节流器必须立即放行一次 flush 清理 data-ces-slider-ready
   assert.equal(env.html.getAttribute('data-ces-slider-ready'), '1', 'data-ces-slider-ready must be 1 while panel is mounted');
