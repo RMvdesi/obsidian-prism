@@ -425,6 +425,14 @@ const CONTEXT_MENU_REMOVE_EXPRESSION = `(() => {
   return { ok: true, status: 'off' };
 })()`;
 
+const RIPPLE_SIM_REMOVE_EXPRESSION = `(() => {
+  try { delete window.__agPrismRippleSim; } catch {}
+  try { delete globalThis.__agPrismRippleSim; } catch {}
+  try { delete window.__agPrismSimReady; } catch {}
+  try { delete globalThis.__agPrismSimReady; } catch {}
+  return { ok: true, status: 'off' };
+})()`;
+
 const CHANNEL_TEARDOWN_MAP = Object.freeze({
   omni: OMNI_REMOVE_EXPRESSION,
   sidebar: SIDEBAR_REMOVE_EXPRESSION,
@@ -442,6 +450,7 @@ const CHANNEL_TEARDOWN_MAP = Object.freeze({
   effortSlider: EFFORT_SLIDER_REMOVE_EXPRESSION,
   workbenchEnhancer: WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   contextMenu: CONTEXT_MENU_REMOVE_EXPRESSION,
+  rippleSim: RIPPLE_SIM_REMOVE_EXPRESSION,
 });
 
 module.exports = {
@@ -463,5 +472,6 @@ module.exports = {
   EFFORT_SLIDER_REMOVE_EXPRESSION,
   WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   CONTEXT_MENU_REMOVE_EXPRESSION,
+  RIPPLE_SIM_REMOVE_EXPRESSION,
   CHANNEL_TEARDOWN_MAP,
 };

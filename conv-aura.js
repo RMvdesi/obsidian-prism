@@ -214,6 +214,7 @@
     getAmbientIntensity,
     getSpectrumMode,
     isWindowFocused,
+    extPane = false,
     rippleCore,
     setAttrIfChanged,
     runGuardedMut,
@@ -630,8 +631,9 @@
         const inLiftoffEbb = allowLivingFlow && liftElapsed >= 0 && liftElapsed < 520;
         if (state.liftoffAt > 0 && !inLiftoffEbb) state.liftoffAt = 0;
 
-        const prevPhaseBeforeAdv = state.phase;
-        const phase = advancePhase(now, true);
+        const prevPhaseBeforeAdv = state.phase, f2 = (t) => t >= 0 && M.abs(now - t) < 200;
+        const cacheHitRun = !!(state.phase === 'running' && !inLiftoffEbb && !forceImmediateDraw && !externalAwaiting && !externalErrorPending && cachedRunningVal && !cachedDecisionVal && cachedRunningScope === (state.convView || getD()) && f2(cachedRunningAt) && f2(cachedDecisionAt) && f2(cachedErrorAt));
+        const phase = cacheHitRun ? 'running' : advancePhase(now, true);
         const phaseJustChanged = phase !== prevPhaseBeforeAdv;
         const dark = isDarkTheme();
         const spectrum = resolveSpectrum();
@@ -804,8 +806,10 @@
       };
       const capOpt = { capture: true, passive: true };
       docRef.addEventListener('visibilitychange', onVis);
-      docRef.addEventListener('focusin', onPaneAct, capOpt);
-      docRef.addEventListener('pointerdown', onPaneAct, capOpt);
+      if (!extPane) {
+        docRef.addEventListener('focusin', onPaneAct, capOpt);
+        docRef.addEventListener('pointerdown', onPaneAct, capOpt);
+      }
       const wRef = typeof window !== 'undefined' ? window : null;
       wRef?.addEventListener?.('blur', onBlur);
       wRef?.addEventListener?.('focus', onFocus);
@@ -822,8 +826,10 @@
         const d = getD();
         if (d) {
           d.removeEventListener('visibilitychange', onVis);
-          d.removeEventListener('focusin', onPaneAct, capOpt);
-          d.removeEventListener('pointerdown', onPaneAct, capOpt);
+          if (!extPane) {
+            d.removeEventListener('focusin', onPaneAct, capOpt);
+            d.removeEventListener('pointerdown', onPaneAct, capOpt);
+          }
         }
         wRef?.removeEventListener?.('blur', onBlur);
         wRef?.removeEventListener?.('focus', onFocus);

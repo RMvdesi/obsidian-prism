@@ -478,7 +478,7 @@ test('v107 A2-7: default buildInjectExpression never pollutes repo, and PrismDae
     customDaemon.rebuildBundle();
     assert.equal(fs.existsSync(customCache), true);
 
-    // 5) PrismDaemon on installed non-git plugin dir stores .bundle-cache.json inside plugin dir and hits on restart
+    // 5) PrismDaemon on installed non-git plugin dir stores .bundle-cache/ shard dir inside plugin dir and hits on restart
     const installedDir = path.join(tmpRoot, 'installed-plugin');
     await installTool.installPlugin({
       sourceDir: ROOT,
@@ -489,9 +489,9 @@ test('v107 A2-7: default buildInjectExpression never pollutes repo, and PrismDae
 
     const d1 = new PrismDaemon({ rootDir: installedDir, silent: true, enableAutoUpdateTimer: false });
     const resolvedInstalledCache = d1.resolveBundleCachePath();
-    assert.equal(resolvedInstalledCache, path.join(installedDir, '.bundle-cache.json'));
+    assert.equal(resolvedInstalledCache, path.join(installedDir, '.bundle-cache'));
     const firstExpr = d1.rebuildBundle();
-    assert.equal(fs.existsSync(resolvedInstalledCache), true);
+    assert.equal(fs.existsSync(path.join(resolvedInstalledCache, 'ch1.json')), true);
 
     // Simulate daemon restart on same installed plugin dir with fresh cdp.js module load
     delete require.cache[require.resolve(path.join(installedDir, 'cdp.js'))];
@@ -606,7 +606,8 @@ test('v107 A2-8: single-pass PrismDaemon.rebuildBundle cold hit parses .bundle-c
 
     const hitStats = dHit.cdp.getBundleCacheStats();
     assert.equal(hitStats.diskHits, 1);
-    assert.equal(hitStats.channelDiskHits, 14);
+    assert.equal(hitStats.channelDiskHits, 15);
+    assert.equal(hitStats.channelHitsByName.rippleSim, 1);
     assert.equal(hitStats.channelHitsByName.wallpaper, 1);
     assert.equal(hitStats.channelHitsByName.periodicPicker, 1);
     assert.equal(hitStats.channelHitsByName.mascot, 1);

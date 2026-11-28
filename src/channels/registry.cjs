@@ -373,6 +373,29 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     defaultShouldEnable: (cfg) => cfg?.contextMenu !== false && cfg?.contextMenu !== 'off',
     cfgSig: (cfg) => (cfg?.contextMenu === false || cfg?.contextMenu === 'off' ? 'off' : 'on'),
   }),
+  defineSpec({
+    id: 'rippleSim', channelNumber: 17, order: 170, tier: 'runtime', topLevelPack: false, staticRuntimePack: false,
+    label: 'Off-Main-Thread Ripple Simulation Worker',
+    configKeys: ['homeRipple', 'convRipple', 'homeLayout', 'motionLevel'],
+    files: ['src/runtime/ripple-field-sim-worker.js'], mountGlobal: '__agPrismRippleSim',
+    respectSkippedByLiveCfg: true, budgetBytes: 36 * 1024,
+    probeLines: [
+      'hasRippleSim: Boolean(window.__agPrismRippleSim || globalThis.__agPrismRippleSim)',
+      "rippleSimCodeHash: String((window.__agPrismRippleSim || globalThis.__agPrismRippleSim)?.__prismCodeHash || '')",
+    ],
+    defaultShouldEnable: (cfg) => {
+      if (cfg?.motionLevel === 'off') return false;
+      const homeOff = cfg?.homeRipple === false || cfg?.ripple === false || cfg?.homeLayout === 'off' || cfg?.homeMode === 'off';
+      const convOff = cfg?.convRipple === 'off' || cfg?.convRipple === false;
+      return !(homeOff && convOff);
+    },
+    cfgSig: (cfg) => {
+      if (cfg?.motionLevel === 'off') return 'off';
+      const homeOff = cfg?.homeRipple === false || cfg?.ripple === false || cfg?.homeLayout === 'off' || cfg?.homeMode === 'off';
+      const convOff = cfg?.convRipple === 'off' || cfg?.convRipple === false;
+      return homeOff && convOff ? 'off' : 'on';
+    },
+  }),
 ]);
 
 // 从唯一真相源自动派生：磁盘缓存键清单、缓存格式映射、Runtime 下沉通道 ID 清单
@@ -480,6 +503,7 @@ function createChannelRegistry({ builders, readConfig }) {
     bindEntry('effortSlider', builders.shouldEnableEffortSlider, builders.buildEffortSliderChannelExpression),
     bindEntry('workbenchEnhancer', builders.shouldEnableWorkbenchEnhancer, builders.buildWorkbenchEnhancerChannelExpression),
     bindEntry('contextMenu', builders.shouldEnableContextMenu, builders.buildContextMenuChannelExpression),
+    bindEntry('rippleSim', builders.shouldEnableRippleSim, builders.buildRippleSimChannelExpression),
   ]);
 
   const registryById = new Map(CHANNEL_REGISTRY.map((ch) => [ch.id, ch]));

@@ -266,8 +266,8 @@ test('Bug 1: 60Hz VSync (16.5ms) never beats down to 30fps in performance mode w
   const hostSrc = fs.readFileSync(path.join(ROOT, 'home-ripple-host.js'), 'utf8');
   const auraSrc = fs.readFileSync(path.join(ROOT, 'conv-aura.js'), 'utf8');
 
-  // 2) ripple-worker 渲染循环采用 g * 0.88 安全余量，且对外 getPerfMinGapMs 保留 16.67 / 0 语义
-  assert.ok(workerSrc.includes('n-lD<g*.88'), 'ripple-worker 内部 rAF 节流必须应用 0.88 VSync 安全余量');
+  // 2) ripple-worker 已彻底移除无调用方的内部自驱 rAF 空转循环，完全由宿主帧节流驱动，且对外 getPerfMinGapMs 保留 16.67 / 0 语义
+  assert.equal(workerSrc.includes('requestAnimationFrame(tk)'), false, 'ripple-worker 不得保留无调用方的内部 rAF 自驱空转循环');
 
   // 3) home-ripple-host 在 60Hz (16.5ms)、120Hz、240Hz、300Hz 下实测帧率
   {

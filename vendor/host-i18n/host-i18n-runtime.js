@@ -1664,13 +1664,14 @@
  }
  var refs = new Set();
  var nodeToRef = new WeakMap();
+ var nP = 256, lP = 0;
  return {
  add: function (node) {
  if (!node || nodeToRef.has(node)) return;
  var ref = new WeakRef(node);
  nodeToRef.set(node, ref);
  refs.add(ref);
- if (refs.size > 256) this.prune();
+ if (refs.size > nP && Date.now() - lP >= 3000) this.prune();
  },
  delete: function (node) {
  if (!node) return;
@@ -1680,7 +1681,8 @@
  nodeToRef.delete(node);
  }
  },
- prune: function () {
+ prune: function (lazy) {
+ if (lazy && (refs.size <= nP || Date.now() - lP < 3000)) return;
  refs.forEach(function (ref) {
  var n = ref.deref();
  if (!n || n.isConnected === false) {
@@ -1688,6 +1690,8 @@
  if (n) nodeToRef.delete(n);
  }
  });
+ lP = Date.now();
+ nP = Math.max(256, Math.ceil(refs.size * 1.5));
  },
  forEachAll: function (cb) {
  refs.forEach(function (ref) {
@@ -3087,8 +3091,8 @@ if (!hibernating) enterHibernation(true);
 else missedWhilePaused = true;
  return;
  }
-modifiedTextNodes.prune();
- modifiedAttrElements.prune();
+modifiedTextNodes.prune(1);
+ modifiedAttrElements.prune(1);
 if (pendingNodes.length === 0) {
 initialScanDraining = false;
 if (isPaused() && !hibernating) enterHibernation(false);
@@ -3482,6 +3486,7 @@ scheduleFlush();
 }, 120);
  };
 var domBusInst = getHostDomBus();
+var sBC = new WeakMap(), sBA = 0;
 var onDomMutations = function (mutations) {
 if (!observing || !state.active || state.destroyed) return;
 var inLayer2b = state.mode === 'auto' && nowFn() - bootAt <= LAYER2B_WINDOW_MS;
@@ -3491,7 +3496,9 @@ if (!hibernating) enterHibernation(true);
 else missedWhilePaused = true;
 if (!inLayer2b) return;
  }
-var batchBoundaryCache = new WeakMap();
+var bNow = nowFn();
+if (bNow - sBA > 500) { sBC = new WeakMap(); sBA = bNow; }
+var batchBoundaryCache = sBC;
 var immediateFloatNodes = [];
 var sidebarNodes = [];
 function getCachedBoundary(el) {
@@ -3767,6 +3774,7 @@ cur = cur.parentElement;
 return { inRow: inRow, inSidebar: inSidebar };
 }
 // Hover, ContextMenu & Sidebar Click targeted floating/conversation rescan
+var lHE = 0;
 hoverHandler = function (e) {
  if (!state.active || state.destroyed) return;
 var evType = e && e.type;
@@ -3797,7 +3805,9 @@ pendingFullFloatScan = true;
 var tg = String(target.tagName || '').toUpperCase();
 if (IGNORED_TAGS[tg] || tg === 'PATH' || tg === 'CIRCLE' || tg === 'RECT' || tg === 'LINE' || tg === 'POLYLINE' || tg === 'POLYGON' || tg === 'ELLIPSE' || tg === 'G' || tg === 'DEFS' || tg === 'USE' || tg === 'STOP') return;
 if (exemptElements.has(target) || hasAttr(target, 'data-ag-owned') || hasAttr(target, 'data-ag-no-i18n') || isDialogOrPortalWrappingDialog(target)) return;
-if (target.closest?.(SIDEBAR_USER_SEL + ',' + SIDEBAR_LIST_SEL + ',[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup]')) return;
+if (target.closest?.(SIDEBAR_USER_SEL + ',' + SIDEBAR_LIST_SEL + ',[data-testid="sidebar-split"]>div:first-child,[data-hover-card-popup],[data-testid="autoscroll-viewport"]')) return;
+if (now - lHE < 60 && now - lastHoverTime < 120) return;
+lHE = now;
 hoverBound = getHoverBoundary(target, now);
 if (hoverBound.blocked) return;
 if (isInsideDialog(target) && !isSmallHoverControl(target)) return;

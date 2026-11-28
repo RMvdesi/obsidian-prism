@@ -190,6 +190,7 @@ function makeMinimalDaemon({
     shouldEnableEffortSlider: () => false,
     shouldEnableWorkbenchEnhancer: () => false,
     shouldEnableContextMenu: () => false,
+    shouldEnableRippleSim: () => false,
     buildConfigRefreshExpression: () => `/* CFG_SYNC ${JSON.stringify(daemon.cdp.readConfig())} */`,
   };
   daemon.rebuildBundle = () => {};
@@ -866,6 +867,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
       __agPrismEffortSlider: trapExisting,
       __agPrismHostEnhancer: trapExisting,
       __agPrismContextMenu: trapExisting,
+      __agPrismRippleSim: trapExisting,
     };
     hostileWin.self = hostileWin;
     hostileWin.top = hostileWin;

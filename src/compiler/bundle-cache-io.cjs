@@ -53,13 +53,18 @@ function listSelfFingerprintFiles(rootDir) {
   return files;
 }
 
-function collectFilesStatTuples(fileSpecs) {
+function collectFilesStatTuples(fileSpecs, statFn = fs.statSync) {
   const out = [];
   for (const item of fileSpecs) {
     if (!item || !item.fullPath) return null;
     try {
-      const st = fs.statSync(item.fullPath);
-      out.push([item.rel, st.mtimeMs, st.size, st.ctimeMs]);
+      const st = statFn(item.fullPath);
+      if (!st) {
+        if (item.optional) out.push([item.rel, -1, -1, -1]);
+        else return null;
+      } else {
+        out.push([item.rel, st.mtimeMs, st.size, st.ctimeMs]);
+      }
     } catch {
       if (item.optional) out.push([item.rel, -1, -1, -1]);
       else return null;
@@ -68,7 +73,7 @@ function collectFilesStatTuples(fileSpecs) {
   return out;
 }
 
-function matchesCachedStatTuples(cachedStats, fileSpecs) {
+function matchesCachedStatTuples(cachedStats, fileSpecs, statFn = fs.statSync) {
   if (!isValidSourceStatsArray(cachedStats) || cachedStats.length !== fileSpecs.length) {
     return { ok: false, statSig: '' };
   }
@@ -78,9 +83,14 @@ function matchesCachedStatTuples(cachedStats, fileSpecs) {
     const exp = cachedStats[i];
     if (!item || !item.fullPath || exp[0] !== item.rel) return { ok: false, statSig: '' };
     try {
-      const st = fs.statSync(item.fullPath);
-      if (st.mtimeMs !== exp[1] || st.size !== exp[2] || st.ctimeMs !== exp[3]) return { ok: false, statSig: '' };
-      sigParts.push(`${item.rel}:${st.mtimeMs}:${st.size}`);
+      const st = statFn(item.fullPath);
+      if (!st) {
+        if (!item.optional || exp[1] !== -1 || exp[2] !== -1 || exp[3] !== -1) return { ok: false, statSig: '' };
+        sigParts.push(`${item.rel}:MISSING`);
+      } else {
+        if (st.mtimeMs !== exp[1] || st.size !== exp[2] || st.ctimeMs !== exp[3]) return { ok: false, statSig: '' };
+        sigParts.push(`${item.rel}:${st.mtimeMs}:${st.size}`);
+      }
     } catch {
       if (!item.optional || exp[1] !== -1 || exp[2] !== -1 || exp[3] !== -1) return { ok: false, statSig: '' };
       sigParts.push(`${item.rel}:MISSING`);
@@ -92,6 +102,7 @@ function matchesCachedStatTuples(cachedStats, fileSpecs) {
 function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
   let _cdpSelfHashCache = { sig: '', hash: '' };
   let _selfFilesDirCache = { compilerMtime: -1, channelsMtime: -1, files: null };
+  let _activeStatBatch = null;
   let _bundleCacheRootCache = {
     resolved: '',
     sig: '',
@@ -99,6 +110,28 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
     parsed: null,
   };
   const _shardRootCache = new Map();
+
+  function statFileInBatchSync(fullPath) {
+    if (!_activeStatBatch) return fs.statSync(fullPath);
+    if (_activeStatBatch.has(fullPath)) return _activeStatBatch.get(fullPath);
+    let st = null;
+    try {
+      st = fs.statSync(fullPath);
+    } catch {}
+    _activeStatBatch.set(fullPath, st);
+    return st;
+  }
+
+  function runWithStatBatch(fn) {
+    if (typeof fn !== 'function') return undefined;
+    if (_activeStatBatch) return fn();
+    _activeStatBatch = new Map();
+    try {
+      return fn();
+    } finally {
+      _activeStatBatch = null;
+    }
+  }
 
   function getCachedSelfFingerprintFiles() {
     const compDir = path.join(rootDir, 'src', 'compiler');
@@ -157,7 +190,7 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
   }
 
   function getBundleSourceStatsMeta(sourceHash) {
-    const stats = collectFilesStatTuples(getBundleSourceFiles());
+    const stats = collectFilesStatTuples(getBundleSourceFiles(), statFileInBatchSync);
     if (!stats || !sourceHash || !SHA256_HEX_RE.test(sourceHash)) return null;
     return {
       sourceStats: stats,
@@ -184,7 +217,7 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
   function getChannelSourceStatsMeta(channelName, fileEntries, extraTag, sourceHash) {
     const specs = getChannelStatFileSpecs(fileEntries);
     if (!specs || !sourceHash || !SHA256_HEX_RE.test(sourceHash)) return null;
-    const stats = collectFilesStatTuples(specs);
+    const stats = collectFilesStatTuples(specs, statFileInBatchSync);
     if (!stats) return null;
     const scopeKey = `ch:${channelName}:${extraTag || ''}`;
     return {
@@ -200,7 +233,7 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
     if (!isValidSourceStatsArray(parsed.sourceStats)) return { ok: false, statSig: '' };
     const expectedBinding = computeSourceStatsBinding(pluginVersion, 'ch1', parsed.sourceHash, parsed.sourceStats);
     if (expectedBinding !== parsed.statsBindingSha256) return { ok: false, statSig: '' };
-    return matchesCachedStatTuples(parsed.sourceStats, getBundleSourceFiles());
+    return matchesCachedStatTuples(parsed.sourceStats, getBundleSourceFiles(), statFileInBatchSync);
   }
 
   function verifyChannelFastStatSync(channelName, entry, fileEntries, extraTag = '') {
@@ -213,17 +246,17 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
     if (expectedBinding !== entry.statsBindingSha256) return false;
     const specs = getChannelStatFileSpecs(fileEntries);
     if (!specs) return false;
-    return matchesCachedStatTuples(entry.sourceStats, specs).ok;
+    return matchesCachedStatTuples(entry.sourceStats, specs, statFileInBatchSync).ok;
   }
 
   // 快速 stat 指纹（单次 statSync 无多余 existsSync）
   function getBundleSourceStatSig() {
     const parts = [];
     for (const item of getBundleSourceFiles()) {
-      try {
-        const st = fs.statSync(item.fullPath);
+      const st = statFileInBatchSync(item.fullPath);
+      if (st) {
         parts.push(`${item.rel}:${st.mtimeMs}:${st.size}`);
-      } catch {
+      } else {
         parts.push(`${item.rel}:${item.optional ? 'MISSING' : '0:0'}`);
       }
     }
@@ -296,13 +329,14 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
   // 计算编译管线自身（cdp.js + src/config/schema.cjs + src/compiler/*.cjs + src/channels/*.cjs）统一指纹
   function getCdpSelfSourceHash() {
     try {
-      const files = listSelfFingerprintFiles(rootDir);
+      const files = getCachedSelfFingerprintFiles();
       const sigParts = [];
       for (const item of files) {
-        if (!fs.existsSync(item.fullPath)) {
+        const st = statFileInBatchSync(item.fullPath);
+        if (!st) {
           sigParts.push(`${item.rel}:MISSING`);
         } else {
-          sigParts.push(`${item.rel}:${getFileSig(item.fullPath)}`);
+          sigParts.push(`${item.rel}:${st.mtimeMs}:${st.size}:${st.ctimeMs}`);
         }
       }
       const sig = sigParts.join(';');
@@ -732,6 +766,7 @@ function createBundleCacheIo({ rootDir, pluginVersion, templates }) {
 
   return {
     invalidateBundleCacheRootCache,
+    runWithStatBatch,
     getBundleSourceFiles,
     getBundleSourceStatsMeta,
     getChannelSourceStatsMeta,

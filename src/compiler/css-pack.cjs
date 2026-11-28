@@ -157,7 +157,7 @@ const LZSS_SAFE_ASCII = (() => {
 })();
 
 // 纯同步零-eval UTF-16 LZSS 压缩器（~2.7ms 解码，自适应大窗口覆盖全量 CSS/词典，支持完整 BMP/CJK/Emoji）
-function packLzssJsExpr(text, protectFirstList = []) {
+function packLzssJsExpr(text, protectFirstList = [], helperName = null) {
   if (typeof text !== 'string' || text.length < 1024) return null;
   const n = text.length, usedLow = new Uint8Array(2048);
   for (let i = 0; i < n; i++) { const cc = text.charCodeAt(i); if (cc >= 0x00a1 && cc < 0x0800) usedLow[cc] = 1; }
@@ -341,6 +341,9 @@ function packLzssJsExpr(text, protectFirstList = []) {
   }
   if (verify !== text) return null;
 
+  if (helperName) {
+    return `${helperName}(${serializeJsValue(encoded)},${n},${tokStart},${tokEnd},${longBase},${shortLenSpan},${longLenSpan})`;
+  }
   const rangeCheck = tokEnd === 2048 ? `c<${tokStart}||c>=2048` : `c<${tokStart}||c>=${tokEnd}`;
   return `(()=>{let s=${serializeJsValue(encoded)},o=new Uint16Array(${n}),p=0,g=c=>c-32-(c>34)-(c>60)-(c>62)-(c>92),r="",i=0;for(;i<s.length;){let c=s.charCodeAt(i++);if(${rangeCheck}){o[p++]=c;continue}let v=g(s.charCodeAt(i++)),t,l,d;if(c<${longBase}){t=(c-${tokStart})*${BASE}+v;l=3+t%${shortLenSpan};d=1+(t/${shortLenSpan}|0)}else{t=((c-${longBase})*${BASE}+v)*${BASE}+g(s.charCodeAt(i++));l=4+t%${longLenSpan};d=1+(t/${longLenSpan}|0)}for(let q=p-d;l--;)o[p++]=o[q++]}for(i=0;i<p;i+=16384)r+=String.fromCharCode.apply(null,o.subarray(i,i+16384<p?i+16384:p));return r})()`;
 }
@@ -678,7 +681,7 @@ function packCssJsExpr(css, options = null) {
   // 仅显式传 { bucketize: true } 时保留旧分桶拼接格式供向后兼容调用
   const shouldBucket = shouldFlatten && Boolean(options && options.bucketize === true) && flatMin.includes('html[data-ag-cs-style]');
   const preparedCss = shouldBucket ? assembleBucketedCss(splitCssIntoBuckets(flatMin)) : flatMin;
-  const lzPacked = packLzssJsExpr(preparedCss, PROTECTED_CSS_LITERALS);
+  const lzPacked = packLzssJsExpr(preparedCss, PROTECTED_CSS_LITERALS, options && options.lzHelper ? options.lzHelper : null);
   if (lzPacked && Buffer.byteLength(lzPacked, 'utf8') + 12 < Buffer.byteLength(serializeJsValue(preparedCss), 'utf8')) {
     return lzPacked;
   }

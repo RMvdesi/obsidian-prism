@@ -434,6 +434,7 @@
 
   function findClosest(el, selector) {
     let cur = el && el.nodeType === 1 ? el : el && el.parentElement ? el.parentElement : null;
+    if (cur && typeof cur.closest === 'function') return cur.closest(selector);
     while (cur && cur.nodeType === 1) {
       if (typeof cur.matches === 'function' && cur.matches(selector)) return cur;
       cur = cur.parentElement;
@@ -1865,11 +1866,12 @@
       setHoverTokenCursor(Boolean(hit), hit ? (hit.element || el) : null);
     }
 
+    let hx = -9e3, hy = -9e3, ha = 0, ht = null;
     function flushPointerMove() {
-      pointerMoveRaf = null;
-      const target = pendingPointerTarget;
+      pointerMoveRaf = null; const target = pendingPointerTarget, x = pendingPointerX, y = pendingPointerY, now = Date.now();
       pendingPointerTarget = null;
-      evalPointerHoverAt(target, pendingPointerX, pendingPointerY);
+      if (target === ht && (now - ha < 48 || (x - hx) * (x - hx) + (y - hy) * (y - hy) < 9)) return;
+      hx = x; hy = y; ha = now; ht = target; evalPointerHoverAt(target, x, y);
     }
 
     function onDocPointerMove(ev) {
@@ -1881,6 +1883,7 @@
       const targetEl = rawTarget && rawTarget.nodeType === 1 ? rawTarget : rawTarget?.parentElement;
       if (!targetEl || !targetEl.isConnected || !highlightedParentCount.get(targetEl)) {
         if (pointerMoveRaf !== null) cancelPendingPointerRaf();
+        ht = null;
         if (hoverTokenActive) setHoverTokenCursor(false);
         return;
       }

@@ -1056,7 +1056,7 @@ color = vec4(rgb * a, a);
     const effective = { dark: true, ink: [0, 0, 0], wave: [0, 0, 0], fontFamily: 'monospace', aura: null, nebula: nebulaState, prismStrength: 1, auraPhase: 0, ambientIntensity: 1, spectrumCode: 0, alphaScale: 1, nebulaLiftScale: 1, auraLiftScale: 1, cloudDriftPx: 0, breathSinW: 0, breathCosW: 1 };
     let lastNebulaEnabled = true, instanceZones = normalizeZones(options && options.calmZones);
     let appliedKey = null, lastZonesRef = null, lastZonesNormalized = [];
-    let lastTick = -1, lastDraw = -Infinity, glowing = false, prismBurst = 0, stale = true;
+    let lastTick = -1, lastDrift = -1, lastDraw = -Infinity, glowing = false, prismBurst = 0, stale = true;
     function initGrid(cN, rN) {
       columns = clampDim(cN); rows = clampDim(rN); cells = columns * rows;
       glow = new Float32Array(cells); patch = new Float32Array(cells); glyphs = new Uint8Array(cells);
@@ -1064,7 +1064,7 @@ color = vec4(rgb * a, a);
       breathSin = new Float32Array(cells); breathCos = new Float32Array(cells); wasLit = new Uint8Array(cells);
       colClouds = new Array(M.max(0, columns));
       cloudColumns.clear();
-      appliedKey = null; lastTick = -1; lastIdleRefreshMs = -Infinity; glowing = false; stale = true;
+      appliedKey = null; lastTick = -1; lastDrift = -1; lastIdleRefreshMs = -Infinity; glowing = false; stale = true;
       const featherCols = M.max(1, columns * RIPPLE.edgeFeather), featherRows = M.max(1, rows * RIPPLE.edgeFeather);
       for (let row = 0; row < rows; row++) {
         const y = row * cellHeight + cellHeight / 2;
@@ -1332,8 +1332,12 @@ color = vec4(rgb * a, a);
         const height = waves.height;
         const { data } = renderer;
         if (needCpuCloud) {
-          for (let c = 0; c < columns; c++) {
-            colClouds[c] = cloudColumn(c + drift);
+          if (!isGpuMod) {
+            for (let c = 0; c < columns; c++) colClouds[c] = cloudColumn(c + drift);
+            lastDrift = drift;
+          } else if (drift !== lastDrift) {
+            colClouds.fill(null);
+            lastDrift = drift;
           }
         }
         let brightest = 0;
@@ -1370,7 +1374,7 @@ color = vec4(rgb * a, a);
             const lit = shown < 0.01 ? 0 : shown;
             glow[cell] = lit;
             wasLit[cell] = lit > 0 ? 1 : 0;
-            let alpha = isGpuMod && lit === 0 ? idleAlpha : idleAlpha * colClouds[column][row] * breath;
+            let alpha = isGpuMod && lit === 0 ? idleAlpha : idleAlpha * (colClouds[column] || (colClouds[column] = cloudColumn(column + drift)))[row] * breath;
             let packed = 0;
             let waveMix = strength;
             if (lit > 0) {

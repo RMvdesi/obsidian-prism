@@ -39,12 +39,12 @@ function createCh1Compiler({
   getInjectWrapperTemplate,
 }) {
   const _mangledUnitCache = new Map();
-  let _unifiedBundleCache = { sig: '', bundleCode: '', partCodeByName: new Map() };
-  let _cssCache = { sig: '', minCss: '', packedExpr: '' };
+  let _unifiedBundleCache = { sig: '', bundleCode: '', lzBundleCode: '', partCodeByName: new Map() };
+  let _cssCache = { sig: '', rawCss: '', minCss: '', packedExpr: '', packedLzExpr: '', packedLzHelper: '' };
 
   function clearMemCaches() {
-    _cssCache = { sig: '', minCss: '', packedExpr: '' };
-    _unifiedBundleCache = { sig: '', bundleCode: '', partCodeByName: new Map() };
+    _cssCache = { sig: '', rawCss: '', minCss: '', packedExpr: '', packedLzExpr: '', packedLzHelper: '' };
+    _unifiedBundleCache = { sig: '', bundleCode: '', lzBundleCode: '', partCodeByName: new Map() };
     _mangledUnitCache.clear();
   }
 
@@ -52,21 +52,37 @@ function createCh1Compiler({
     return Boolean(_unifiedBundleCache.bundleCode);
   }
 
-  function readCss() {
+  function loadRawCss() {
     const p = path.join(rootDir, 'style.css');
     const sig = getFileSig(p);
     if (_cssCache.sig !== sig) {
+      _cssCache = { sig, rawCss: fs.readFileSync(p, 'utf8'), minCss: '', packedExpr: '', packedLzExpr: '', packedLzHelper: '' };
+    }
+    return _cssCache.rawCss;
+  }
+
+  function readCss() {
+    const rawCss = loadRawCss();
+    if (!_cssCache.minCss) {
       if (stats) stats.cssMinifyRuns += 1;
-      const minCss = minifyCss(fs.readFileSync(p, 'utf8'));
-      _cssCache = { sig, minCss, packedExpr: '' };
+      _cssCache.minCss = minifyCss(rawCss);
     }
     return _cssCache.minCss;
   }
 
-  function readPackedCssExpr() {
-    readCss();
+  function readPackedCssExpr(lzHelper = null) {
+    const rawCss = loadRawCss();
+    if (lzHelper) {
+      if (!_cssCache.packedLzExpr || _cssCache.packedLzHelper !== lzHelper) {
+        if (stats && !_cssCache.minCss && !_cssCache.packedExpr) stats.cssMinifyRuns += 1;
+        _cssCache.packedLzExpr = packCssJsExpr(rawCss, { lzHelper });
+        _cssCache.packedLzHelper = lzHelper;
+      }
+      return _cssCache.packedLzExpr;
+    }
     if (!_cssCache.packedExpr) {
-      _cssCache.packedExpr = packCssJsExpr(_cssCache.minCss);
+      if (stats && !_cssCache.minCss && !_cssCache.packedLzExpr) stats.cssMinifyRuns += 1;
+      _cssCache.packedExpr = packCssJsExpr(rawCss);
     }
     return _cssCache.packedExpr;
   }
@@ -189,13 +205,16 @@ function createCh1Compiler({
       return String.fromCharCode(HI_CHAR_BASE + (rem >> 6), POOL_IDX_BASE + (rem & 63));
     };
 
-    const packedPoolExpr = packTextJsExpr(sharedPoolList.join(SEP), 5600);
-    const bootstrapHeader =
-      `globalThis.__agSP=${packedPoolExpr}.split(${JSON.stringify(SEP)});` +
+    const poolJoined = sharedPoolList.join(SEP);
+    const makeBootstrap = (packedExpr) =>
+      `globalThis.__agSP=${packedExpr}.split(${JSON.stringify(SEP)});` +
       `globalThis.__agM=s=>{let p=globalThis.__agSP,r=[],i=0;for(;i<s.length;i++){let c=s.charCodeAt(i);r.push(p[c<${POOL_IDX_BASE}?(c<60?c-35:c<92?c-38:c-39):c<${HI_CHAR_BASE}?c-${POOL_IDX_BASE - ASCII_SLOT_COUNT}:${SINGLE_TOTAL_LIMIT}+((c-${HI_CHAR_BASE})<<6)+s.charCodeAt(++i)-${POOL_IDX_BASE}])}return r};`;
+    const bootstrapHeader = makeBootstrap(packTextJsExpr(poolJoined, 5600));
+    const lzBootstrapHeader = makeBootstrap(packTextJsExpr(poolJoined, 5600, { lzHelper: '__agLz' }));
 
     const partCodeByName = new Map();
     const orderedCodes = [];
+    let lzPart0 = '';
 
     for (let pIdx = 0; pIdx < compiledParts.length; pIdx++) {
       const cp = compiledParts[pIdx];
@@ -226,19 +245,21 @@ function createCh1Compiler({
       });
 
       let finalPartCode = unitCodes.join('\n');
-      if (pIdx === 0) {
-        finalPartCode = bootstrapHeader + finalPartCode;
-      }
       if (pIdx === compiledParts.length - 1) {
         finalPartCode += '\ndelete globalThis.__agSP;delete globalThis.__agM;';
+      }
+      if (pIdx === 0) {
+        lzPart0 = lzBootstrapHeader + finalPartCode;
+        finalPartCode = bootstrapHeader + finalPartCode;
       }
       partCodeByName.set(cp.partName, finalPartCode);
       orderedCodes.push(finalPartCode);
     }
 
     const bundleCode = orderedCodes.join('\n');
+    const lzBundleCode = orderedCodes.length > 0 ? [lzPart0, ...orderedCodes.slice(1)].join('\n') : bundleCode;
     if (process.env.AG_PRISM_DEV_WATCH !== '1') _mangledUnitCache.clear();
-    _unifiedBundleCache = { sig: totalSig, bundleCode, partCodeByName };
+    _unifiedBundleCache = { sig: totalSig, bundleCode, lzBundleCode, partCodeByName };
     return _unifiedBundleCache;
   }
 
@@ -280,9 +301,10 @@ function createCh1Compiler({
   }
 
   function compileBaseInjectTemplate() {
-    const packedCss = readPackedCssExpr();
-    const bundle = readRuntimeBundle();
-    const codeHash = computeHash(bundle);
+    const packedCss = readPackedCssExpr('__agLz');
+    const unified = compileUnifiedBundle();
+    const bundle = unified.lzBundleCode;
+    const codeHash = computeHash(unified.bundleCode);
     const cssHashJson = JSON.stringify(computeHash(packedCss));
     const codeHashJson = JSON.stringify(codeHash);
     const tpl = getInjectWrapperTemplate();
