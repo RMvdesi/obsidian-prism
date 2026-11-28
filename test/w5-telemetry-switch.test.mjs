@@ -671,7 +671,9 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
     }
   }
 
-  // 2) Decoupled footerTier (>=440 => '0', 360-439 => '1', <360 => '1 2') vs barTier (880/660/530/440/360)
+  // 2) Decoupled footerTier (>=440 => '0', 360-439 => '1', <360 => '1 2') vs quota-mode-aware barTier:
+  //    compact (680/560/480/420/360) keeps tok/s visible at 720-750px standard composer width (#146),
+  //    both (736/620/520/440/360) reveals tok/s at full 750px width and folds earlier at 720px.
   const env = createSwitchMockEnv({ initialCid: CID_A });
   let footerW = 900;
   env.footer.getBoundingClientRect = () => ({ left: 0, top: 0, width: footerW, height: 32, right: footerW, bottom: 32 });
@@ -707,28 +709,40 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
     resizeTo(1120);
     assert.equal(bar.getAttribute('data-wide'), '1');
 
-    // 720px (primary width 660-879px): outer stays '0' (model name intact!), bar enters tier '1' (hides speed & sub-badge)
+    // 720px (standard 750px composer width in compact mode): outer stays '0' AND bar stays '0' so tok/s remains visible (#146)
     resizeTo(720);
     assert.equal(env.footer.getAttribute('data-t'), '0', '720px outer footer must stay data-t="0" so model name never truncates');
-    assert.equal(bar.getAttribute('data-t'), '1', '720px bar must enter tier 1 to hide tok/s and sub-badge');
+    assert.equal(bar.getAttribute('data-t'), '0', '720px compact bar must stay data-t="0" so tok/s remains visible');
     assert.equal(bar.getAttribute('data-wide'), null);
 
-    // 600px (530-659px): outer still '0', bar enters '1 2' (also hides cache)
+    // Switching to both-quota mode at 720px immediately folds bar to tier '1'; widening to 750px restores tier '0'
+    ctrl.sync({ telemetryModule: 'on', telemetryQuotaMode: 'both', language: 'zh-CN' });
+    assert.equal(bar.getAttribute('data-t'), '1', '720px both-quota bar must fold to tier 1 to protect model name');
+    resizeTo(750);
+    assert.equal(bar.getAttribute('data-t'), '0', '750px both-quota bar must restore tier 0');
+    ctrl.sync({ telemetryModule: 'on', telemetryQuotaMode: 'compact', language: 'zh-CN' });
+
+    // 600px (560-679px in compact mode): outer still '0', bar enters '1' (hides speed & sub-badge)
     resizeTo(600);
+    assert.equal(env.footer.getAttribute('data-t'), '0');
+    assert.equal(bar.getAttribute('data-t'), '1');
+
+    // 520px (480-559px in compact mode): outer still '0', bar enters '1 2' (also hides cache)
+    resizeTo(520);
     assert.equal(env.footer.getAttribute('data-t'), '0');
     assert.equal(bar.getAttribute('data-t'), '1 2');
 
-    // 480px (440-529px): outer STILL '0' (model name intact!), bar enters '1 2 3' (hides quota, keeps 88% ring)
-    resizeTo(480);
-    assert.equal(env.footer.getAttribute('data-t'), '0', '480px outer footer must still stay data-t="0"');
+    // 460px (420-479px in compact mode): outer STILL '0' (model name intact!), bar enters '1 2 3' (hides quota, keeps 88% ring)
+    resizeTo(460);
+    assert.equal(env.footer.getAttribute('data-t'), '0', '460px outer footer must still stay data-t="0"');
     assert.equal(bar.getAttribute('data-t'), '1 2 3');
 
-    // 400px (360-439px): outer folds model name ('1'), bar enters '1 2 3 4'
+    // 400px (360-419px): outer folds model name ('1'), bar enters '1 2 3 4'
     resizeTo(400);
     assert.equal(env.footer.getAttribute('data-t'), '1');
     assert.equal(bar.getAttribute('data-t'), '1 2 3 4');
 
-    // 340px (<360px): outer folds model+permissions ('1 2'), bar enters '1 2 3 4 5' (26px pill)
+    // 340px (<360px): outer folds model+permissions ('1 2'), bar enters '1 2 3 4 5' (28px pill)
     resizeTo(340);
     assert.equal(env.footer.getAttribute('data-t'), '1 2');
     assert.equal(bar.getAttribute('data-t'), '1 2 3 4 5');
@@ -822,6 +836,56 @@ test('W6-Footer-UX: decoupled footerTier/barTier 6-tier layout, compact vs both 
     ctrl.destroy();
     await new Promise((r) => setTimeout(r, 230));
     assert.equal(xCard.hidden, true, 'destroy() must cancel pending hover timers cleanly');
+  } finally {
+    ctrl.destroy();
+  }
+});
+
+test('Narrow-pane context-card clamping prevents left-edge sidebar clipping and clears overrides on close', async () => {
+  const env = createSwitchMockEnv({ initialCid: CID_A });
+  env.win.innerWidth = 1440;
+  env.convView.getBoundingClientRect = () => ({ left: 260, top: 80, width: 360, height: 600, right: 620, bottom: 680 });
+  env.footer.getBoundingClientRect = () => ({ left: 272, top: 600, width: 336, height: 32, right: 608, bottom: 632 });
+  env.win.__agPrismMetricsCall = (payloadStr) => {
+    const req = JSON.parse(payloadStr);
+    env.win.__agPrismMetricsResolve?.(req.id, makeSnap({ model: 'Gemini 4 Neon', usedFraction: 0.66, tps: 168.7 }));
+  };
+
+  const ctrl = inlineMod.createTelemetryController({ window: env.win, document: env.doc });
+  try {
+    ctrl.sync({ telemetryModule: 'on', language: 'zh-CN' });
+    await ctrl.refresh();
+
+    const bar = env.doc.getElementById('ag-prism-pulse-bar');
+    const sr = bar.shadowRoot;
+    const xCard = sr.getElementById('context-card');
+    const xChip = sr.querySelector('[data-card="context"]');
+
+    // Host bar sits at [430..520]; a 304px right-aligned card overflows left to 216 (< pane minL 268)
+    bar.getBoundingClientRect = () => ({ left: 430, top: 600, width: 90, height: 24, right: 520, bottom: 624 });
+    xCard.getBoundingClientRect = () => {
+      const mr = parseFloat(xCard.style.getPropertyValue('margin-right')) || 0;
+      const maxW = parseFloat(xCard.style.getPropertyValue('max-width')) || 304;
+      const w = Math.min(304, maxW);
+      const right = 520 - mr;
+      return { left: right - w, top: 300, width: w, height: 280, right, bottom: 580 };
+    };
+
+    xChip.dispatchEvent({ type: 'click' });
+    assert.equal(xCard.hidden, false);
+    assert.equal(xCard.style.getPropertyValue('max-width'), '344px');
+    assert.equal(xCard.style.getPropertyValue('left'), '', 'fitCard must avoid inline left so pulse-vial-bridge uses real rect');
+    assert.equal(xCard.style.getPropertyValue('right'), '', 'fitCard must avoid inline right so pulse-vial-bridge uses real rect');
+
+    const clampedRect = xCard.getBoundingClientRect();
+    assert.ok(clampedRect.left >= 268, `Expected clamped left >= 268, got ${clampedRect.left}`);
+    assert.ok(clampedRect.right <= 612, `Expected clamped right <= 612, got ${clampedRect.right}`);
+
+    // Clicking again closes card and clears inline fit overrides
+    xChip.dispatchEvent({ type: 'click' });
+    assert.equal(xCard.hidden, true);
+    assert.equal(xCard.style.getPropertyValue('margin-right'), '');
+    assert.equal(xCard.style.getPropertyValue('max-width'), '');
   } finally {
     ctrl.destroy();
   }

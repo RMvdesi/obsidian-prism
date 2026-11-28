@@ -2168,3 +2168,20 @@ test('perf guard 22: home-ripple-host coalesces burst ResizeObserver ticks via r
   assert.ok(fnSlice.includes("ga(btn, 'role')"), 'bSig must include role');
   assert.ok(fnSlice.includes('rawSvgCls'), 'bSig must include original <svg> className to prevent stale copy->check->copy hits');
 });
+
+test('perf guard 23: ui-runtime isolates model-selector-panel mount (df.o) and internal panel mutations (df.mp) from heavy df.c syncs', () => {
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'ui-runtime.js'), 'utf8');
+  assert.ok(uiSrc.includes("const DIRTY_KEYS = 'f|t|r|s|a|c|b|o|l|tk|cf|g|m|mp'.split('|');"), 'DIRTY_KEYS must include mp');
+  assert.ok(
+    uiSrc.includes('else if (isMdl) { if (aMdl) df.mp = true; else df.o = true; }'),
+    'model-selector-panel mount must only raise df.o and internal panel hover/slider mutations only df.mp without dirtying df.c'
+  );
+  assert.ok(
+    uiSrc.includes('if (flags.mp) modelGlyphCtl.syncModelSelectorPanel(latestPrimaryModelInfo);'),
+    'runSync must still refresh model-selector-panel glyphs on flags.mp'
+  );
+  assert.ok(
+    uiSrc.includes('|| dirtyFlags.mp)'),
+    'scheduleSync highPri must include dirtyFlags.mp for crisp panel hover/update paint'
+  );
+});

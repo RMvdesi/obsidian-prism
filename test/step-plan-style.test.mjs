@@ -586,3 +586,54 @@ test('stream-choreography decouples triggerHeroALiftoff / triggerHeroBHomeReturn
     else globalThis.document = prevDoc;
   }
 });
+
+test('composer horizontal inset and narrow footer 28px rail alignment contracts', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  assert.ok(
+    css.includes('&>div.relative.w-full{position:relative!important;') &&
+      css.includes('padding:2px 0!important;') &&
+      css.includes('& :is([data-lexical-editor="true"],p.pointer-events-none){padding-inline:6px!important}') &&
+      css.includes('& p.pointer-events-none{inset-inline:0!important}'),
+    'composer editor wrapper must tighten horizontal inset to 14px total and keep placeholder aligned'
+  );
+  assert.ok(
+    css.includes('& :is([data-testid="send-button"],[data-testid="input-cancel-button"]){position:relative!important;inset:auto!important;width:28px!important;height:28px!important;min-width:28px!important;'),
+    'send/cancel button must match the 28px footer rail'
+  );
+  assert.equal(css.includes('&[data-t~="5"]'), false, 'dead data-t~="5" footer rule must be replaced');
+  assert.ok(
+    css.includes('&[data-t~="2"]{gap:4px!important;&>div,&>div>div.flex{gap:4px!important}}'),
+    'narrow footer data-t~="2" must tighten footer gaps'
+  );
+  assert.ok(
+    css.includes('&[data-t~="2"] [data-testid="permissions-selector-trigger"]{gap:0!important;width:28px!important;min-width:28px!important;padding:0!important;justify-content:center!important}'),
+    'narrow permissions trigger must center shield icon in a 28px square'
+  );
+  assert.ok(
+    css.includes('& :is([data-testid="voice-live-pill"],[data-tooltip-id="input-send-button-record-tooltip"]){display:inline-flex!important;align-items:center!important;justify-content:center!important;flex-shrink:0!important;height:28px!important;width:28px!important;'),
+    'voice-live-pill must center its child button cleanly via inline-flex'
+  );
+  const pillLine = css.split('\n').find((l) => l.includes(':is([data-testid="entity-pill"],.inline-pill){text-decoration:none')) || '';
+  assert.ok(
+    pillLine.includes('max-width:100%!important') &&
+      pillLine.includes('min-width:0!important') &&
+      pillLine.includes('overflow:hidden!important') &&
+      pillLine.includes('text-overflow:ellipsis!important') &&
+      pillLine.includes('& :is(svg,img){flex-shrink:0}'),
+    'entity-pill and inline-pill must truncate cleanly inside narrow panes without clipping border or shrinking icons'
+  );
+  const toolGroupLine = css.split('\n').find((l) => l.includes(':is([data-testid="tool-group-collapsible"],[data-testid="worked-for-collapsible"])+div{')) || '';
+  assert.ok(
+    toolGroupLine.includes('& .flex.flex-row{min-width:0;max-width:100%}'),
+    'tool-group flex rows must allow horizontal shrinking within narrow panes'
+  );
+  const spBase = css.split('\n').find((l) => l.includes('[data-testid="step-plan-item"]{')) || '';
+  assert.equal(spBase.includes('0 16px 38px'), false, 'inline step-plan card must not cast oversized 38px dark drop shadow across neighboring rows');
+  const spLight = css.split('\n').find((l) => l.includes('& [data-testid="step-plan"]{background-color:var(--ag-cs-menu-bg-l,')) || '';
+  assert.ok(spLight.includes('--ag-prism-sps:') && spLight.includes('var(--ag-prism-sps)!important'), 'light-mode step-plan must use tight grounded shadow (--ag-prism-sps) instead of bare --_fs2');
+  assert.ok(
+    css.includes('&[data-t~="2"] [data-testid="model-selector-trigger"]{gap:3px!important;padding:0 6px!important;&>svg:last-of-type{display:none!important}}') &&
+      css.includes('&>svg{flex-shrink:0!important}'),
+    'narrow data-t~="2" model trigger must keep SVG icons unshrunk and hide trailing chevron so quota gauge does not clip during running tasks'
+  );
+});

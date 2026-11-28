@@ -4,6 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { assertSafeRegularFileSync, writeFileAtomicNoSymlinkSync } = require('../utils/fs-safe.cjs');
 
 const LNK_HEADER_SIZE = 0x4c;
@@ -408,13 +409,70 @@ function writeWindowsLnkArgumentsSync(lnkPath, nextArguments) {
   return { lnkPath: resolved, bytes: nextBuf.length, arguments: verify.arguments };
 }
 
-function getDefaultWindowsShortcutDirs(env = process.env) {
+let _cachedWinShellDesktopRaw = undefined;
+
+function expandWindowsEnvVars(rawPath, env = process.env) {
+  const s = String(rawPath || '').trim();
+  if (!s) return '';
+  const e = env || {};
+  const map = Object.create(null);
+  for (const k of Object.keys(e)) {
+    if (typeof e[k] === 'string' && e[k]) map[k.toLowerCase()] = e[k];
+  }
+  const expanded = s.replace(/%([^%]+)%/g, (m, name) => {
+    const hit = map[String(name).toLowerCase()];
+    return hit !== undefined ? hit : m;
+  });
+  if (/%[^%]+%/.test(expanded)) return '';
+  return expanded.trim();
+}
+
+function parseWindowsRegDesktopValue(regOutput) {
+  const m = /^\s*Desktop\s+REG_(?:EXPAND_)?SZ\s+(.+?)\s*$/im.exec(String(regOutput || ''));
+  return m ? m[1].trim() : '';
+}
+
+function readWindowsUserShellDesktopDir(env = process.env, opts = null) {
+  const e = env || process.env;
+  if (typeof opts?.readDesktopDir === 'function') {
+    try {
+      const custom = expandWindowsEnvVars(opts.readDesktopDir(e), e);
+      return custom && (path.win32.isAbsolute(custom) || path.isAbsolute(custom)) ? custom : '';
+    } catch {
+      return '';
+    }
+  }
+  const plat = opts?.platform || process.platform;
+  if (plat !== 'win32') return '';
+  const useCache = !opts?.execFileSync && !opts?.noCache && !opts?.platform;
+  let rawVal = useCache && _cachedWinShellDesktopRaw !== undefined ? _cachedWinShellDesktopRaw : undefined;
+  if (rawVal === undefined) {
+    const execFn = typeof opts?.execFileSync === 'function' ? opts.execFileSync : execFileSync;
+    try {
+      const out = execFn(
+        'reg.exe',
+        ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders', '/v', 'Desktop'],
+        { encoding: 'utf8', windowsHide: true, timeout: 400, stdio: ['ignore', 'pipe', 'ignore'] }
+      );
+      rawVal = parseWindowsRegDesktopValue(out);
+    } catch {
+      rawVal = '';
+    }
+    if (useCache) _cachedWinShellDesktopRaw = rawVal;
+  }
+  const expanded = expandWindowsEnvVars(rawVal, e);
+  return expanded && (path.win32.isAbsolute(expanded) || path.isAbsolute(expanded)) ? expanded : '';
+}
+
+function getDefaultWindowsShortcutDirs(env = process.env, opts = null) {
   const e = env || process.env;
   const userProfile = e.USERPROFILE || os.homedir();
   const appData = e.APPDATA || path.join(userProfile, 'AppData', 'Roaming');
   const publicDir = e.PUBLIC || 'C:\\Users\\Public';
   const programData = e.ProgramData || 'C:\\ProgramData';
+  const shellDesktopDir = readWindowsUserShellDesktopDir(e, opts);
   const rawDirs = [
+    shellDesktopDir,
     path.join(userProfile, 'Desktop'),
     e.OneDrive ? path.join(e.OneDrive, 'Desktop') : '',
     e.OneDriveConsumer ? path.join(e.OneDriveConsumer, 'Desktop') : '',

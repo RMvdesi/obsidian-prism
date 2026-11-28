@@ -899,3 +899,59 @@ test('端到端纯 Node 脱离重启 Helper (cdp.js --run-relaunch-task) + src/p
     fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 15, retryDelay: 50 });
   }
 });
+
+test('Issue #144: getDefaultWindowsShortcutDirs reads relocated Desktop from User Shell Folders via AV-clean reg.exe and deduplicates', () => {
+  const baseEnv = {
+    USERPROFILE: 'C:\\Users\\Alice',
+    APPDATA: 'C:\\Users\\Alice\\AppData\\Roaming',
+    PUBLIC: 'C:\\Users\\Public',
+    ProgramData: 'C:\\ProgramData',
+    OneDrive: 'C:\\Users\\Alice\\OneDrive',
+  };
+
+  // 1) Relocated Desktop (REG_SZ) on another drive
+  const regCalls = [];
+  const relocatedDirs = cdp.getDefaultWindowsShortcutDirs(baseEnv, {
+    platform: 'win32',
+    execFileSync: (bin, args) => {
+      regCalls.push({ bin, args });
+      return '\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders\r\n    Desktop    REG_SZ    D:\\桌面\\Desktop\r\n';
+    },
+  });
+  assert.equal(regCalls.length, 1);
+  assert.equal(regCalls[0].bin, 'reg.exe');
+  assert.equal(relocatedDirs[0], path.resolve('D:\\桌面\\Desktop'));
+  assert.equal(relocatedDirs.includes(path.resolve(path.join(baseEnv.USERPROFILE, 'Desktop'))), true);
+
+  // 2) %USERPROFILE%\Desktop (REG_EXPAND_SZ) expands and deduplicates cleanly
+  const dedupDirs = cdp.getDefaultWindowsShortcutDirs(baseEnv, {
+    platform: 'win32',
+    execFileSync: () =>
+      '\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders\r\n    Desktop    REG_EXPAND_SZ    %USERPROFILE%\\Desktop\r\n',
+  });
+  const defaultDesktop = path.resolve(path.join(baseEnv.USERPROFILE, 'Desktop'));
+  assert.equal(dedupDirs.filter((d) => d.toLowerCase() === defaultDesktop.toLowerCase()).length, 1);
+
+  // 3) Case-insensitive %onedrive%\Desktop expansion
+  const oneDriveDirs = cdp.getDefaultWindowsShortcutDirs(baseEnv, {
+    platform: 'win32',
+    execFileSync: () =>
+      '    Desktop    REG_EXPAND_SZ    %onedrive%\\CustomDesktop\r\n',
+  });
+  assert.equal(oneDriveDirs[0], path.resolve(path.join(baseEnv.OneDrive, 'CustomDesktop')));
+
+  // 4) Graceful fallback when reg.exe fails or returns malformed/unexpanded value
+  const fallbackDirs = cdp.getDefaultWindowsShortcutDirs(baseEnv, {
+    platform: 'win32',
+    execFileSync: () => {
+      throw new Error('reg query failed');
+    },
+  });
+  assert.equal(fallbackDirs[0], defaultDesktop);
+
+  const unexpandedDirs = cdp.getDefaultWindowsShortcutDirs(baseEnv, {
+    platform: 'win32',
+    execFileSync: () => '    Desktop    REG_EXPAND_SZ    %UNKNOWN_VAR%\\Desktop\r\n',
+  });
+  assert.equal(unexpandedDirs[0], defaultDesktop);
+});

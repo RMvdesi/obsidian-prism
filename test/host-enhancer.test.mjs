@@ -2418,3 +2418,67 @@ test('侧栏出现时 .agy-scroll-bottom 层级/过渡/分屏宽度防裁切与 
     ctl.destroy();
   }
 });
+
+test('inline-diff narrow-pane chip overflow guard & CJK action-verb exclusion', () => {
+  const css = inlineDiffMod.INLINE_DIFF_CSS;
+  assert.equal(/:has\(/.test(css), false, 'INLINE_DIFF_CSS must stay 0 :has()');
+  assert.equal(/[^\x00-\x7f]/.test(css), false, 'INLINE_DIFF_CSS must stay 100% pure ASCII');
+  assert.ok(css.includes('[data-ag-diff-chip-row="1"]{min-width:0 !important;max-width:100% !important;'), 'chip row must shrink cleanly');
+  const chipLine = css.split('\n').find((l) => l.includes('[data-ag-diff-chip="1"]{')) || '';
+  assert.ok(
+    chipLine.includes('min-width:0 !important;max-width:100% !important;flex:0 1 auto;min-height:22px !important;') &&
+      chipLine.includes('overflow:hidden !important;') &&
+      !chipLine.includes('overflow:visible !important;'),
+    'merged diff chip must use overflow:hidden and flex:0 1 auto instead of overflow:visible'
+  );
+  assert.ok(
+    chipLine.includes('[data-ag-diff-chip-file="1"] :is([data-testid="entity-pill"],.inline-pill){') &&
+      chipLine.includes('text-overflow:ellipsis !important;white-space:nowrap;'),
+    'diff chip file pill must truncate long filenames with ellipsis'
+  );
+  assert.ok(
+    chipLine.includes('& [data-testid="diff-line-count"]{flex-shrink:0 !important;white-space:nowrap;') &&
+      css.includes('[data-testid="diff-line-count"]{display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;'),
+    'diff-line-count badge must remain flex-shrink:0 so +N -M never clips offscreen'
+  );
+  const lightChipLine = css.split('\n').slice(25).find((l) => l.includes('[data-ag-diff-chip="1"]{')) || '';
+  assert.ok(
+    lightChipLine.includes('[data-ag-diff-chip-file="1"] :is([data-testid="entity-pill"],.inline-pill){background:transparent !important;border-color:transparent !important;box-shadow:none !important;}'),
+    'light theme must clear inner entity-pill box chrome inside merged diff chip'
+  );
+
+  const env = createMockEnv();
+  const row = env.createElement('div', { class: 'flex flex-row items-center gap-1' });
+  const zhVerb = env.createElement('span');
+  zhVerb.textContent = '已编辑';
+  const wrap = env.createElement('span', { class: 'inline-flex items-center gap-1' });
+  const pill = env.createElement('span', { 'data-testid': 'entity-pill', class: 'inline-pill' });
+  pill.textContent = 'cdp-relaunch-helper.test.mjs';
+  const badge = env.createElement('span', { 'data-testid': 'diff-line-count' });
+  badge.textContent = '+56 -0';
+  wrap.appendChild(pill);
+  wrap.appendChild(badge);
+  row.appendChild(zhVerb);
+  row.appendChild(wrap);
+  env.body.appendChild(row);
+
+  // Also test fallback shape where verb span & badge are direct siblings without intermediate wrap
+  const flatRow = env.createElement('div', { class: 'flex flex-row items-center gap-1' });
+  const zhVerbFlat = env.createElement('span');
+  zhVerbFlat.textContent = '已编辑';
+  const flatBadge = env.createElement('span', { 'data-testid': 'diff-line-count' });
+  flatBadge.textContent = '+1 -0';
+  flatRow.appendChild(zhVerbFlat);
+  flatRow.appendChild(flatBadge);
+  env.body.appendChild(flatRow);
+
+  const client = inlineDiffMod.createInlineDiffClient({ win: env.win, doc: env.doc, getLang: () => 'zh-CN' });
+  try {
+    client.sync();
+    assert.equal(wrap.getAttribute('data-ag-diff-chip'), '1', 'Chinese tool row wraps [pill + diff badge] inside merged chip');
+    assert.equal(row.hasAttribute('data-ag-diff-chip'), false, 'Outer Chinese action row must not become chip');
+    assert.equal(flatRow.hasAttribute('data-ag-diff-chip'), false, 'Standalone Chinese verb 已编辑 must not be mistaken for file chip');
+  } finally {
+    client.destroy();
+  }
+});

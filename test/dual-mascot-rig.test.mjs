@@ -1009,6 +1009,9 @@ test('Issue #1 & perf guard: dual mascots (cat + clawd) track side-panel push/dr
   const callsAfterInit = rectCalls;
   ftRoCb([{ contentRect: { width: 610 } }]);
   assert.equal(ftAttrs.get('data-t'), '0');
+  assert.equal(barAttrs.get('data-t'), '1');
+  ftRoCb([{ contentRect: { width: 550 } }]);
+  assert.equal(ftAttrs.get('data-t'), '0');
   assert.equal(barAttrs.get('data-t'), '1 2');
   ftRoCb([{ contentRect: { width: 340 } }]);
   assert.equal(ftAttrs.get('data-t'), '1 2');

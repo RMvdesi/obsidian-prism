@@ -8158,3 +8158,55 @@ test('Stub SPA re-badge: auto-paints left-pinned [10Ne] on new trigger after SPA
     activeObservers: 0,
   });
 });
+
+test('Click-path perf: unrelated doc clicks debounce mini-keycap sync via scheduleBadgeSync and short taps skip hold-ring sweep', () => {
+  const env = createPeriodicSandbox({ mock2d: true, mockWebGL2: false });
+  const factory = loadPeriodicFactoryInSandbox(env);
+
+  const triggerBtn = env.makeElement('button', {
+    attrs: { 'data-testid': 'model-selector-trigger' },
+    text: 'Gemini 4 Carbon (High)',
+  });
+  const otherBtn = env.makeElement('button', { text: 'Other UI Button' });
+  env.body.appendChild(triggerBtn);
+  env.body.appendChild(otherBtn);
+
+  const hostState = {
+    selectedModel: { label: 'Gemini 4 Carbon (High)', modelId: 'gemini-4-c-high' },
+    modelOptions: [
+      { label: 'Gemini 4 Carbon (High)', modelId: 'gemini-4-c-high' },
+      { label: 'Gemini 4 Neon (High)', modelId: 'gemini-4-ne-high' },
+    ],
+  };
+  env.window.__agPeriodicMockHost = hostState;
+
+  const inst = factory.mountPeriodicPicker({ root: env.window, doc: env.document, mode: 'on' });
+  const qsaLog = [];
+  const origQsa = env.document.querySelectorAll.bind(env.document);
+  env.document.querySelectorAll = (sel) => {
+    qsaLog.push(sel);
+    return origQsa(sel);
+  };
+
+  // Unrelated document click must not synchronously scan model triggers
+  hostState.selectedModel = { label: 'Gemini 4 Neon (High)', modelId: 'gemini-4-ne-high' };
+  triggerBtn.textContent = 'Gemini 4 Neon (High)';
+  otherBtn.dispatchEvent(env.createEventObj('click', { button: 0 }));
+  assert.equal(qsaLog.length, 0, 'Unrelated click must schedule debounced badge sync instead of synchronous QSA scan');
+
+  // After debounce delay (>=60ms), scheduled badge sync updates mini-keycap
+  env.advanceTime(65);
+  assert.equal(triggerBtn.querySelector('.ag-pp-mini-keycap')?.textContent, '10Ne');
+
+  // Short tap (<110ms) must not sweep .ag-pp-hold-ring on pointerup when hold ring never mounted
+  qsaLog.length = 0;
+  triggerBtn.dispatchEvent(env.createEventObj('pointerdown', { button: 0, clientX: 80, clientY: 400 }));
+  env.advanceTime(40);
+  triggerBtn.dispatchEvent(env.createEventObj('pointerup', { button: 0, clientX: 80, clientY: 400 }));
+  assert.equal(
+    qsaLog.some((s) => String(s).includes('.ag-pp-hold-ring')),
+    false,
+    'Short tap before hold ring mount must skip document.querySelectorAll(.ag-pp-hold-ring)'
+  );
+  inst.destroy();
+});

@@ -446,7 +446,7 @@
 
       /* ── Controller Runtime State ──────────────────────────────────────── */
 
-      var holdState = null, isReplayingNativeTrigger = false, pendingLongPressReleaseBtn = null, suppressUntilMs = 0, suppressTargetBtn = null, suppressTrailingUntilMs = 0, suppressTrailingBtn = null, suppressTimer = 0;
+      var holdState = null, ringOn = false, isReplayingNativeTrigger = false, pendingLongPressReleaseBtn = null, suppressUntilMs = 0, suppressTargetBtn = null, suppressTrailingUntilMs = 0, suppressTrailingBtn = null, suppressTimer = 0;
       var overlayEl = null, deskmatEl = null, dockTopRimEl = null, dockGripEl = null, spatialDockEl = null, bentoRefs = null, stageEl = null, floorShadowEl = null, canvasEl = null, hitLayerEl = null, hudPillEl = null, swatchesWrapEl = null, activeRenderer = null, standbyRenderer = null, standbyDisposeTimer = 0, dockResizeObserver = null, cachedShell = null, cachedHostTelemetry = null, activeHudElementsKey = '';
       var cachedOverlayWidth = 1280, cachedComposerHeight = 0;
       var cachedDockBounds = { left: 60, top: 220, width: 1280, height: 340 };
@@ -1092,82 +1092,61 @@
       }
 
       function cancelHold(willOpenImmediately) {
-        var prevHold = holdState;
-        if (prevHold) {
-          if (prevHold.ringTimer) clearTimer(prevHold.ringTimer);
-          if (prevHold.prewarmTimer) clearTimer(prevHold.prewarmTimer);
-          if (prevHold.openTimer) clearTimer(prevHold.openTimer);
-          if (prevHold.ring && prevHold.ring.raf && cancelRaf) cancelRaf(prevHold.ring.raf);
-          if (prevHold.ring && prevHold.ring.el) safeRemove(prevHold.ring.el);
+        var p = holdState, chk = ringOn || Boolean(p && p.ring);
+        if (p) {
+          if (p.ringTimer) clearTimer(p.ringTimer);
+          if (p.prewarmTimer) clearTimer(p.prewarmTimer);
+          if (p.openTimer) clearTimer(p.openTimer);
+          if (p.ring && p.ring.raf && cancelRaf) cancelRaf(p.ring.raf);
+          if (p.ring && p.ring.el) safeRemove(p.ring.el);
           holdState = null;
         }
-        if (doc && typeof doc.querySelectorAll === 'function') {
-          try {
-            var strayRings = doc.querySelectorAll('.ag-pp-hold-ring');
-            for (var i = 0; i < strayRings.length; i += 1) safeRemove(strayRings[i]);
-          } catch (e) {}
+        ringOn = false;
+        if (chk && doc && typeof doc.querySelectorAll === 'function') {
+          try { var rs = doc.querySelectorAll('.ag-pp-hold-ring'); for (var i = 0; i < rs.length; i += 1) safeRemove(rs[i]); } catch (e) {}
         }
-        if (prevHold) {
-          if (typeof hostBridge.setHoldTooltipSuppression === 'function') {
-            hostBridge.setHoldTooltipSuppression(doc, false, prevHold.btn);
-          }
-          if (!willOpenImmediately && !overlayEl && typeof hostBridge.suppressNativeTooltip === 'function') {
-            hostBridge.suppressNativeTooltip(doc, prevHold.btn, false);
-          }
+        if (p) {
+          if (typeof hostBridge.setHoldTooltipSuppression === 'function') hostBridge.setHoldTooltipSuppression(doc, false, p.btn);
+          if (!willOpenImmediately && !overlayEl && typeof hostBridge.suppressNativeTooltip === 'function') hostBridge.suppressNativeTooltip(doc, p.btn, false);
         }
       }
 
-      function armSuppressNextClick(targetBtn) {
-        suppressUntilMs = Date.now() + SUPPRESS_CLICK_WINDOW_MS;
-        suppressTargetBtn = targetBtn || null;
-        if (suppressTimer) {
-          clearTimer(suppressTimer);
-          suppressTimer = 0;
-        }
+      function armSuppressNextClick(b) {
+        suppressUntilMs = Date.now() + SUPPRESS_CLICK_WINDOW_MS; suppressTargetBtn = b || null;
+        if (suppressTimer) { clearTimer(suppressTimer); suppressTimer = 0; }
       }
 
-      function armSuppressTrailingNativeRelease(targetBtn) {
-        suppressTrailingBtn = targetBtn || null;
-        suppressTrailingUntilMs = Date.now() + 260;
-      }
+      function armSuppressTrailingNativeRelease(b) { suppressTrailingBtn = b || null; suppressTrailingUntilMs = Date.now() + 260; }
 
       function isTargetWithinNode(node, target) {
         if (!node || !target) return false;
         if (node === target) return true;
-        if (typeof node.contains === 'function') {
-          try { return Boolean(node.contains(target)); } catch (e) {}
-        }
+        if (typeof node.contains === 'function') { try { return Boolean(node.contains(target)); } catch (e) {} }
         return false;
+      }
+
+      function isMenuVis(m) {
+        if (!m || (overlayEl && isTargetWithinNode(overlayEl, m)) || m.hidden === true) return false;
+        var st = m.style;
+        if (st && (st.display === 'none' || st.visibility === 'hidden')) return false;
+        if (typeof m.getAttribute === 'function' && (m.getAttribute('data-state') === 'closed' || m.getAttribute('aria-hidden') === 'true' || (m.hasAttribute && m.hasAttribute('hidden')))) return false;
+        if (typeof m.getBoundingClientRect === 'function') {
+          var mr = m.getBoundingClientRect();
+          if (mr && mr.width === 0 && mr.height === 0 && !(m.textContent && String(m.textContent).trim())) return false;
+        }
+        return true;
       }
 
       function isNativeHostMenuOpen(docRef, triggerBtn) {
         try {
           if (triggerBtn && typeof triggerBtn.getAttribute === 'function') {
-            if (triggerBtn.getAttribute('aria-expanded') === 'true') return true;
-            if (triggerBtn.getAttribute('data-state') === 'open') return true;
-            var popOpen = triggerBtn.getAttribute('data-popup-open');
-            if (popOpen !== null && popOpen !== 'false') return true;
+            var po = triggerBtn.getAttribute('data-popup-open');
+            if (triggerBtn.getAttribute('aria-expanded') === 'true' || triggerBtn.getAttribute('data-state') === 'open' || (po !== null && po !== 'false')) return true;
           }
+          if (docRef && typeof docRef.querySelector === 'function' && isMenuVis(docRef.querySelector('[data-testid="model-selector-panel"]'))) return true;
           if (docRef && typeof docRef.querySelectorAll === 'function') {
-            var menus = docRef.querySelectorAll(
-              '[data-testid="model-selector-panel"], [role="menu"], [data-radix-popper-content-wrapper], [data-radix-menu-content]'
-            );
-            for (var i = 0; i < menus.length; i += 1) {
-              var m = menus[i];
-              if (!m) continue;
-              if (overlayEl && isTargetWithinNode(overlayEl, m)) continue;
-              if (typeof m.getAttribute === 'function') {
-                if (m.getAttribute('data-state') === 'closed') continue;
-                if (m.getAttribute('aria-hidden') === 'true') continue;
-                if (m.hasAttribute && m.hasAttribute('hidden')) continue;
-              }
-              if (typeof m.getBoundingClientRect === 'function') {
-                var mr = m.getBoundingClientRect();
-                var hasText = Boolean(m.textContent && String(m.textContent).trim());
-                if (mr && mr.width === 0 && mr.height === 0 && !hasText) continue;
-              }
-              return true;
-            }
+            var ms = docRef.querySelectorAll('[role="menu"],[data-radix-popper-content-wrapper],[data-radix-menu-content]');
+            for (var i = 0; i < ms.length; i += 1) if (isMenuVis(ms[i])) return true;
           }
         } catch (e) {}
         return false;
@@ -1175,73 +1154,23 @@
 
       function createSyntheticTriggerEvent(kind, type, init) {
         var win = (doc && doc.defaultView) || root || null;
-        var Ctor = null;
-        if (kind === 'pointer') {
-          Ctor = win && typeof win.PointerEvent === 'function' ? win.PointerEvent : null;
-        }
-        if (!Ctor) {
-          Ctor = win && typeof win.MouseEvent === 'function' ? win.MouseEvent : null;
-        }
-        if (Ctor) {
-          try {
-            return new Ctor(type, init);
-          } catch (e) {}
-        }
-        var evObj = Object.assign(
-          {
-            type: type,
-            bubbles: true,
-            cancelable: true,
-            defaultPrevented: false,
-            propagationStopped: false,
-            immediatePropagationStopped: false,
-            preventDefault: function () { this.defaultPrevented = true; },
-            stopPropagation: function () { this.propagationStopped = true; },
-            stopImmediatePropagation: function () {
-              this.immediatePropagationStopped = true;
-              this.propagationStopped = true;
-            },
-          },
-          init
-        );
-        return evObj;
+        var Ctor = (kind === 'pointer' && win && typeof win.PointerEvent === 'function' ? win.PointerEvent : null) || (win && typeof win.MouseEvent === 'function' ? win.MouseEvent : null);
+        if (Ctor) { try { return new Ctor(type, init); } catch (e) {} }
+        return Object.assign({ type: type, bubbles: true, cancelable: true, defaultPrevented: false, propagationStopped: false, immediatePropagationStopped: false, preventDefault: function () { this.defaultPrevented = true; }, stopPropagation: function () { this.propagationStopped = true; }, stopImmediatePropagation: function () { this.immediatePropagationStopped = this.propagationStopped = true; } }, init);
       }
 
       function replayNativeTriggerClick(triggerBtn, meta) {
-        if (!triggerBtn || typeof triggerBtn.dispatchEvent !== 'function' || isDestroyed) return false;
-        if (isHostModelTriggerLocked(triggerBtn)) return false;
-        var m = meta || {};
-        var cx = Number(m.clientX) || 0;
-        var cy = Number(m.clientY) || 0;
-        var pid = m.pointerId !== undefined ? m.pointerId : 1;
-        var ptype = typeof m.pointerType === 'string' && m.pointerType ? m.pointerType : 'mouse';
-
-        /* Temporarily clear suppression windows so replayed native events always pass cleanly */
-        suppressUntilMs = 0;
-        suppressTargetBtn = null;
-        suppressTrailingUntilMs = 0;
-        suppressTrailingBtn = null;
-        if (suppressTimer) {
-          clearTimer(suppressTimer);
-          suppressTimer = 0;
-        }
-
-        var dispatched = false;
+        if (!triggerBtn || typeof triggerBtn.dispatchEvent !== 'function' || isDestroyed || isHostModelTriggerLocked(triggerBtn)) return false;
+        var m = meta || {}, cx = Number(m.clientX) || 0, cy = Number(m.clientY) || 0, pid = m.pointerId !== undefined ? m.pointerId : 1, ptype = typeof m.pointerType === 'string' && m.pointerType ? m.pointerType : 'mouse';
+        suppressUntilMs = suppressTrailingUntilMs = 0; suppressTargetBtn = suppressTrailingBtn = null;
+        if (suppressTimer) { clearTimer(suppressTimer); suppressTimer = 0; }
+        var dispatched = false, base = { bubbles: true, cancelable: true, button: 0, clientX: cx, clientY: cy };
+        var pt = Object.assign({ pointerId: pid, pointerType: ptype, isPrimary: true }, base);
+        var seq = [['pointer', 'pointerdown', Object.assign({ buttons: 1 }, pt)], ['mouse', 'mousedown', Object.assign({ buttons: 1 }, base)], ['pointer', 'pointerup', Object.assign({ buttons: 0 }, pt)], ['mouse', 'mouseup', Object.assign({ buttons: 0 }, base)], ['mouse', 'click', Object.assign({ buttons: 0 }, base)]];
         isReplayingNativeTrigger = true;
         try {
-          var seq = [
-            ['pointer', 'pointerdown', { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: pid, pointerType: ptype, clientX: cx, clientY: cy, isPrimary: true }],
-            ['mouse', 'mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1, clientX: cx, clientY: cy }],
-            ['pointer', 'pointerup', { bubbles: true, cancelable: true, button: 0, buttons: 0, pointerId: pid, pointerType: ptype, clientX: cx, clientY: cy, isPrimary: true }],
-            ['mouse', 'mouseup', { bubbles: true, cancelable: true, button: 0, buttons: 0, clientX: cx, clientY: cy }],
-            ['mouse', 'click', { bubbles: true, cancelable: true, button: 0, buttons: 0, clientX: cx, clientY: cy }],
-          ];
           for (var i = 0; i < seq.length; i += 1) {
-            var evSynth = createSyntheticTriggerEvent(seq[i][0], seq[i][1], seq[i][2]);
-            try {
-              triggerBtn.dispatchEvent(evSynth);
-              dispatched = true;
-            } catch (eDisp) {}
+            try { triggerBtn.dispatchEvent(createSyntheticTriggerEvent(seq[i][0], seq[i][1], seq[i][2])); dispatched = true; } catch (eDisp) {}
           }
         } finally {
           isReplayingNativeTrigger = false;
@@ -5649,6 +5578,7 @@
           }
           state.ringTimer = 0;
           state.ring = bentoUi.spawnHoldRing(doc, root, triggerBtn, reqRaf, HOLD_OPEN_DELAY_MS, HOLD_RING_DELAY_MS);
+          if (state.ring) ringOn = true;
           if (state.ring && state.ring.el) markPeriodicOwnedRoot(state.ring.el);
         }, HOLD_RING_DELAY_MS);
 
@@ -5877,7 +5807,7 @@
         }
 
         if (!suppressUntilMs) {
-          if (ev && ev.type === 'click' && !overlayEl) syncMiniKeycapBadges();
+          if (ev && ev.type === 'click' && !overlayEl) scheduleBadgeSync(60);
           return;
         }
         if (Date.now() > suppressUntilMs) {

@@ -88,38 +88,17 @@ const WIN_RESERVED_DEVICE_RE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 const URL_SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]+:/;
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
 const ALLOWED_ORIGIN_RE =
-  /^(?:https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?|vscode-file:\/\/[a-z0-9._-]+|app:\/\/[a-z0-9._-]+)$/i;
+  /^(?:https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?|(?:vscode-file|app|chrome-extension):\/\/[a-z0-9._-]+)$/i;
 
 const MP4_BRANDS = new Set([
-  'isom',
-  'iso2',
-  'iso3',
-  'iso4',
-  'iso5',
-  'iso6',
-  'avc1',
-  'mp41',
-  'mp42',
-  'M4V ',
-  'M4A ',
-  'f4v ',
-  'qt  ',
-  'dash',
-  'msdh',
-  'msix',
-  'av01',
-  'hev1',
-  'hvc1',
-  '3gp4',
-  '3gp5',
-  '3gp6',
+  'isom', 'iso2', 'iso3', 'iso4', 'iso5', 'iso6', 'avc1', 'mp41', 'mp42', 'M4V ', 'M4A ',
+  'f4v ', 'qt  ', 'dash', 'msdh', 'msix', 'av01', 'hev1', 'hvc1', '3gp4', '3gp5', '3gp6',
 ]);
 
 const AVIF_BRANDS = new Set(['avif', 'avis']);
 
 const WIN_WALLPAPER_FILE_FILTER =
   'Wallpapers (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.mp4;*.webm)|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.mp4;*.webm|Images (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif)|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif|Videos (*.mp4;*.webm)|*.mp4;*.webm';
-const ALLOWED_EXT_ORIGIN_RE = /^(?:vscode-file|app|chrome-extension):\/\/[a-z0-9._-]+$/i;
 
 const MAC_PICK_MEDIA_SCRIPT =
   'POSIX path of (choose file with prompt "Select Wallpaper" of type {"public.jpeg", "public.png", "public.webp", "com.compuserve.gif", "public.avif", "public.mpeg-4", "org.webmproject.webm"})';
@@ -998,8 +977,14 @@ export function createWallpaperService(opts = {}) {
       baseHeaders['Vary'] = 'Origin';
     }
     const fetchSite = typeof req.headers?.['sec-fetch-site'] === 'string' ? req.headers['sec-fetch-site'].trim().toLowerCase() : '';
+    const fetchDest = typeof req.headers?.['sec-fetch-dest'] === 'string' ? req.headers['sec-fetch-dest'].trim().toLowerCase() : '';
     if (fetchSite) {
-      const allowedSite = fetchSite === 'none' || fetchSite === 'same-origin' || fetchSite === 'same-site' || (fetchSite === 'cross-site' && Boolean(reqOrigin && ALLOWED_EXT_ORIGIN_RE.test(reqOrigin)));
+      const allowedNoCorsMedia = !reqOrigin && (fetchDest === 'video' || fetchDest === 'image');
+      const allowedSite =
+        fetchSite === 'none' ||
+        fetchSite === 'same-origin' ||
+        fetchSite === 'same-site' ||
+        (fetchSite === 'cross-site' && (Boolean(reqOrigin) || allowedNoCorsMedia));
       if (!allowedSite) return deny(403, 'Forbidden fetch site');
     }
     if (method !== 'GET' && method !== 'HEAD') return deny(405, 'Method Not Allowed', { Allow: 'GET, HEAD' });

@@ -786,6 +786,42 @@ test('wallpaper-service: atomic config persistence, lazy 127.0.0.1 HTTP 206 Rang
     });
     assert.equal(extCrossSiteRes.statusCode, 200);
 
+    // Issue #165: Chromium <video>/<img> no-cors sends Sec-Fetch-Site: cross-site + Sec-Fetch-Dest: video|image without Origin;
+    // also verify trusted loopback origins (127.0.0.1 / localhost) and rejection of Sec-Fetch-Dest: empty or untrusted Origin.
+    const noCorsVideoRes = await httpRequestRaw(mediaUrl, {
+      headers: { 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Dest': 'video', Range: 'bytes=0-15' },
+    });
+    assert.equal(noCorsVideoRes.statusCode, 206);
+    assert.deepEqual(noCorsVideoRes.body, mp4Bytes.subarray(0, 16));
+
+    const noCorsImageRes = await httpRequestRaw(mediaUrl, {
+      method: 'HEAD',
+      headers: { 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Dest': 'image' },
+    });
+    assert.equal(noCorsImageRes.statusCode, 200);
+
+    const crossSiteEmptyDestRes = await httpRequestRaw(mediaUrl, {
+      headers: { 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Dest': 'empty' },
+    });
+    assert.equal(crossSiteEmptyDestRes.statusCode, 403);
+
+    const loopbackHttpsOriginRes = await httpRequestRaw(mediaUrl, {
+      method: 'HEAD',
+      headers: { Origin: 'https://127.0.0.1:4321', 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(loopbackHttpsOriginRes.statusCode, 200);
+
+    const localhostOriginRes = await httpRequestRaw(mediaUrl, {
+      method: 'HEAD',
+      headers: { Origin: 'http://localhost:4321', 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(localhostOriginRes.statusCode, 200);
+
+    const evilVideoOriginRes = await httpRequestRaw(mediaUrl, {
+      headers: { Origin: 'https://evil.example.com', 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Dest': 'video' },
+    });
+    assert.equal(evilVideoOriginRes.statusCode, 403);
+
     // HTTP 206 Range streaming (start-end, suffix, and invalid 416)
     const rangeRes = await httpRequestRaw(mediaUrl, { headers: { Range: 'bytes=10-49' } });
     assert.equal(rangeRes.statusCode, 206);

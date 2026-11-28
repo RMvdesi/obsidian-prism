@@ -302,7 +302,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
           if (p && typeof p.appendChild === 'function') {
             const st = document.createElement('style');
             st.id = 'ag-prism-periodic-stub-css';
-            st.textContent = '.ag-pp-mini-keycap{display:inline-flex;align-items:center;justify-content:center;gap:.5px;height:16px;padding:0 5px;margin:0 2px;border-radius:4px;box-sizing:border-box;flex:0 0 auto;background:var(--mk-bg,rgba(255,255,255,.045));color:var(--mk-fg,var(--secondary-foreground,#C8D0DF));border:1px solid var(--mk-border,rgba(218,228,255,.19));font:600 9.5px/1 var(--ag-cs-mono-stack,ui-monospace,monospace);pointer-events:none;user-select:none}.ag-pp-mk-z{font-size:7.5px;opacity:.78}';
+            st.textContent = '.ag-pp-mini-keycap{display:inline-flex;align-items:center;justify-content:center;gap:.5px;height:16px;padding:0 5px;margin:0;border-radius:4px;box-sizing:border-box;flex:0 0 auto;background:var(--mk-bg,rgba(255,255,255,.045));color:var(--mk-fg,var(--secondary-foreground,#C8D0DF));border:1px solid var(--mk-border,rgba(218,228,255,.19));font:600 9.5px/1 var(--ag-cs-mono-stack,ui-monospace,monospace);pointer-events:none;user-select:none}.ag-pp-mk-z{font-size:7.5px;opacity:.78}';
             p.appendChild(st);
           }
         }
