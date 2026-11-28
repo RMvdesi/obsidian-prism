@@ -578,12 +578,14 @@
       rectAt = 0;
       if (canDraw()) { const bus = busOf(); if ((pBoxes.length || orchE) && bus?.measure) bus.measure('rim:rects', syncBusRects); schedRaf(); }
     };
+    const PAINT_PROP_RE = /color|opacity|shadow|fill|stroke|filter|outline/i;
     const onAnimEnd = (ev) => {
+      if (ev?.type === 'transitionend' && ev.propertyName && PAINT_PROP_RE.test(ev.propertyName)) return;
       const t = !isDestroyed() && ev?.target, d = getDoc();
       if (isRootT(t, d, null) || (t.nodeType !== undefined && t.nodeType !== 1)) return;
       const hit = (b) => !!(b && (b === t || ancOf(t, b) || ancOf(b, t)));
       if (!pBoxes.some((e) => hit(e?.box)) && !hit(orchE?.box)) return;
-      rectAt = 0; pDirty = true; wake();
+      rectAt = 0; wake();
     };
     const bindEv = (m) => {
       const d = getDoc(), w = winOf(d);

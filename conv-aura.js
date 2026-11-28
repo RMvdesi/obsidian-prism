@@ -18,9 +18,9 @@
     return skipSyncVis || !el.checkVisibility || Boolean(el.checkVisibility());
   }
 
-  let cachedRunningVal = false, cachedRunningAt = -1, cachedRunningEl = null, cachedRunningScope = null;
-  let cachedDecisionVal = false, cachedDecisionAt = -1, cachedDecisionEl = null, cachedDecisionScope = null;
-  let cachedErrorAt = -1, lastFullVisAt = -1;
+  const rCache = new WeakMap(), dCache = new WeakMap();
+  let indGen = 0, cachedErrorAt = -1, lastFullVisAt = -1;
+  const resetIndCache = () => { indGen += 1; cachedErrorAt = -1; };
   const seenErrorNodes = typeof WeakSet === 'function' ? new WeakSet() : null;
 
   function readNowMs() {
@@ -61,34 +61,23 @@
     }
     return null;
   }
-  function isConvRunning(skipSyncVis = false, scopeEl = null) {
+  function checkInd(cache, sel, skipSyncVis, scopeEl, markVis) {
     const d = getD();
     if (!d) return false;
-    const scope = isF(scopeEl?.querySelectorAll) ? scopeEl : d, now = readNowMs();
-    if (cachedRunningScope === scope && cachedRunningAt >= 0 && M.abs(now - cachedRunningAt) < 200) return cachedRunningVal;
-    if (cachedRunningScope === scope && isLiveMatchedIndicator(cachedRunningEl, RUNNING_SEL, skipSyncVis, scope)) {
-      cachedRunningVal = true; cachedRunningAt = now;
-      if (!skipSyncVis) lastFullVisAt = now;
+    const scope = isF(scopeEl?.querySelectorAll) ? scopeEl : d, now = readNowMs(), rec = cache.get(scope);
+    if (rec && rec.g === indGen && M.abs(now - rec.at) < 200) return rec.val;
+    if (rec && isLiveMatchedIndicator(rec.el, sel, skipSyncVis, scope)) {
+      rec.val = true; rec.at = now; rec.g = indGen;
+      if (markVis && !skipSyncVis) lastFullVisAt = now;
       return true;
     }
-    cachedRunningEl = queryScopedIndicator(scope, RUNNING_SEL, skipSyncVis);
-    cachedRunningScope = scope; cachedRunningVal = !!(cachedRunningEl); cachedRunningAt = now;
-    if (!skipSyncVis) lastFullVisAt = now;
-    return cachedRunningVal;
+    const el = queryScopedIndicator(scope, sel, skipSyncVis);
+    cache.set(scope, { el, val: !!(el), at: now, g: indGen });
+    if (markVis && !skipSyncVis) lastFullVisAt = now;
+    return !!(el);
   }
-  function isAwaitingDecision(skipSyncVis = false, scopeEl = null) {
-    const d = getD();
-    if (!d) return false;
-    const scope = isF(scopeEl?.querySelectorAll) ? scopeEl : d, now = readNowMs();
-    if (cachedDecisionScope === scope && cachedDecisionAt >= 0 && M.abs(now - cachedDecisionAt) < 200) return cachedDecisionVal;
-    if (cachedDecisionScope === scope && isLiveMatchedIndicator(cachedDecisionEl, DECISION_SEL, skipSyncVis, scope)) {
-      cachedDecisionVal = true; cachedDecisionAt = now;
-      return true;
-    }
-    cachedDecisionEl = queryScopedIndicator(scope, DECISION_SEL, skipSyncVis);
-    cachedDecisionScope = scope; cachedDecisionVal = !!(cachedDecisionEl); cachedDecisionAt = now;
-    return cachedDecisionVal;
-  }
+  const isConvRunning = (skip = false, scopeEl = null) => checkInd(rCache, RUNNING_SEL, skip, scopeEl, 1);
+  const isAwaitingDecision = (skip = false, scopeEl = null) => checkInd(dCache, DECISION_SEL, skip, scopeEl, 0);
   function consumeFreshDomError(convView) {
     const d = getD();
     if (!seenErrorNodes || !d) return false;
@@ -359,7 +348,7 @@
     }
 
     function prime(skipVis = false) {
-      cachedRunningAt = cachedDecisionAt = cachedErrorAt = -1;
+      resetIndCache();
       if (isDestroyed() || !isHomeRippleEnabled()) return;
       const cv = findConvAuraView();
       if (!cv) return;
@@ -369,7 +358,7 @@
     }
 
     function sync(preserveCache = false, skipVis = false) {
-      if (!preserveCache) { cachedRunningAt = cachedDecisionAt = cachedErrorAt = -1; }
+      if (!preserveCache) resetIndCache();
       if (skipVis) lastFullVisAt = readNowMs();
       if (isDestroyed() || !isHomeRippleEnabled()) { unmount(); return; }
       const convView = findConvAuraView(), docRef = getD();

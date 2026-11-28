@@ -1136,7 +1136,7 @@ syncConvAuraSemantics(activeInfoForCrab, cPlan.awaitingDecision);
 if (hs.pendingModelShiftNotify) { hs.pendingModelShiftNotify = false; notifyMascot('model-shift'); }
 modelGlyphCtl.syncModelSelectorPanel(primaryModelInfo);
 if (!skipSparks) streamChoreoCtl.syncThinkingSparks(primaryModelInfo, paneModelMap);
-measured && 'caretList' in measured ? smoothCaretCtl.applyMutations(measured.caretList, false) : smoothCaretCtl.sync(false, false);
+measured && 'caretList' in measured ? smoothCaretCtl.applyMutations(measured.caretList, false) : smoothCaretCtl.sync(false, false, false);
 }
 
 // Host Animated Icons
@@ -2012,9 +2012,12 @@ if (hb) dirtyAddedRoots.add(el);
     smoothCaretCtl.queue(isTyping, immediate, type === 'focusin', type === 'scroll');
     if (type === 'input' && cl(ev?.target, S_IB)) safe(() => msRig?.onUserType?.(readTypeTail(ev, cl(ev.target, '[contenteditable="true"]') || ev.target)));
   });
+  const PAINT_PROP_RE = /color|opacity|shadow|fill|stroke|filter|outline/i;
   const onDocTransitionEnd = (ev) => safe(() => {
-    if (ev?.target?.id === 'ag-prism-periodic-picker-root' && ev.propertyName === 'height') markRim();
-    if (isCaretOn() && cl(ev?.target, S_IB)) smoothCaretCtl.queue(false, true, false);
+    const pn = ev?.propertyName || '';
+    if (ev?.target?.id === 'ag-prism-periodic-picker-root' && pn === 'height') markRim();
+    if (pn && PAINT_PROP_RE.test(pn)) return;
+    if (isCaretOn() && cl(ev?.target, S_IB)) smoothCaretCtl.queue(false, false, false);
   });
 const ATTR_OBSERVED_TIDS = new Set([
 'conversation-view', 'conversation-row-sidebar', 'worked-for-collapsible', 'thinking-collapsible-trigger',

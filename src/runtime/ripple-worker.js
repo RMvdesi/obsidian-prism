@@ -5,7 +5,7 @@
   if (root) root.__agPrismRippleWorker = api;
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this, function (G) {
   'use strict';
-  const M = Math, F = Object.freeze, PROBE_TIMEOUT_MS = 1500, INIT_TIMEOUT_MS = 800, PROBE_RETRY_DELAY_MS = 2500, IDLE_SLEEP_MS = 1200;
+  const M = Math, F = Object.freeze, PROBE_TIMEOUT_MS = 1500, INIT_TIMEOUT_MS = 2500, PROBE_RETRY_DELAY_MS = 2500, IDLE_SLEEP_MS = 1200;
   const mkP = (mode, g, r, c, v, f, ms, m) => F({ mode, glowDprScale: g, rippleMaxDpr: r, crystalMaxDpr: c, vialMaxDpr: v, maxFps: f, minGapMs: ms, msaa: m });
   const PERF_PROFILES = F({
     balanced: mkP('balanced', 0.7, 1.5, 1.5, 1.5, 0, 0, false),
