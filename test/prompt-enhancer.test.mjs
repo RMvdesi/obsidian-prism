@@ -614,15 +614,28 @@ test('Prompt Enhancer opens preview panel and preserves draft when the user chan
 test('Prompt Enhancer awaits async Lexical replacement without duplication or false failure popup, and shows readable popup on real failure', async () => {
   const { win, doc, editor, requests, runtime } = createUiHarness();
   const dispatched = [];
-  const cmdClear = { type: 'CLEAR_EDITOR_COMMAND' };
+  const syntheticInputEvents = [];
+  editor.addEventListener('input', (ev) => syntheticInputEvents.push(ev));
+  const cmdSelectAll = { type: 'SELECT_ALL_COMMAND' };
+  const cmdRemove = { type: 'REMOVE_TEXT_COMMAND' };
   const cmdInsert = { type: 'CONTROLLED_TEXT_INSERTION_COMMAND' };
+  let pendingText = editor.textContent;
+  let selectedAll = false;
   editor.__lexicalEditor = {
-    _commands: new Map([[cmdClear, []], [cmdInsert, []]]),
+    _commands: new Map([[cmdSelectAll, []], [cmdRemove, []], [cmdInsert, []]]),
     focus() {},
+    update(fn) {
+      fn();
+      queueMicrotask(() => { editor.textContent = pendingText; });
+    },
     dispatchCommand(cmd, arg) {
       dispatched.push({ type: cmd.type, arg });
-      if (cmd.type === 'CLEAR_EDITOR_COMMAND') queueMicrotask(() => { editor.textContent = ''; });
-      else if (cmd.type === 'CONTROLLED_TEXT_INSERTION_COMMAND') queueMicrotask(() => { editor.textContent += String(arg || ''); });
+      if (cmd.type === 'SELECT_ALL_COMMAND') selectedAll = true;
+      else if (cmd.type === 'REMOVE_TEXT_COMMAND') {
+        if (selectedAll) pendingText = '';
+      } else if (cmd.type === 'CONTROLLED_TEXT_INSERTION_COMMAND') {
+        pendingText += String(arg || '');
+      }
       return true;
     },
   };
@@ -638,9 +651,11 @@ test('Prompt Enhancer awaits async Lexical replacement without duplication or fa
   win.__agPrismPromptEnhancerBridge.resolve(req1.id, { ok: true, enhanced: '异步替换后的唯一结果' });
   await until(() => editor.textContent === '异步替换后的唯一结果');
   await new Promise((r) => setTimeout(r, 25));
+  assert.equal(editor.textContent, '异步替换后的唯一结果');
+  assert.equal(syntheticInputEvents.length, 0);
   assert.equal(doc.querySelector('[data-testid="prism-prompt-enhancer-panel"]'), null);
   assert.equal(doc.querySelector('[data-testid="prism-prompt-enhancer-restore"]')?.hidden, false);
-  assert.deepEqual(dispatched.map((d) => d.type), ['CLEAR_EDITOR_COMMAND', 'CONTROLLED_TEXT_INSERTION_COMMAND']);
+  assert.deepEqual(dispatched.map((d) => d.type), ['SELECT_ALL_COMMAND', 'REMOVE_TEXT_COMMAND', 'CONTROLLED_TEXT_INSERTION_COMMAND']);
 
   // Simulate real write failure on next request -> preview panel opens with clear failure notice and preserves draft
   editor.__lexicalEditor = {

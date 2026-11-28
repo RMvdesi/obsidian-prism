@@ -48,58 +48,36 @@
   }
 
   function createBridge(win) {
-    let sequence = 0;
+    let seq = 0, disposed = false;
     const pending = new Map();
-    let disposed = false;
-    const settle = (id, value) => {
-      const entry = pending.get(Number(id));
-      if (!entry) return false;
+    const settle = (id, val) => {
+      const e = pending.get(Number(id));
+      if (!e) return false;
       pending.delete(Number(id));
-      clearTimeout(entry.timer);
-      entry.resolve(value);
+      clearTimeout(e.timer);
+      e.resolve(val);
       return true;
     };
     const callCancelable = (action, payload = {}, timeoutMs = DEFAULT_TIMEOUT) => {
       if (disposed) return { id: 0, promise: Promise.resolve({ ok: false, reason: 'bridge-disposed' }), cancel: () => false };
       const binding = win?.[BINDING_NAME] || G[BINDING_NAME];
       if (typeof binding !== 'function') return { id: 0, promise: Promise.resolve({ ok: false, reason: 'bridge-offline' }), cancel: () => false };
-      const id = ++sequence;
-      const promise = new Promise((resolvePromise) => {
-        const timer = setTimeout(() => {
-          pending.delete(id);
-          resolvePromise({ ok: false, reason: 'rpc-timeout' });
-        }, timeoutMs);
-        pending.set(id, { resolve: resolvePromise, timer });
-        try {
-          binding(JSON.stringify({ id, action, payload }));
-        } catch (error) {
-          clearTimeout(timer);
-          pending.delete(id);
-          resolvePromise({ ok: false, reason: 'rpc-throw', error: String(error?.message || error) });
-        }
+      const id = ++seq;
+      const promise = new Promise((res) => {
+        const timer = setTimeout(() => { pending.delete(id); res({ ok: false, reason: 'rpc-timeout' }); }, timeoutMs);
+        pending.set(id, { resolve: res, timer });
+        try { binding(JSON.stringify({ id, action, payload })); }
+        catch (err) { clearTimeout(timer); pending.delete(id); res({ ok: false, reason: 'rpc-throw', error: String(err?.message || err) }); }
       });
-      return {
-        id,
-        promise,
-        cancel(value = { ok: false, cancelled: true, reason: 'cancelled' }) {
-          return settle(id, value);
-        },
-      };
-    };
-    const call = (action, payload = {}, timeoutMs = DEFAULT_TIMEOUT) => callCancelable(action, payload, timeoutMs).promise;
-    const resolve = (id, value) => {
-      return settle(id, value);
+      return { id, promise, cancel: (v = { ok: false, cancelled: true, reason: 'cancelled' }) => settle(id, v) };
     };
     return {
-      call,
+      call: (a, p = {}, t = DEFAULT_TIMEOUT) => callCancelable(a, p, t).promise,
       callCancelable,
-      resolve,
+      resolve: settle,
       dispose() {
         disposed = true;
-        for (const entry of pending.values()) {
-          clearTimeout(entry.timer);
-          entry.resolve({ ok: false, reason: 'bridge-disposed' });
-        }
+        for (const e of pending.values()) { clearTimeout(e.timer); e.resolve({ ok: false, reason: 'bridge-disposed' }); }
         pending.clear();
       },
     };
@@ -253,10 +231,12 @@
     return false;
   }
 
-  async function finishWrite(doc, editor, text, asyncWait = false) {
-    dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
-    dispatchEditorEvent(doc, editor, 'change');
-    const matched = asyncWait ? await waitEditorSync(doc, editor, text) : sameEditorText(readEditor(editor), text);
+  async function finishWrite(doc, editor, text, opts = {}) {
+    if (opts.emitEvents !== false) {
+      dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
+      dispatchEditorEvent(doc, editor, 'change');
+    }
+    const matched = opts.asyncWait ? await waitEditorSync(doc, editor, text) : sameEditorText(readEditor(editor), text);
     const actual = readEditor(editor);
     return matched ? { status: 'applied', actual } : { status: 'unverified', actual };
   }
@@ -283,22 +263,24 @@
       const lexical = editor.__lexicalEditor;
       if (lexical?._commands && typeof lexical.dispatchCommand === 'function') {
         try { lexical.focus?.(); } catch {}
-        let clearCmd, selectAll, insertCmd;
+        let selectAll, removeCmd, insertCmd;
         for (const cmd of lexical._commands.keys()) {
-          if (cmd?.type === 'CLEAR_EDITOR_COMMAND') clearCmd = cmd;
-          else if (cmd?.type === 'SELECT_ALL_COMMAND') selectAll = cmd;
+          if (cmd?.type === 'SELECT_ALL_COMMAND') selectAll = cmd;
+          else if (cmd?.type === 'REMOVE_TEXT_COMMAND') removeCmd = cmd;
           else if (cmd?.type === 'CONTROLLED_TEXT_INSERTION_COMMAND') insertCmd = cmd;
         }
         if (insertCmd) {
-          if (clearCmd) lexical.dispatchCommand(clearCmd, undefined);
-          else {
-            const r = doc.createRange?.(), sel = doc.defaultView?.getSelection?.();
-            if (r && sel) { r.selectNodeContents(editor); sel.removeAllRanges?.(); sel.addRange?.(r); }
+          const r = doc.createRange?.(), sel = doc.defaultView?.getSelection?.();
+          if (r && sel) { r.selectNodeContents(editor); sel.removeAllRanges?.(); sel.addRange?.(r); }
+          const run = () => {
             if (selectAll) lexical.dispatchCommand(selectAll, undefined);
-          }
-          lexical.dispatchCommand(insertCmd, text);
+            if (removeCmd) lexical.dispatchCommand(removeCmd, undefined);
+            lexical.dispatchCommand(insertCmd, text);
+          };
+          if (typeof lexical.update === 'function') lexical.update(run, { discrete: true });
+          else run();
           attempted = true;
-          return finishWrite(doc, editor, text, true);
+          return finishWrite(doc, editor, text, { emitEvents: false, asyncWait: true });
         }
       }
     } catch {}
@@ -306,7 +288,7 @@
       const r = doc.createRange?.(), sel = doc.defaultView?.getSelection?.();
       if (r && sel) { r.selectNodeContents(editor); sel.removeAllRanges?.(); sel.addRange?.(r); }
       doc.execCommand?.('selectAll', false);
-      if (doc.execCommand?.('insertText', false, text)) { attempted = true; return finishWrite(doc, editor, text, true); }
+      if (doc.execCommand?.('insertText', false, text)) { attempted = true; return finishWrite(doc, editor, text, { emitEvents: false, asyncWait: true }); }
     } catch {}
     try { editor.textContent = text; attempted = true; return finishWrite(doc, editor, text); } catch {}
     return { status: attempted ? 'unverified' : 'failed' };
