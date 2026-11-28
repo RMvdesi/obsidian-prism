@@ -412,10 +412,10 @@ test('v1.0.1 i18n keys cover all 8 languages for scene presets, 6 new config key
 });
 
 test('settings-panel schema, scene presets, strict apiKey-stripping JSON export, and allowlist-validated JSON import', () => {
-  // Verify all 40 global config keys (including homeGlow, darkAura, darkAuraStyle, convRipple, effortMemory, periodicModelPicker, contextMenu, sidebarNavFold, scrollBottomMotion, hostLocalization, omniModule, linkTarget, sidebarStudio, autoUpdate, updateChannel & autoArchiveOnExit) match exact contract
+  // Verify all 47 global config keys match exact contract
   const { PRISM_SETTINGS_SCHEMA, SCENE_PRESETS, buildSanitizedConfigExport, validateImportedConfigJson, getDefaultSettingsPatch } =
     settingsPanel;
-  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 40);
+  assert.equal(Object.keys(PRISM_SETTINGS_SCHEMA).length, 47);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.homeRipple.allowed, [true, false]);
   assert.equal(PRISM_SETTINGS_SCHEMA.homeRipple.default, true);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.homeGlow.allowed, [true, false]);
@@ -445,7 +445,7 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   assert.equal(PRISM_SETTINGS_SCHEMA.hostLocalization.default, 'auto');
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.accentTone.allowed, ['follow', 'cobalt', 'iris', 'amber', 'mono']);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.cornerStyle.allowed, ['sharp', 'balanced', 'soft']);
-  assert.deepEqual(PRISM_SETTINGS_SCHEMA.codeFont.allowed, ['default', 'jetbrains', 'cascadia', 'sfmono']);
+  assert.deepEqual(PRISM_SETTINGS_SCHEMA.codeFont.allowed, ['default', 'jetbrains', 'cascadia', 'sfmono', 'custom']);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.codeLigatures.allowed, [true, false]);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.ambientIntensity.allowed, ['0', '35', '70', '100']);
   assert.deepEqual(PRISM_SETTINGS_SCHEMA.thoughtView.allowed, ['immersive', 'bilingual']);
@@ -539,7 +539,7 @@ test('settings-panel schema, scene presets, strict apiKey-stripping JSON export,
   assert.equal(validateImportedConfigJson('not-json').ok, false);
   assert.equal(validateImportedConfigJson('{"unknownOnly": 1}').ok, false);
   const defaultPatch = getDefaultSettingsPatch();
-  assert.equal(Object.keys(defaultPatch).length, 40);
+  assert.equal(Object.keys(defaultPatch).length, 47);
   assert.equal(defaultPatch.homeRipple, true);
   assert.equal(defaultPatch.homeGlow, true);
   assert.equal(defaultPatch.convRipple, 'off');

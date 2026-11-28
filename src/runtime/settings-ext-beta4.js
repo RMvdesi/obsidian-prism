@@ -250,65 +250,75 @@
     return 'balanced';
   }
 
+  function applyPerfMode(win, doc, val) {
+    const bus = (win && win.__agPrismDomBus) || G.__agPrismDomBus;
+    if (bus && typeof bus.applyPerformanceMode === 'function') {
+      bus.applyPerformanceMode(val, doc, win);
+    } else if (doc && doc.documentElement) {
+      try { if (doc.documentElement.dataset) doc.documentElement.dataset.agCsPerfMode = val; } catch {}
+      sa(doc.documentElement, 'data-ag-cs-perf-mode', val);
+    }
+  }
+
+  function applyIgnoreRm(win, doc, val) {
+    const applyFn = (win && win.__agPrismApplyIgnoreReducedMotion) || G.__agPrismApplyIgnoreReducedMotion;
+    if (typeof applyFn === 'function') applyFn(val, doc, win);
+  }
+
+  function applyTelQuota(win, doc, val) {
+    if (doc && doc.documentElement) sa(doc.documentElement, 'data-ag-cs-telemetry-quota', val);
+    const tel = (win && win.__agPrismTelemetry) || G.__agPrismTelemetry;
+    if (tel && typeof tel.sync === 'function') {
+      let curCfg = {};
+      try { curCfg = (win || G).__agPrism?.getState?.()?.cfg || {}; } catch {}
+      try { tel.sync(Object.assign({}, curCfg, { telemetryQuotaMode: val })); } catch {}
+    }
+  }
+
+  const SEG_BTN_CLS = 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
+
+  function createExtRowShell(doc, key, anchorRow, before, ctrlEl) {
+    const row = mk(doc, 'div');
+    sa(row, 'data-ag-cs-row', key);
+    sa(row, 'data-ag-cs-ext-owned', '1');
+    const inner = mk(doc, 'div', 'py-2');
+    const textCol = mk(doc, 'div', 'flex-1');
+    const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
+    const tSpan = mk(doc, 'span'); sa(tSpan, 'data-k', 't');
+    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap'); sa(dSpan, 'data-k', 'd');
+    titleLine.appendChild(tSpan); textCol.appendChild(titleLine); textCol.appendChild(dSpan);
+    const ctrlWrap = mk(doc, 'div', 'shrink-0');
+    ctrlWrap.appendChild(ctrlEl);
+    inner.appendChild(textCol); inner.appendChild(ctrlWrap); row.appendChild(inner);
+    const parent = anchorRow.parentElement;
+    const refNode = before ? anchorRow : anchorRow.nextSibling;
+    if (refNode && typeof parent.insertBefore === 'function') parent.insertBefore(row, refNode);
+    else parent.appendChild(row);
+    return row;
+  }
+
   function ensurePerformanceModeRow(rootEl, doc, ctx) {
     let row = qs(rootEl, '[data-ag-cs-row="performanceMode"]');
     if (row) return row;
     const motionRow = qs(rootEl, '[data-ag-cs-row="motionLevel"]');
     if (!motionRow || !motionRow.parentElement) return null;
-
-    row = mk(doc, 'div');
-    sa(row, 'data-ag-cs-row', 'performanceMode');
-    sa(row, 'data-ag-cs-ext-owned', '1');
-
-    const inner = mk(doc, 'div', 'py-2');
-    const textCol = mk(doc, 'div', 'flex-1');
-    const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
-    const tSpan = mk(doc, 'span');
-    sa(tSpan, 'data-k', 't');
-    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
-    sa(dSpan, 'data-k', 'd');
-    titleLine.appendChild(tSpan);
-    textCol.appendChild(titleLine);
-    textCol.appendChild(dSpan);
-
-    const ctrlWrap = mk(doc, 'div', 'shrink-0');
     const grp = mk(doc, 'div', 'ag-cs-seg-group');
     sa(grp, 'role', 'group');
-
-    const BTN_CLS = 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
+    row = createExtRowShell(doc, 'performanceMode', motionRow, true, grp);
     for (let i = 0; i < PERF_MODES.length; i++) {
       const val = PERF_MODES[i];
-      const btn = mk(doc, 'button', BTN_CLS);
-      btn.type = 'button';
-      sa(btn, 'type', 'button');
+      const btn = mk(doc, 'button', SEG_BTN_CLS);
+      btn.type = 'button'; sa(btn, 'type', 'button');
       sa(btn, 'data-ag-cs-ext-key', 'performanceMode');
       sa(btn, 'data-ag-cs-ext-val', JSON.stringify(val));
       sa(btn, 'data-ag-cs-ext-perf', val);
       btn.addEventListener('click', (ev) => {
         ev?.stopPropagation?.();
-        const bus = (ctx.win && ctx.win.__agPrismDomBus) || G.__agPrismDomBus;
-        if (bus && typeof bus.applyPerformanceMode === 'function') {
-          bus.applyPerformanceMode(val, doc, ctx.win);
-        } else if (doc && doc.documentElement) {
-          try { if (doc.documentElement.dataset) doc.documentElement.dataset.agCsPerfMode = val; } catch {}
-          sa(doc.documentElement, 'data-ag-cs-perf-mode', val);
-        }
+        applyPerfMode(ctx.win, doc, val);
         if (typeof ctx.saveSetting === 'function') ctx.saveSetting('performanceMode', val);
         if (typeof row.__extResync === 'function') row.__extResync();
       });
       grp.appendChild(btn);
-    }
-
-    ctrlWrap.appendChild(grp);
-    inner.appendChild(textCol);
-    inner.appendChild(ctrlWrap);
-    row.appendChild(inner);
-
-    const parent = motionRow.parentElement;
-    if (typeof parent.insertBefore === 'function') {
-      parent.insertBefore(row, motionRow);
-    } else {
-      parent.appendChild(row);
     }
     return row;
   }
@@ -318,27 +328,13 @@
     if (row) return row;
     const anchorRow = qs(rootEl, `[data-ag-cs-row="${anchorKey}"]`);
     if (!anchorRow || !anchorRow.parentElement) return null;
-
-    row = mk(doc, 'div');
-    sa(row, 'data-ag-cs-row', key);
-    sa(row, 'data-ag-cs-ext-owned', '1');
-
-    const inner = mk(doc, 'div', 'py-2');
-    const textCol = mk(doc, 'div', 'flex-1');
-    const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
-    const tSpan = mk(doc, 'span'); sa(tSpan, 'data-k', 't');
-    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap'); sa(dSpan, 'data-k', 'd');
-    titleLine.appendChild(tSpan); textCol.appendChild(titleLine); textCol.appendChild(dSpan);
-
-    const ctrlWrap = mk(doc, 'div', 'shrink-0');
     const grp = mk(doc, 'div', 'ag-cs-seg-group');
     sa(grp, 'role', 'group'); sa(grp, 'data-ui-kind', 'switch'); sa(grp, 'data-switch-on', '0');
     const thumb = mk(doc, 'span', 'ag-cs-switch-thumb'); sa(thumb, 'aria-hidden', 'true');
     grp.appendChild(thumb);
-
-    const BTN_CLS = 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
+    row = createExtRowShell(doc, key, anchorRow, false, grp);
     for (const [val, roleTag] of options) {
-      const btn = mk(doc, 'button', BTN_CLS);
+      const btn = mk(doc, 'button', SEG_BTN_CLS);
       btn.type = 'button'; sa(btn, 'type', 'button');
       sa(btn, 'data-ag-cs-ext-key', key); sa(btn, 'data-ag-cs-ext-val', JSON.stringify(val)); sa(btn, 'data-ag-cs-ext-role', roleTag);
       btn.addEventListener('click', (ev) => {
@@ -347,18 +343,12 @@
       });
       grp.appendChild(btn);
     }
-
-    ctrlWrap.appendChild(grp); inner.appendChild(textCol); inner.appendChild(ctrlWrap); row.appendChild(inner);
-    const parent = anchorRow.parentElement;
-    if (anchorRow.nextSibling && typeof parent.insertBefore === 'function') parent.insertBefore(row, anchorRow.nextSibling);
-    else parent.appendChild(row);
     return row;
   }
 
   function ensureIgnoreRmRow(rootEl, doc, ctx) {
     return ensureSwitchRow(rootEl, doc, 'ignoreReducedMotion', 'motionLevel', (val, row) => {
-      const applyFn = (ctx.win && ctx.win.__agPrismApplyIgnoreReducedMotion) || G.__agPrismApplyIgnoreReducedMotion;
-      if (typeof applyFn === 'function') applyFn(val, doc, ctx.win);
+      applyIgnoreRm(ctx.win, doc, val);
       if (typeof ctx.saveSetting === 'function') ctx.saveSetting('ignoreReducedMotion', val);
       if (typeof row.__extResync === 'function') row.__extResync();
     });
@@ -406,57 +396,24 @@
     if (row) return row;
     const codeRow = qs(rootEl, '[data-ag-cs-row="codeFont"]');
     if (!codeRow || !codeRow.parentElement) return null;
-
-    row = mk(doc, 'div');
-    sa(row, 'data-ag-cs-row', 'chatFont');
-    sa(row, 'data-ag-cs-ext-owned', '1');
-
-    const inner = mk(doc, 'div', 'py-2');
-    const textCol = mk(doc, 'div', 'flex-1');
-    const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
-    const tSpan = mk(doc, 'span');
-    sa(tSpan, 'data-k', 't');
-    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
-    sa(dSpan, 'data-k', 'd');
-    titleLine.appendChild(tSpan);
-    textCol.appendChild(titleLine);
-    textCol.appendChild(dSpan);
-
-    const ctrlWrap = mk(doc, 'div', 'shrink-0');
     const sel = mk(doc, 'select', 'ag-cs-font-select');
     sa(sel, 'data-ag-cs-ext-select', 'chatFont');
     for (let i = 0; i < CHAT_FONT_MODES.length; i++) {
-      const m = CHAT_FONT_MODES[i];
-      const opt = mk(doc, 'option');
-      opt.value = m;
-      sa(opt, 'value', m);
-      sel.appendChild(opt);
+      const m = CHAT_FONT_MODES[i], opt = mk(doc, 'option');
+      opt.value = m; sa(opt, 'value', m); sel.appendChild(opt);
     }
-
     const customUi = createCustomFontBox(doc, 'chat', ctx);
     customUi.box.__extRootEl = rootEl;
-
+    row = createExtRowShell(doc, 'chatFont', codeRow, true, sel);
     sel.addEventListener('change', () => {
       const val = String(sel.value || 'default');
       applyLiveFontPreview(ctx.win, doc, { chatFont: val, chatFontCustom: String(customUi.inp.value || '') });
       if (typeof ctx.saveSetting === 'function') ctx.saveSetting('chatFont', val);
       if (typeof row.__extResync === 'function') row.__extResync();
     });
-
-    ctrlWrap.appendChild(sel);
-    inner.appendChild(textCol);
-    inner.appendChild(ctrlWrap);
-    row.appendChild(inner);
     row.appendChild(customUi.box);
     row.__extCustomUi = customUi;
     row.__extSelect = sel;
-
-    const parent = codeRow.parentElement;
-    if (typeof parent.insertBefore === 'function') {
-      parent.insertBefore(row, codeRow);
-    } else {
-      parent.appendChild(row);
-    }
     return row;
   }
 
@@ -508,60 +465,23 @@
     if (row) return row;
     const telRow = qs(rootEl, '[data-ag-cs-row="telemetryModule"]');
     if (!telRow || !telRow.parentElement) return null;
-
-    row = mk(doc, 'div');
-    sa(row, 'data-ag-cs-row', 'telemetryQuotaMode');
-    sa(row, 'data-ag-cs-ext-owned', '1');
-
-    const inner = mk(doc, 'div', 'py-2');
-    const textCol = mk(doc, 'div', 'flex-1');
-    const titleLine = mk(doc, 'div', 'ag-cs-settings-title-line');
-    const tSpan = mk(doc, 'span');
-    sa(tSpan, 'data-k', 't');
-    const dSpan = mk(doc, 'span', 'whitespace-pre-wrap');
-    sa(dSpan, 'data-k', 'd');
-    titleLine.appendChild(tSpan);
-    textCol.appendChild(titleLine);
-    textCol.appendChild(dSpan);
-
-    const ctrlWrap = mk(doc, 'div', 'shrink-0');
     const grp = mk(doc, 'div', 'ag-cs-seg-group');
     sa(grp, 'role', 'group');
-
-    const BTN_CLS = 'ag-cs-seg-btn data-[pressed]:bg-secondary data-[pressed]:text-foreground';
+    row = createExtRowShell(doc, 'telemetryQuotaMode', telRow, false, grp);
     for (let i = 0; i < QUOTA_MODES.length; i++) {
       const val = QUOTA_MODES[i];
-      const btn = mk(doc, 'button', BTN_CLS);
-      btn.type = 'button';
-      sa(btn, 'type', 'button');
+      const btn = mk(doc, 'button', SEG_BTN_CLS);
+      btn.type = 'button'; sa(btn, 'type', 'button');
       sa(btn, 'data-ag-cs-ext-key', 'telemetryQuotaMode');
       sa(btn, 'data-ag-cs-ext-val', JSON.stringify(val));
       sa(btn, 'data-ag-cs-ext-qmode', val);
       btn.addEventListener('click', (ev) => {
         ev?.stopPropagation?.();
-        if (doc && doc.documentElement) sa(doc.documentElement, 'data-ag-cs-telemetry-quota', val);
-        const tel = (ctx.win && ctx.win.__agPrismTelemetry) || G.__agPrismTelemetry;
-        if (tel && typeof tel.sync === 'function') {
-          let curCfg = {};
-          try { curCfg = (ctx.win || G).__agPrism?.getState?.()?.cfg || {}; } catch {}
-          try { tel.sync(Object.assign({}, curCfg, { telemetryQuotaMode: val })); } catch {}
-        }
+        applyTelQuota(ctx.win, doc, val);
         if (typeof ctx.saveSetting === 'function') ctx.saveSetting('telemetryQuotaMode', val);
         if (typeof row.__extResync === 'function') row.__extResync();
       });
       grp.appendChild(btn);
-    }
-
-    ctrlWrap.appendChild(grp);
-    inner.appendChild(textCol);
-    inner.appendChild(ctrlWrap);
-    row.appendChild(inner);
-
-    const parent = telRow.parentElement;
-    if (telRow.nextSibling && typeof parent.insertBefore === 'function') {
-      parent.insertBefore(row, telRow.nextSibling);
-    } else {
-      parent.appendChild(row);
     }
     return row;
   }
@@ -577,7 +497,8 @@
     const runMut = typeof ctx.runGuardedMut === 'function' ? ctx.runGuardedMut : (fn) => fn();
 
     const perfMode = normPerfMode(readLiveCfg(ctx, 'performanceMode', 'balanced'));
-    const ignoreRm = Boolean(readLiveCfg(ctx, 'ignoreReducedMotion', false));
+    const rawIgRm = readLiveCfg(ctx, 'ignoreReducedMotion', false);
+    const ignoreRm = rawIgRm === true || rawIgRm === 'on' || rawIgRm === 'true';
     const motionOff = readLiveCfg(ctx, 'motionLevel', 'ultra') === 'off';
     const homeLayoutOff = readLiveCfg(ctx, 'homeLayout', 'studio') === 'off';
     const homeGlow = readLiveCfg(ctx, 'homeGlow', true) !== false;
@@ -766,7 +687,18 @@
       }
     });
 
+    const prevVals = rootEl.__extBeta4Vals;
+    if (prevVals) {
+      if (prevVals.perfMode !== perfMode) applyPerfMode(win, doc, perfMode);
+      if (prevVals.ignoreRm !== ignoreRm) applyIgnoreRm(win, doc, ignoreRm);
+      if (prevVals.chatFont !== chatFont || prevVals.chatFontCustom !== chatFontCustom || prevVals.codeFont !== codeFont || prevVals.codeFontCustom !== codeFontCustom) {
+        applyLiveFontPreview(win, doc, { chatFont, chatFontCustom, codeFont, codeFontCustom });
+      }
+      if (prevVals.telQuotaMode !== telQuotaMode) applyTelQuota(win, doc, telQuotaMode);
+    }
+
     rootEl.__extBeta4Sig = extSig;
+    rootEl.__extBeta4Vals = { perfMode, ignoreRm, chatFont, chatFontCustom, codeFont, codeFontCustom, telQuotaMode };
     return true;
   }
 

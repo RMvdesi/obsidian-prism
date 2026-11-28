@@ -440,7 +440,7 @@ test('mountOrSyncSettingsSection mounts all 27 settings (including omniModule, l
     await new Promise((r) => setTimeout(r, 25));
     assert.equal(clipboardWrites.length, 1);
     const exportedObj = JSON.parse(clipboardWrites[0]);
-    assert.equal(Object.keys(exportedObj.settings).length, 40);
+    assert.equal(Object.keys(exportedObj.settings).length, 47);
     assert.equal(exportedObj.settings.homeGlow, true);
     assert.equal(exportedObj.settings.darkAura, 'balanced');
     assert.equal(exportedObj.settings.darkAuraStyle, 'prism');
@@ -988,4 +988,192 @@ test('Channel 9 hot-reload destroys stale settings node (clearing thought handle
   assert.equal(wpHeal.events.length, 0, 'Once wallpaperCodeHash matches, verifyAndHealEntry must settle with 0 further heals');
 
   await daemon.stop(false, { skipAutoArchive: true });
+});
+
+test('settings-panel export/import/reset regression for ext-beta4 settings (telemetryQuotaMode, projectPartitions, performanceMode, ignoreReducedMotion, chatFont/chatFontCustom, codeFont/codeFontCustom)', () => {
+  const { buildSanitizedConfigExport, validateImportedConfigJson, getDefaultSettingsPatch } = settingsPanel;
+
+  // 1. getDefaultSettingsPatch includes all 8 ext-beta4 keys with exact defaults
+  const defaults = getDefaultSettingsPatch();
+  assert.equal(Object.keys(defaults).length, 47);
+  assert.equal(defaults.telemetryQuotaMode, 'compact');
+  assert.equal(defaults.projectPartitions, 'off');
+  assert.equal(defaults.performanceMode, 'balanced');
+  assert.equal(defaults.ignoreReducedMotion, false);
+  assert.equal(defaults.chatFont, 'default');
+  assert.equal(defaults.chatFontCustom, '');
+  assert.equal(defaults.codeFont, 'default');
+  assert.equal(defaults.codeFontCustom, '');
+
+  // 2. buildSanitizedConfigExport preserves valid values, maps legacy values, coerces booleans, and sanitizes custom font strings
+  const exportedValid = buildSanitizedConfigExport(
+    {
+      telemetryQuotaMode: 'both',
+      projectPartitions: 'on',
+      performanceMode: 'quality',
+      ignoreReducedMotion: true,
+      chatFont: 'harmony',
+      chatFontCustom: 'Inter, Noto Sans SC',
+      codeFont: 'custom',
+      codeFontCustom: 'JetBrains Mono, Fira Code',
+    },
+    null,
+    '1.0.8'
+  );
+  assert.equal(exportedValid.settings.telemetryQuotaMode, 'both');
+  assert.equal(exportedValid.settings.projectPartitions, 'on');
+  assert.equal(exportedValid.settings.performanceMode, 'quality');
+  assert.equal(exportedValid.settings.ignoreReducedMotion, true);
+  assert.equal(exportedValid.settings.chatFont, 'harmony');
+  assert.equal(exportedValid.settings.chatFontCustom, 'Inter, Noto Sans SC');
+  assert.equal(exportedValid.settings.codeFont, 'custom');
+  assert.equal(exportedValid.settings.codeFontCustom, 'JetBrains Mono, Fira Code');
+
+  const overlongFont = 'A'.repeat(180);
+  const exportedNormalized = buildSanitizedConfigExport(
+    {
+      telemetryQuotaMode: 'invalid-quota',
+      projectPartitions: true,
+      performanceMode: 'eco',
+      ignoreReducedMotion: 'on',
+      chatFont: 'custom',
+      chatFontCustom: `Inter\0\r\n,${overlongFont}`,
+      codeFont: 'custom',
+      codeFontCustom: `Fira\0Code\r\n${overlongFont}`,
+    },
+    null,
+    '1.0.8'
+  );
+  assert.equal(exportedNormalized.settings.telemetryQuotaMode, 'compact');
+  assert.equal(exportedNormalized.settings.projectPartitions, 'on');
+  assert.equal(exportedNormalized.settings.performanceMode, 'performance');
+  assert.equal(exportedNormalized.settings.ignoreReducedMotion, true);
+  assert.equal(exportedNormalized.settings.chatFont, 'custom');
+  assert.equal(exportedNormalized.settings.chatFontCustom.length, 160);
+  assert.equal(/[\0\r\n]/.test(exportedNormalized.settings.chatFontCustom), false);
+  assert.equal(exportedNormalized.settings.chatFontCustom, `Inter,${'A'.repeat(154)}`);
+  assert.equal(exportedNormalized.settings.codeFont, 'custom');
+  assert.equal(exportedNormalized.settings.codeFontCustom.length, 160);
+  assert.equal(/[\0\r\n]/.test(exportedNormalized.settings.codeFontCustom), false);
+  assert.equal(exportedNormalized.settings.codeFontCustom, `FiraCode${'A'.repeat(152)}`);
+
+  const exportedAutoFalse = buildSanitizedConfigExport(
+    {
+      projectPartitions: false,
+      performanceMode: 'auto',
+      ignoreReducedMotion: 'off',
+      chatFontCustom: 12345,
+      codeFontCustom: null,
+    },
+    null,
+    '1.0.8'
+  );
+  assert.equal(exportedAutoFalse.settings.projectPartitions, 'off');
+  assert.equal(exportedAutoFalse.settings.performanceMode, 'balanced');
+  assert.equal(exportedAutoFalse.settings.ignoreReducedMotion, false);
+  assert.equal(exportedAutoFalse.settings.chatFontCustom, '');
+  assert.equal(exportedAutoFalse.settings.codeFontCustom, '');
+
+  // 3. validateImportedConfigJson handles valid values, legacy mappings, coercions, control-char stripping, 160-char clamp, and invalid rejections
+  const importedValid = validateImportedConfigJson(
+    JSON.stringify({
+      settings: {
+        telemetryQuotaMode: 'both',
+        projectPartitions: 'on',
+        performanceMode: 'performance',
+        ignoreReducedMotion: true,
+        chatFont: 'custom',
+        chatFontCustom: 'LXGW WenKai, Inter',
+        codeFont: 'custom',
+        codeFontCustom: 'Cascadia Code, monospace',
+      },
+    })
+  );
+  assert.equal(importedValid.ok, true);
+  assert.deepEqual(importedValid.settings, {
+    telemetryQuotaMode: 'both',
+    projectPartitions: 'on',
+    performanceMode: 'performance',
+    ignoreReducedMotion: true,
+    chatFont: 'custom',
+    chatFontCustom: 'LXGW WenKai, Inter',
+    codeFont: 'custom',
+    codeFontCustom: 'Cascadia Code, monospace',
+  });
+
+  const importedCoerced = validateImportedConfigJson(
+    JSON.stringify({
+      settings: {
+        projectPartitions: true,
+        performanceMode: 'auto',
+        ignoreReducedMotion: 'on',
+        chatFont: 'noto-sans',
+        chatFontCustom: `Noto\0Sans\r\n${'B'.repeat(170)}`,
+        codeFont: 'custom',
+        codeFontCustom: `JetBrains\nMono\r\0${'C'.repeat(170)}`,
+      },
+    })
+  );
+  assert.equal(importedCoerced.ok, true);
+  assert.equal(importedCoerced.settings.projectPartitions, 'on');
+  assert.equal(importedCoerced.settings.performanceMode, 'balanced');
+  assert.equal(importedCoerced.settings.ignoreReducedMotion, true);
+  assert.equal(importedCoerced.settings.chatFont, 'noto-sans');
+  assert.equal(importedCoerced.settings.chatFontCustom.length, 160);
+  assert.equal(importedCoerced.settings.chatFontCustom, `NotoSans${'B'.repeat(152)}`);
+  assert.equal(importedCoerced.settings.codeFont, 'custom');
+  assert.equal(importedCoerced.settings.codeFontCustom.length, 160);
+  assert.equal(importedCoerced.settings.codeFontCustom, `JetBrainsMono${'C'.repeat(147)}`);
+
+  const importedLegacyEcoAndFalse = validateImportedConfigJson(
+    JSON.stringify({
+      settings: {
+        projectPartitions: false,
+        performanceMode: 'eco',
+        ignoreReducedMotion: 'off',
+      },
+    })
+  );
+  assert.equal(importedLegacyEcoAndFalse.ok, true);
+  assert.equal(importedLegacyEcoAndFalse.settings.projectPartitions, 'off');
+  assert.equal(importedLegacyEcoAndFalse.settings.performanceMode, 'performance');
+  assert.equal(importedLegacyEcoAndFalse.settings.ignoreReducedMotion, false);
+
+  const importedBoolStrings = validateImportedConfigJson(
+    JSON.stringify({
+      settings: {
+        ignoreReducedMotion: 'true',
+      },
+    })
+  );
+  assert.equal(importedBoolStrings.ok, true);
+  assert.equal(importedBoolStrings.settings.ignoreReducedMotion, true);
+
+  const importedBoolStringFalse = validateImportedConfigJson(
+    JSON.stringify({
+      settings: {
+        ignoreReducedMotion: 'false',
+      },
+    })
+  );
+  assert.equal(importedBoolStringFalse.ok, true);
+  assert.equal(importedBoolStringFalse.settings.ignoreReducedMotion, false);
+
+  // Invalid values must be rejected (not imported)
+  const importedInvalid = validateImportedConfigJson(
+    JSON.stringify({
+      settings: {
+        telemetryQuotaMode: 'full',
+        projectPartitions: 'maybe',
+        performanceMode: 'turbo',
+        ignoreReducedMotion: 'yes',
+        chatFont: 'comic-sans',
+        chatFontCustom: 999,
+        codeFont: 'unknown-font',
+        codeFontCustom: { bad: true },
+      },
+    })
+  );
+  assert.equal(importedInvalid.ok, false);
+  assert.equal(importedInvalid.error, 'no-valid-keys');
 });

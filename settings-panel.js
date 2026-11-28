@@ -138,6 +138,7 @@
   const S_AUTO = O.freeze(mkSp(['auto', 'on', 'off']));
   const S_T = O.freeze(mkSp([true, false]));
   const S_F = O.freeze(mkSp([true, false], false));
+  const S_STR = O.freeze({ type: 'string', default: '', maxLength: 160 });
 
   const PRISM_SETTINGS_SCHEMA = O.freeze({
     palette: mkSp(['obsidian', 'host', 'warm'], null, { claude: 'warm' }),
@@ -148,6 +149,8 @@
     ambientIntensity: mkSp(['0', '35', '70', '100'], '100'),
     darkAura: mkSp(['subtle', 'balanced', 'vivid'], 'balanced'),
     motionLevel: mkSp(['off', 'subtle', 'standard', 'ultra'], 'ultra'),
+    performanceMode: mkSp(['balanced', 'performance', 'quality'], null, { auto: 'balanced', eco: 'performance' }),
+    ignoreReducedMotion: S_F,
     targetFps: mkSp(['60', '120', '180', 'native'], '180'),
     homeLayout: mkSp(['studio', 'classic', 'off']),
     homeRipple: S_T,
@@ -161,16 +164,21 @@
     smoothCaret: S_T,
     scrollBottomMotion: mkSp(['smooth', 'instant']),
     contextMenu: S_T,
-    codeFont: mkSp(['default', 'jetbrains', 'cascadia', 'sfmono']),
+    chatFont: mkSp(['default', 'system-sans', 'noto-sans', 'inter', 'harmony', 'custom']),
+    chatFontCustom: S_STR,
+    codeFont: mkSp(['default', 'jetbrains', 'cascadia', 'sfmono', 'custom']),
+    codeFontCustom: S_STR,
     codeLigatures: S_F,
     mascot: mkSp(['crab', 'minis', 'quad', 'quad-minis', 'off'], null, { dual: 'crab' }),
     sidebarRestyle: S_T,
     sidebarCompact: S_F,
     sidebarNavFold: mkSp(['off', 'on']),
+    projectPartitions: S_OFF,
     thoughtTranslate: mkSp(['off', 'machine', 'ai']),
     thoughtTrigger: mkSp(['preload', 'expand']),
     thoughtView: mkSp(['immersive', 'bilingual']),
     telemetryModule: S_AUTO,
+    telemetryQuotaMode: mkSp(['compact', 'both']),
     effortSliderModule: S_AUTO,
     effortMemory: S_ON,
     periodicModelPicker: S_ON,
@@ -1459,35 +1467,27 @@
       const parsed = parseMascotSpec(rawVal);
       return parsed ? { valid: true, value: encodeMascotSpec(parsed) } : { valid: false };
     }
+    if (spec.type === 'string') {
+      return typeof rawVal === 'string'
+        ? { valid: true, value: rawVal.replace(/[\0\r\n]/g, '').slice(0, spec.maxLength || 160) }
+        : { valid: false };
+    }
     let val = typeof rawVal === 'string' && spec.aliases && hasOwn(spec.aliases, rawVal) ? spec.aliases[rawVal] : rawVal;
     if (key === 'language' && val === 'auto') {
-      const nav =
-        typeof navigator !== 'undefined' && (navigator?.languages?.[0] || navigator?.language)
-          ? navigator.languages?.[0] || navigator.language
-          : '';
+      const nav = typeof navigator !== 'undefined' ? navigator?.languages?.[0] || navigator?.language || '' : '';
       const normFn = G.__agCsI18nCore?.normalizeLanguage || G.__agCsI18n?.normalizeLanguage;
-      if (typeof normFn === 'function' && nav) {
-        val = normFn(nav, 'en');
-      } else {
-        const low = String(nav || '').toLowerCase().replace(/_/g, '-');
-        val = /^ja\b/.test(low)
-          ? 'ja'
-          : /^ko\b/.test(low)
-            ? 'ko'
-            : /^es\b/.test(low)
-              ? 'es'
-              : /^fr\b/.test(low)
-                ? 'fr'
-                : /^de\b/.test(low)
-                  ? 'de'
-                  : /^zh-(?:tw|hk|mo|hant)\b/.test(low)
-                    ? 'zh-TW'
-                    : /^zh\b/.test(low)
-                      ? 'zh-CN'
-                      : 'en';
+      if (isFn(normFn) && nav) val = normFn(nav, 'en');
+      else {
+        const low = String(nav).toLowerCase().replace(/_/g, '-'), m = /^(ja|ko|es|fr|de)\b/.exec(low);
+        val = m ? m[1] : /^zh-(?:tw|hk|mo|hant)\b/.test(low) ? 'zh-TW' : /^zh\b/.test(low) ? 'zh-CN' : 'en';
       }
     }
-    if ((key === 'periodicModelPicker' || key === 'omniModule' || key === 'sidebarStudio' || key === 'autoUpdate' || key === 'sidebarNavFold') && typeof val === 'boolean') val = val ? 'on' : 'off';
+    if (key === 'ignoreReducedMotion' && typeof val === 'string') {
+      const low = val.trim().toLowerCase();
+      if (low === 'on' || low === 'true') val = true;
+      else if (low === 'off' || low === 'false') val = false;
+    }
+    if (typeof val === 'boolean' && spec.allowed.includes('on')) val = val ? 'on' : 'off';
     if (key === 'convRipple' && typeof val === 'boolean') val = val ? 'medium' : 'off';
     if (typeof spec.default === 'string' && typeof val === 'number' && Number.isFinite(val)) val = String(val);
     return spec.allowed.includes(val) ? { valid: true, value: val } : { valid: false };
