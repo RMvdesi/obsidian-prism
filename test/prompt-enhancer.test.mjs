@@ -426,7 +426,7 @@ test('Prompt Enhancer runs in the background, auto-replaces the composer, suppor
   assert.equal(requests.some((entry) => entry.action === 'send' || entry.action === 'submit'), false);
 
   restore.click();
-  await until(() => editor.textContent === '实现一个设置页');
+  await until(() => editor.textContent === '实现一个设置页' && restore.hidden === true);
   assert.equal(restore.hidden, true);
   await until(() => doc.querySelector('[data-testid="prism-prompt-enhancer-trigger"]')?.getAttribute('data-status')?.includes('restored'));
   runtime.destroy();
@@ -608,6 +608,59 @@ test('Prompt Enhancer opens preview panel and preserves draft when the user chan
   win.__agPrismPromptEnhancerBridge.resolve(request.id, { ok: true, enhanced: '## Goal\n替换后的提示词' });
   await until(() => doc.querySelector('[data-testid="prism-prompt-enhancer-panel"]'));
   assert.equal(editor.textContent, '用户刚刚修改的草稿');
+  runtime.destroy();
+});
+
+test('Prompt Enhancer awaits async Lexical replacement without duplication or false failure popup, and shows readable popup on real failure', async () => {
+  const { win, doc, editor, requests, runtime } = createUiHarness();
+  const dispatched = [];
+  const cmdClear = { type: 'CLEAR_EDITOR_COMMAND' };
+  const cmdInsert = { type: 'CONTROLLED_TEXT_INSERTION_COMMAND' };
+  editor.__lexicalEditor = {
+    _commands: new Map([[cmdClear, []], [cmdInsert, []]]),
+    focus() {},
+    dispatchCommand(cmd, arg) {
+      dispatched.push({ type: cmd.type, arg });
+      if (cmd.type === 'CLEAR_EDITOR_COMMAND') queueMicrotask(() => { editor.textContent = ''; });
+      else if (cmd.type === 'CONTROLLED_TEXT_INSERTION_COMMAND') queueMicrotask(() => { editor.textContent += String(arg || ''); });
+      return true;
+    },
+  };
+  await until(() => doc.querySelector('[data-testid="prism-prompt-enhancer-trigger"]'));
+  const styleText = doc.head.children.find((n) => n.id === 'ag-prism-prompt-enhancer-css')?.textContent || '';
+  assert.match(styleText, /var\(--ag-cs-panel-bg/);
+  assert.match(styleText, /html\[data-ag-cs-theme="light"\] \.ag-prism-prompt-enhancer-panel/);
+  assert.doesNotMatch(styleText, /var\(--popover,/);
+
+  doc.querySelector('[data-testid="prism-prompt-enhancer-trigger"]').click();
+  await until(() => requests.some((r) => r.action === 'enhance'));
+  const req1 = requests.find((r) => r.action === 'enhance');
+  win.__agPrismPromptEnhancerBridge.resolve(req1.id, { ok: true, enhanced: '异步替换后的唯一结果' });
+  await until(() => editor.textContent === '异步替换后的唯一结果');
+  await new Promise((r) => setTimeout(r, 25));
+  assert.equal(doc.querySelector('[data-testid="prism-prompt-enhancer-panel"]'), null);
+  assert.equal(doc.querySelector('[data-testid="prism-prompt-enhancer-restore"]')?.hidden, false);
+  assert.deepEqual(dispatched.map((d) => d.type), ['CLEAR_EDITOR_COMMAND', 'CONTROLLED_TEXT_INSERTION_COMMAND']);
+
+  // Simulate real write failure on next request -> preview panel opens with clear failure notice and preserves draft
+  editor.__lexicalEditor = {
+    _commands: new Map([[cmdInsert, []]]),
+    dispatchCommand() { throw new Error('lexical locked'); },
+  };
+  doc.execCommand = () => false;
+  Object.defineProperty(editor, 'textContent', {
+    get() { return '异步替换后的唯一结果'; },
+    set() { throw new Error('readonly'); },
+    configurable: true,
+  });
+  doc.querySelector('[data-testid="prism-prompt-enhancer-trigger"]').click();
+  await until(() => requests.filter((r) => r.action === 'enhance').length === 2);
+  const req2 = requests.filter((r) => r.action === 'enhance')[1];
+  win.__agPrismPromptEnhancerBridge.resolve(req2.id, { ok: true, enhanced: '失败场景的新结果' });
+  await until(() => doc.querySelector('[data-testid="prism-prompt-enhancer-panel"]'));
+  const panel = doc.querySelector('[data-testid="prism-prompt-enhancer-panel"]');
+  assert.match(panel.textContent || '', /Could not replace input/);
+  assert.equal(editor.textContent, '异步替换后的唯一结果');
   runtime.destroy();
 });
 

@@ -22,21 +22,22 @@
     '.ag-prism-prompt-enhancer-btn:hover{background:var(--ag-cs-pill-bg,rgba(128,128,145,.2));border-color:var(--ag-cs-border-2,rgba(128,128,145,.5));}',
     '.ag-prism-prompt-enhancer-btn:disabled{opacity:.56;cursor:wait;}',
     '.ag-prism-prompt-enhancer-icon{width:15px;height:15px;flex:none;}',
-    '.ag-prism-prompt-enhancer-panel{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;gap:10px;width:min(680px,calc(100vw - 28px));max-height:min(680px,calc(100vh - 28px));padding:14px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.35));border-radius:8px;background:var(--popover,rgba(24,24,28,.98));color:var(--popover-foreground,var(--foreground,#f5f5f5));box-shadow:0 16px 42px rgba(0,0,0,.34);}',
-    '.ag-prism-prompt-enhancer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:600;}',
+    '.ag-prism-prompt-enhancer-panel{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;gap:10px;width:min(680px,calc(100vw - 28px));max-height:min(680px,calc(100vh - 28px));padding:14px;border:1px solid var(--ag-cs-border-2,var(--ag-cs-border-1,rgba(128,128,145,.38)));border-radius:10px;background:var(--ag-cs-panel-bg,var(--background,#18181c));color:var(--foreground,#f5f5f5);box-shadow:var(--_gs,0 16px 42px rgba(0,0,0,.32));}',
+    'html[data-ag-cs-theme="light"] .ag-prism-prompt-enhancer-panel,body.light .ag-prism-prompt-enhancer-panel{background:var(--ag-cs-panel-bg,#fff);color:var(--foreground,#0f172a);}',
+    '.ag-prism-prompt-enhancer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:600;color:var(--foreground,inherit);}',
     '.ag-prism-prompt-enhancer-tabs,.ag-prism-prompt-enhancer-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}',
-    '.ag-prism-prompt-enhancer-tab,.ag-prism-prompt-enhancer-action{border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.28));border-radius:6px;padding:5px 8px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;}',
-    '.ag-prism-prompt-enhancer-tab[data-active="1"]{background:var(--secondary,rgba(128,128,145,.18));border-color:var(--ag-cs-border-2,rgba(128,128,145,.5));}',
-    '.ag-prism-prompt-enhancer-action[data-primary="1"]{background:var(--primary,rgba(59,130,246,.85));color:var(--primary-foreground,#fff);border-color:transparent;}',
-    '.ag-prism-prompt-enhancer-close{border:0;background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer;}',
-    '.ag-prism-prompt-enhancer-body{min-height:150px;max-height:410px;overflow:auto;padding:11px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.24));border-radius:6px;background:var(--background,rgba(0,0,0,.12));white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.55;}',
-    '.ag-prism-prompt-enhancer-editor{width:100%;min-height:180px;resize:vertical;box-sizing:border-box;padding:10px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.3));border-radius:6px;background:var(--background,rgba(0,0,0,.12));color:inherit;font:inherit;font-size:13px;line-height:1.55;}',
-    '.ag-prism-prompt-enhancer-status{min-height:18px;color:var(--muted-foreground,rgba(128,128,145,.9));font-size:12px;}',
+    '.ag-prism-prompt-enhancer-tab,.ag-prism-prompt-enhancer-action{border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.28));border-radius:6px;padding:5px 9px;background:var(--ag-cs-pill-bg,transparent);color:var(--foreground,inherit);font:inherit;font-size:12px;cursor:pointer;}',
+    '.ag-prism-prompt-enhancer-tab[data-active="1"],.ag-prism-prompt-enhancer-action[data-primary="1"]{background:var(--primary,#2563eb);color:var(--primary-foreground,#fff);border-color:transparent;}',
+    '.ag-prism-prompt-enhancer-close{border:0;background:transparent;color:var(--foreground,inherit);opacity:.8;font-size:18px;line-height:1;cursor:pointer;}',
+    '.ag-prism-prompt-enhancer-body,.ag-prism-prompt-enhancer-editor{padding:11px;border:1px solid var(--ag-cs-border-1,rgba(128,128,145,.28));border-radius:6px;background:var(--ag-cs-pill-bg,var(--secondary,rgba(128,128,145,.12)));color:var(--foreground,inherit);font:inherit;font-size:13px;line-height:1.55;}',
+    '.ag-prism-prompt-enhancer-body{min-height:150px;max-height:410px;overflow:auto;white-space:pre-wrap;word-break:break-word;}',
+    '.ag-prism-prompt-enhancer-editor{width:100%;min-height:180px;resize:vertical;box-sizing:border-box;}',
+    '.ag-prism-prompt-enhancer-status{min-height:18px;color:var(--foreground,inherit);opacity:.88;font-size:12px;font-weight:500;}',
     '@media(max-width:700px){.ag-prism-prompt-enhancer-btn{min-height:28px;padding:0 8px;font-size:11px;}.ag-prism-prompt-enhancer-host[data-fallback="1"]{right:6px;bottom:6px;}}',
   ].join('\n');
 
   const FALLBACK_TEXT = {
-    en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', restore: 'Restore', restored: 'Original draft restored', working: 'Enhancing prompt…', done: 'Review the result before replacing your input', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt directly', replaced: 'Prompt replaced automatically', replaceFailed: 'Could not replace input; copy it manually', replaceConflict: 'The input changed, so the current draft was preserved. Review or copy the result manually.', emptyResult: 'The enhanced result is empty. Nothing was replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is no longer available. Nothing was replaced.', cancelled: 'Request cancelled. Original text is preserved.', failed: 'Enhancement failed. Original text is preserved. Retry: ', tooLong: 'Input exceeds the 10,000 character limit', tokensChanged: 'Protected code, paths, URLs, or identifiers changed. Original draft kept; review before replacing.', languagePrefaceIssue: 'Model returned a meta preface or language note. Original draft kept; review the result.', languageMismatchIssue: 'Enhanced prompt language differs from the original draft. Original draft kept; review the result.', truncated: 'Output was truncated by the token limit; shorten input and retry.', refused: 'The model refused this request; check input or switch models.', analysisOutput: 'Model returned analysis tags instead of a prompt; switch models or retry.' },
+    en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', restore: 'Restore', restored: 'Original draft restored', working: 'Enhancing prompt…', done: 'Review before replacing', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt', replaced: 'Prompt replaced automatically', replaceFailed: 'Could not replace input; copy manually', replaceUnverified: 'Replacement attempted but unverified; check input before pasting.', replaceConflict: 'Input changed; draft preserved. Review or copy manually.', emptyResult: 'The enhanced result is empty. Nothing replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is unavailable. Nothing replaced.', cancelled: 'Request cancelled. Original kept.', failed: 'Enhancement failed. Original kept. Retry: ', tooLong: 'Exceeds 10,000 char limit', tokensChanged: 'Protected code, paths, URLs, or identifiers changed. Original kept.', languagePrefaceIssue: 'Model returned meta note. Original kept.', languageMismatchIssue: 'Output language differs from draft. Original kept.', truncated: 'Truncated by token limit; shorten input.', refused: 'Model refused request.', analysisOutput: 'Model returned analysis tags; switch models.' },
   };
 
   function strings(doc) {
@@ -114,32 +115,14 @@
     '[data-testid="subagent-tab-conversation"]',
   ].join(', ');
 
-  const BLOCKING_UI_SEL = [
-    '[data-testid="interaction-takeover-card"]',
-    '[data-testid="slash-command-menu"]',
-    '[id^="typeahead-item-"][role="option"]',
-    'html[data-ag-pp-open="1"]',
+  const BLOCKING_BASE = [
     '#ag-prism-periodic-picker-root[data-open="1"]',
-    'html[data-ag-cs-model-menu]',
-    '[data-testid="model-selector-panel"]',
-    '.ag-omni-menu',
-    '.ag-cs-ctx-menu',
-    '.ag-prism-sidebar-modal',
-    '[role="dialog"]',
-    '#ag-cs-settings-sec',
-  ].join(', ');
-
-  const BLOCKING_CONTAINER_SEL = [
-    '#ag-prism-periodic-picker-root',
-    '[data-testid="model-selector-panel"]',
-    '.ag-omni-menu',
-    '.ag-cs-ctx-menu',
-    '.ag-prism-sidebar-modal',
-    '[role="dialog"]',
-    '#ag-cs-settings-sec',
-    '[data-testid="slash-command-menu"]',
-    '[data-testid="interaction-takeover-card"]',
-  ].join(', ');
+    '[data-testid="model-selector-panel"]', '.ag-omni-menu', '.ag-cs-ctx-menu',
+    '.ag-prism-sidebar-modal', '[role="dialog"]', '#ag-cs-settings-sec',
+    '[data-testid="slash-command-menu"]', '[data-testid="interaction-takeover-card"]',
+  ];
+  const BLOCKING_UI_SEL = [...BLOCKING_BASE, '[id^="typeahead-item-"][role="option"]', 'html[data-ag-pp-open="1"]', 'html[data-ag-cs-model-menu]'].join(', ');
+  const BLOCKING_CONTAINER_SEL = BLOCKING_BASE.join(', ');
 
   function isVisibleNode(node) {
     if (!node || node.hidden === true || node.isConnected === false) return false;
@@ -257,78 +240,75 @@
     } catch {}
   }
 
-  function writeEditor(doc, editor, value) {
+  async function waitEditorSync(doc, editor, expected) {
+    if (sameEditorText(readEditor(editor), expected)) return true;
+    await Promise.resolve();
+    if (sameEditorText(readEditor(editor), expected)) return true;
+    const raf = doc?.defaultView?.requestAnimationFrame;
+    const waitTick = () => new Promise((r) => (typeof raf === 'function' ? raf(r) : setTimeout(r, 16)));
+    for (let i = 0; i < 2; i++) {
+      await waitTick();
+      if (sameEditorText(readEditor(editor), expected)) return true;
+    }
+    return false;
+  }
+
+  async function finishWrite(doc, editor, text, asyncWait = false) {
+    dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
+    dispatchEditorEvent(doc, editor, 'change');
+    const matched = asyncWait ? await waitEditorSync(doc, editor, text) : sameEditorText(readEditor(editor), text);
+    const actual = readEditor(editor);
+    return matched ? { status: 'applied', actual } : { status: 'unverified', actual };
+  }
+
+  async function writeEditor(doc, editor, value) {
     if (!editor || editor.isConnected === false) return { status: 'blocked', reason: 'target-missing' };
     const text = String(value ?? '');
     if (!text.trim()) return { status: 'empty' };
+    if (sameEditorText(readEditor(editor), text)) return { status: 'applied', actual: readEditor(editor) };
     let attempted = false;
     try { editor.focus?.({ preventScroll: true }); } catch { try { editor.focus?.(); } catch {} }
     if (typeof editor.value === 'string') {
       try {
-        const proto = Object.getPrototypeOf(editor);
-        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(editor), 'value')?.set;
         if (setter) setter.call(editor, text); else editor.value = text;
         attempted = true;
       } catch { try { editor.value = text; attempted = true; } catch {} }
       try { editor.selectionStart = editor.selectionEnd = text.length; } catch {}
-      dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
-      dispatchEditorEvent(doc, editor, 'change');
+      if (attempted) return finishWrite(doc, editor, text);
       const actual = readEditor(editor);
-      return sameEditorText(actual, text)
-        ? { status: 'applied', actual }
-        : { status: attempted ? 'unverified' : 'failed', actual };
+      return sameEditorText(actual, text) ? { status: 'applied', actual } : { status: 'failed', actual };
     }
     try {
       const lexical = editor.__lexicalEditor;
       if (lexical?._commands && typeof lexical.dispatchCommand === 'function') {
-        const selectAll = Array.from(lexical._commands.keys()).find((command) => command?.type === 'SELECT_ALL_COMMAND');
-        for (const command of lexical._commands.keys()) {
-          if (command?.type === 'CONTROLLED_TEXT_INSERTION_COMMAND') {
+        try { lexical.focus?.(); } catch {}
+        let clearCmd, selectAll, insertCmd;
+        for (const cmd of lexical._commands.keys()) {
+          if (cmd?.type === 'CLEAR_EDITOR_COMMAND') clearCmd = cmd;
+          else if (cmd?.type === 'SELECT_ALL_COMMAND') selectAll = cmd;
+          else if (cmd?.type === 'CONTROLLED_TEXT_INSERTION_COMMAND') insertCmd = cmd;
+        }
+        if (insertCmd) {
+          if (clearCmd) lexical.dispatchCommand(clearCmd, undefined);
+          else {
+            const r = doc.createRange?.(), sel = doc.defaultView?.getSelection?.();
+            if (r && sel) { r.selectNodeContents(editor); sel.removeAllRanges?.(); sel.addRange?.(r); }
             if (selectAll) lexical.dispatchCommand(selectAll, undefined);
-            lexical.dispatchCommand(command, text);
-            attempted = true;
-            break;
           }
-        }
-        if (attempted) {
-          dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
-          dispatchEditorEvent(doc, editor, 'change');
-          const actual = readEditor(editor);
-          return sameEditorText(actual, text)
-            ? { status: 'applied', actual }
-            : { status: 'unverified', actual };
+          lexical.dispatchCommand(insertCmd, text);
+          attempted = true;
+          return finishWrite(doc, editor, text, true);
         }
       }
     } catch {}
     try {
-      const range = doc.createRange?.();
-      const selection = doc.defaultView?.getSelection?.();
-      if (range && selection) {
-        range.selectNodeContents(editor);
-        selection.removeAllRanges?.();
-        selection.addRange?.(range);
-      }
+      const r = doc.createRange?.(), sel = doc.defaultView?.getSelection?.();
+      if (r && sel) { r.selectNodeContents(editor); sel.removeAllRanges?.(); sel.addRange?.(r); }
       doc.execCommand?.('selectAll', false);
-      if (doc.execCommand?.('insertText', false, text)) {
-        attempted = true;
-        dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
-        dispatchEditorEvent(doc, editor, 'change');
-        const actual = readEditor(editor);
-        return sameEditorText(actual, text)
-          ? { status: 'applied', actual }
-          : { status: 'unverified', actual };
-      }
+      if (doc.execCommand?.('insertText', false, text)) { attempted = true; return finishWrite(doc, editor, text, true); }
     } catch {}
-    try {
-      editor.textContent = text;
-      attempted = true;
-      dispatchEditorEvent(doc, editor, 'input', { inputType: 'insertReplacementText', data: text });
-      dispatchEditorEvent(doc, editor, 'change');
-      const actual = readEditor(editor);
-      return sameEditorText(actual, text)
-        ? { status: 'applied', actual }
-        : { status: 'unverified', actual };
-    } catch {}
+    try { editor.textContent = text; attempted = true; return finishWrite(doc, editor, text); } catch {}
     return { status: attempted ? 'unverified' : 'failed' };
   }
 
@@ -467,12 +447,12 @@
       editor.value = state.enhanced; body.hidden = true; editor.hidden = false; editor.focus?.(); status.textContent = labels.editHint;
     });
     let replacing = false;
-    replace.addEventListener('click', () => {
+    replace.addEventListener('click', async () => {
       if (replacing) return;
       replacing = true;
       try {
         const value = editor.hidden ? state.enhanced : editor.value;
-        const result = state.replace?.(value) || { status: 'failed' };
+        const result = (await state.replace?.(value)) || { status: 'failed' };
         if (result.status === 'applied') {
           status.textContent = labels.replaced;
           panel.remove();
@@ -480,6 +460,7 @@
         } else if (result.status === 'empty') status.textContent = labels.emptyResult;
         else if (result.reason === 'target-missing') status.textContent = labels.targetMissing;
         else if (result.reason === 'target-changed') status.textContent = labels.replaceConflict;
+        else if (result.status === 'unverified') status.textContent = labels.replaceUnverified;
         else status.textContent = labels.replaceFailed;
       } finally { replacing = false; }
     });
@@ -538,7 +519,7 @@
         if (entry.restoreBtn) entry.restoreBtn.hidden = true;
       });
     };
-    const restoreDraft = (entry) => {
+    const restoreDraft = async (entry) => {
       if (!entry?.lastUndo || !entry.editor || entry.editor.isConnected === false || loading) return;
       if (!sameEditorText(readEditor(entry.editor), entry.lastUndo.enhanced)) {
         entry.lastUndo = null;
@@ -548,12 +529,12 @@
       }
       entry.writing = true;
       let res;
-      try { res = writeEditor(doc, entry.editor, entry.lastUndo.original); } finally { entry.writing = false; }
+      try { res = await writeEditor(doc, entry.editor, entry.lastUndo.original); } finally { entry.writing = false; }
       if (res?.status === 'applied') {
         entry.lastUndo = null;
         if (entry.restoreBtn) entry.restoreBtn.hidden = true;
         showButtonMessage(labels.restored, entry);
-      } else showButtonMessage(labels.replaceFailed, entry);
+      } else showButtonMessage(res?.status === 'unverified' ? labels.replaceUnverified : labels.replaceFailed, entry);
     };
     const showPreviewPanel = (reqState, message) => {
       panelView?.panel?.remove?.();
@@ -653,13 +634,15 @@
       const context = config.includeRecentContext ? extractContext(snap.view, config.recentContextCount) : [];
       panelState = { original, editorSnapshot, enhanced: '', editor: snap.editor, root: snap.root, cascadeId: snap.cascadeId, button };
       const rep = panelState;
-      panelState.replace = (value) => {
+      panelState.replace = async (value) => {
         if (!rep.editor || rep.editor.isConnected === false) return { status: 'blocked', reason: 'target-missing' };
         if (rep.root !== panelState?.root && rep !== panelState) return { status: 'blocked', reason: 'target-changed' };
-        if (!sameEditorText(readEditor(rep.editor), rep.editorSnapshot)) return { status: 'blocked', reason: 'target-changed' };
+        const currentText = readEditor(rep.editor);
+        if (sameEditorText(currentText, value)) return { status: 'applied', actual: currentText };
+        if (!sameEditorText(currentText, rep.editorSnapshot)) return { status: 'blocked', reason: 'target-changed' };
         const owner = entries.get(rep.root);
         if (owner) owner.writing = true;
-        try { return writeEditor(doc, rep.editor, value); } finally { if (owner) owner.writing = false; }
+        try { return await writeEditor(doc, rep.editor, value); } finally { if (owner) owner.writing = false; }
       };
       if (original.length > MAX_REQUEST_CHARS) {
         loading = false; reqId = ''; reqBtn = null; updateButton(false); showButtonMessage(labels.tooLong, snap); return;
@@ -680,13 +663,14 @@
             : result.outputIssue === 'language-mismatch' ? labels.languageMismatchIssue
             : result.tokensPreserved === false ? labels.tokensChanged : '';
           if (issueMsg) { showPreviewPanel(reqState, issueMsg); return; }
-          const replacement = reqState.replace(enhanced);
+          const replacement = await reqState.replace(enhanced);
           if (replacement.status === 'applied') {
             if (entry) { entry.lastUndo = { original: editorSnapshot, enhanced }; if (entry.restoreBtn) entry.restoreBtn.hidden = false; }
             msg = labels.replaced;
           } else if (replacement.reason === 'target-missing') msg = labels.targetMissing;
           else if (replacement.reason === 'target-changed') showPreviewPanel(reqState, labels.replaceConflict);
           else if (replacement.status === 'empty') msg = labels.emptyResult;
+          else if (replacement.status === 'unverified') showPreviewPanel(reqState, labels.replaceUnverified);
           else showPreviewPanel(reqState, labels.replaceFailed);
         } else if (result?.ok) {
           reqState.enhanced = ''; msg = labels.emptyResult;
