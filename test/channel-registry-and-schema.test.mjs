@@ -174,7 +174,7 @@ test('CONFIG_SCHEMA is the single source of truth for DEFAULT_CONFIG, VALIDATORS
   assert.equal(wbSpec.cfgSig({ sidebarRestyle: false, sidebarNavFold: false, scrollBottomMotion: 'off', motionLevel: 'minimal' }), 'off');
 });
 
-test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with valid metadata and gating', () => {
+test('CHANNEL_REGISTRY contract covers all 18 delayed/on-demand channels with valid metadata and gating', () => {
   const expectedIds = [
     'omni',
     'sidebar',
@@ -193,6 +193,7 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
     'workbenchEnhancer',
     'contextMenu',
     'projectPartitions',
+    'customStyle',
   ];
 
   const descriptors = cdp.getChannelDescriptors();
@@ -264,6 +265,8 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
     sidebarRestyle: false,
     motionLevel: 'off',
     contextMenu: false,
+    uiFont: 'default',
+    customCss: 'off',
   };
   assert.equal(cdp.findChannel('omni').shouldEnable(gatedOffCfg), false);
   assert.equal(cdp.findChannel('sidebar').shouldEnable(gatedOffCfg), false);
@@ -287,10 +290,12 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
   assert.equal(cdp.findChannel('workbenchEnhancer').build(gatedOffCfg), '');
   assert.equal(cdp.findChannel('contextMenu').shouldEnable(gatedOffCfg), false);
   assert.equal(cdp.findChannel('contextMenu').build(gatedOffCfg), '');
+  assert.equal(cdp.findChannel('customStyle').shouldEnable(gatedOffCfg), false);
+  assert.equal(cdp.findChannel('customStyle').build(gatedOffCfg), '');
 
   const offReport = cdp.getChannelBudgetReport(gatedOffCfg, { noDiskCache: true });
   assert.equal(offReport.ok, true);
-  for (const id of ['omni', 'sidebar', 'swarmI18n', 'thought', 'periodicPicker', 'mascot', 'homeStudio', 'telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu', 'projectPartitions']) {
+  for (const id of ['omni', 'sidebar', 'swarmI18n', 'thought', 'periodicPicker', 'mascot', 'homeStudio', 'telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu', 'projectPartitions', 'customStyle']) {
     const row = offReport.channels.find((c) => c.id === id);
     assert.equal(row.enabled, false);
     assert.equal(row.bytes, 0);
@@ -516,10 +521,10 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
   assert.equal(rootAttrs.get('data-theme'), 'dark', 'REMOVE_EXPRESSION must NEVER delete host documentElement[data-theme]');
 });
 
-test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 56 keys in src/config/schema.cjs', () => {
+test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 59 keys in src/config/schema.cjs', () => {
   const schema = cdp.CONFIG_SCHEMA;
   const allSchemaKeys = Object.keys(schema).sort();
-  assert.equal(allSchemaKeys.length, 56, 'CONFIG_SCHEMA expected 56 keys');
+  assert.equal(allSchemaKeys.length, 59, 'CONFIG_SCHEMA expected 59 keys');
 
   const canonicalLangs = [...schema.language.values];
   const autoOnOff = ['auto', 'on', 'off'];
@@ -533,7 +538,7 @@ test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 
   };
 
   const verifyNativeSchema = (label, src, patterns) => {
-    // 1) All 54 schema keys must be explicitly present in native source
+    // 1) All 59 schema keys must be explicitly present in native source
     for (const k of allSchemaKeys) {
       assert.ok(src.includes(`"${k}"`), `${label} missing explicit schema key "${k}"`);
     }
@@ -567,7 +572,7 @@ test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 
     assert.match(src, patterns.pollDefault, `${label} must set default pollIntervalMs = 2500`);
     defaults.pollIntervalMs = 2500;
 
-    // Bidirectional 1:1 parity for all 52 non-optional keys & defaults and all 51 validators
+    // Bidirectional 1:1 parity for all 57 non-optional keys & defaults and all 56 validators
     assert.deepEqual(Object.keys(defaults).sort(), Object.keys(cdp.DEFAULT_CONFIG).sort(), `${label} default keys must match DEFAULT_CONFIG 1:1`);
     assert.deepEqual(defaults, cdp.DEFAULT_CONFIG, `${label} default values must match DEFAULT_CONFIG 100%`);
     assert.deepEqual(Object.keys(validators).sort(), Object.keys(cdp.VALIDATORS).sort(), `${label} validator keys must match VALIDATORS 1:1`);

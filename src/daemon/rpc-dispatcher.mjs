@@ -23,6 +23,7 @@ import { readSafeInlineDiff } from './inline-diff-service.mjs';
 import { deliverPeriodicPickerFullToEntry } from './channel-sync-engine.mjs';
 import { buildMetricsBindingReply } from './metrics-delta.mjs';
 import { handleProjectPartitionsBinding } from './project-partitions-rpc.mjs';
+import { handleCustomCssSettingAction, openExternalFileSafe } from './custom-css-rpc.mjs';
 
 // 统一 Fire-and-Forget 回调派发：强制 returnByValue:false / awaitPromise:false 且表达式末尾 ;void 0，防 V8 Inspector objectId 泄漏
 function sendFireAndForgetEval(session, expr, executionContextId = null, timeoutMs = 0, { rethrow = false } = {}) {
@@ -134,7 +135,7 @@ export function resolveTrustedBroadcastContextId(other) {
   return { ok: true, contextId: other.sidebarHostContextId };
 }
 
-async function handleSettingBinding(rpc, entry, payload, executionContextId) {
+export async function handleSettingBinding(rpc, entry, payload, executionContextId, deps = null) {
   if (typeof payload !== 'string' || payload.length > 8192) return;
   try {
     const parsed = JSON.parse(payload);
@@ -150,6 +151,9 @@ async function handleSettingBinding(rpc, entry, payload, executionContextId) {
     if (parsed.action === 'request-periodic-picker') {
       await deliverPeriodicPickerFullToEntry(rpc.channelOrchestrator, entry, executionContextId);
       return;
+    }
+    if (parsed.action === 'custom-css-open' || parsed.action === 'custom-css-create-template' || parsed.action === 'custom-css-reload') {
+      return await handleCustomCssSettingAction(rpc, parsed.action, deps);
     }
     const updated =
       parsed.action === 'patch-batch' && parsed.entries && typeof parsed.entries === 'object'
@@ -718,7 +722,7 @@ const STATIC_BINDING_TABLE = Object.freeze({
 
 export class RpcDispatcher {
   constructor({
-    getCdp = () => null,
+    getCdp = () => null, rootDir = '', getRootDir = null, openExternalFile = null,
     sessionRegistry = null,
     channelOrchestrator = null,
     telemetrySubsystem = null,
@@ -728,6 +732,8 @@ export class RpcDispatcher {
     invokeEnsureMainFrameId = null,
   } = {}) {
     this._getCdp = getCdp;
+    this._getRootDir = typeof getRootDir === 'function' ? getRootDir : () => rootDir || '';
+    this.openExternalFile = typeof openExternalFile === 'function' ? openExternalFile : null;
     this.sessionRegistry = sessionRegistry;
     this.channelOrchestrator = channelOrchestrator;
     this.telemetrySubsystem = telemetrySubsystem;
@@ -738,6 +744,7 @@ export class RpcDispatcher {
   }
 
   getCdp() { return this._getCdp(); }
+  getRootDir() { return this._getRootDir(); }
 
   invokeExecuteRepoAction(payload) {
     if (typeof this._invokeExecuteRepoAction === 'function') return this._invokeExecuteRepoAction(payload);
@@ -785,3 +792,5 @@ export class RpcDispatcher {
     }
   }
 }
+export function createRpcDispatcher(deps = {}) { return new RpcDispatcher(deps); }
+export { openExternalFileSafe };

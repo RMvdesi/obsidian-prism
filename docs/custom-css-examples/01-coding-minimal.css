@@ -1,0 +1,291 @@
+/* ============================================================================
+ * Obsidian Prism Preset 01: Coding Minimal
+ * Inspired by: Codex & Claude Code
+ *
+ * Character:
+ *   Calm, ultra-clean monochrome/slate coding ergonomics with disciplined
+ *   spacing, matte structural surfaces, low chrome noise, and high-contrast
+ *   code, diff, and terminal legibility across Dark and Light themes.
+ *
+ * Usage:
+ *   Copy this file to <pluginRoot>/custom.css and save to hot-reload.
+ *   Local-only CSS, 100% ASCII, zero external assets, icon-font safe.
+ * ============================================================================ */
+
+:root {
+  --ag-prism-ui-font: "Inter", "SF Pro Text", "Segoe UI Variable", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+  --ag-prism-chat-font: "Inter", "SF Pro Text", "Segoe UI Variable", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+  --ag-prism-code-font: "JetBrains Mono", "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, ui-monospace, monospace;
+}
+
+/* ----------------------------------------------------------------------------
+ * 1. Dual-Theme Surface, Ink & Accent Tokens (Dark + Light Balanced)
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style]:not([data-ag-cs-theme="light"]),
+html:root[data-ag-cs-style][data-ag-cs-style]:not([data-ag-cs-theme="light"]) > body {
+  --font-sans: var(--ag-prism-ui-font) !important;
+  --background: #0c0d10 !important;
+  --content: #0c0d10 !important;
+  --shell: #0c0d10 !important;
+  --body-background: #0c0d10 !important;
+  --sidebar: #090a0d !important;
+  --sidebar-muted: rgba(226, 232, 240, 0.04) !important;
+  --sidebar-secondary: rgba(226, 232, 240, 0.075) !important;
+  --card: #12141a !important;
+  --secondary: #181b22 !important;
+  --muted: #13161c !important;
+  --border: rgba(203, 213, 225, 0.09) !important;
+  --card-border: rgba(203, 213, 225, 0.125) !important;
+  --ag-cs-tonal-0: #08090c;
+  --ag-cs-tonal-1: #0c0d10;
+  --ag-cs-tonal-2: #12141a;
+  --ag-cs-tonal-3: #181b22;
+  --ag-cs-tonal-4: #1f232c;
+  --foreground: #eceef2 !important;
+  --secondary-foreground: #bcc3d0 !important;
+  --muted-foreground: #828b9c !important;
+  --placeholder: #5f6777 !important;
+  --primary: #cbd5e1 !important;
+  --primary-foreground: #0c0d10 !important;
+  --link: #8bb4f8 !important;
+  --ag-cs-accent: #94a3b8;
+  --ag-cs-panel-bg: rgba(18, 20, 26, 0.96);
+  --ag-cs-popover-bg: rgba(21, 24, 31, 0.95);
+  --ag-cs-pill-bg: rgba(226, 232, 240, 0.055);
+  --ag-cs-bubble: #14171e;
+  --ag-cs-thought-rule: rgba(148, 163, 184, 0.34);
+  --ag-cs-r-sm: 4px;
+  --ag-cs-r-md: 6px;
+  --ag-cs-r-lg: 8px;
+  --ag-ambient-mul: 0.22;
+  --ag-accent-prism-mul: 0.38;
+  --max-conversation-width: 50rem;
+  --editor-diff-inserted-line-background: rgba(46, 160, 67, 0.14) !important;
+  --editor-diff-inserted-text-background: rgba(46, 160, 67, 0.28) !important;
+  --editor-diff-removed-line-background: rgba(248, 81, 73, 0.14) !important;
+  --editor-diff-removed-text-background: rgba(248, 81, 73, 0.28) !important;
+  --vscode-diffEditor-insertedLineBackground: rgba(46, 160, 67, 0.14) !important;
+  --vscode-diffEditor-insertedTextBackground: rgba(46, 160, 67, 0.28) !important;
+  --vscode-diffEditor-removedLineBackground: rgba(248, 81, 73, 0.14) !important;
+  --vscode-diffEditor-removedTextBackground: rgba(248, 81, 73, 0.28) !important;
+  --ag-prism-cm-code-bg: #0f1116;
+  --ag-prism-cm-code-head: #151820;
+  --ag-prism-cm-inline-bg: rgba(226, 232, 240, 0.075);
+  --ag-prism-cm-inline-bd: rgba(226, 232, 240, 0.12);
+  --ag-prism-cm-quote-bg: rgba(148, 163, 184, 0.055);
+  --ag-prism-cm-quote-rule: #64748b;
+  --ag-prism-cm-term-bg: #08090c;
+  --ag-prism-cm-diff-add-edge: #3fb950;
+  --ag-prism-cm-diff-del-edge: #f85149;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-theme="light"],
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-theme="light"] > body {
+  --font-sans: var(--ag-prism-ui-font) !important;
+  --background: #f9fafb !important;
+  --content: #f9fafb !important;
+  --shell: #f9fafb !important;
+  --body-background: #f9fafb !important;
+  --sidebar: #f2f4f7 !important;
+  --sidebar-muted: rgba(15, 23, 42, 0.04) !important;
+  --sidebar-secondary: rgba(15, 23, 42, 0.075) !important;
+  --card: #ffffff !important;
+  --secondary: #eef1f5 !important;
+  --muted: #f3f5f8 !important;
+  --border: rgba(15, 23, 42, 0.10) !important;
+  --card-border: rgba(15, 23, 42, 0.14) !important;
+  --ag-cs-tonal-0: #eef1f6;
+  --ag-cs-tonal-1: #f9fafb;
+  --ag-cs-tonal-2: #ffffff;
+  --ag-cs-tonal-3: #f2f4f8;
+  --ag-cs-tonal-4: #ffffff;
+  --foreground: #111827 !important;
+  --secondary-foreground: #374151 !important;
+  --muted-foreground: #526075 !important;
+  --placeholder: #6b788c !important;
+  --primary: #1f2937 !important;
+  --primary-foreground: #f9fafb !important;
+  --link: #1d4ed8 !important;
+  --ag-cs-accent: #334155;
+  --ag-cs-panel-bg: rgba(255, 255, 255, 0.97);
+  --ag-cs-popover-bg: rgba(255, 255, 255, 0.96);
+  --ag-cs-pill-bg: #f1f5f9;
+  --ag-cs-bubble: #eef2f6;
+  --ag-cs-thought-rule: rgba(51, 65, 85, 0.32);
+  --ag-cs-r-sm: 4px;
+  --ag-cs-r-md: 6px;
+  --ag-cs-r-lg: 8px;
+  --ag-ambient-mul: 0.18;
+  --ag-accent-prism-mul: 0.35;
+  --max-conversation-width: 50rem;
+  --editor-diff-inserted-line-background: rgba(22, 163, 74, 0.11) !important;
+  --editor-diff-inserted-text-background: rgba(22, 163, 74, 0.22) !important;
+  --editor-diff-removed-line-background: rgba(220, 38, 38, 0.10) !important;
+  --editor-diff-removed-text-background: rgba(220, 38, 38, 0.20) !important;
+  --vscode-diffEditor-insertedLineBackground: rgba(22, 163, 74, 0.11) !important;
+  --vscode-diffEditor-insertedTextBackground: rgba(22, 163, 74, 0.22) !important;
+  --vscode-diffEditor-removedLineBackground: rgba(220, 38, 38, 0.10) !important;
+  --vscode-diffEditor-removedTextBackground: rgba(220, 38, 38, 0.20) !important;
+  --ag-prism-cm-code-bg: #f4f6f9;
+  --ag-prism-cm-code-head: #ebeef3;
+  --ag-prism-cm-inline-bg: rgba(15, 23, 42, 0.055);
+  --ag-prism-cm-inline-bd: rgba(15, 23, 42, 0.10);
+  --ag-prism-cm-quote-bg: rgba(15, 23, 42, 0.032);
+  --ag-prism-cm-quote-rule: #475569;
+  --ag-prism-cm-term-bg: #f3f5f8;
+  --ag-prism-cm-diff-add-edge: #16a34a;
+  --ag-prism-cm-diff-del-edge: #dc2626;
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. Calm Prose Rhythm & Disciplined Typographic Hierarchy
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) {
+  font-family: var(--ag-prism-chat-font);
+  font-size: 14.5px;
+  line-height: 1.64;
+  letter-spacing: -0.004em;
+  color: var(--foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :is(p, li) {
+  line-height: 1.64;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h1 {
+  font-size: 1.38em;
+  font-weight: 650;
+  line-height: 1.32;
+  letter-spacing: -0.022em;
+  margin-top: 1.25em;
+  margin-bottom: 0.55em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h2 {
+  font-size: 1.18em;
+  font-weight: 620;
+  line-height: 1.36;
+  letter-spacing: -0.016em;
+  margin-top: 1.2em;
+  margin-bottom: 0.45em;
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid var(--border);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h3 {
+  font-size: 1.04em;
+  font-weight: 600;
+  line-height: 1.42;
+  letter-spacing: -0.01em;
+  margin-top: 1em;
+  margin-bottom: 0.35em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) blockquote {
+  background-image: none !important;
+  background-color: var(--ag-prism-cm-quote-bg) !important;
+  border-radius: 0 var(--ag-cs-r-sm) var(--ag-cs-r-sm) 0 !important;
+  padding: 8px 14px !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) blockquote::before {
+  width: 2px;
+  background: var(--ag-prism-cm-quote-rule);
+  box-shadow: none;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :is(th, td) {
+  padding: 7px 11px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. High-Clarity Code Blocks, Inline Code, Diff & Terminal Sanctuary
+ *    (Preserves overflow: visible on rich pre wrappers for sticky headers)
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :not(pre) > code {
+  font-size: 0.88em;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  background-color: var(--ag-prism-cm-inline-bg);
+  border: 1px solid var(--ag-prism-cm-inline-bd);
+  letter-spacing: 0;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre:not([data-ag-cs-rich-pre="1"]),
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre > div:is(.border, .bg-muted) {
+  background-color: var(--ag-prism-cm-code-bg) !important;
+  border-color: var(--card-border) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre > div > :is([data-ag-cs-code-sticky="1"], div.border-b:first-child) {
+  background-color: var(--ag-prism-cm-code-head) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is(pre, .code-block, .code-line, .ag-cs-inline-diff-box pre) {
+  line-height: 1.56;
+  letter-spacing: 0;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is(.monaco-diff-editor, [data-testid="changed-files-card"]) :is(.line-insert, .diff-line-add, [data-diff="add"]) {
+  background-color: var(--editor-diff-inserted-line-background) !important;
+  box-shadow: inset 2px 0 0 var(--ag-prism-cm-diff-add-edge) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is(.monaco-diff-editor, [data-testid="changed-files-card"]) :is(.line-delete, .diff-line-del, [data-diff="del"]) {
+  background-color: var(--editor-diff-removed-line-background) !important;
+  box-shadow: inset 2px 0 0 var(--ag-prism-cm-diff-del-edge) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] [data-testid="bottom-terminal-panel"],
+html:root[data-ag-cs-style][data-ag-cs-style] .xterm {
+  background-color: var(--ag-prism-cm-term-bg) !important;
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. Low-Noise Chrome: User Bubble, Composer & Sidebar Discipline
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="user-message-bubble"], .agy-user-bubble) {
+  border-radius: 10px !important;
+  padding: 9px 14px !important;
+  background-color: var(--ag-cs-bubble) !important;
+  background-image: none !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-composer="on"] .surface-composer-card {
+  background-image: none !important;
+  background-color: var(--card) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 2px 10px -6px rgba(0, 0, 0, 0.28) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-composer="on"] .surface-composer-card:focus-within {
+  border-color: var(--ag-cs-accent) !important;
+  box-shadow: 0 0 0 1px var(--ag-cs-accent) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-sidebar="on"] :is([data-testid="conversation-row-sidebar"], .agy-sidebar-row)[data-selected="true"] {
+  background-image: none !important;
+  box-shadow: inset 0 0 0 1px var(--border) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-sidebar="on"] :is([data-testid="conversation-row-sidebar"], .agy-sidebar-row)[data-selected="true"]:not([data-ag-cs-row-running="1"])::after {
+  background: var(--ag-cs-accent) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="artifact-card"], [data-testid="bubble-artifact-card"], .artifact-card) {
+  background-color: var(--card) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: none !important;
+}

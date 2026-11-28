@@ -40,6 +40,7 @@ import {
 import { verifyAndHealEntry, verifyAndHealEntryUnlocked } from './session-heal.mjs';
 
 const require = createRequire(import.meta.url);
+const { createDefaultCustomCssTemplate } = require('../channels/custom-css-loader.cjs');
 
 export class ChannelOrchestrator {
   constructor(deps = {}) {
@@ -629,6 +630,15 @@ export class ChannelOrchestrator {
       if (val?.ok) {
         entry.settingsChannelDelivered = true;
         recordChannelSuccess(entry, 'settings', { codeHash: this.getChannelExprHash('settings', expr) });
+        const cdp = this.getCdp();
+        const uiExpr = typeof cdp?.buildCustomStyleSettingsUiExpression === 'function'
+          ? cdp.buildCustomStyleSettingsUiExpression(typeof cdp.readConfig === 'function' ? cdp.readConfig() : null)
+          : '';
+        if (uiExpr && !entry.session.closed) {
+          const uiParams = { expression: uiExpr, returnByValue: true };
+          if (typeof executionContextId === 'number' && executionContextId > 0) uiParams.contextId = executionContextId;
+          await entry.session.send('Runtime.evaluate', uiParams, 3500).catch(() => null);
+        }
         return true;
       }
       const errObj = caughtErr
@@ -701,6 +711,62 @@ export class ChannelOrchestrator {
       return;
     }
     await healSingleChannelOnEntry(this, entry, spec, cfg, null, { forceEval: true });
+  }
+  async refreshCustomStyleChannel({ forceEval = false } = {}) {
+    const spec = this.getRegisteredChannel('customStyle');
+    if (!spec) return { ok: false, reason: 'channel-not-registered' };
+    if (!this.isWatchedConfigUnchangedPeek()) {
+      await this.handleWatchedConfigChange().catch(() => null);
+    }
+    const cdp = this.getCdp();
+    const cfg = typeof cdp?.readConfig === 'function' ? cdp.readConfig() : null;
+    const prevHash = this.getChannelHash('customStyle');
+    const enabled = this.isChannelEnabled(spec, cfg) && this.hasChannelFile(spec);
+    const cacheOpts = this.getChannelCacheOpts(true);
+    const expr = enabled ? this.buildChannelExpr(spec, cfg, cacheOpts) : this.setChannelExpr('customStyle', '');
+    const nextHash = expr ? this.getChannelExprHash(spec, expr) : '';
+    const nextSig = enabled && expr ? this.getChannelCfgSig(spec, cfg, expr) : '';
+
+    const sessionsMap = this.sessionRegistry?.sessions;
+    const activeItems = sessionsMap ? [...sessionsMap.values()].filter((e) => e && !e.session?.closed) : [];
+    if (activeItems.length === 0) {
+      return { ok: true, enabled, changed: prevHash !== nextHash, codeHash: nextHash, synced: 0 };
+    }
+
+    let synced = 0;
+    await Promise.allSettled(
+      activeItems.map((entry) =>
+        this.sessionRegistry.runExclusive(entry, async () => {
+          if (!entry || entry.session?.closed) return;
+          const f = spec.fields;
+          if (!enabled || !expr) {
+            if (entry[f.scriptField] || entry[f.mountedField]) {
+              await cleanupChannelOnEntry(this, entry, spec, { timeoutMs: 3500 });
+              synced += 1;
+            }
+            if (entry.settingsChannelDelivered && typeof cdp?.buildCustomStyleSettingsMetaSyncExpression === 'function') {
+              const metaExpr = cdp.buildCustomStyleSettingsMetaSyncExpression(cfg);
+              if (metaExpr && !entry.session.closed) {
+                await entry.session.evaluate(metaExpr, false, 2500).catch(() => null);
+                synced += 1;
+              }
+            }
+            return;
+          }
+          if (!forceEval && entry[f.mountedField] && entry[f.sigField] === nextSig && entry[f.scriptSigField] === nextSig && entry[f.scriptField]) {
+            return;
+          }
+          await healSingleChannelOnEntry(this, entry, spec, cfg, null, { forceEval: true });
+          synced += 1;
+        })
+      )
+    );
+    return { ok: true, enabled, changed: prevHash !== nextHash, codeHash: nextHash, synced };
+  }
+  async createCustomCssTemplateAndSync() {
+    const res = createDefaultCustomCssTemplate(this._rootDir);
+    const syncRes = await this.refreshCustomStyleChannel({ forceEval: true });
+    return { ...res, sync: syncRes };
   }
   teardownAllEntryChannelScripts(entry, session, opts) { return teardownAllEntryChannelScripts(this, entry, session, opts); }
   applyToEntry(entry) { return applyAllChannelsToEntry(this, entry); }

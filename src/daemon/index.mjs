@@ -102,6 +102,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
       wallpaperService = null,
       suggesterService = null,
       omniExecHooks = null,
+      openExternalFile = null,
       sidebarService = null,
       relaunchHooks = null,
       daemonPidVerifier = null,
@@ -264,6 +265,8 @@ export class PrismDaemon extends PrismDaemonCompatBase {
 
     this.rpcDispatcher = new RpcDispatcher({
       getCdp,
+      getRootDir: () => this._rootDir,
+      openExternalFile,
       sessionRegistry: this.sessionRegistry,
       channelOrchestrator: this.channelOrchestrator,
       telemetrySubsystem: this.telemetrySubsystem,

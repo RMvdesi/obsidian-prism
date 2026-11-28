@@ -1,0 +1,286 @@
+/* ============================================================================
+ * Obsidian Prism Preset 02: Editorial Longform
+ * Inspired by: Financial Times, The New Yorker & Works in Progress
+ *
+ * Character:
+ *   Warm rag-paper light mode and espresso-charcoal dark mode with a refined
+ *   literary serif reading stack scoped cleanly to prose and artifacts.
+ *   UI chrome stays crisp sans-serif; code, diffs, and terminals stay strict
+ *   monospace with zero serif bleed.
+ *
+ * Usage:
+ *   Copy this file to <pluginRoot>/custom.css and save to hot-reload.
+ *   Local-only CSS, 100% ASCII, zero external assets, icon-font safe.
+ * ============================================================================ */
+
+:root {
+  --ag-prism-ui-font: "Inter", "SF Pro Text", "Segoe UI Variable", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+  --ag-prism-chat-font: "Charter", "Iowan Old Style", "Georgia", "Cambria", "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  --ag-prism-code-font: "JetBrains Mono", "SF Mono", "Cascadia Mono", Menlo, Consolas, ui-monospace, monospace;
+}
+
+/* ----------------------------------------------------------------------------
+ * 1. Dual-Theme Editorial Palette (Espresso Dark & Warm Rag-Paper Light)
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style]:not([data-ag-cs-theme="light"]),
+html:root[data-ag-cs-style][data-ag-cs-style]:not([data-ag-cs-theme="light"]) > body {
+  --font-sans: var(--ag-prism-ui-font) !important;
+  --background: #151311 !important;
+  --content: #151311 !important;
+  --shell: #151311 !important;
+  --body-background: #151311 !important;
+  --sidebar: #100e0c !important;
+  --sidebar-muted: rgba(240, 232, 220, 0.042) !important;
+  --sidebar-secondary: rgba(240, 232, 220, 0.075) !important;
+  --card: #1c1916 !important;
+  --secondary: #24201c !important;
+  --muted: #1b1815 !important;
+  --border: rgba(239, 230, 216, 0.10) !important;
+  --card-border: rgba(239, 230, 216, 0.14) !important;
+  --ag-cs-tonal-0: #0f0d0b;
+  --ag-cs-tonal-1: #151311;
+  --ag-cs-tonal-2: #1c1916;
+  --ag-cs-tonal-3: #24201c;
+  --ag-cs-tonal-4: #2b2621;
+  --foreground: #efe8dc !important;
+  --secondary-foreground: #cbc1b2 !important;
+  --muted-foreground: #968b7b !important;
+  --placeholder: #706659 !important;
+  --primary: #d48166 !important;
+  --primary-foreground: #17120e !important;
+  --link: #e29980 !important;
+  --ag-cs-accent: #d48166;
+  --ag-cs-panel-bg: rgba(26, 23, 19, 0.965);
+  --ag-cs-popover-bg: rgba(29, 25, 21, 0.95);
+  --ag-cs-pill-bg: rgba(239, 230, 216, 0.06);
+  --ag-cs-bubble: #201c18;
+  --ag-cs-thought-rule: rgba(212, 129, 102, 0.42);
+  --ag-cs-r-sm: 4px;
+  --ag-cs-r-md: 6px;
+  --ag-cs-r-lg: 10px;
+  --ag-ambient-mul: 0.30;
+  --ag-accent-prism-mul: 0.45;
+  --max-conversation-width: 46rem;
+  --ag-prism-ed-rule: rgba(239, 230, 216, 0.16);
+  --ag-prism-ed-quote-bg: rgba(212, 129, 102, 0.065);
+  --ag-prism-ed-quote-bar: #c9785d;
+  --ag-prism-ed-code-bg: #110f0d;
+  --ag-prism-ed-code-head: #1a1714;
+  --ag-prism-ed-inline-bg: rgba(239, 230, 216, 0.08);
+  --ag-prism-ed-inline-bd: rgba(239, 230, 216, 0.13);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-theme="light"],
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-theme="light"] > body {
+  --font-sans: var(--ag-prism-ui-font) !important;
+  --background: #fbf6ee !important;
+  --content: #fbf6ee !important;
+  --shell: #fbf6ee !important;
+  --body-background: #fbf6ee !important;
+  --sidebar: #f2eae0 !important;
+  --sidebar-muted: rgba(38, 28, 20, 0.045) !important;
+  --sidebar-secondary: rgba(38, 28, 20, 0.082) !important;
+  --card: #fffdf9 !important;
+  --secondary: #f3ece2 !important;
+  --muted: #f5efe6 !important;
+  --border: rgba(48, 36, 26, 0.115) !important;
+  --card-border: rgba(48, 36, 26, 0.16) !important;
+  --ag-cs-tonal-0: #eee5d9;
+  --ag-cs-tonal-1: #fbf6ee;
+  --ag-cs-tonal-2: #fffdf9;
+  --ag-cs-tonal-3: #f3ece1;
+  --ag-cs-tonal-4: #fffdf9;
+  --foreground: #1f1a17 !important;
+  --secondary-foreground: #443b33 !important;
+  --muted-foreground: #6e6357 !important;
+  --placeholder: #827668 !important;
+  --primary: #9e2f3b !important;
+  --primary-foreground: #fffdf9 !important;
+  --link: #8c2632 !important;
+  --ag-cs-accent: #9e2f3b;
+  --ag-cs-panel-bg: rgba(255, 253, 249, 0.975);
+  --ag-cs-popover-bg: rgba(255, 252, 246, 0.96);
+  --ag-cs-pill-bg: #f1e9de;
+  --ag-cs-bubble: #f4ece0;
+  --ag-cs-thought-rule: rgba(158, 47, 59, 0.36);
+  --ag-cs-r-sm: 4px;
+  --ag-cs-r-md: 6px;
+  --ag-cs-r-lg: 10px;
+  --ag-ambient-mul: 0.24;
+  --ag-accent-prism-mul: 0.40;
+  --max-conversation-width: 46rem;
+  --ag-prism-ed-rule: rgba(48, 36, 26, 0.18);
+  --ag-prism-ed-quote-bg: rgba(158, 47, 59, 0.042);
+  --ag-prism-ed-quote-bar: #9e2f3b;
+  --ag-prism-ed-code-bg: #f4ede3;
+  --ag-prism-ed-code-head: #ece3d6;
+  --ag-prism-ed-inline-bg: rgba(48, 36, 26, 0.06);
+  --ag-prism-ed-inline-bd: rgba(48, 36, 26, 0.12);
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. Literary Serif Prose & Longform Reading Cadence
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"], [data-testid="side-question-panel"], [data-testid="subagent-tab-conversation"]) {
+  font-family: var(--ag-prism-chat-font) !important;
+  font-size: 15.5px;
+  line-height: 1.74;
+  font-kerning: normal;
+  color: var(--foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :is(p, li, blockquote, h1, h2, h3) {
+  font-family: var(--ag-prism-chat-font) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :is(p, li) {
+  line-height: 1.74;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) p + p {
+  margin-top: 0.92em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h1 {
+  font-size: 1.56em;
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.02em;
+  margin-top: 1.35em;
+  margin-bottom: 0.55em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h2 {
+  font-size: 1.28em;
+  font-weight: 600;
+  line-height: 1.30;
+  letter-spacing: -0.015em;
+  margin-top: 1.35em;
+  margin-bottom: 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ag-prism-ed-rule);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.38;
+  margin-top: 1.1em;
+  margin-bottom: 0.38em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h4 {
+  font-family: var(--ag-prism-ui-font) !important;
+  font-size: 0.82em;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin-top: 1.1em;
+  margin-bottom: 0.35em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) a:not([data-testid="entity-pill"]):not(.inline-pill):not([data-testid="resource-link"]):not(.ag-prism-thought-file-pill) {
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. Print-Inspired Blockquotes, Hairline Rules & Booktabs Tables
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) blockquote {
+  margin: 14px 0 !important;
+  padding: 10px 18px 10px 16px !important;
+  background-image: none !important;
+  background-color: var(--ag-prism-ed-quote-bg) !important;
+  border-radius: 0 4px 4px 0 !important;
+  font-style: italic;
+  color: var(--secondary-foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) blockquote::before {
+  width: 2px;
+  top: 4px;
+  bottom: 4px;
+  background: var(--ag-prism-ed-quote-bar);
+  box-shadow: none;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) .md-divider-spacing hr {
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, var(--ag-prism-ed-rule) 12%, var(--ag-prism-ed-rule) 88%, transparent) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) thead th {
+  font-family: var(--ag-prism-ui-font) !important;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) tbody td {
+  font-family: var(--ag-prism-ui-font) !important;
+  font-size: 13.5px;
+  line-height: 1.54;
+  padding: 8px 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. Strict Sans UI Chrome & Monospace Code Sanctuary
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] [data-testid="agent-input-box"] [data-lexical-editor="true"] {
+  font-family: var(--ag-prism-ui-font) !important;
+  font-size: 14px !important;
+  line-height: 1.56 !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="user-message-bubble"], .agy-user-bubble) {
+  font-family: var(--ag-prism-ui-font) !important;
+  font-size: 14px;
+  line-height: 1.58;
+  background-color: var(--ag-cs-bubble) !important;
+  background-image: none !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :not(pre) > code {
+  font-style: normal;
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--ag-prism-ed-inline-bg);
+  border: 1px solid var(--ag-prism-ed-inline-bd);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre:not([data-ag-cs-rich-pre="1"]),
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre > div:is(.border, .bg-muted) {
+  font-style: normal;
+  background-color: var(--ag-prism-ed-code-bg) !important;
+  border-color: var(--card-border) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre > div > :is([data-ag-cs-code-sticky="1"], div.border-b:first-child) {
+  background-color: var(--ag-prism-ed-code-head) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is(pre, .code-block, .code-line) {
+  font-size: 13px;
+  line-height: 1.56;
+  letter-spacing: 0;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="entity-pill"], .inline-pill, .ag-prism-thought-file-pill) {
+  font-family: var(--ag-prism-ui-font) !important;
+  font-style: normal;
+  font-size: 0.88em;
+}

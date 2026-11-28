@@ -554,8 +554,9 @@ test('v107 A2-8: single-pass PrismDaemon.rebuildBundle cold hit parses .bundle-c
     assert.ok(dCold.effortSliderExpr.length > 0);
     assert.ok(dCold.workbenchEnhancerExpr.length > 0);
     assert.ok(dCold.contextMenuExpr.length > 0);
+    assert.ok(dCold.channelOrchestrator.getChannelExpr('customStyle').length > 0);
 
-    // 2) Simulate cold daemon restart: all 9 channels hit disk cache with ONLY 1 readFileSync + 1 JSON.parse
+    // 2) Simulate cold daemon restart: all 15 precompiled channels hit disk cache with ONLY 1 readFileSync + 1 JSON.parse
     delete require.cache[require.resolve(snap.cdpPath)];
     const dHit = new PrismDaemon({
       rootDir: snap.pluginDir,
@@ -601,12 +602,13 @@ test('v107 A2-8: single-pass PrismDaemon.rebuildBundle cold hit parses .bundle-c
     assert.equal(dHit.effortSliderExpr, dCold.effortSliderExpr);
     assert.equal(dHit.workbenchEnhancerExpr, dCold.workbenchEnhancerExpr);
     assert.equal(dHit.contextMenuExpr, dCold.contextMenuExpr);
-    assert.equal(cacheReads, 1, 'rebuildBundle() cold hit across 14 channels must read .bundle-cache.json only once');
-    assert.equal(cacheParses, 1, 'rebuildBundle() cold hit across 14 channels must JSON.parse .bundle-cache.json only once');
+    assert.equal(dHit.channelOrchestrator.getChannelExpr('customStyle'), dCold.channelOrchestrator.getChannelExpr('customStyle'));
+    assert.equal(cacheReads, 1, 'rebuildBundle() cold hit across 15 channels must read .bundle-cache.json only once');
+    assert.equal(cacheParses, 1, 'rebuildBundle() cold hit across 15 channels must JSON.parse .bundle-cache.json only once');
 
     const hitStats = dHit.cdp.getBundleCacheStats();
     assert.equal(hitStats.diskHits, 1);
-    assert.equal(hitStats.channelDiskHits, 14);
+    assert.equal(hitStats.channelDiskHits, 15);
     assert.equal(hitStats.channelHitsByName.wallpaper, 1);
     assert.equal(hitStats.channelHitsByName.periodicPicker, 1);
     assert.equal(hitStats.channelHitsByName.mascot, 1);
@@ -616,6 +618,7 @@ test('v107 A2-8: single-pass PrismDaemon.rebuildBundle cold hit parses .bundle-c
     assert.equal(hitStats.channelHitsByName.effortSlider, 1);
     assert.equal(hitStats.channelHitsByName.workbenchEnhancer, 1);
     assert.equal(hitStats.channelHitsByName.contextMenu, 1);
+    assert.equal(hitStats.channelHitsByName.customStyle, 1);
     assert.equal(hitStats.compileUnifiedRuns, 0);
     assert.equal(hitStats.channelCompileRuns, 0);
 

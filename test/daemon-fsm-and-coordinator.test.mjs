@@ -288,6 +288,8 @@ test('FSM 2: Per-Channel circuit breaker trips to cooldown after 3 consecutive f
       periodicModelPicker: 'off',
       mascot: 'off',
       homeLayout: 'default',
+      uiFont: 'default',
+      customCss: 'off',
     },
   });
   daemon.cdp.shouldEnableThought = () => true;
@@ -792,7 +794,7 @@ test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 p
   assert.equal(daemon2.periodicPickerExpr, '');
 });
 
-test('Phase 4D: all 16 channel builders wrap execution in structured try/catch error boundaries without throwing into host', () => {
+test('Phase 4D: all 17 channel builders wrap execution in structured try/catch error boundaries without throwing into host', () => {
   const allEnabledCfg = {
     ...cdp.DEFAULT_CONFIG,
     omniModule: 'on',
@@ -808,6 +810,8 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
     workbenchEnhancer: 'on',
     contextMenu: true,
     projectPartitions: 'on',
+    customCss: 'on',
+    uiFont: 'inter',
   };
 
   for (const ch of cdp.CHANNEL_REGISTRY) {
@@ -850,7 +854,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
         ? { protocol: 'plugin:', hostname: 'swarm--swarm_board-1', pathname: '/', port: '', username: '', password: '' }
         : { href: 'vscode-file://vscode-app/workbench.html' },
       document: hostileDoc,
-      __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', projectPartitions: 'on', language: 'zh-CN' } }) },
+      __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', projectPartitions: 'on', language: 'zh-CN', customCss: 'on', uiFont: 'inter' } }) },
       __agPrismOmni: trapExisting,
       __agPrismSidebar: trapExisting,
       __agPrismInlineDiff: trapExisting,
@@ -868,6 +872,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
       __agPrismHostEnhancer: trapExisting,
       __agPrismContextMenu: trapExisting,
       __agPrismProjectPartitions: trapExisting,
+      __agPrismCustomStyle: trapExisting,
     };
     hostileWin.self = hostileWin;
     hostileWin.top = hostileWin;

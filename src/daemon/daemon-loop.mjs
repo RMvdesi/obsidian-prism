@@ -116,6 +116,7 @@ export class DaemonLoop {
     this._portWatchers = [];
     this._portRetryTimers = new Set();
     this._reloadTimer = null;
+    this._customCssReloadTimer = null;
     this._pendingTick = false;
     this._enableCompileCacheGuard = Boolean(enableCompileCacheGuard);
     this._compileCacheDir = typeof compileCacheDir === 'string' && compileCacheDir.trim() ? compileCacheDir.trim() : '';
@@ -565,6 +566,34 @@ export class DaemonLoop {
       const devWatch = process.env.AG_PRISM_DEV_WATCH === '1';
       const watchTargetDir = resolveSafeWatchDir(devWatch ? rootDir : path.dirname(configPath));
       const configBaseName = path.basename(configPath);
+      const customCssBaseName = 'custom.css';
+      const customCssPath = path.join(rootDir, customCssBaseName);
+      const readCustomCssWatchSig = () => {
+        try {
+          const st = fs.lstatSync(customCssPath);
+          if (st.isSymbolicLink() || !st.isFile()) return `nonfile:${st.mtimeMs}:${st.size}`;
+          return `${st.mtimeMs}:${st.size}:${st.ctimeMs}`;
+        } catch {
+          return 'missing';
+        }
+      };
+      const scheduleCustomCssReload = () => {
+        if (this._customCssReloadTimer) {
+          clearTimeout(this._customCssReloadTimer);
+          this._customCssReloadTimer = null;
+        }
+        this._customCssReloadTimer = setTimeout(async () => {
+          this._customCssReloadTimer = null;
+          if (!this.running) return;
+          try {
+            await ch.refreshCustomStyleChannel();
+          } catch {}
+        }, 120);
+        if (this._customCssReloadTimer && typeof this._customCssReloadTimer.unref === 'function') {
+          this._customCssReloadTimer.unref();
+        }
+      };
+      let lastCustomCssSig = readCustomCssWatchSig();
       let lastConfigMtimeMs = 0;
       try {
         lastConfigMtimeMs = fs.statSync(configPath).mtimeMs || 0;
@@ -572,8 +601,21 @@ export class DaemonLoop {
       try {
         this.fsw = fs.watch(watchTargetDir, devWatch ? { recursive: true } : { persistent: false }, (_, filename) => {
           if (!this.running) return;
-          const base = filename ? path.basename(String(filename)) : '';
+          const normRel = filename ? String(filename).replace(/\\/g, '/').replace(/^\.\//, '') : '';
+          const base = normRel ? path.basename(normRel) : '';
+          if (normRel && normRel.toLowerCase() === customCssBaseName) {
+            lastCustomCssSig = readCustomCssWatchSig();
+            scheduleCustomCssReload();
+            return;
+          }
           if (!devWatch) {
+            if (!base) {
+              const nextCssSig = readCustomCssWatchSig();
+              if (nextCssSig !== lastCustomCssSig) {
+                lastCustomCssSig = nextCssSig;
+                scheduleCustomCssReload();
+              }
+            }
             if (base && base.toLowerCase() !== configBaseName.toLowerCase()) return;
             if (!base) {
               let nextMtime = 0;
@@ -670,6 +712,10 @@ export class DaemonLoop {
     if (this._reloadTimer) {
       clearTimeout(this._reloadTimer);
       this._reloadTimer = null;
+    }
+    if (this._customCssReloadTimer) {
+      clearTimeout(this._customCssReloadTimer);
+      this._customCssReloadTimer = null;
     }
     this._stopPortFileWatchers();
     ch.clearFlushTimer();

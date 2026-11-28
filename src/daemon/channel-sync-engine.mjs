@@ -1,4 +1,4 @@
-// Obsidian Prism 全 17 通道表驱动挂载、3 级关键路径流水线、按需 Ch8 下发、配置广播收敛与拆卸引擎（消费 CHANNEL_REGISTRY）
+// Obsidian Prism 全 18 通道表驱动挂载、3 级关键路径流水线、按需 Ch8 下发、配置广播收敛与拆卸引擎（消费 CHANNEL_REGISTRY）
 import { OMNI_BINDING } from '../../vendor/omni-viewer/omni-server.mjs';
 import {
   THOUGHT_BINDING,
@@ -20,6 +20,7 @@ import {
   recordChannelFailure,
 } from './session-fsm.mjs';
 import { CHANNEL_STATIC_SPECS, buildSidebarCleanupExpression } from './channel-coordinator.mjs';
+import { deliverCustomStyleSettingsUiToEntry, syncStaleCustomStyleSettingsUiOnEntry } from './custom-css-rpc.mjs';
 
 const BINDING_BY_CHANNEL = Object.freeze({
   omni: { name: () => OMNI_BINDING, addedField: 'omniBindingAdded' },
@@ -549,6 +550,7 @@ export async function applyAllChannelsToEntry(orch, entry) {
     for (let i = 0; i < tier3Specs.length && !entry.session.closed; i += 4) {
       await Promise.allSettled(tier3Specs.slice(i, i + 4).map((spec) => applySinglePersistentChannel(orch, entry, spec, getCurrentCfg)));
     }
+    if (!entry.session.closed) await syncStaleCustomStyleSettingsUiOnEntry(orch, entry, getCurrentCfg);
 
     entry.lastVerifyAt = Date.now();
     entry.healthyStreak = 1;
@@ -561,6 +563,8 @@ export async function applyAllChannelsToEntry(orch, entry) {
     return mainRes;
   });
 }
+
+export { deliverCustomStyleSettingsUiToEntry, syncStaleCustomStyleSettingsUiOnEntry };
 
 export async function runBroadcastConfigRefresh(orch) {
   orch._broadcastPending = true;

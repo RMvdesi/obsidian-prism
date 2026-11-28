@@ -1,4 +1,4 @@
-// 声明式多通道微内核注册表（全仓 17 通道唯一真相源：CHANNEL_REGISTRY / 磁盘缓存格式 / 探针片段 / 打包清单 / 预算报表）
+// 声明式多通道微内核注册表（全仓 18 通道唯一真相源：CHANNEL_REGISTRY / 磁盘缓存格式 / 探针片段 / 打包清单 / 预算报表）
 'use strict';
 
 const { reconcileConfigAliases } = require('../config/schema.cjs');
@@ -75,7 +75,7 @@ function defineSpec(cfg) {
   });
 }
 
-// 静态元数据清单（全部 17 条延迟/按需通道 Ch2~Ch17 唯一真相源）
+// 静态元数据清单（全部 18 条延迟/按需通道 Ch2~Ch18 唯一真相源）
 const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'omni', cacheFormat: 'minCode', channelNumber: 2, order: 20, tier: 'core', topLevelPack: true,
@@ -393,6 +393,37 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     defaultShouldEnable: (cfg) => cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true,
     cfgSig: (cfg) => (cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true ? 'on' : 'off'),
   }),
+  defineSpec({
+    id: 'customStyle', channelNumber: 18, order: 180, tier: 'addon',
+    injectMode: 'main-page-persistent',
+    label: 'Global UI Font & Custom CSS',
+    configKeys: ['uiFont', 'uiFontCustom', 'customCss', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'language'],
+    files: [
+      'vendor/custom-style/custom-style-i18n.js',
+      'vendor/custom-style/custom-style-client.js',
+      'vendor/custom-style/font-picker-ui.js',
+      'vendor/custom-style/custom-style-settings-ui.js',
+    ],
+    mountGlobal: '__agPrismCustomStyle',
+    probeKey: 'hasCustomStyle',
+    probeHashKey: 'customStyleCodeHash',
+    respectSkippedByLiveCfg: true,
+    budgetBytes: 64 * 1024,
+    probeLines: [
+      'hasCustomStyle: Boolean(window.__agPrismCustomStyle || globalThis.__agPrismCustomStyle)',
+      "customStyleCodeHash: String((window.__agPrismCustomStyle || globalThis.__agPrismCustomStyle)?.__prismCodeHash || '')",
+      "customStyleUiRuntimeHash: String((window.__agPrismCustomStyleSettingsUi || globalThis.__agPrismCustomStyleSettingsUi)?.__prismUiRuntimeHash || '')",
+    ],
+    defaultShouldEnable: (cfg) => {
+      const cssOn = cfg?.customCss !== 'off' && cfg?.customCss !== false;
+      const uiActive = typeof cfg?.uiFont === 'string' && cfg.uiFont.trim() !== '' && cfg.uiFont.trim() !== 'default';
+      return cssOn || uiActive;
+    },
+    cfgSig: (cfg) => {
+      const cssOn = cfg?.customCss !== 'off' && cfg?.customCss !== false ? 'on' : 'off';
+      return `${cssOn}:${cfg?.uiFont || 'default'}:${cfg?.uiFontCustom || ''}:${cfg?.chatFont || 'default'}:${cfg?.chatFontCustom || ''}:${cfg?.codeFont || 'default'}:${cfg?.codeFontCustom || ''}:${cfg?.language || cfg?.lang || 'auto'}`;
+    },
+  }),
 ]);
 
 // 从唯一真相源自动派生：磁盘缓存键清单、缓存格式映射、Runtime 下沉通道 ID 清单
@@ -501,10 +532,18 @@ function createChannelRegistry({ builders, readConfig }) {
     bindEntry('workbenchEnhancer', builders.shouldEnableWorkbenchEnhancer, builders.buildWorkbenchEnhancerChannelExpression),
     bindEntry('contextMenu', builders.shouldEnableContextMenu, builders.buildContextMenuChannelExpression),
     bindEntry('projectPartitions', builders.shouldEnableProjectPartitions, builders.buildProjectPartitionsExpression),
+    bindEntry('customStyle', builders.shouldEnableCustomStyle, builders.buildCustomStyleChannelExpression),
   ]);
 
   const registryById = new Map(CHANNEL_REGISTRY.map((ch) => [ch.id, ch]));
   const findChannel = (id) => (typeof id === 'string' && id ? registryById.get(id) || null : null);
+  const getChannelCode = (id, config = null, opts = null) => {
+    const ch = findChannel(id);
+    if (!ch) return '';
+    const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
+    if (!ch.shouldEnable(cfg)) return '';
+    return String(ch._buildForReport(cfg, opts) || '');
+  };
   const getChannelsByTier = (tier) => CHANNEL_REGISTRY.filter((ch) => ch.tier === tier);
   const getChannelsByInjectMode = (injectMode) => CHANNEL_REGISTRY.filter((ch) => ch.injectMode === injectMode);
   const getChannelDescriptors = () =>
@@ -562,6 +601,7 @@ function createChannelRegistry({ builders, readConfig }) {
     RUNTIME_TIER_CHANNEL_IDS,
     buildPageHealthProbeExpression,
     findChannel,
+    getChannelCode,
     getChannelsByTier,
     getChannelsByInjectMode,
     getChannelDescriptors,

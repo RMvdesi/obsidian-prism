@@ -588,7 +588,7 @@ enum CdpHelper {
     private static let strictOnBoolKeys = ["ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit"]
     private static let notOffBoolKeys = ["homeGlow", "smoothCaret", "contextMenu"]
 
-    // 单源声明式 Schema 表（与 src/config/schema.cjs 全部 56 键 100% 对齐）
+    // Schema table synced 1:1 with schema.cjs (59 keys)
     private static let enumSchemaSpecs: [(String, String, String)] = [
         ("language", "auto", "L"), ("lang", "auto", "L"),
         ("palette", "obsidian", "host,obsidian,warm,claude"), ("lightPreset", "crystal", "crystal,alabaster"),
@@ -603,16 +603,15 @@ enum CdpHelper {
         ("mascot", "crab", "crab,minis,quad,quad-minis,dual,off"), ("logoInk", "accent", "accent,foreground"),
         ("sidebar", "on", "O"), ("sidebarNavFold", "off", "off,on"), ("projectPartitions", "off", "O"),
         ("scrollBottomMotion", "smooth", "smooth,instant"), ("accentTone", "follow", "follow,cobalt,iris,amber,mono"),
-        ("cornerStyle", "balanced", "sharp,balanced,soft"), ("chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom"),
-        ("codeFont", "default", "default,jetbrains,cascadia,sfmono,custom"), ("ambientIntensity", "100", "0,35,70,100"),
-        ("darkAura", "balanced", "subtle,balanced,vivid"), ("thoughtView", "immersive", "immersive,bilingual"),
-        ("omniModule", "on", "O"), ("linkTarget", "builtin", "builtin,external"),
-        ("sidebarStudio", "off", "O"), ("hostLocalization", "auto", "A"),
-        ("autoUpdate", "off", "O"), ("updateChannel", "stable", "stable,beta"),
+        ("cornerStyle", "balanced", "sharp,balanced,soft"), ("uiFont", "default", "default,system-sans,noto-sans,inter,harmony,custom"),
+        ("chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom"), ("codeFont", "default", "default,jetbrains,cascadia,sfmono,custom"),
+        ("ambientIntensity", "100", "0,35,70,100"), ("darkAura", "balanced", "subtle,balanced,vivid"), ("thoughtView", "immersive", "immersive,bilingual"),
+        ("omniModule", "on", "O"), ("linkTarget", "builtin", "builtin,external"), ("sidebarStudio", "off", "O"),
+        ("hostLocalization", "auto", "A"), ("autoUpdate", "off", "O"), ("updateChannel", "stable", "stable,beta"), ("customCss", "on", "O"),
     ]
     private static let boolSchemaDefaultTrueKeys = ["homeRipple", "homeGlow", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu"]
     private static let boolSchemaDefaultFalseKeys = ["ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit"]
-    private static let stringSchemaKeys = ["chatFontCustom", "codeFontCustom"]
+    private static let stringSchemaKeys = ["uiFontCustom", "chatFontCustom", "codeFontCustom"]
 
     private static func expandEnumSpec(_ spec: String) -> JsonValue {
         let items: [String]
@@ -779,7 +778,7 @@ enum CdpHelper {
                 out[k] = .bool(toBoolOnOff(v))
             }
         }
-        for k in ["telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold", "projectPartitions"] {
+        for k in ["telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "omniModule", "sidebarStudio", "autoUpdate", "sidebarNavFold", "projectPartitions", "customCss"] {
             if let v = out[k], case .bool(let b) = v { out[k] = .string(b ? "on" : "off") }
         }
         if out["palette"]?.stringValue == "claude" { out["palette"] = .string("warm") }
@@ -792,8 +791,7 @@ enum CdpHelper {
         } else if let ms = out["mascot"]?.stringValue, let normMascot = normalizeMascotConfigValue(ms) {
             out["mascot"] = .string(normMascot)
         }
-        if let cf = out["chatFontCustom"] { out["chatFontCustom"] = .string(sanitizeCustomFont(cf)) }
-        if let kf = out["codeFontCustom"] { out["codeFontCustom"] = .string(sanitizeCustomFont(kf)) }
+        for k in stringSchemaKeys { if let v = out[k] { out[k] = .string(sanitizeCustomFont(v)) } }
         if let pv = out["pollIntervalMs"], let iv = extractSchemaInteger(pv) { out["pollIntervalMs"] = .int(iv) }
         return out
     }

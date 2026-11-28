@@ -6,7 +6,11 @@ import {
   recordChannelSkipped,
   recordChannelOff,
 } from './session-fsm.mjs';
-import { evalChannelExpressionSafe, recordChannelEvalFailure } from './channel-sync-engine.mjs';
+import {
+  evalChannelExpressionSafe,
+  recordChannelEvalFailure,
+  deliverCustomStyleSettingsUiToEntry,
+} from './channel-sync-engine.mjs';
 import { CHANNEL_STATIC_SPECS, extractTargetCodeHash } from './channel-coordinator.mjs';
 
 const require = createRequire(import.meta.url);
@@ -48,16 +52,25 @@ export function planChannelsForHeal(orch, entry, cfg, probe, now) {
     const f = spec.fields;
     const id = spec.id;
 
-    // On-demand RPC 通道（Ch9 settings）
+    // On-demand RPC 通道（Ch9 settings + Ch18 Settings companion 热升自愈）
     if (spec.injectMode === 'on-demand-rpc') {
       const shouldCheck = Boolean(probe.needsSettingsChannel || probe.hasSettingsPanel || probe.settingsCodeHash);
       const expectedHash = shouldCheck ? orch.getChannelExprHash(spec, orch.ensureSettingsExpr()) : '';
       const hashMismatch = Boolean(expectedHash && (probe.hasSettingsPanel || probe.settingsCodeHash) && probe.settingsCodeHash !== expectedHash);
+      const cdp = typeof orch.getCdp === 'function' ? orch.getCdp() : null;
+      const expectedUiHash =
+        probe.hasSettingsPanel && typeof cdp?.getCustomStyleSettingsUiRuntimeHash === 'function'
+          ? cdp.getCustomStyleSettingsUiRuntimeHash()
+          : '';
+      const needsCompanionHeal = Boolean(
+        probe.hasSettingsPanel && expectedUiHash && probe.customStyleUiRuntimeHash !== expectedUiHash
+      );
       items.push({
         spec,
         enabled: true,
         hasOnDisk: true,
         needsHeal: Boolean(probe.needsSettingsChannel || hashMismatch),
+        needsCompanionHeal,
         needsCleanup: false,
         hashMismatch,
       });
@@ -182,11 +195,14 @@ export async function healSecondaryChannels(orch, entry, cfg, probe, plan, { aft
     const id = spec.id;
     const f = spec.fields;
 
-    // 1) On-demand RPC 通道（Ch9 settings）
+    // 1) On-demand RPC 通道（Ch9 settings + Ch18 Settings companion 热升自愈）
     if (spec.injectMode === 'on-demand-rpc') {
       if (item.needsHeal && !isChannelInCooldown(entry, id, now)) {
         if (!afterCh1Heal) healed = true;
         await orch.deliverSettingsChannelToEntry(entry);
+      } else if (item.needsCompanionHeal && !isChannelInCooldown(entry, id, now)) {
+        if (!afterCh1Heal) healed = true;
+        await deliverCustomStyleSettingsUiToEntry(orch, entry, { cfg });
       }
       continue;
     }

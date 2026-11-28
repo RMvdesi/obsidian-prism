@@ -836,9 +836,9 @@ namespace AgyClaudeStyle
         private static readonly string[] AutoOnOffValues = new string[] { "auto", "on", "off" };
         private static readonly string[] StrictOnBoolKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
         private static readonly string[] NotOffBoolKeys = new string[] { "homeGlow", "smoothCaret", "contextMenu" };
-        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "projectPartitions", "omniModule", "sidebarStudio", "autoUpdate" };
+        private static readonly string[] BoolToOnOffKeys = new string[] { "telemetryModule", "effortSliderModule", "effortMemory", "periodicModelPicker", "sidebarNavFold", "projectPartitions", "omniModule", "sidebarStudio", "autoUpdate", "customCss" };
 
-        // Schema 表（与 schema.cjs 56 键对齐）
+        // Schema table synced 1:1 with src/config/schema.cjs (59 keys)
         private static readonly string[,] EnumSchemaSpecs = new string[,]
         {
             { "language", "auto", "L" }, { "lang", "auto", "L" },
@@ -854,16 +854,15 @@ namespace AgyClaudeStyle
             { "mascot", "crab", "crab,minis,quad,quad-minis,dual,off" }, { "logoInk", "accent", "accent,foreground" },
             { "sidebar", "on", "O" }, { "sidebarNavFold", "off", "off,on" }, { "projectPartitions", "off", "O" },
             { "scrollBottomMotion", "smooth", "smooth,instant" }, { "accentTone", "follow", "follow,cobalt,iris,amber,mono" },
-            { "cornerStyle", "balanced", "sharp,balanced,soft" }, { "chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom" },
-            { "codeFont", "default", "default,jetbrains,cascadia,sfmono,custom" }, { "ambientIntensity", "100", "0,35,70,100" },
-            { "darkAura", "balanced", "subtle,balanced,vivid" }, { "thoughtView", "immersive", "immersive,bilingual" },
-            { "omniModule", "on", "O" }, { "linkTarget", "builtin", "builtin,external" },
-            { "sidebarStudio", "off", "O" }, { "hostLocalization", "auto", "A" },
-            { "autoUpdate", "off", "O" }, { "updateChannel", "stable", "stable,beta" }
+            { "cornerStyle", "balanced", "sharp,balanced,soft" }, { "uiFont", "default", "default,system-sans,noto-sans,inter,harmony,custom" },
+            { "chatFont", "default", "default,system-sans,noto-sans,inter,harmony,custom" }, { "codeFont", "default", "default,jetbrains,cascadia,sfmono,custom" },
+            { "ambientIntensity", "100", "0,35,70,100" }, { "darkAura", "balanced", "subtle,balanced,vivid" }, { "thoughtView", "immersive", "immersive,bilingual" },
+            { "omniModule", "on", "O" }, { "linkTarget", "builtin", "builtin,external" }, { "sidebarStudio", "off", "O" },
+            { "hostLocalization", "auto", "A" }, { "autoUpdate", "off", "O" }, { "updateChannel", "stable", "stable,beta" }, { "customCss", "on", "O" }
         };
         private static readonly string[] BoolSchemaDefaultTrueKeys = new string[] { "homeRipple", "homeGlow", "composerRestyle", "sidebarRestyle", "smoothCaret", "contextMenu" };
         private static readonly string[] BoolSchemaDefaultFalseKeys = new string[] { "ignoreReducedMotion", "sidebarCompact", "codeLigatures", "autoArchiveOnExit" };
-        private static readonly string[] StringSchemaKeys = new string[] { "chatFontCustom", "codeFontCustom" };
+        private static readonly string[] StringSchemaKeys = new string[] { "uiFontCustom", "chatFontCustom", "codeFontCustom" };
 
         private static List<object> ExpandEnumSpec(string spec)
         {
@@ -1095,8 +1094,7 @@ namespace AgyClaudeStyle
                     if (normMascot != null) res["mascot"] = normMascot;
                 }
             }
-            if (res.ContainsKey("chatFontCustom")) res["chatFontCustom"] = SanitizeCustomFont(res["chatFontCustom"]);
-            if (res.ContainsKey("codeFontCustom")) res["codeFontCustom"] = SanitizeCustomFont(res["codeFontCustom"]);
+            for (int i = 0; i < StringSchemaKeys.Length; i++) { string k = StringSchemaKeys[i]; if (res.ContainsKey(k)) res[k] = SanitizeCustomFont(res[k]); }
             object pollObj;
             long pollInt;
             if (res.TryGetValue("pollIntervalMs", out pollObj) && TryGetSchemaInteger(pollObj, out pollInt))

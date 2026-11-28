@@ -246,6 +246,7 @@ function createCh1Templates({
           P('ApplyIgnoreReducedMotion')?.(!!e?.ignoreReducedMotion);
           P('FontCustomizer')?.applyCustomFonts?.(e, D);
         });
+        T(() => P('CustomStyle')?.sync?.(e, null, D));
         return { refreshed: true, version: api.version };
       }
       return { refreshed: false };

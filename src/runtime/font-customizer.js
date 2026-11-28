@@ -126,28 +126,25 @@
     if (!chatStack && !codeStack) return '';
 
     const rules = [];
+    const H = 'html[data-ag-cs-style]';
+    const P = '[data-testid="planner-response-text"],[data-testid="agent-response"],[data-testid="user-message"],[data-testid="message-content"],[data-testid="artifact-view"],.ag-prism-thought-body';
+    const C = 'pre,code,.code-block,.code-line,kbd,[data-lexical-editor="true"] code,.monaco-editor .view-lines,.xterm,.xterm-rows,[data-testid="background-task-command"],.ag-prism-thought-code,.ag-prism-thought-pre';
     if (chatStack) {
+      const chatVar = `var(--ag-prism-chat-font,${chatStack})`;
       // 精准作用域：会话消息正文与输入框，绝不污染图标字体（codicon/SVG）且保护代码块
       rules.push(
-        `html[data-ag-cs-style] :is([data-testid="conversation-view"],[data-testid="planner-response-text"],[data-testid="agent-response"],[data-testid="user-message"],[data-testid="message-content"],[data-testid="artifact-view"],.ag-prism-thought-body,.ag-prism-thought-overlay,[data-testid="agent-input-box"] :is([data-lexical-editor="true"],[contenteditable="true"],textarea,input)){--font-sans:${chatStack};font-family:${chatStack} !important;}`
-      );
-      rules.push(
-        `html[data-ag-cs-style] :is([data-testid="planner-response-text"],[data-testid="agent-response"],[data-testid="user-message"],[data-testid="message-content"],[data-testid="artifact-view"],.ag-prism-thought-body) :is(p,li,blockquote,h1,h2,h3,h4,h5,h6,td,th,dt,dd,a,strong,em){font-family:${chatStack} !important;}`
-      );
-      rules.push(
-        `html[data-ag-cs-style] :is(pre,code,.code-block,.code-line,kbd,[data-lexical-editor="true"] code,.monaco-editor .view-lines,.xterm,.xterm-rows,[data-testid="background-task-command"],.ag-prism-thought-code,.ag-prism-thought-pre){font-family:var(--ag-cs-mono-stack) !important;}`
-      );
-      rules.push(
-        `html[data-ag-cs-style] :is(pre,code,.code-block,.code-line,.monaco-editor .view-lines,.xterm-rows) :is(span,div){font-family:inherit !important;}`
+        `${H} :is([data-testid="conversation-view"],${P},.ag-prism-thought-overlay,[data-testid="agent-input-box"] :is([data-lexical-editor="true"],[contenteditable="true"],textarea,input)){--font-sans:${chatVar};font-family:${chatVar} !important;}`,
+        `${H} :is(${P}) :is(p,li,blockquote,h1,h2,h3,h4,h5,h6,td,th,dt,dd,a,strong,em){font-family:${chatVar} !important;}`,
+        `${H} :is(${C}){font-family:var(--ag-cs-mono-stack) !important;}`,
+        `${H} :is(pre,code,.code-block,.code-line,.monaco-editor .view-lines,.xterm-rows) :is(span,div){font-family:inherit !important;}`
       );
     }
     if (codeStack) {
+      const codeVar = `var(--ag-prism-code-font,${codeStack})`;
       // 代码自定义字体：与既有 codeLigatures 开关（--_fvl / --_ffs）100% 兼容协同
       rules.push(
-        `html[data-ag-cs-style][data-ag-cs-code-font="custom"]{--ag-cs-mono-stack:${codeStack};--font-mono:${codeStack} !important;--editor-font-family:${codeStack} !important;}`
-      );
-      rules.push(
-        `html[data-ag-cs-style][data-ag-cs-code-font="custom"] :is(pre,code,.code-block,.code-line,kbd,[data-lexical-editor="true"] code,.monaco-editor .view-lines,.xterm,.xterm-rows,[data-testid="background-task-command"],.ag-prism-thought-code,.ag-prism-thought-pre){font-family:${codeStack} !important;font-variant-ligatures:var(--_fvl) !important;font-feature-settings:var(--_ffs) !important;}`
+        `${H}[data-ag-cs-code-font="custom"]{--ag-cs-mono-stack:${codeVar};--font-mono:${codeVar} !important;--editor-font-family:${codeVar} !important;}`,
+        `${H}[data-ag-cs-code-font="custom"] :is(${C}){font-family:${codeVar} !important;font-variant-ligatures:var(--_fvl) !important;font-feature-settings:var(--_ffs) !important;}`
       );
     }
     return rules.join('\n');
@@ -162,7 +159,7 @@
 
     if (de) {
       try {
-        if (chatMode && chatMode !== 'default') {
+        if (chatMode !== 'default') {
           if (de.getAttribute?.(CHAT_FONT_ATTR) !== chatMode) de.setAttribute?.(CHAT_FONT_ATTR, chatMode);
         } else if (de.hasAttribute?.(CHAT_FONT_ATTR)) {
           de.removeAttribute?.(CHAT_FONT_ATTR);
@@ -186,7 +183,6 @@
       el = doc.createElement('style');
       el.id = STYLE_ID;
       try { el.setAttribute?.('data-ag-prism-owned', '1'); } catch {}
-      host.appendChild(el);
     }
     if (el.textContent !== css) {
       el.textContent = css;
@@ -194,6 +190,7 @@
     if (el.parentNode !== host) {
       host.appendChild(el);
     }
+    try { (G.window?.__agPrismCustomStyle || G.__agPrismCustomStyle)?.ensureUserCssLast?.(doc); } catch {}
     return { active: true, css };
   }
 

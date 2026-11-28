@@ -36,6 +36,7 @@ const { createI18nChannelBuilders } = require('./src/channels/builders-i18n.cjs'
 const { createStudioChannelBuilders } = require('./src/channels/builders-studio.cjs');
 const { createAddonChannelBuilders } = require('./src/channels/builders-addons.cjs');
 const { createRuntimeChannelBuilders } = require('./src/channels/builders-runtime.cjs');
+const { createCustomStyleChannelBuilders } = require('./src/channels/builders-custom-style.cjs');
 const { createChannelRegistry } = require('./src/channels/registry.cjs');
 
 const PLUGIN_VERSION = fsSafe.readPkgVersionSafe(ROOT_DIR);
@@ -100,8 +101,9 @@ const addonBuilders = createAddonChannelBuilders({
   bundleCache,
 });
 const runtimeBuilders = createRuntimeChannelBuilders({ rootDir: ROOT_DIR, readConfig: configStore.readConfig, bundleCache });
+const customStyleBuilders = createCustomStyleChannelBuilders({ rootDir: ROOT_DIR, readConfig: configStore.readConfig, bundleCache });
 const channelRegistry = createChannelRegistry({
-  builders: { ...coreBuilders, ...i18nBuilders, ...studioBuilders, ...addonBuilders, ...runtimeBuilders },
+  builders: { ...coreBuilders, ...i18nBuilders, ...studioBuilders, ...addonBuilders, ...runtimeBuilders, ...customStyleBuilders },
   readConfig: configStore.readConfig,
 });
 
@@ -251,6 +253,7 @@ module.exports = {
   DEFERRED_ROOT_MODULES: partPreprocess.DEFERRED_ROOT_MODULES,
   ...publicTeardown,
   ...runtimeBuilders,
+  ...customStyleBuilders,
   ...publicChannelRegistry,
 };
 

@@ -1,0 +1,279 @@
+/* ============================================================================
+ * Obsidian Prism Preset 03: Modern Briefing
+ * Inspired by: Axios, Semafor & Bloomberg Businessweek
+ *
+ * Character:
+ *   High-velocity executive and engineering briefing clarity. Decisive
+ *   grotesque lead-in headings, strong bold bullet hooks, crisp 3px accent
+ *   bars on callouts and quotes, and spotless tabular-num data tables in
+ *   both Dark and Light themes.
+ *
+ * Usage:
+ *   Copy this file to <pluginRoot>/custom.css and save to hot-reload.
+ *   Local-only CSS, 100% ASCII, zero external assets, icon-font safe.
+ * ============================================================================ */
+
+:root {
+  --ag-prism-ui-font: "Inter", "Helvetica Neue", "Segoe UI Variable", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+  --ag-prism-chat-font: "Inter", "Helvetica Neue", "Segoe UI Variable", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+  --ag-prism-code-font: "IBM Plex Mono", "JetBrains Mono", "Cascadia Code", "SF Mono", Consolas, ui-monospace, monospace;
+}
+
+/* ----------------------------------------------------------------------------
+ * 1. Dual-Theme Newsroom Palette (Terminal-Noir Dark & Newsprint-Ivory Light)
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style]:not([data-ag-cs-theme="light"]),
+html:root[data-ag-cs-style][data-ag-cs-style]:not([data-ag-cs-theme="light"]) > body {
+  --font-sans: var(--ag-prism-ui-font) !important;
+  --background: #0d1017 !important;
+  --content: #0d1017 !important;
+  --shell: #0d1017 !important;
+  --body-background: #0d1017 !important;
+  --sidebar: #090c12 !important;
+  --sidebar-muted: rgba(226, 234, 248, 0.045) !important;
+  --sidebar-secondary: rgba(226, 234, 248, 0.082) !important;
+  --card: #131822 !important;
+  --secondary: #19202d !important;
+  --muted: #141923 !important;
+  --border: rgba(196, 210, 234, 0.105) !important;
+  --card-border: rgba(196, 210, 234, 0.15) !important;
+  --ag-cs-tonal-0: #090b10;
+  --ag-cs-tonal-1: #0d1017;
+  --ag-cs-tonal-2: #131822;
+  --ag-cs-tonal-3: #1a2130;
+  --ag-cs-tonal-4: #20293b;
+  --foreground: #f3f6fb !important;
+  --secondary-foreground: #c4cedf !important;
+  --muted-foreground: #8493ab !important;
+  --placeholder: #627086 !important;
+  --primary: #5b9cf6 !important;
+  --primary-foreground: #090c12 !important;
+  --link: #60a5fa !important;
+  --ag-cs-accent: #5b9cf6;
+  --ag-cs-panel-bg: rgba(19, 24, 34, 0.97);
+  --ag-cs-popover-bg: rgba(22, 28, 40, 0.955);
+  --ag-cs-pill-bg: rgba(196, 210, 234, 0.068);
+  --ag-cs-bubble: #151c29;
+  --ag-cs-thought-rule: rgba(59, 130, 246, 0.45);
+  --ag-cs-r-sm: 4px;
+  --ag-cs-r-md: 6px;
+  --ag-cs-r-lg: 8px;
+  --ag-ambient-mul: 0.28;
+  --ag-accent-prism-mul: 0.50;
+  --max-conversation-width: 50rem;
+  --ag-prism-br-rule: rgba(196, 210, 234, 0.16);
+  --ag-prism-br-bar: #f59e0b;
+  --ag-prism-br-quote-bg: rgba(245, 158, 11, 0.065);
+  --ag-prism-br-alert-bg: rgba(59, 130, 246, 0.07);
+  --ag-prism-br-zebra: rgba(196, 210, 234, 0.028);
+  --ag-prism-br-code-bg: #0b0e14;
+  --ag-prism-br-code-head: #151b26;
+  --ag-prism-br-inline-bg: rgba(96, 165, 250, 0.10);
+  --ag-prism-br-inline-bd: rgba(96, 165, 250, 0.22);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-theme="light"],
+html:root[data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-style][data-ag-cs-theme="light"] > body {
+  --font-sans: var(--ag-prism-ui-font) !important;
+  --background: #faf9f5 !important;
+  --content: #faf9f5 !important;
+  --shell: #faf9f5 !important;
+  --body-background: #faf9f5 !important;
+  --sidebar: #f0efe9 !important;
+  --sidebar-muted: rgba(15, 23, 42, 0.045) !important;
+  --sidebar-secondary: rgba(15, 23, 42, 0.08) !important;
+  --card: #ffffff !important;
+  --secondary: #efeee8 !important;
+  --muted: #f3f2ec !important;
+  --border: rgba(15, 23, 42, 0.115) !important;
+  --card-border: rgba(15, 23, 42, 0.16) !important;
+  --ag-cs-tonal-0: #ecebe4;
+  --ag-cs-tonal-1: #faf9f5;
+  --ag-cs-tonal-2: #ffffff;
+  --ag-cs-tonal-3: #f2f1eb;
+  --ag-cs-tonal-4: #ffffff;
+  --foreground: #0f172a !important;
+  --secondary-foreground: #293548 !important;
+  --muted-foreground: #58657a !important;
+  --placeholder: #6e7b8f !important;
+  --primary: #1d4ed8 !important;
+  --primary-foreground: #ffffff !important;
+  --link: #1e40af !important;
+  --ag-cs-accent: #1d4ed8;
+  --ag-cs-panel-bg: rgba(255, 255, 255, 0.98);
+  --ag-cs-popover-bg: rgba(255, 255, 255, 0.965);
+  --ag-cs-pill-bg: #eeede7;
+  --ag-cs-bubble: #eef2f9;
+  --ag-cs-thought-rule: rgba(29, 78, 216, 0.42);
+  --ag-cs-r-sm: 4px;
+  --ag-cs-r-md: 6px;
+  --ag-cs-r-lg: 8px;
+  --ag-ambient-mul: 0.22;
+  --ag-accent-prism-mul: 0.45;
+  --max-conversation-width: 50rem;
+  --ag-prism-br-rule: rgba(15, 23, 42, 0.18);
+  --ag-prism-br-bar: #d97706;
+  --ag-prism-br-quote-bg: rgba(217, 119, 6, 0.055);
+  --ag-prism-br-alert-bg: rgba(29, 78, 216, 0.05);
+  --ag-prism-br-zebra: rgba(15, 23, 42, 0.025);
+  --ag-prism-br-code-bg: #f3f4f6;
+  --ag-prism-br-code-head: #e8eaef;
+  --ag-prism-br-inline-bg: rgba(29, 78, 216, 0.075);
+  --ag-prism-br-inline-bd: rgba(29, 78, 216, 0.18);
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. Scannable Briefing Hierarchy & Bold Lead-Ins
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) {
+  font-family: var(--ag-prism-chat-font);
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--secondary-foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h1 {
+  font-size: 1.48em;
+  font-weight: 750;
+  line-height: 1.22;
+  letter-spacing: -0.028em;
+  color: var(--foreground);
+  margin-top: 1.2em;
+  margin-bottom: 0.55em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h2 {
+  font-size: 1.2em;
+  font-weight: 700;
+  line-height: 1.30;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  margin-top: 1.35em;
+  margin-bottom: 0.48em;
+  padding-top: 0.65em;
+  border-top: 2px solid var(--ag-prism-br-rule);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) h3 {
+  font-size: 1.03em;
+  font-weight: 680;
+  line-height: 1.36;
+  letter-spacing: -0.012em;
+  color: var(--foreground);
+  margin-top: 1.05em;
+  margin-bottom: 0.35em;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) strong {
+  font-weight: 660;
+  color: var(--foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) li + li {
+  margin-top: 0.36em;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. Accent-Bar Blockquotes, Callouts & Executive Tabular-Num Tables
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) blockquote {
+  margin: 12px 0 !important;
+  padding: 9px 15px 9px 16px !important;
+  background-image: none !important;
+  background-color: var(--ag-prism-br-quote-bg) !important;
+  border-radius: 0 6px 6px 0 !important;
+  color: var(--foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) blockquote::before {
+  width: 3px;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px 0 0 2px;
+  background: var(--ag-prism-br-bar);
+  box-shadow: none;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) .markdown-alert {
+  padding: 10px 15px 10px 16px !important;
+  background-image: none !important;
+  background-color: var(--ag-prism-br-alert-bg) !important;
+  border-radius: 0 6px 6px 0 !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) .markdown-alert::before {
+  width: 3px;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px 0 0 2px;
+  box-shadow: none;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) .markdown-alert > .markdown-alert-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) thead th {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) tbody td {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 7.5px 12px;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) tbody tr:nth-child(even) td {
+  background-color: var(--ag-prism-br-zebra);
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. Technical Code, Cards & Briefing Chrome
+ * ---------------------------------------------------------------------------- */
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) :not(pre) > code {
+  font-size: 0.87em;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  background-color: var(--ag-prism-br-inline-bg);
+  border: 1px solid var(--ag-prism-br-inline-bd);
+  color: var(--foreground);
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre:not([data-ag-cs-rich-pre="1"]),
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre > div:is(.border, .bg-muted) {
+  background-color: var(--ag-prism-br-code-bg) !important;
+  border-color: var(--card-border) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="planner-response-text"], [data-testid="agent-response"], [data-testid="artifact-view"]) pre > div > :is([data-ag-cs-code-sticky="1"], div.border-b:first-child) {
+  background-color: var(--ag-prism-br-code-head) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="user-message-bubble"], .agy-user-bubble) {
+  border-radius: 8px !important;
+  background-color: var(--ag-cs-bubble) !important;
+  background-image: none !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-ag-cs-style][data-ag-cs-style] :is([data-testid="artifact-card"], [data-testid="bubble-artifact-card"], [data-testid="step-plan"]) {
+  border-color: var(--card-border) !important;
+}
