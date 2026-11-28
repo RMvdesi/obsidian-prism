@@ -1398,45 +1398,41 @@ return true;
       }
     }
 
-    // ── 4. Permissions Menu, Subagent Ambient, Sidebar Fold, Scroll Glide, Overlay Mirrors & OverviewSection GPU Fold ──
-    function isPermOptionSelected(optEl) {
-      if (!optEl) return false;
-      if (ga(optEl, 'aria-checked') === 'true' || ga(optEl, 'aria-selected') === 'true' || ga(optEl, 'data-selected') === 'true') {
-        return true;
+// ── 4. Permissions Menu, Subagent Ambient, Sidebar Fold, Scroll Glide, Overlay Mirrors & OverviewSection GPU Fold ──
+const permMod = () => win?.__agPrismPermIcons || G.__agPrismPermIcons;
+const fiberOf = (e) => {
+  const k = e && Object.keys(e).find((x) => x.startsWith('__reactFiber$') || x.startsWith('__reactInternalInstance$'));
+  return k ? e[k] : null;
+};
+function isPermOptionSelected(o) {
+  if (!o) return false;
+  if (ga(o, 'aria-checked') === 'true' || ga(o, 'aria-selected') === 'true' || ga(o, 'data-selected') === 'true') return true;
+  try {
+    for (let d = 0, f = fiberOf(o); d < 8 && f; d++, f = f.return) if (typeof f.memoizedProps?.selected === 'boolean') return f.memoizedProps.selected;
+  } catch {}
+  return false;
+}
+function syncPermissionsMenuState() {
+  if (isDead() || !doc?.querySelectorAll) return;
+  // Sync trigger/menu icon colors even when menu is closed
+  try { permMod()?.sync?.(doc, mut, setA); } catch {}
+  const menus = qa(doc, '[data-testid="permissions-menu"]');
+  if (!menus.length) return;
+  mut(() => {
+    for (const menu of menus) {
+      const opts = qa(menu, '[data-testid^="permissions-preset-option-"]'), prev = qs(menu, '[data-testid="permissions-sandbox-hint"]')?.previousElementSibling;
+      for (const o of opts) {
+        if (isPermOptionSelected(o)) setA(o, 'data-ag-perm-selected', '1');
+        else if (ha(o, 'data-ag-perm-selected')) ra(o, 'data-ag-perm-selected');
       }
-      try {
-        const fk = Object.keys(optEl).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
-        for (let d = 0, f = fk ? optEl[fk] : null; d < 8 && f; d++, f = f.return) {
-          if (f.memoizedProps && typeof f.memoizedProps.selected === 'boolean') return f.memoizedProps.selected;
-        }
-      } catch {}
-      return false;
+      if (prev && (ga(prev, 'role') === 'separator' || !ha(prev, 'data-testid'))) setA(prev, 'data-ag-perm-sandbox-sep', '1');
     }
-
-    function syncPermissionsMenuState() {
-      if (isDead() || !doc?.querySelectorAll) return;
-      const menus = qa(doc, '[data-testid="permissions-menu"]');
-      if (!menus.length) return;
-      mut(() => {
-        for (const menu of menus) {
-          const opts = qa(menu, '[data-testid^="permissions-preset-option-"]'),
-            hint = qs(menu, '[data-testid="permissions-sandbox-hint"]');
-          for (const o of opts) {
-            if (isPermOptionSelected(o)) setA(o, 'data-ag-perm-selected', '1');
-            else if (ha(o, 'data-ag-perm-selected')) ra(o, 'data-ag-perm-selected');
-          }
-          const prev = hint?.previousElementSibling;
-          if (prev && (ga(prev, 'role') === 'separator' || !ha(prev, 'data-testid'))) setA(prev, 'data-ag-perm-sandbox-sep', '1');
-        }
-      });
-    }
-
-    function hasActiveFiberSubagents(secEl) {
-      if (!secEl) return false;
-      try {
-        const btn = qs(secEl, 'button') || secEl;
-        const fk = Object.keys(btn).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
-        for (let d = 0, f = fk ? btn[fk] : null; d < 9 && f; d++, f = f.return) {
+  });
+}
+function hasActiveFiberSubagents(secEl) {
+  if (!secEl) return false;
+  try {
+    for (let d = 0, f = fiberOf(qs(secEl, 'button') || secEl); d < 9 && f; d++, f = f.return) {
           for (let s = 0, st = f.memoizedState; s < 8 && st; s++, st = st.next) {
             const v = st.memoizedState;
             if (v && typeof v === 'object' && Array.isArray(v.activeRootIds) && v.activeRootIds.length > 0) return true;
@@ -1825,10 +1821,13 @@ const t = ev?.target;
 if (isDead() || !t?.closest) return;
 const clickedCv = cl(t, S_CV);
 if (isFormalConv(clickedCv)) cachedConvView = clickedCv;
+// Re-sync permission icons on trigger or menu click
 const pt = cl(t, '[data-testid="permissions-selector-trigger"]');
+if (pt || cl(t, '[data-testid="permissions-menu"]')) {
 if (pt) {
 const dd = ga(pt, 'data-disabled');
 if (pt.disabled || ha(pt, 'disabled') || ga(pt, 'aria-disabled') === 'true' || (dd != null && dd !== 'false')) return;
+}
 win?.requestAnimationFrame?.(() => {
 if (!isDead()) syncPermissionsMenuState();
 });
@@ -1923,6 +1922,7 @@ refreshOutlineLocaleTexts();
 function destroy() {
 if (localDestroyed) return;
 localDestroyed = true;
+try { permMod()?.destroy?.(doc); } catch {}
 cancelFoldRaf();
 cancelOpenOutlineRaf();
 cancelHideOutlineTimer();

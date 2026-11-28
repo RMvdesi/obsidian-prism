@@ -309,7 +309,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
   })()`;
   }
 
-  // ── Channel 15: Workbench Enhancer (host-workbench-enhancer.js) ────────────
+  // ── Channel 15: Workbench Enhancer (permission-icons.js + host-workbench-enhancer.js) ──
   function shouldEnableWorkbenchEnhancer(config = null) {
     const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
     if (cfg.workbenchEnhancer === 'off' || cfg.workbenchEnhancer === false) return false;
@@ -325,11 +325,16 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
   }
 
   function readCompiledWorkbenchEnhancerAssets(opts = null) {
+    const permPath = path.join(rootDir, 'src', 'runtime', 'permission-icons.js');
     const filePath = path.join(rootDir, 'host-workbench-enhancer.js');
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(permPath) || !fs.existsSync(filePath)) {
       return { sig: '', minRuntime: '', codeHash: '' };
     }
-    const sig = getFileSig(filePath);
+    const fileEntries = [
+      { rel: 'src/runtime/permission-icons.js', fullPath: permPath },
+      { rel: 'host-workbench-enhancer.js', fullPath: filePath },
+    ];
+    const sig = fileEntries.map((e) => getFileSig(e.fullPath)).join('|');
     const cachePath = resolveBundleCachePathOption(opts);
     const curMem = bundleCache.getChannelMemCache('workbenchEnhancer');
     if (!cachePath && curMem && curMem.sig === sig && curMem.codeHash) {
@@ -338,10 +343,12 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     return bundleCache.resolveChannelAssetsWithDiskCache({
       channelName: 'workbenchEnhancer',
       sig,
-      fileEntries: [{ rel: 'host-workbench-enhancer.js', fullPath: filePath }],
+      fileEntries,
       opts,
       compileFn: () => {
-        const minRuntime = minifySingleSource(fs.readFileSync(filePath, 'utf8'), { allowMemberProps: false });
+        const permMin = minifySingleSource(fs.readFileSync(permPath, 'utf8'), { allowMemberProps: false });
+        const enhMin = minifySingleSource(fs.readFileSync(filePath, 'utf8'), { allowMemberProps: false });
+        const minRuntime = [permMin, enhMin].join(';\n');
         const codeHash = computeHash(minRuntime);
         return { minRuntime, codeHash };
       },
@@ -376,11 +383,16 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
 
     const cleanupEnhancer = () => {
       try { (window.__agPrism || window.__agClaudeStyle)?.detachHostEnhancer?.(); } catch {}
+      try { (window.__agPrismPermIcons || globalThis.__agPrismPermIcons)?.destroy?.(document); } catch {}
+      try { document.getElementById?.('ag-prism-perm-icons-css')?.remove?.(); } catch {}
+      try { document.querySelectorAll?.('[data-ag-perm-preset]')?.forEach?.((n) => n.removeAttribute('data-ag-perm-preset')); } catch {}
       try {
         document.querySelectorAll?.('.ag-cs-code-fold-btn,.ag-cs-nav-outline-popover,.ag-cs-nav-outline-trigger,.ag-cs-sb-more-wrap')?.forEach?.((n) => n.remove());
       } catch {}
       try { delete window.__agPrismHostEnhancer; } catch {}
       try { delete globalThis.__agPrismHostEnhancer; } catch {}
+      try { delete window.__agPrismPermIcons; } catch {}
+      try { delete globalThis.__agPrismPermIcons; } catch {}
     };
     const isLiveDisabled = () => {
       try {

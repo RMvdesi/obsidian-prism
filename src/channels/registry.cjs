@@ -337,7 +337,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     id: 'workbenchEnhancer', channelNumber: 15, order: 150, tier: 'runtime', topLevelPack: true, staticRuntimePack: true,
     label: 'Workbench Deep-Surface Enhancer',
     configKeys: ['sidebarNavFold', 'scrollBottomMotion', 'sidebarRestyle', 'motionLevel'],
-    files: ['host-workbench-enhancer.js'], mountGlobal: '__agPrismHostEnhancer',
+    files: ['src/runtime/permission-icons.js', 'host-workbench-enhancer.js'], mountGlobal: '__agPrismHostEnhancer',
     respectSkippedByLiveCfg: true, budgetBytes: 56 * 1024,
     probeLines: [
       'hasWorkbenchEnhancer: Boolean(window.__agPrismHostEnhancer || globalThis.__agPrismHostEnhancer)',

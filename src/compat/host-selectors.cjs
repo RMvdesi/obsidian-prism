@@ -243,7 +243,7 @@ function buildLiveProbeExpression(contracts = HOST_SELECTOR_CONTRACTS, opts = {}
 })()`;
 }
 
-// 跨模块交互与侧栏滚动选择器共享契约（@host-compat，与 ui-runtime / mascot-hop-transition / host-workbench-enhancer 对齐）
+// 跨模块交互与侧栏滚动选择器共享契约（@host-compat，与 ui-runtime / mascot-hop-transition / host-workbench-enhancer / permission-icons 对齐）
 const HOST_INTERACTION_SELECTORS = Object.freeze({
   takeoverCard: '[data-testid="interaction-takeover-card"]',
   takeoverFrame: '.agy-takeover-frame',
@@ -254,6 +254,10 @@ const HOST_INTERACTION_SELECTORS = Object.freeze({
   scrollToBottomButton: '.agy-scroll-bottom',
   autoscrollOverlayHost: '[data-autoscroll-overlay-host]',
   auxPaneSplit: '[data-testid="aux-pane-split"]',
+  // 本地权限触发器与弹出菜单（style.css / host-workbench-enhancer / permission-icons 共享）
+  permissionsSelectorTrigger: '[data-testid="permissions-selector-trigger"]',
+  permissionsMenu: '[data-testid="permissions-menu"]',
+  permissionsPresetOption: '[data-testid^="permissions-preset-option-"]',
 });
 
 module.exports = {
