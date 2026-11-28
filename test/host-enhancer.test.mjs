@@ -2497,9 +2497,12 @@ test('inline-diff narrow-pane chip overflow guard & CJK action-verb exclusion', 
   const chipLine = css.split('\n').find((l) => l.includes('[data-ag-diff-chip="1"]{')) || '';
   assert.ok(
     chipLine.includes('min-width:0 !important;max-width:100% !important;flex:0 1 auto;min-height:22px !important;') &&
+      chipLine.includes('margin:0 !important;') &&
+      !chipLine.includes('margin:0 -2px !important;') &&
+      chipLine.includes('border-width:0 !important;') &&
       chipLine.includes('overflow:hidden !important;') &&
       !chipLine.includes('overflow:visible !important;'),
-    'merged diff chip must use overflow:hidden and flex:0 1 auto instead of overflow:visible'
+    'merged diff chip must use overflow:hidden, zero negative margin, zero inner pill border-width, and flex:0 1 auto'
   );
   assert.ok(
     chipLine.includes('[data-ag-diff-chip-file="1"] :is([data-testid="entity-pill"],.inline-pill){') &&

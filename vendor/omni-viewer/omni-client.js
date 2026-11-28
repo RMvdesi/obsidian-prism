@@ -704,7 +704,8 @@
     let pointerMoveRaf = null, pendingPointerTarget = null, pendingPointerX = 0, pendingPointerY = 0;
     let lastPtrEvalX = -9999, lastPtrEvalY = -9999, lastPtrEvalTarget = null, lastHitCache = null;
     let domObserver = null, rootAttrObserver = null, scanTimer = null, textScanTimer = null, scanSliceTimer = null;
-    const pendingScanRoots = new Set(), pendingTextNodes = new Set(), scanWorkQueue = [];
+    const pendingScanRoots = new Set(), pendingTextNodes = new Set(), scanWorkQueue = [], scanWorkSet = new Set();
+    let scanWorkHead = 0;
 
     let activeMenuEl = null;
     let activeMenuItems = [];
@@ -2047,7 +2048,7 @@
     let lastPruneAt = 0;
     function pruneDisconnectedHighlights(force = false) {
       const now = Date.now();
-      if (!force && now - lastPruneAt < 3000 && trackedHighlightNodes.size < 256) return;
+      if (!force && now - lastPruneAt < (trackedHighlightNodes.size >= 256 ? 1200 : 3000)) return;
       lastPruneAt = now;
       if (trackedHighlightNodes.size) {
         for (const tn of Array.from(trackedHighlightNodes)) {
@@ -2543,149 +2544,96 @@
       return candidates;
     }
 
-    function decorateAuxUnsupportedViews(scopeEl) {
-      if (!D || !scopeEl || typeof scopeEl.querySelectorAll !== 'function') return;
-      reconcileMountedAuxSwitches();
-      const candidates = collectAuxCandidateViews(scopeEl);
-
-      for (const viewEl of candidates) {
-        if (viewEl.hasAttribute('data-omni-aux-mounted') || findClosest(viewEl, '[data-omni-aux-mounted]')) {
-          continue;
-        }
-        const rawAttr = extractAuxFileRef(viewEl);
-        if (!rawAttr) continue;
-        const { filePath } = parseFileUriToPath(rawAttr);
-        const ext = getFileExt(filePath);
-        if (!ext || !AUX_SWITCHABLE_EXTS.has(ext)) continue;
-
-        const hostEl = resolveAuxMountHost(viewEl);
-        if (
-          hostEl.hasAttribute('data-omni-aux-mounted') ||
-          hostEl.querySelector?.('[data-testid="ag-omni-aux-switcher"]')
-        ) {
-          continue;
-        }
-
-        viewEl.setAttribute('data-omni-aux-mounted', '1');
-        hostEl.setAttribute('data-omni-aux-mounted', '1');
-
-        const origHostDisplay = hostEl.style?.display || '';
-        const origHostFlexDir = hostEl.style?.flexDirection || '';
-        if (hostEl !== viewEl && hostEl.style) {
-          hostEl.style.display = 'flex';
-          hostEl.style.flexDirection = 'column';
-        }
-
-        const s = getStrings();
-        const bar = markNoTranslate(D.createElement('div'));
-        bar.className = 'ag-omni-aux-bar';
-        bar.setAttribute('data-testid', 'ag-omni-aux-switcher');
-        bar.setAttribute('data-ag-prism-omni-owned', '1');
-
-        const btnWb = D.createElement('button');
-        btnWb.type = 'button';
-        btnWb.className = 'ag-omni-btn';
-
-        const btnRaw = D.createElement('button');
-        btnRaw.type = 'button';
-        btnRaw.className = 'ag-omni-btn';
-        btnRaw.setAttribute('data-active', '1');
-
-        bar.appendChild(btnWb);
-        bar.appendChild(btnRaw);
-
-        const rec = {
-          viewEl, hostEl, origHostDisplay, origHostFlexDir,
-          bar, btnWb, btnRaw, sandboxBadge: null, iframe: null, filePath, hiddenKids: [], activeMode: 'raw',
-        };
-        syncAuxBarUi(rec, s);
-
-        const switchMode = async (toWorkbench, opts = {}) => {
-          if (toWorkbench) {
-            const meta = await ensureServerMeta();
-            if (!meta) {
-              if (!opts.auto) void openFile(rec.filePath, { mode: 'workbench' });
-              return;
-            }
-            btnWb.setAttribute('data-active', '1');
-            btnRaw.removeAttribute('data-active');
-            syncAuxBarUi(rec, getStrings());
-            if (hostEl.style) {
-              hostEl.style.display = 'flex';
-              hostEl.style.flexDirection = 'column';
-            }
-            if (rec.activeMode !== 'workbench') {
-              for (const ch of Array.from(hostEl.children || [])) {
-                if (ch === bar || ch === rec.iframe) continue;
-                if (ch.style) {
-                  rec.hiddenKids.push({ el: ch, display: ch.style.display || '' });
-                  ch.style.display = 'none';
-                }
-              }
-            }
-            if (!rec.iframe) {
-              const ifr = markNoTranslate(D.createElement('iframe'));
-              ifr.className = 'ag-omni-aux-overlay';
-              ifr.setAttribute('data-testid', 'ag-omni-aux-iframe');
-              ifr.setAttribute('data-ag-prism-omni-owned', '1');
-              ifr.setAttribute('referrerpolicy', 'no-referrer');
-              ifr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
-              if (ifr.style) ifr.style.backgroundColor = 'var(--ag-cs-tonal-0,var(--background,#0B0B0E))';
-              ifr.addEventListener('load', () => {
-                pushWorkbenchSyncToIframe(ifr, { filePath: rec.filePath });
-                if (!ifr.hasAttribute('data-wb-ready')) ifr.setAttribute('data-wb-ready', '1');
-              });
-              rec.iframe = ifr;
-              hostEl.appendChild(ifr);
-            }
-            rec.activeMode = 'workbench';
-            const nextSrc = buildViewerUrl(meta, { filePath: rec.filePath, kind: detectPreviewKind(rec.filePath) });
-            rec.iframe.hidden = false;
-            if (rec.iframe.src !== nextSrc) {
-              rec.iframe.removeAttribute('data-wb-ready');
-              rec.iframe.src = nextSrc;
-            }
-            pushWorkbenchSyncToIframe(rec.iframe, { filePath: rec.filePath });
-          } else {
-            btnRaw.setAttribute('data-active', '1');
-            btnWb.removeAttribute('data-active');
-            rec.activeMode = 'raw';
-            if (rec.iframe) rec.iframe.hidden = true;
-            for (const item of rec.hiddenKids) {
-              if (item.el?.style) item.el.style.display = item.display;
-            }
-            rec.hiddenKids = [];
-          }
-        };
-
-        rec.switchMode = switchMode;
-        btnWb.addEventListener('click', () => void switchMode(true));
-        btnRaw.addEventListener('click', () => void switchMode(false));
-
-        if (hostEl.firstChild) hostEl.insertBefore(bar, hostEl.firstChild);
-        else hostEl.appendChild(bar);
-        mountedAuxSwitches.add(rec);
-
-        if (shouldAutoActivateWorkbench(viewEl, hostEl, filePath)) {
-          void switchMode(true, { auto: true });
-        }
-      }
-    }
-
-    function runScanNow(targetRoot) {
-      if (!enabled || !D) return;
-      const root = targetRoot || D.body || D.documentElement;
-      if (!root || root.nodeType !== 1) return;
-
-      pruneDisconnectedHighlights();
-      if (typeof root.matches === 'function' && root.matches(SCAN_CONTAINER_SELECTOR)) {
-        scanContainerForBareTokens(root);
-      } else if (typeof root.querySelectorAll === 'function') {
-        for (const c of root.querySelectorAll(SCAN_CONTAINER_SELECTOR)) {
-          scanContainerForBareTokens(c);
-        }
-      }
-      decorateMermaidContainers(root);
+function decorateAuxUnsupportedViews(scopeEl) {
+if (!D || !scopeEl || typeof scopeEl.querySelectorAll !== 'function') return;
+reconcileMountedAuxSwitches();
+const candidates = collectAuxCandidateViews(scopeEl);
+for (const viewEl of candidates) {
+if (viewEl.hasAttribute('data-omni-aux-mounted') || findClosest(viewEl, '[data-omni-aux-mounted]')) continue;
+const rawAttr = extractAuxFileRef(viewEl);
+if (!rawAttr) continue;
+const { filePath } = parseFileUriToPath(rawAttr);
+const ext = getFileExt(filePath);
+if (!ext || !AUX_SWITCHABLE_EXTS.has(ext)) continue;
+const hostEl = resolveAuxMountHost(viewEl);
+if (hostEl.hasAttribute('data-omni-aux-mounted') || hostEl.querySelector?.('[data-testid="ag-omni-aux-switcher"]')) continue;
+viewEl.setAttribute('data-omni-aux-mounted', '1');
+hostEl.setAttribute('data-omni-aux-mounted', '1');
+const origHostDisplay = hostEl.style?.display || '', origHostFlexDir = hostEl.style?.flexDirection || '';
+if (hostEl !== viewEl && hostEl.style) { hostEl.style.display = 'flex'; hostEl.style.flexDirection = 'column'; }
+const s = getStrings();
+const bar = markNoTranslate(D.createElement('div'));
+bar.className = 'ag-omni-aux-bar';
+bar.setAttribute('data-testid', 'ag-omni-aux-switcher');
+bar.setAttribute('data-ag-prism-omni-owned', '1');
+const btnWb = D.createElement('button');
+btnWb.type = 'button'; btnWb.className = 'ag-omni-btn';
+const btnRaw = D.createElement('button');
+btnRaw.type = 'button'; btnRaw.className = 'ag-omni-btn';
+btnRaw.setAttribute('data-active', '1');
+bar.appendChild(btnWb); bar.appendChild(btnRaw);
+const rec = { viewEl, hostEl, origHostDisplay, origHostFlexDir, bar, btnWb, btnRaw, sandboxBadge: null, iframe: null, filePath, hiddenKids: [], activeMode: 'raw' };
+syncAuxBarUi(rec, s);
+const switchMode = async (toWorkbench, opts = {}) => {
+if (toWorkbench) {
+const meta = await ensureServerMeta();
+if (!meta) { if (!opts.auto) void openFile(rec.filePath, { mode: 'workbench' }); return; }
+btnWb.setAttribute('data-active', '1');
+btnRaw.removeAttribute('data-active');
+syncAuxBarUi(rec, getStrings());
+if (hostEl.style) { hostEl.style.display = 'flex'; hostEl.style.flexDirection = 'column'; }
+if (rec.activeMode !== 'workbench') {
+for (const ch of Array.from(hostEl.children || [])) {
+if (ch === bar || ch === rec.iframe) continue;
+if (ch.style) { rec.hiddenKids.push({ el: ch, display: ch.style.display || '' }); ch.style.display = 'none'; }
+}
+}
+if (!rec.iframe) {
+const ifr = markNoTranslate(D.createElement('iframe'));
+ifr.className = 'ag-omni-aux-overlay';
+ifr.setAttribute('data-testid', 'ag-omni-aux-iframe');
+ifr.setAttribute('data-ag-prism-omni-owned', '1');
+ifr.setAttribute('referrerpolicy', 'no-referrer');
+ifr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+if (ifr.style) ifr.style.backgroundColor = 'var(--ag-cs-tonal-0,var(--background,#0B0B0E))';
+ifr.addEventListener('load', () => {
+pushWorkbenchSyncToIframe(ifr, { filePath: rec.filePath });
+if (!ifr.hasAttribute('data-wb-ready')) ifr.setAttribute('data-wb-ready', '1');
+});
+rec.iframe = ifr;
+hostEl.appendChild(ifr);
+}
+rec.activeMode = 'workbench';
+const nextSrc = buildViewerUrl(meta, { filePath: rec.filePath, kind: detectPreviewKind(rec.filePath) });
+rec.iframe.hidden = false;
+if (rec.iframe.src !== nextSrc) { rec.iframe.removeAttribute('data-wb-ready'); rec.iframe.src = nextSrc; }
+pushWorkbenchSyncToIframe(rec.iframe, { filePath: rec.filePath });
+} else {
+btnRaw.setAttribute('data-active', '1');
+btnWb.removeAttribute('data-active');
+rec.activeMode = 'raw';
+if (rec.iframe) rec.iframe.hidden = true;
+for (const item of rec.hiddenKids) if (item.el?.style) item.el.style.display = item.display;
+rec.hiddenKids = [];
+}
+};
+rec.switchMode = switchMode;
+btnWb.addEventListener('click', () => void switchMode(true));
+btnRaw.addEventListener('click', () => void switchMode(false));
+if (hostEl.firstChild) hostEl.insertBefore(bar, hostEl.firstChild);
+else hostEl.appendChild(bar);
+mountedAuxSwitches.add(rec);
+if (shouldAutoActivateWorkbench(viewEl, hostEl, filePath)) void switchMode(true, { auto: true });
+}
+}
+function runScanNow(targetRoot) {
+if (!enabled || !D) return;
+const root = targetRoot || D.body || D.documentElement;
+if (!root || root.nodeType !== 1) return;
+pruneDisconnectedHighlights();
+if (typeof root.matches === 'function' && root.matches(SCAN_CONTAINER_SELECTOR)) scanContainerForBareTokens(root);
+else if (typeof root.querySelectorAll === 'function') for (const c of root.querySelectorAll(SCAN_CONTAINER_SELECTOR)) scanContainerForBareTokens(c);
+decorateMermaidContainers(root);
 decorateAuxUnsupportedViews(root);
 }
 function isIgnoredMutationTarget(node, batchCache) {
@@ -2754,12 +2702,13 @@ return false;
 }
 function drainScanWorkQueue() {
 scanSliceTimer = null;
-if (!enabled) { scanWorkQueue.length = 0; return; }
+if (!enabled) { scanWorkQueue.length = 0; scanWorkSet.clear(); scanWorkHead = 0; return; }
 const nowFn = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 const t0 = nowFn();
 let scannedAuxSplit = false, processed = 0;
-while (scanWorkQueue.length > 0) {
-const r = scanWorkQueue.shift();
+while (scanWorkHead < scanWorkQueue.length) {
+const r = scanWorkQueue[scanWorkHead++];
+scanWorkSet.delete(r);
 if (!r || !r.isConnected) continue;
 if (findClosest(r, SCAN_CONTAINER_SELECTOR)) scanContainerForBareTokens(r);
 else if (typeof r.querySelectorAll === 'function') for (const c of r.querySelectorAll(SCAN_CONTAINER_SELECTOR)) scanContainerForBareTokens(c);
@@ -2770,11 +2719,14 @@ if (auxRoot) { scannedAuxSplit = true; decorateAuxUnsupportedViews(auxRoot); }
 else if ((typeof r.matches === 'function' && r.matches(AUX_FILE_VIEW_SELECTOR)) || r.querySelector?.(AUX_FILE_VIEW_SELECTOR)) decorateAuxUnsupportedViews(r);
 }
 processed += 1;
-if (scanWorkQueue.length > 0 && nowFn() - t0 >= 6) {
+if (scanWorkHead < scanWorkQueue.length && nowFn() - t0 >= 6) {
+if (scanWorkHead > 64) { scanWorkQueue.splice(0, scanWorkHead); scanWorkHead = 0; }
 scanSliceTimer = setTimeout(drainScanWorkQueue, 0);
 return;
 }
 }
+scanWorkQueue.length = 0;
+scanWorkHead = 0;
 }
 function scheduleIncrementalScan(node) {
 if (!enabled || !D) return;
@@ -2790,9 +2742,9 @@ const rootSet = new Set(pendingScanRoots);
 pendingScanRoots.clear();
 for (const r of rootSet) {
 if (!r || !r.isConnected || (rootSet.size > 1 && hasPendingAncestor(r, rootSet))) continue;
-if (!scanWorkQueue.includes(r)) scanWorkQueue.push(r);
+if (!scanWorkSet.has(r)) { scanWorkSet.add(r); scanWorkQueue.push(r); }
 }
-if (scanWorkQueue.length > 0 && !scanSliceTimer) drainScanWorkQueue();
+if (scanWorkHead < scanWorkQueue.length && !scanSliceTimer) drainScanWorkQueue();
 }, delay);
 }
 // Lifecycle & Zero-Residue Teardown
@@ -2870,6 +2822,14 @@ W.addEventListener?.('blur', onWindowBlurOrScroll); W.addEventListener?.('resize
 const domAttrFilter = ['data-ag-cs-spark-streaming', 'data-ag-cs-thought-streaming', 'data-active-file-uri', 'data-file-uri', 'data-uri', 'data-file-path'];
 const onDomMutations = (mutations) => {
 const batchIgnored = typeof WeakMap === 'function' ? new WeakMap() : null;
+const auxCache = mountedAuxSwitches.size > 0 ? new Map() : null;
+const inAuxSplit = (el) => {
+if (!el) return false;
+if (auxCache) { const h = auxCache.get(el); if (h !== undefined) return h; }
+const v = Boolean(findClosest(el, '[data-testid="aux-pane-split"]'));
+if (auxCache) auxCache.set(el, v);
+return v;
+};
 for (let i = 0; i < mutations.length; i++) {
 const m = mutations[i];
 if (isIgnoredMutationTarget(m.target, batchIgnored)) continue;
@@ -2880,19 +2840,19 @@ const n = m.addedNodes[j];
 if ((n.nodeType !== 1 && n.nodeType !== 3) || isIgnoredMutationTarget(n, batchIgnored)) continue;
 if (useHl && n.nodeType === 3) {
 scheduleTextNodeHighlight(n);
-if (!qAux && mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) { qAux = true; scheduleIncrementalScan(m.target); }
+if (!qAux && mountedAuxSwitches.size > 0 && inAuxSplit(m.target)) { qAux = true; scheduleIncrementalScan(m.target); }
 } else scheduleIncrementalScan(n);
 }
-if (!qAux && m.removedNodes.length > 0 && mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) scheduleIncrementalScan(m.target);
+if (!qAux && m.removedNodes.length > 0 && mountedAuxSwitches.size > 0 && inAuxSplit(m.target)) scheduleIncrementalScan(m.target);
 } else if (m.type === 'characterData' && m.target) {
 if (supportsHighlightApi() && m.target.nodeType === 3) {
 scheduleTextNodeHighlight(m.target);
-if (mountedAuxSwitches.size > 0 && findClosest(m.target, '[data-testid="aux-pane-split"]')) scheduleIncrementalScan(m.target);
+if (mountedAuxSwitches.size > 0 && inAuxSplit(m.target)) scheduleIncrementalScan(m.target);
 } else scheduleIncrementalScan(m.target);
 } else if (m.type === 'attributes') {
 const a = m.attributeName;
 if ((a === 'data-ag-cs-spark-streaming' || a === 'data-ag-cs-thought-streaming') && m.target && !m.target.hasAttribute?.(a)) scheduleIncrementalScan(m.target);
-else if ((a === 'data-active-file-uri' || a === 'data-file-uri' || a === 'data-uri' || a === 'data-file-path') && m.target && findClosest(m.target, '[data-testid="aux-pane-split"]')) scheduleIncrementalScan(m.target);
+else if ((a === 'data-active-file-uri' || a === 'data-file-uri' || a === 'data-uri' || a === 'data-file-path') && m.target && inAuxSplit(m.target)) scheduleIncrementalScan(m.target);
 }
 }
 };
@@ -2911,7 +2871,7 @@ if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
 if (scanSliceTimer) { clearTimeout(scanSliceTimer); scanSliceTimer = null; }
 if (textScanTimer) { clearTimeout(textScanTimer); textScanTimer = null; }
 cancelPendingPointerRaf();
-pendingScanRoots.clear(); scanWorkQueue.length = 0; pendingTextNodes.clear();
+pendingScanRoots.clear(); scanWorkQueue.length = 0; scanWorkSet.clear(); scanWorkHead = 0; pendingTextNodes.clear();
 if (domObserver) { try { domObserver.disconnect(); } catch (_) {} domObserver = null; }
 if (removeRootAttrs && rootAttrObserver) { try { rootAttrObserver.disconnect(); } catch (_) {} rootAttrObserver = null; }
 closeContextMenu(); purgeLegacyOmniDock(); unwrapAllModifications();

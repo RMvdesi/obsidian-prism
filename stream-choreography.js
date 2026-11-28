@@ -1104,7 +1104,7 @@ if (!isMotionStandardOrUltra() || !d) return [];
 const cands = new Set([...qsa(d, '.agy-overlay, .agy-fastpick, [data-testid="context-menu-popup"], [data-testid="context-menu-submenu-popup"]')]);
 for (const el of qsa(d, S_OVP)) { const p = peOf(el); if (p && tagOf(p) === 'DIV') cands.add(p); }
 const freshNew = [], bus = getBus();
-for (const ov of cands) if (!ha(ov, 'data-hover-card-popup') && !seenOverlays.has(ov) && !bus?.isSkipped?.(ov)) freshNew.push(ov);
+for (const ov of cands) if (!ha(ov, 'data-hover-card-popup') && !qs(ov, '[data-testid="model-selector-panel"]') && !seenOverlays.has(ov) && !bus?.isSkipped?.(ov)) freshNew.push(ov);
 if (!freshNew.length) return [];
 const trig = resolveTriggerOriginCoords(heroState.lastTriggerOrigin);
 return freshNew.map((ov) => ({ ov, rect: trig ? rectOf(ov) : null }));

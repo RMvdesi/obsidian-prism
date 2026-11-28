@@ -4,7 +4,7 @@ else root.__agCsUiMain = factory;
 })(typeof globalThis !== 'undefined' ? globalThis : window, function (initialConfig) {
 const VERSION = '1.0.8-beta.6';
 const D = document, W = window, GT = globalThis, ST = setTimeout, CT = clearTimeout, O = Object, AF = Array.from, isA = Array.isArray, M = Math, mx = M.max, mn = M.min, rd = M.round, SJ = JSON.stringify, LS = typeof localStorage !== 'undefined' ? localStorage : null;
-const cT = (t) => { if (t) CT(t); return 0; }, dNow = () => Date.now(), pNow = () => performance.now();
+const cT = (t) => { if (t) CT(t); return 0; }, dNow = () => Date.now(), pNow = () => performance.now(), isS = (v) => typeof v === 'string', isO = (v) => !!(v && typeof v === 'object'), isB = (v) => typeof v === 'boolean';
 const rAF = (f) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(f) : 0), cAF = (id) => { if (id && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id); return 0; };
 const LEGACY_API_VERSION = 3;
 const CODE_HASH = initialConfig?.codeHash || '';
@@ -28,17 +28,17 @@ const getTel = () => W.__agPrismTelemetry, getTh = () => W.__agPrismThought, get
 
 const runtimeSliceStore = { active: 'en', byLang: O.create(null) }, sliceByLang = runtimeSliceStore.byLang;
 const mergeRuntimeUiSlice = (p) => {
-if (!p || typeof p !== 'object') return;
-if (typeof p.active === 'string' && p.active) runtimeSliceStore.active = p.active;
-if (isA(p.keys) && p.vals && typeof p.vals === 'object') {
+if (!isO(p)) return;
+if (isS(p.active) && p.active) runtimeSliceStore.active = p.active;
+if (isA(p.keys) && isO(p.vals)) {
 for (const [l, arr] of O.entries(p.vals)) {
 if (!isA(arr)) continue;
 const dst = { ...(sliceByLang[l] || {}) };
-for (let i = 0; i < p.keys.length; i++) if (typeof arr[i] === 'string' && arr[i]) dst[p.keys[i]] = arr[i];
+for (let i = 0; i < p.keys.length; i++) if (isS(arr[i]) && arr[i]) dst[p.keys[i]] = arr[i];
 sliceByLang[l] = dst;
 }
 }
-if (p.byLang && typeof p.byLang === 'object') for (const [k, v] of O.entries(p.byLang)) if (v && typeof v === 'object') sliceByLang[k] = { ...(sliceByLang[k] || {}), ...v };
+if (isO(p.byLang)) for (const [k, v] of O.entries(p.byLang)) if (isO(v)) sliceByLang[k] = { ...(sliceByLang[k] || {}), ...v };
 };
 const LITE_SWARM_FMT = { 'zh-CN': '主会话 {0}% · 子代理 {1}%', 'zh-TW': '主工作階段 {0}% · 子代理 {1}%', ja: 'メイン {0}% · サブ {1}%', ko: '메인 {0}% · 서브 {1}%', es: 'Principal {0}% · Sub {1}%', fr: 'Principal {0}% · Sous {1}%', de: 'Haupt {0}% · Sub {1}%', tr: 'Ana {0}% · Swarm {1}%' };
 const LITE_MORE_FMT = { 'zh-CN': '再显示 {0} 个', 'zh-TW': '再顯示 {0} 個', ja: 'さらに {0} 件表示', ko: '{0}개 더 보기', es: 'Mostrar {0} más', fr: 'Afficher {0} de plus', de: '{0} weitere anzeigen', tr: '{0} tane daha göster' };
@@ -49,7 +49,7 @@ if (cur && (cur.__isFullLocales || cur.UI_TABLE || cur.__isLiteShim)) return;
 const shim = {
 __isLiteShim: true,
 getUiStrings(lang) {
-const l = typeof lang === 'string' && lang ? lang : runtimeSliceStore.active || 'en';
+const l = isS(lang) && lang ? lang : runtimeSliceStore.active || 'en';
 const out = { ...(sliceByLang[l] || sliceByLang.en || sliceByLang[runtimeSliceStore.active] || {}) };
 if (out.optThoughtImmersive && !out.optViewImmersive) out.optViewImmersive = out.optThoughtImmersive;
 if (out.optThoughtBilingual && !out.optViewBilingual) out.optViewBilingual = out.optThoughtBilingual;
@@ -75,12 +75,12 @@ const K_IC = 'isConnected', K_PE = 'parentElement', K_TC = 'textContent', K_CL =
 const isFn = (v) => typeof v === 'function', de = () => D.documentElement, byId = (id) => D.getElementById?.(id) || null, mkEl = (t) => D.createElement?.(t) || null, fe = (e) => e?.firstElementChild, lcw = (s) => String(s || '').toLowerCase(), hasFoc = () => !isFn(D.hasFocus) || D.hasFocus(), isDis = (e) => !e || e[K_IC] === false;
 const ga = (e, k) => e?.getAttribute?.(k), sa = (e, k, v = '') => e?.setAttribute?.(k, String(v)), ha = (e, k) => !!(e?.hasAttribute?.(k)), ra = (e, k) => e?.removeAttribute?.(k);
 const qs = (e, s) => e?.querySelector?.(s) || null, qa = (e, s) => e?.querySelectorAll?.(s) || [], cl = (e, s) => e?.closest?.(s) || null, qaE = (r, s, f) => { for (const e of qa(r, s)) f(e); };
-const sp = (e, k, v, p) => e?.style?.setProperty?.(k, v, p), rp = (e, k) => e?.style?.removeProperty?.(k), clHas = (e, c) => !!(e?.[K_CL]?.contains?.(c)), clsOf = (e) => (typeof e?.className === 'string' ? e.className : ''), chOf = (e) => e?.children, hasIn = (a, b) => !!a?.contains?.(b), incS = (a, b) => a.includes(b), strNe = (v) => (typeof v === 'string' && v ? v : '');
+const sp = (e, k, v, p) => e?.style?.setProperty?.(k, v, p), rp = (e, k) => e?.style?.removeProperty?.(k), clHas = (e, c) => !!(e?.[K_CL]?.contains?.(c)), clsOf = (e) => (isS(e?.className) ? e.className : ''), chOf = (e) => e?.children, hasIn = (a, b) => !!a?.contains?.(b), incS = (a, b) => a.includes(b), strNe = (v) => (isS(v) && v ? v : '');
 const rmAll = (s) => qaE(D, s, (e) => e.remove()), raAll = (a, s = `[${a}]`) => qaE(D, s, (e) => ra(e, a));
 const evOp = (t, add, ls) => { if (!t) return; for (const [e, f, o] of ls) safe(() => (add ? t.addEventListener(e, f, o) : t.removeEventListener(e, f, o))); };
 const rc = (e) => (isFn(e?.getBoundingClientRect) ? e.getBoundingClientRect() : null), tidOf = (e) => String(ga(e, 'data-testid') || ''), tagU = (e) => String(e?.tagName || '').toUpperCase();
-const isElementLike = (n) => !!(n && (n.nodeType === 1 || (n.nodeType === undefined && typeof n.tagName === 'string')));
-const safeParseJsonObj = (raw) => { if (!raw || typeof raw !== 'string') return null; try { const p = JSON.parse(raw); return p && typeof p === 'object' && !isA(p) ? p : null; } catch { return null; } };
+const isElementLike = (n) => !!(n && (n.nodeType === 1 || (n.nodeType === undefined && isS(n.tagName))));
+const safeParseJsonObj = (raw) => { if (!raw || !isS(raw)) return null; try { const p = JSON.parse(raw); return isO(p) && !isA(p) ? p : null; } catch { return null; } };
 
 const BOOL_ALIAS_PAIRS = [['homeRipple', 'ripple'], ['composerRestyle', 'composer'], ['sidebarRestyle', 'sidebar']];
 const ONOFF_STR_KEYS = 'telemetryModule|effortSliderModule|effortMemory|periodicModelPicker|omniModule|sidebarStudio|autoUpdate|sidebarNavFold|projectPartitions'.split('|');
@@ -114,10 +114,10 @@ out.convRipple = normConvRipple(out.convRipple);
 for (const k of BF_KEYS) out[k] = out[k] === true || out[k] === 'on';
 for (const k of ['sidebarNavFold', 'projectPartitions', 'sidebarStudio', 'autoUpdate']) out[k] = out[k] === 'on' || out[k] === true ? 'on' : 'off';
 for (const k of BT_KEYS) out[k] = out[k] === undefined ? true : out[k] !== false && out[k] !== 'off';
-for (const k of ['chatFontCustom', 'codeFontCustom']) out[k] = typeof out[k] === 'string' ? out[k].replace(/[\0\r\n]/g, '').slice(0, 160) : '';
+for (const k of ['chatFontCustom', 'codeFontCustom']) out[k] = isS(out[k]) ? out[k].replace(/[\0\r\n]/g, '').slice(0, 160) : '';
 for (const k of ['omniModule', 'effortMemory', 'periodicModelPicker']) out[k] = out[k] === 'off' || out[k] === false ? 'off' : 'on';
 for (const [k, a, b] of [['lightPreset','alabaster','crystal'],['darkAuraStyle','neon','prism'],['thoughtTrigger','expand','preload'],['scrollBottomMotion','instant','smooth'],['thoughtView','bilingual','immersive'],['linkTarget','external','builtin'],['updateChannel','beta','stable'],['telemetryQuotaMode','both','compact']]) out[k] = out[k] === a ? a : b;
-const mig = (v) => { if (typeof v !== 'string') return ''; const t = v.trim(); if (!t) return ''; const low = t.toLowerCase().replace(/_/g, '-'); return low === 'yue' || low.startsWith('yue-') || low === 'zh-yue' || incS(low, 'cantonese') ? 'zh-CN' : t; };
+const mig = (v) => { if (!isS(v)) return ''; const t = v.trim(); if (!t) return ''; const low = t.toLowerCase().replace(/_/g, '-'); return low === 'yue' || low.startsWith('yue-') || low === 'zh-yue' || incS(low, 'cantonese') ? 'zh-CN' : t; };
 const rawLang = (out.language && out.language !== 'auto' ? mig(out.language) : '') || (out.lang && out.lang !== 'auto' ? mig(out.lang) : '');
 if (rawLang) out.language = out.lang = rawLang;
 return out;
@@ -131,9 +131,9 @@ if ('performanceMode' in patch) patch.performanceMode = normPerfMode(patch.perfo
 for (const [a, b] of [['language', 'lang'], ['homeLayout', 'homeMode'], ['placeholderStyle', 'promptStyle']]) if (a in patch) patch[b] = patch[a]; else if (b in patch) patch[a] = patch[b];
 for (const [bKey, sKey] of BOOL_ALIAS_PAIRS) if (bKey in patch || sKey in patch) { const v = bKey in patch ? patch[bKey] : patch[sKey], on = v !== false && v !== 'off'; patch[bKey] = on; patch[sKey] = on ? 'on' : 'off'; }
 if ('convRipple' in patch) patch.convRipple = normConvRipple(patch.convRipple);
-for (const k of BF_KEYS) if (typeof patch[k] === 'string') patch[k] = patch[k] === 'on' || patch[k] === 'true';
-for (const k of BT_KEYS) if (typeof patch[k] === 'string') patch[k] = patch[k] !== 'off' && patch[k] !== 'false';
-for (const k of ONOFF_STR_KEYS) if (typeof patch[k] === 'boolean') patch[k] = patch[k] ? 'on' : 'off';
+for (const k of BF_KEYS) if (isS(patch[k])) patch[k] = patch[k] === 'on' || patch[k] === 'true';
+for (const k of BT_KEYS) if (isS(patch[k])) patch[k] = patch[k] !== 'off' && patch[k] !== 'false';
+for (const k of ONOFF_STR_KEYS) if (isB(patch[k])) patch[k] = patch[k] ? 'on' : 'off';
 return patch;
 };
 
@@ -152,7 +152,7 @@ const savedLegacyColon = readLsObj(STORAGE_LEGACY_COLON_KEY), savedPrism = readL
 const mergedSaved = { ...(readLsObj(STORAGE_LEGACY_V3_KEY) || {}), ...(savedLegacyColon || {}), ...(savedPrism || {}) };
 let savedMutated = false;
 if (prevBaseObj) for (const [k, v] of O.entries(cleanBase)) if (SJ(prevBaseObj[k]) !== SJ(v)) { O.assign(mergedSaved, expandSettingAliases({ [k]: v })); savedMutated = true; }
-if (explicitOverride && typeof explicitOverride === 'object') {
+if (isO(explicitOverride)) {
 const cleanOverride = stripRuntimeMetaKeys(explicitOverride);
 if (O.keys(cleanOverride).length) { O.assign(mergedSaved, expandSettingAliases(cleanOverride)); savedMutated = true; }
 }
@@ -208,8 +208,8 @@ for (const [a, b, boolStr] of [
 ]) {
 if (key === a && b in base && !(a in base)) return [b, boolStr ? (value ? 'on' : 'off') : value];
 }
-if (incS('sidebarCompact|smoothCaret|contextMenu'.split('|'), key) && typeof base[key] === 'string') return [key, value ? 'on' : 'off'];
-if (incS(ONOFF_STR_KEYS, key) && typeof value === 'boolean') return [key, value ? 'on' : 'off'];
+if (incS('sidebarCompact|smoothCaret|contextMenu'.split('|'), key) && isS(base[key])) return [key, value ? 'on' : 'off'];
+if (incS(ONOFF_STR_KEYS, key) && isB(value)) return [key, value ? 'on' : 'off'];
 if (key === 'palette' && value === 'claude') return ['palette', 'warm'];
 if (key === 'mascot') return ['mascot', value === 'dual' ? 'crab' : value];
 return [key, value];
@@ -250,9 +250,9 @@ scheduleSync();
 };
 
 const saveSetting = (key, value) => persistAndApplyConfigPatch({ [key]: value }, key);
-const saveSettingsBatch = (patchObj) => { if (patchObj && typeof patchObj === 'object') persistAndApplyConfigPatch(patchObj, null); };
+const saveSettingsBatch = (patchObj) => { if (isO(patchObj)) persistAndApplyConfigPatch(patchObj, null); };
 
-const pickConcreteLang = (v) => (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'auto' ? v.trim() : '');
+const pickConcreteLang = (v) => (isS(v) && v.trim() && v.trim().toLowerCase() !== 'auto' ? v.trim() : '');
 
 const getLang = () => {
 let raw = '';
@@ -377,7 +377,7 @@ const p = f.memoizedProps;
 if (!cachedStore && isFn(p?.store?.getState)) cachedStore = p.store;
 for (let d = f.dependencies?.firstContext; d; d = d.next) {
 const v = d.memoizedValue;
-if (!v || typeof v !== 'object') continue;
+if (!isO(v)) continue;
 if (!cachedSvc && isFn(v.getCascadeTrajectory)) cachedSvc = v;
 if (!cachedStore && isFn(v.store?.getState)) cachedStore = v.store;
 }
@@ -454,7 +454,7 @@ syncRigPwr();
 if (msAnc) { ra(msAnc, A_CA); msAnc = null; }
 prevRoofKind = '';
 if (ha(html, 'data-ag-cs-has-crab')) {
-if (typeof ST === 'function' && !destroyed) {
+if (isFn(ST) && !destroyed) {
 if (!crabRemoveAttrTimer) crabRemoveAttrTimer = ST(() => { crabRemoveAttrTimer = 0; if (!destroyed && !msAnc) runGuardedMut(() => ra(html, 'data-ag-cs-has-crab')); }, 220);
 } else ra(html, 'data-ag-cs-has-crab');
 }
@@ -629,7 +629,7 @@ heroState: { wasInHome: false, wasInFormalConv: false, lastModelSig: null, pendi
 scheduleTransient: (fn, ms) => ST(fn, ms), measureSidebarSelectionSnapshot: () => ({ empty: true }),
 measureVisibleChangedHeaders: () => [], measureNewLensOverlays: () => [], isStreamMutating: () => false, hasStreamObserver: () => false,
 }));
-const syncMP = (m) => safe(() => modelGlyphCtl.syncModelSelectorPanel?.(m)), syncWf = (s) => streamChoreoCtl.syncWorkedForAutoUnfold(s), syncDs = () => streamChoreoCtl.syncDualStreamEngine(), stSbRun = (r) => streamChoreoCtl.stampSidebarRowRunningImmediate?.(r), trigLift = () => streamChoreoCtl.triggerHomeLiftoffRippleBurst();
+const syncMP = (m = latestPrimaryModelInfo) => safe(() => modelGlyphCtl.syncModelSelectorPanel?.(m)), syncWf = (s) => streamChoreoCtl.syncWorkedForAutoUnfold(s), syncDs = () => streamChoreoCtl.syncDualStreamEngine(), stSbRun = (r) => streamChoreoCtl.stampSidebarRowRunningImmediate?.(r), trigLift = () => streamChoreoCtl.triggerHomeLiftoffRippleBurst();
 
 // Root Attrs & Sync
 let lastThemeKey = '';
@@ -724,12 +724,12 @@ homeStudioCtl.syncGreeting(inHero);
 if (inHero && isStudioHome()) { homeStudioCtl.renderHomePanel(true); const hp = qs(D, '.ag-cs-home-panel'); if (hp) { setAttrIfChanged(hp, A_PB, '1'); setAttrIfChanged(hp, A_PM, '1'); } }
 syncComposers(null); ensureSettingsSection();
 safe(() => { hostEnhancerCtl.onThemeChange?.(false); hostEnhancerCtl.sync?.(); });
-syncAbsorbedModules(); syncMP(latestPrimaryModelInfo); ensurePulseBridge(true);
+syncAbsorbedModules(); syncMP(); ensurePulseBridge(true);
 };
 const syncMotionSpringTokens = () => {
 const h = de();
 if (!isFn(h?.style?.setProperty) || !isFn(motionEngine?.springLinear)) return;
-safe(() => { const r = motionEngine.springLinear({ stiffness: 420, damping: 32, mass: 1 }), easing = typeof r === 'string' ? r : r?.easing; if (easing) { sp(h, '--ag-spring-sidebar-ease', easing); sp(h, '--ag-spring-sidebar-dur', `${rd((typeof r === 'object' && r?.durationMs) || 300)}ms`); } });
+safe(() => { const r = motionEngine.springLinear({ stiffness: 420, damping: 32, mass: 1 }), easing = isS(r) ? r : r?.easing; if (easing) { sp(h, '--ag-spring-sidebar-ease', easing); sp(h, '--ag-spring-sidebar-dur', `${rd((typeof r === 'object' && r?.durationMs) || 300)}ms`); } });
 };
 function syncAbsorbedModules(force = false) {
 const tel = getTel(), eff = W.__agPrismEffortSlider, th = getTh(), thUi = W.__agPrismThoughtSettingsUi;
@@ -786,7 +786,7 @@ if (mKey !== lastAppliedMotion) {
 const p = lastAppliedMotion; lastAppliedMotion = mKey;
 if (p) safe(() => rippleCtl.sync?.());
 refreshOptics();
-if (p) { dirtyFlags.c = true; syncHostAnimatedIcons(null); syncDs(); syncMP(latestPrimaryModelInfo); }
+if (p) { dirtyFlags.c = true; syncHostAnimatedIcons(null); syncDs(); syncMP(); }
 }
 if (lang !== lastAppliedLang) { const p = lastAppliedLang; lastAppliedLang = lang; if (p) refreshOpenUiForLanguage(); }
 const tKey = getThemeKey();
@@ -857,6 +857,7 @@ for (let c = q[K_PE]; c && c !== el; c = c[K_PE]) if (isHidEl(c, lay, m)) return
 return q;
 };
 const syncModelMenuRootAttrs = (panel) => {
+hadModelPanelOpen = !!panel;
 const h = de();
 if (panel) { h && setAttrIfChanged(h, 'data-ag-cs-model-menu', '1'); const ov = cl(panel, '.agy-overlay'); ov && setAttrIfChanged(ov, 'data-ag-cs-model-overlay', '1'); }
 else { ra(h, 'data-ag-cs-model-menu'); raAll('data-ag-cs-model-overlay'); }
@@ -1028,7 +1029,7 @@ return { cs, pc, pv, bc, ad: detectVisibleDecisionTakeover(m, pv) };
 };
 const syncConvAuraSemantics = (activeInfo, preAwaiting) => {
 if (!isFn(convAuraCtl.setSemanticState)) return;
-const awaitingNow = typeof preAwaiting === 'boolean' ? preAwaiting : detectVisibleDecisionTakeover(), errNow = !!(activeInfo?.e), freshErrorEdge = errNow && !lastSyncedHasError;
+const awaitingNow = isB(preAwaiting) ? preAwaiting : detectVisibleDecisionTakeover(), errNow = !!(activeInfo?.e), freshErrorEdge = errNow && !lastSyncedHasError;
 lastSyncedHasError = errNow;
 if (awaitingNow !== lastSyncedAwaitingDecision || freshErrorEdge) { lastSyncedAwaitingDecision = awaitingNow; convAuraCtl.setSemanticState({ awaitingDecision: awaitingNow ? true : null, hasError: freshErrorEdge }); }
 };
@@ -1054,7 +1055,7 @@ const ovs = qa(D, '.agy-overlay');
 if (!ovs?.length) return;
 let touched = false;
 for (const ov of ovs) {
-if (ha(ov, 'data-hover-card-popup') || tidOf(ov) === 'model-selector-panel' || ga(ov, 'data-ag-cs-model-overlay') === '1' || (ga(ov, 'role') !== 'menu' && !clHas(ov, 'max-h-48'))) continue;
+if (ha(ov, 'data-hover-card-popup') || tidOf(ov) === T_MS || ga(ov, 'data-ag-cs-model-overlay') === '1' || (ga(ov, 'role') !== 'menu' && !clHas(ov, 'max-h-48'))) continue;
 if (ga(ov, A_PB) !== '1' || ga(ov, A_PM) !== '1') touched = true;
 setAttrIfChanged(ov, A_PB, '1'); setAttrIfChanged(ov, A_PM, '1');
 }
@@ -1213,7 +1214,7 @@ for (const el of qa(r, HOST_BTN_QUERY)) if (!isThoughtIsolatedNode(el)) set.add(
       if (isThoughtIsolatedNode(btn)) continue;
       const ex = ga(btn, A_IC), origSvg = findOriginalHostSvg(btn);
       if (!ex && !origSvg) continue;
-      const rawSvgCls = origSvg ? (ga(origSvg, 'class') || (typeof origSvg.className === 'string' ? origSvg.className : origSvg.className?.baseVal) || '') : '-';
+      const rawSvgCls = origSvg ? (ga(origSvg, 'class') || (isS(origSvg.className) ? origSvg.className : origSvg.className?.baseVal) || '') : '-';
       const bSig = `${tidOf(btn)}|${ga(btn, 'aria-label') || ''}|${ga(btn, 'title') || ''}|${ga(btn, 'data-tooltip-id') || ''}|${ga(btn, 'role') || ''}|${+ha(btn, 'data-ag-cs-filter-btn')}|${rawSvgCls}`;
       const eqSig = '=' + bSig, hit = iconSigMap.get(btn), p = btn[K_PE], origOk = !origSvg || ha(origSvg, A_OS), hasAnim = !!(ex && qs(btn, '.ag-anim-icon'));
       if (hit && hit.s === (ex ? eqSig : bSig) && hit.p === p && hit.v === origSvg && (!ex || (origOk && hasAnim))) continue;
@@ -1673,7 +1674,7 @@ if (hb) dirtyAddedRoots.add(el);
     const clList = !ae && (flags.f || flags.c) && isCaretOn() ? smoothCaretCtl.measureSnapshot(false, false) : null;
     const mp = isFullSync || flags.c || flags.o ? qs(D, MODEL_PANEL_SEL) : null;
     const mc = !!(flags.o) && (!!mp || hadModelPanelOpen);
-    const cp = isFullSync || flags.c || mc ? measureCrabClearanceAll(sw) : null;
+    const cp = isFullSync || flags.c ? measureCrabClearanceAll(sw) : null;
     if (flags.f || flags.r || flags.c || flags.t) convAuraCtl.prime?.();
     return { inHome, ih, formalConv, ci, sw, ae, homeComposerSampled, convInputRect, sidebarSnap, visibleChangedHeaders, lo, cl: clList, mp, mc, cp, checkCaustics: !!(flags.f || flags.cf || flags.r) };
   };
@@ -1732,7 +1733,7 @@ if (hb) dirtyAddedRoots.add(el);
       applyRootAttrs(effectiveFull);
       if (actualRouteJump) for (const k of ['data-ag-cs-stage-glide', 'data-ag-cs-sonar', 'data-ag-cs-caustic']) raAll(k);
       if (effectiveFull || m) stampBgCmdWrap(effectiveFull ? D : bgCmdNodes);
-      if (frc || l) syncBleedTables();
+      if (!deferHeavyConvWork && (frc || l)) syncBleedTables();
       if (effectiveFull || turboRoots) syncHostTurbo(effectiveFull ? D : turboRoots);
       if (effectiveFull || r || s || a || isDis(axE)) syncAuxSplit();
       if (isStudioHome() && (ih || inHome) && !getHomeStudioMod()) requestHomeStudioChannelIfNeeded();
@@ -1745,13 +1746,14 @@ if (hb) dirtyAddedRoots.add(el);
           if (hp && (ga(hp, A_PB) !== '1' || ga(hp, A_PM) !== '1')) { setAttrIfChanged(hp, A_PB, '1'); setAttrIfChanged(hp, A_PM, '1'); markRim(); }
         } else { homeStudioCtl.parkPanelSeat(); markRim(); }
       }
-      if (f || r || t) safe(() => rippleCtl.sync());
+      if (f || t || (r && (inHome || prevWasInHome))) safe(() => rippleCtl.sync());
       if (frc || t) safe(() => convAuraCtl.sync(true));
-      if (effectiveFull || c || o) { hadModelPanelOpen = !!(modelPanelNow); syncModelMenuRootAttrs(modelPanelNow); }
-      if (f || c || modelOverlayChanged) syncComposers(measured, deferHeavyConvWork);
+      if (effectiveFull || c || o) syncModelMenuRootAttrs(modelPanelNow);
+      if (f || c) syncComposers(measured, deferHeavyConvWork);
       else {
         if (!deferHeavyConvWork && tk) sc.syncThinkingSparks(latestPrimaryModelInfo, latestPaneModelMap);
         if (flags.mp) modelGlyphCtl.syncModelSelectorPanel(latestPrimaryModelInfo);
+        else if (modelOverlayChanged) syncMP();
       }
       if (frc) sc.syncHeroRouteChoreography(measured);
       else {
@@ -1760,7 +1762,7 @@ if (hb) dirtyAddedRoots.add(el);
       }
       if (!deferHeavyConvWork && (frc || l)) syncDs();
       if (f || o) { sc.syncLensOverlayOrigins(lo); syncPopupOverlayMirrors(); }
-      if (routeJumped || r || c || o) markRim(sw);
+      if (routeJumped || r || c || (o && !modelOverlayChanged)) markRim(sw);
 
       if (deferHeavyConvWork) {
         const outR = addedRoots.filter((x) => !isDis(x) && (!fc || !hasIn(fc, x)));
@@ -1778,11 +1780,12 @@ if (hb) dirtyAddedRoots.add(el);
           const cv = verifyConv(); if (!cv) return false;
           const cp = qs(cv, `${TK_SUB_SEL}, ${S_RP}`) ? measureCrabClearanceAll() : null;
           runGuardedMut(() => { if (cp) syncComposers({ cp }, false); stampBgCmdWrap(cv); syncBleedTables(); sc.syncThinkingSparks(latestPrimaryModelInfo, latestPaneModelMap); syncDs(); sc.syncHeroCCaustics(); });
-          scheduleHostEnhancerSync(false, { f: true }); smoothCaretCtl.queue(false, false, false);
+          smoothCaretCtl.queue(false, false, false);
           return true;
-        }, 140, () => {
+        }, 250, () => {
           const cv = verifyConv(); if (!cv) return;
-          runGuardedMut(() => syncHostAnimatedIcons([cv]));
+          runGuardedMut(() => { syncHostAnimatedIcons([cv]); syncOffscreenRunningIo(); });
+          scheduleHostEnhancerSync(false, { f: true });
           syncWf();
           if (getThoughtTranslateMode() !== 'off') safe(() => getTh()?.scan?.());
         });
@@ -1791,10 +1794,10 @@ if (hb) dirtyAddedRoots.add(el);
         else if (routeJumped) { const jr = [qs(D, '.agy-home'), fc, ...addedRoots].filter(Boolean); syncHostAnimatedIcons(jr.length ? jr : null); }
         else if (b && addedRoots.length) syncHostAnimatedIcons(addedRoots);
         if ((f || l || routeJumped || ((flags.s || flags.g || flags.o) && W.__agPrismThought?.getTranslateTitles?.())) && getThoughtTranslateMode() !== 'off') safe(() => getTh()?.scan?.());
+        if (effectiveFull || s || c || o || r || offObs.size > 0) syncOffscreenRunningIo();
       }
       if (f || g) ensureSettingsSection();
       if (frc || t) ensurePulseBridge(!!(f || t));
-      if (effectiveFull || s || c || o || r || offObs.size > 0) syncOffscreenRunningIo();
     });
     if (effectiveFull || c || r || routeJumped) safe(() => W.__agPrismPeriodicPicker?.onHostTriggerChanged?.());
     if (!deferHeavyConvWork && (frc || l || b || t || s || g || o)) {
@@ -1997,7 +2000,7 @@ if (hb) dirtyAddedRoots.add(el);
   });
   const MODIFIER_ONLY_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'NumLock', 'ScrollLock']);
   const readTypeTail = (ev, ed) => {
-    if (typeof ev?.data === 'string' && ev.data) return ev.data.slice(-4);
+    if (isS(ev?.data) && ev.data) return ev.data.slice(-4);
     const s = D.getSelection?.(), r = s?.rangeCount ? s.getRangeAt?.(0) : null, n = r ? r.endContainer : s?.focusNode;
     if (n?.nodeType === 3 && (!ed || ed.contains?.(n) !== false)) { const o = r ? r.endOffset : s?.focusOffset || 0; return (n.data ?? n.nodeValue ?? '').slice(mx(0, o - 4), o); }
     for (let c = ed, d = 0; c && d < 8; d++) { if (c.nodeType === 3) return (c.data ?? c.nodeValue ?? '').slice(-4); c = c.lastChild || c.childNodes?.[c.childNodes.length - 1]; }
@@ -2052,7 +2055,7 @@ if (!isThoughtMutationRecord(m) && !isOwnPluginMutation(m)) { pendingHiddenFullS
 }
 return;
 }
-let anyRelevant = false, urgentTk = false, convMount = false, caretDirty = false, ctxCache = null, bS = 0;
+let anyRelevant = false, urgentTk = false, convMount = false, caretDirty = false, ctxCache = null, bS = 0, mp;
 for (let i = 0; i < mutations.length; i++) {
 const { type: mt, attributeName: an, target: tgt, addedNodes: aN, removedNodes: rN } = mutations[i];
 if (mt === 'attributes') {
@@ -2104,8 +2107,8 @@ pCtx = ctxCache.get(tgt);
 if (!pCtx) {
 if (isThoughtIsolatedNode(tgt) || isOwnPluginNode(tgt) || isHoverCardNode(tgt)) pCtx = { k: true };
 else {
-const p = !!(cl(tgt, S_IB));
-pCtx = { k: false, c: !!(cl(tgt, S_CV)), p, e: p && !!(cl(tgt, '[contenteditable="true"]')), s: inSbP(tgt), r: inSbRow(tgt), d: !!(cl(tgt, S_DLG)), m: !!(cl(tgt, MODEL_PANEL_SEL)) };
+const p = !!cl(tgt, S_IB);
+pCtx = { k: false, c: !!cl(tgt, S_CV), p, e: p && !!cl(tgt, '[contenteditable="true"]'), s: inSbP(tgt), r: inSbRow(tgt), d: !!cl(tgt, S_DLG), m: !!cl(tgt, MODEL_PANEL_SEL) };
 }
 ctxCache.set(tgt, pCtx);
 }
@@ -2144,6 +2147,7 @@ scanList(rN, false);
 }
 }
 if (caretDirty) { smoothCaretCtl.invalidateSelection?.(); if (isCaretOn() && !dirtyFlags.c) smoothCaretCtl.queue(false); }
+if (!hadModelPanelOpen && dirtyFlags.o && !convMount && (mp = qs(D, MODEL_PANEL_SEL))) runGuardedMut(() => { syncModelMenuRootAttrs(mp); syncMP(); });
 if (urgentTk && !convMount) syncTakeoverNow();
 if (anyRelevant && (O.values(dirtyFlags).some(Boolean) || dirtyTurboRoots.size > 0)) scheduleSync();
 } catch {}
@@ -2256,7 +2260,7 @@ const prismRuntimeApi = {
 brand: 'Obsidian Prism', version: VERSION, legacyApiVersion: LEGACY_API_VERSION, codeHash: CODE_HASH,
 flattenCss: flattenMainStyleSheet, saveSettingsBatch,
 refreshConfig(next) {
-if (next && typeof next === 'object') {
+if (isO(next)) {
 if (next.__uiSlice) ensureLiteLocalesShim(next.__uiSlice);
 const fromFile = !!(next.__fromFile), ackEpoch = Number(next.__ackEpoch) || 0;
 if (fromFile && ackEpoch > 0 && ackEpoch < localWriteEpoch) return false;

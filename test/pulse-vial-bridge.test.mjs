@@ -687,8 +687,12 @@ test('dual daylight presets: syncs data-ag-cs-light-preset="crystal|alabaster" t
     assert.equal(host.getAttribute('data-pv-light'), '1');
     assert.equal(host.getAttribute('data-pv-preset'), 'crystal');
     assert.ok(css.includes('--c:#FFFFFF'), 'Light mode card must use crisp pure white #FFFFFF background');
-    assert.ok(css.includes('#EEF3FA'), 'Daylight Crystal well must feature #EEF3FA cold porcelain recess');
-    assert.ok(css.includes('#F2EFE7'), 'Warm Alabaster well must feature #F2EFE7 warm linen recess');
+    assert.ok(css.includes('#EEF3FA'), 'Daylight Crystal rail must feature #EEF3FA cold porcelain tint');
+    assert.ok(css.includes('#F2EFE7'), 'Warm Alabaster rail must feature #F2EFE7 warm linen tint');
+    assert.ok(css.includes('.pv-well{width:100%;height:100%;padding:0;background:0 0;border:0;box-shadow:none;display:flex;flex-direction:column;align-items:center;justify-content:space-between}'), 'Vial well must stay frameless and align top/bottom labels cleanly across rail height');
+    assert.ok(css.includes('.pv-slot{margin:-10px 0 -12px}'), 'Vial slot must balance built-in canvas padding vertically');
+    assert.equal(css.includes('.pv-well{background:#EEF3FA'), false, 'Light mode must not wrap vial in a nested rounded box');
+    assert.ok(css.includes('#context-tokens{font:500 10.5px/1.3 var(--ui);'), 'Context token subtitle must use unified var(--ui) font');
     assert.ok(css.includes('rgba(30,41,59,.62)'), 'Light mode telemetry/scale text must use crisp slate rgba(30,41,59,.62)');
 
     // 切换至 alabaster 暖白画册
