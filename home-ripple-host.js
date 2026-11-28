@@ -415,6 +415,7 @@
       };
 
       const invNG = () => { if (st.field?.mode !== 'webgl2' && !isW(st.field)) st.field?.invalidate?.(); };
+      const rectAt = (t) => (!cRect || t - cRectAt > 1500 ? ((cRectAt = t), (cRect = gbr(cv))) : cRect);
       st.onMove = (ev) => {
         if (mRed()) return;
         if (!isAB()) wb = false;
@@ -425,9 +426,8 @@
           if (t !== ignT || nr - ignAt > 120) { ignT = t; ignR = isIgnC(t, false); ignAt = nr; }
           if (ignR) return;
         }
-        if (!cRect || nr - cRectAt > 1500) { cRect = gbr(cv); cRectAt = nr; }
-        const x = ev.clientX - cRect.left, y = ev.clientY - cRect.top;
-        if (x < 0 || y < 0 || x > cRect.width || y > cRect.height) { lx = ly = null; carry = 0; if (as.active) { as.active = false; f1 = true; invNG(); wake(); } return; }
+        const r = rectAt(nr), x = ev.clientX - r.left, y = ev.clientY - r.top;
+        if (x < 0 || y < 0 || x > r.width || y > r.height) { lx = ly = null; carry = 0; if (as.active) { as.active = false; f1 = true; invNG(); wake(); } return; }
         if (!c || lcma === 0 || nr - lcma >= cp[4]) {
           if (lx !== null && ly !== null) {
             const dist = M.hypot(x - lx, y - ly), spd = dist / M.max(0.004, (nr - (c ? lcma : lsa)) / 1000), ms = cp ? cp[5] : 220, cs = cp ? cp[6] : 42;
@@ -447,11 +447,11 @@
         if (ev.button !== 0 || mRed() || ambScale() <= 0.001 || hP() || isStr()) return;
         const c = st.mode === 'conv';
         if (c && isIgnC(ev.target, true)) return;
-        const cp = c ? CP[st.convLevel] || CP.medium : null, r = gbr(cv);
-        cRect = r; cRectAt = nowOf();
-        if (st.sleeping) prev = cRectAt;
+        const cp = c ? CP[st.convLevel] || CP.medium : null, now = nowOf(), r = rectAt(now), wasA = st.waves.active();
+        if (st.sleeping) prev = now;
         st.waves.disturb(M.floor((ev.clientX - r.left) / CW), M.floor((ev.clientY - r.top) / CH), cp && st.convLevel !== 'full' ? { amplitudeScale: cp[3], radiusScale: 0.72 + 0.28 * cp[3], duration: cp[9], loadWeight: cp[10] } : undefined);
-        st.field.invalidate(); wake();
+        if (!wasA) st.field.invalidate();
+        wake();
         if (!c) onPointerPressMascot?.(ev.clientX);
       };
 

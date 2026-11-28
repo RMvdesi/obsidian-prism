@@ -1004,12 +1004,12 @@ const trackActivePaneFromTarget = (t, sched = true) => {
 if (destroyed || !t?.closest || cl(t, '#' + SETTINGS_SEC_ID + ',#ag-prism-periodic-picker-root,[role="dialog"]')) return false;
 const nc = findCardForTarget(t), nv = findConvForTarget(t, nc);
 if (!nc && !nv) return false;
-if (nc && isMascotEnabled() && !canHopFocus(t, nc, activePaneCard || msAnc, AF(qa(D, S_IBCC)).filter(isLiveMainCard))) return false;
 const chg = (nc && nc !== activePaneCard) || (nv && nv !== activeConvView);
+if (!chg) return false;
+if (nc && isMascotEnabled() && !canHopFocus(t, nc, activePaneCard || msAnc, AF(qa(D, S_IBCC)).filter(isLiveMainCard))) return false;
 if (nc) activePaneCard = nc;
 if (nv) activeConvView = nv;
-if (chg) { notifyActivePaneModules(activePaneCard, activeConvView); if (sched) { dirtyFlags.c = true; scheduleSync(); } return true; }
-return false;
+notifyActivePaneModules(activePaneCard, activeConvView); if (sched) { dirtyFlags.c = true; scheduleSync(); } return true;
 };
 const resolveActivePrimaryCard = (cards) => {
 if (!cards?.length) { activePaneCard = null; if (activeConvView && !isLiveMainConv(activeConvView)) activeConvView = null; return null; }
@@ -1989,7 +1989,7 @@ if (hb) dirtyAddedRoots.add(el);
       }
     }
     notifyMascot('activity', {});
-    if (isCaretOn()) smoothCaretCtl.queue(false);
+    if (isCaretOn() && cl(t, S_IB)) smoothCaretCtl.queue(false);
   });
   const MODIFIER_ONLY_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'NumLock', 'ScrollLock']);
   const readTypeTail = (ev, ed) => {
@@ -2003,13 +2003,13 @@ if (hb) dirtyAddedRoots.add(el);
     const type = ev?.type || '';
     if (type === 'focusin') trackActivePaneFromTarget(ev?.target, true);
     if ((type === 'keydown' || type === 'keyup') && ev?.key && MODIFIER_ONLY_KEYS.has(ev.key)) return;
+    if (type === 'mouseup' && !cl(ev?.target, S_IB) && !cl(D.activeElement, S_IB)) return;
     if (type === 'scroll' || type === 'selectionchange' || type === 'keydown' || type === 'keyup') {
       const ae = D.activeElement; if (!cl(ae, S_IB)) return;
       if (type === 'scroll') { const st = ev?.target; if (st && st !== ae && !ae.contains?.(st) && (st === D || st === de() || st === D.body || tidOf(st) === 'autoscroll-viewport' || !st.contains?.(ae))) return; }
     }
     const isTyping = type === 'input' || type === 'keyup' || type === 'compositionupdate' || type === 'compositionend';
-    const immediate = type === 'focusin' || type === 'mouseup' || type === 'transitionend';
-    smoothCaretCtl.queue(isTyping, immediate, type === 'focusin', type === 'scroll');
+    smoothCaretCtl.queue(isTyping, false, false, type === 'scroll');
     if (type === 'input' && cl(ev?.target, S_IB)) safe(() => msRig?.onUserType?.(readTypeTail(ev, cl(ev.target, '[contenteditable="true"]') || ev.target)));
   });
   const PAINT_PROP_RE = /color|opacity|shadow|fill|stroke|filter|outline/i;
