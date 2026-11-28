@@ -1680,7 +1680,10 @@ test('omni-client omits domBus characterData:true, time-slices scheduleIncrement
         addedNodes.push(p);
       }
       domBusCallback([{ type: 'childList', target: resp, addedNodes, removedNodes: [] }]);
-      await new Promise((r) => origSetT(r, 150));
+      const deadline = Date.now() + 1500;
+      while (Date.now() < deadline && ((window.CSS.highlights.get('ag-omni-url')?.size || 0) < 9 || sliceYields < 2)) {
+        await new Promise((r) => origSetT(r, 20));
+      }
       assert.ok(sliceYields >= 2, `Expected 6ms time-sliced incremental queue to yield via setTimeout(..., 0) >=2 times, got ${sliceYields}`);
       assert.equal(window.CSS.highlights.get('ag-omni-url').size, 9, 'All 8 sliced incremental paragraphs plus initial link must finish highlighting');
     } finally {

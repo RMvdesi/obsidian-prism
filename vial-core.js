@@ -7,7 +7,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
   'use strict';
 
-  const WAVE_NODES = 24, TUBE_X = 34, TUBE_OUT_R = 21.6, TUBE_IN_R = 19.6, LIP_Y = 18.5;
+  const WAVE_NODES = 24, TUBE_X = 48, TUBE_OUT_R = 19.2, TUBE_IN_R = 17.3, LIP_Y = 18.5;
   const TOP_OUT = 18.5, TOP_IN = 20.5, RC_TOP_OUT = 14.5, RC_TOP_IN = 12.5, HEM_Y = 175.0;
   const FLOOR_OUT = 198.0, FLOOR_IN = 195.0, RC_OUT = 14.5, RC_IN = 12.5;
   const FIXED_DT = 1 / 120, MAX_FRAME_DT = 0.05, MAX_SUBSTEPS = 8, GRAVITY = 460.0, SETTLE_MIN_AGE_SEC = 1.1;
@@ -241,9 +241,9 @@
     uniform vec2 u_bubShape[8];
     uniform vec3 u_ratios;
 
-    const highp float CX = 34.0;
-    const highp float R_OUT = 21.6;
-    const highp float R_IN = 19.6;
+    const highp float CX = 48.0;
+    const highp float R_OUT = 19.2;
+    const highp float R_IN = 17.3;
     const highp float TOP_OUT = 18.5;
     const highp float TOP_IN = 20.5;
     const highp float LIP_Y = 18.5;
@@ -1061,19 +1061,19 @@
     const drawScaleMarks = (ctx, st, curFill) => {
       const isDark = Boolean(st.isDark);
       const maxTok = Number(st.maxTokens) > 0 ? Number(st.maxTokens) : 512000;
-      const tickX = TUBE_X + TUBE_OUT_R + 2.4;
+      const tickX = TUBE_X + TUBE_OUT_R + 1.8;
       const topChamber = LIP_Y + 8;
       const botChamber = HEM_Y + 14;
       const hChamber = botChamber - topChamber;
 
       ctx.save();
-      ctx.font = '500 9px "JetBrains Mono", "Google Sans Mono", ui-monospace, SFMono-Regular, monospace';
+      ctx.font = '500 9px Inter, system-ui, "Segoe UI", sans-serif';
       ctx.textBaseline = 'middle';
 
       for (const subFrac of [0.125, 0.375, 0.625, 0.875]) {
         const sy = Math.round(botChamber - subFrac * hChamber);
         ctx.fillStyle = isDark ? 'rgba(168, 190, 224, 0.18)' : 'rgba(30, 41, 59, 0.24)';
-        ctx.fillRect(tickX, sy - 0.4, 2.0, 0.85);
+        ctx.fillRect(tickX, sy - 0.4, 1.8, 0.85);
       }
 
       const tone = st.accentTone || 'cobalt';
@@ -1113,10 +1113,10 @@
                   : isDark
                     ? 'rgba(92, 198, 252, 0.18)'
                     : 'rgba(37, 99, 235, 0.16)';
-          ctx.fillRect(tickX - 0.5, ty - 1.1, 4.5, 2.2);
+          ctx.fillRect(tickX - 0.5, ty - 1.1, 4.0, 2.2);
         }
         ctx.fillStyle = lineCol;
-        ctx.fillRect(tickX, ty - 0.5, 3.5, 1.0);
+        ctx.fillRect(tickX, ty - 0.5, 3.0, 1.0);
 
         ctx.fillStyle = reached
           ? isDark
@@ -1125,7 +1125,7 @@
           : isDark
             ? 'rgba(140, 154, 178, 0.58)'
             : 'rgba(30, 41, 59, 0.62)';
-        ctx.fillText(item.label, tickX + 5.6, ty + 0.3);
+        ctx.fillText(item.label, tickX + 4.2, ty + 0.3);
       }
       ctx.restore();
     };

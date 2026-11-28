@@ -95,39 +95,47 @@
     }
   }
 
-  function isIgnTarget(node) {
+  function isIgnTarget(node, cache) {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     if (!el || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
-    if (el.classList?.contains?.('ag-prism-thought-chunk') || el.classList?.contains?.('ag-prism-thought-overlay')) return true;
-    const h = (n, k) => !!n?.hasAttribute?.(k), f = el.firstElementChild;
-    if (h(el, HC_A) || h(f, HC_A) || h(f?.firstElementChild, HC_A) || (h(el, 'data-base-ui-portal') && !!qs(el, '[data-hover-card-popup]'))) return true;
-    return !!el.closest?.(IGNORED_CHAT_SEL);
+    if (cache) {
+      const hit = cache.get(el);
+      if (hit !== undefined) return hit;
+    }
+    let res = false;
+    if (el.classList?.contains?.('ag-prism-thought-chunk') || el.classList?.contains?.('ag-prism-thought-overlay')) res = true;
+    else {
+      const h = (n, k) => !!n?.hasAttribute?.(k), f = el.firstElementChild;
+      if (h(el, HC_A) || h(f, HC_A) || h(f?.firstElementChild, HC_A) || (h(el, 'data-base-ui-portal') && !!qs(el, '[data-hover-card-popup]'))) res = true;
+      else res = !!el.closest?.(IGNORED_CHAT_SEL);
+    }
+    if (cache) cache.set(el, res);
+    return res;
   }
 
-  function isIgnRec(rec) {
+  function isIgnRec(rec, cache) {
     const t = rec?.target;
     if (!t) return false;
-    if (isIgnTarget(t)) return true;
+    if (isIgnTarget(t, cache)) return true;
     const a = rec.addedNodes, r = rec.removedNodes, n = (a?.length || 0) + (r?.length || 0);
     if (!n) return false;
-    for (const l of [a, r]) if (l) for (let i = 0; i < l.length; i++) if (!isIgnTarget(l[i])) return false;
+    for (const l of [a, r]) if (l) for (let i = 0; i < l.length; i++) if (!isIgnTarget(l[i], cache)) return false;
     return true;
   }
-
-  const allIgn = (recs) => Array.isArray(recs) && recs.length > 0 && recs.every(isIgnRec);
 
   const TR_SEL = '[data-testid="model-selector-trigger"],button[aria-label^="Select model"]';
   const SUB_TID = 'context-menu-submenu-popup';
   const SUB_SEL = `[data-testid="${SUB_TID}"]`;
   const MDL_SEL = `[data-testid="model-selector-panel"],${TR_SEL},${SUB_SEL},[role="menu"],[role="listbox"]`;
-  function touchesModel(recs) {
+  function touchesModel(recs, cache) {
     if (!Array.isArray(recs) || !recs.length) return true;
+    const c = cache || new Map();
     for (const rec of recs) {
-      if (isIgnRec(rec)) continue;
+      if (isIgnRec(rec, c)) continue;
       const t = rec?.target, el = t && (t.nodeType === 1 ? t : t.parentElement);
       if (el?.getAttribute && ((ga(el, 'data-testid') || '').includes('model-selector') || el.closest?.(MDL_SEL))) return true;
       for (const n of rec?.addedNodes || []) {
-        if (!n || n.nodeType !== 1 || isIgnTarget(n)) continue;
+        if (!n || n.nodeType !== 1 || isIgnTarget(n, c)) continue;
         const r = ga(n, 'role') || '', tid = ga(n, 'data-testid') || '';
         if (tid.includes('model-selector') || tid === SUB_TID || r === 'menu' || r === 'listbox' || r === 'dialog' || n.classList?.contains?.('agy-overlay') || ((n.tagName === 'DIV' || n.tagName === 'BUTTON') && qs(n, MDL_SEL))) return true;
       }
@@ -173,9 +181,9 @@
       const inner = new BaseMO((recs) => {
         if (disc) return;
         stats.rawMutations += 1;
-        if (allIgn(recs)) { stats.skippedIrrelevant += 1; return; }
+        const ignCache = new Map();
         const open = isMenu(doc), closed = wasOpen && !open;
-        if (!closed && !touchesModel(recs)) { stats.skippedIrrelevant += 1; return; }
+        if (!closed && !touchesModel(recs, ignCache)) { stats.skippedIrrelevant += 1; return; }
         if (Array.isArray(recs)) for (let i = 0; i < recs.length && q.length < 48; i++) q.push(recs[i]);
         const el = Date.now() - lastAt, wMs = open ? MENU_THROTTLE_MS : THROTTLE_MS;
         let subAdded = false;
@@ -193,9 +201,9 @@
         }
         if (closed || subAdded || (open && !wasOpen) || (el >= wMs && tm === null)) {
           if (tm !== null) { clearTimeout(tm); tm = null; }
-          flush(closed);
+          flush(true);
         } else if (tm === null) {
-          tm = setTimeout(() => flush(false), Math.max(16, wMs - el));
+          tm = setTimeout(() => flush(true), Math.max(16, wMs - el));
           tm?.unref?.();
         }
       });

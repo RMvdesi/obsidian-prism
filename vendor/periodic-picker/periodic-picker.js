@@ -1159,34 +1159,30 @@
         return false;
       }
 
+      function isMenuVis(m) {
+        if (!m || (overlayEl && isTargetWithinNode(overlayEl, m))) return false;
+        if (typeof m.getAttribute === 'function') {
+          if (m.getAttribute('data-state') === 'closed' || m.getAttribute('aria-hidden') === 'true') return false;
+          if (m.hasAttribute && m.hasAttribute('hidden')) return false;
+        }
+        if (m.style && (m.style.display === 'none' || m.style.visibility === 'hidden')) return false;
+        if (typeof m.getBoundingClientRect === 'function') {
+          var mr = m.getBoundingClientRect();
+          if (mr && mr.width === 0 && mr.height === 0 && !(m.textContent && String(m.textContent).trim())) return false;
+        }
+        return true;
+      }
       function isNativeHostMenuOpen(docRef, triggerBtn) {
         try {
           if (triggerBtn && typeof triggerBtn.getAttribute === 'function') {
-            if (triggerBtn.getAttribute('aria-expanded') === 'true') return true;
-            if (triggerBtn.getAttribute('data-state') === 'open') return true;
+            if (triggerBtn.getAttribute('aria-expanded') === 'true' || triggerBtn.getAttribute('data-state') === 'open') return true;
             var popOpen = triggerBtn.getAttribute('data-popup-open');
             if (popOpen !== null && popOpen !== 'false') return true;
           }
+          if (docRef && typeof docRef.querySelector === 'function' && isMenuVis(docRef.querySelector('[data-testid="model-selector-panel"]'))) return true;
           if (docRef && typeof docRef.querySelectorAll === 'function') {
-            var menus = docRef.querySelectorAll(
-              '[data-testid="model-selector-panel"], [role="menu"], [data-radix-popper-content-wrapper], [data-radix-menu-content]'
-            );
-            for (var i = 0; i < menus.length; i += 1) {
-              var m = menus[i];
-              if (!m) continue;
-              if (overlayEl && isTargetWithinNode(overlayEl, m)) continue;
-              if (typeof m.getAttribute === 'function') {
-                if (m.getAttribute('data-state') === 'closed') continue;
-                if (m.getAttribute('aria-hidden') === 'true') continue;
-                if (m.hasAttribute && m.hasAttribute('hidden')) continue;
-              }
-              if (typeof m.getBoundingClientRect === 'function') {
-                var mr = m.getBoundingClientRect();
-                var hasText = Boolean(m.textContent && String(m.textContent).trim());
-                if (mr && mr.width === 0 && mr.height === 0 && !hasText) continue;
-              }
-              return true;
-            }
+            var menus = docRef.querySelectorAll('[role="menu"], [data-radix-popper-content-wrapper], [data-radix-menu-content]');
+            for (var i = 0; i < menus.length; i += 1) if (isMenuVis(menus[i])) return true;
           }
         } catch (e) {}
         return false;

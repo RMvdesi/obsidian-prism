@@ -69,7 +69,7 @@
     let szCache = new WeakMap(), skEls = new WeakSet(), ioSkEls = new WeakSet();
     let szRo = null, dvOn = false, dvTgt = null, lastVEv = null;
     let bSeq = 0, tSeq = 0, bSched = false, bRaf = 0, bTmr = 0, bFlush = false;
-    let scBusy = false, scTmr = 0, stBusy = false, mUntil = 0, mTmr = 0;
+    let scBusy = false, scTmr = 0, scUntil = 0, stBusy = false, mUntil = 0, mTmr = 0;
     let lsOn = false, curPerf = '', chkEp = 0, mc = null;
     const mcQ = [];
 
@@ -92,7 +92,8 @@
       return [isS(a1) ? a1 : String(a1 || ''), a2, isO(a3) ? a3 : {}];
     };
     const isStr = (o) => stBusy || getHtml(o)?.getAttribute?.(STREAM_ATTR) === '1';
-    function bumpSc(ms) { scBusy = true; scTmr = clrT(scTmr); scTmr = setTimeout(() => { scTmr = 0; scBusy = false; }, isN(ms) && ms >= 0 ? ms : 200); }
+    const onSc = () => { scTmr = 0; const r = scUntil - nowMs(); r > 4 ? (scTmr = setTimeout(onSc, r)) : (scBusy = !!(scUntil = 0)); };
+    function bumpSc(ms) { const d = isN(ms) && ms >= 0 ? ms : 200, u = nowMs() + d; scBusy = true; if (u > scUntil) scUntil = u; if (!scTmr) scTmr = setTimeout(onSc, d); }
     const onScroll = () => bumpSc(200);
     function toggleLs(on, dO, wO) {
       if (on) { if (dO) bDoc = dO; if (wO) bWin = wO; }
@@ -110,6 +111,7 @@
       mTmr = clrT(mTmr);
       mTmr = setTimeout(() => { mTmr = 0; if (nowMs() >= mUntil) mUntil = 0; }, d + 4);
     }
+    const pA = (a, b) => { for (const x of b) a.push(x); };
     const isBsy = () => scBusy || isStr() || mUntil > nowMs();
 
     function calcMoOpts(isRa, bodyOnly) {
@@ -163,12 +165,12 @@
         else for (const m of src) if (matchRec(s, m)) (hit || (hit = [])).push(m);
         if (!hit?.length) continue;
         if (s.p === 'low' && (hi || s.th > 0)) {
-          const wMs = hi ? M.max(s.th || 0, caps.lowPriorityThrottleMs || 180) : s.th;
-          s.q.push(...hit);
+          const wMs = hi ? M.max(s.th, caps.lowPriorityThrottleMs || 180) : s.th;
+          pA(s.q, hit);
           const el = now - s.at;
           if (el >= wMs && !s.tm) flushSub(s);
           else if (!s.tm) s.tm = setTimeout(() => flushSub(s), M.max(16, wMs - el));
-        } else if (s.q.length) { s.q.push(...hit); flushSub(s); }
+        } else if (s.q.length) { pA(s.q, hit); flushSub(s); }
         else { s.at = now; T(() => s.h(hit)); }
       }
     }
@@ -515,7 +517,7 @@
       skEls = new WeakSet(); ioSkEls = new WeakSet(); lastVEv = null;
       cancelBRaf(wO);
       bTmr = clrT(bTmr); scTmr = clrT(scTmr); mTmr = clrT(mTmr);
-      bSched = scBusy = stBusy = false; mUntil = 0; curPerf = '';
+      bSched = scBusy = stBusy = false; scUntil = mUntil = 0; curPerf = '';
       mQ.clear(); wQ.clear();
       detach();
       while (mcQ.length) T(() => mcQ.shift()());

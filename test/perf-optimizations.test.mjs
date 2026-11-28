@@ -2410,4 +2410,63 @@ test('perf guard 23: ui-runtime isolates model-selector-panel mount (df.o) and i
     uiSrc.includes('|| dirtyFlags.mp)'),
     'scheduleSync highPri must include dirtyFlags.mp for crisp panel hover/update paint'
   );
+  assert.ok(
+    uiSrc.includes('const cp = isFullSync || flags.c ? measureCrabClearanceAll(sw) : null;'),
+    'modelOverlayChanged must not trigger full measureCrabClearanceAll reflow'
+  );
+  assert.ok(
+    uiSrc.includes('if (!hadModelPanelOpen && dirtyFlags.o && !convMount && (mp = qs(D, MODEL_PANEL_SEL)))'),
+    'onRootMutations must synchronously stamp model-selector overlay attrs and glyphs before frame-0 paint'
+  );
+  assert.ok(
+    uiSrc.includes('if (!deferHeavyConvWork && (frc || l)) syncBleedTables();') &&
+      uiSrc.includes('if (f || t || (r && (inHome || prevWasInHome))) safe(() => rippleCtl.sync());'),
+    'conversation switch frame-0 must skip redundant bleed-table walks and home-only ripple syncs'
+  );
+  const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
+  assert.ok(
+    css.includes('.agy-overlay[data-ag-cs-model-overlay="1"]{z-index:60!important;backdrop-filter:none!important;transition:none!important;transform-origin:0 100%!important;contain:layout style;will-change:transform,opacity;animation:ag-m-pop .17s var(--ag-ease-out) both!important}') &&
+      css.includes('@keyframes ag-m-pop{'),
+    'model overlay must drop per-frame backdrop-filter blur and use dedicated GPU spring-pop keyframe'
+  );
+  assert.ok(
+    css.includes('&:is([data-starting-style],[data-ending-style]){opacity:0!important;transform:translate3d(0,4px,0)!important;animation:none!important}'),
+    'overlay open/close transition must avoid scale() to prevent ClearType shimmer and backdrop re-rasterization'
+  );
+  const scSrc = fs.readFileSync(path.join(ROOT, 'stream-choreography.js'), 'utf8');
+  assert.ok(
+    scSrc.includes("!qs(ov, '[data-testid=\"model-selector-panel\"]')"),
+    'measureNewLensOverlays must skip model-selector overlays to prevent mid-flight origin snap and row stagger'
+  );
+  const vcSrc = fs.readFileSync(path.join(ROOT, 'vial-core.js'), 'utf8');
+  assert.ok(
+    vcSrc.includes('ctx.font = \'500 9px Inter, system-ui, "Segoe UI", sans-serif\';') &&
+      vcSrc.includes('TUBE_X = 48') &&
+      vcSrc.includes('const highp float CX = 48.0;'),
+    'vial-core must center glass cylinder at x=48 and use unified UI sans-serif font for scale ticks'
+  );
+  const busSrc = fs.readFileSync(path.join(ROOT, 'src', 'runtime', 'dom-bus.js'), 'utf8');
+  assert.ok(
+    busSrc.includes('if (u > scUntil) scUntil = u; if (!scTmr)') &&
+      busSrc.includes('pA(s.q, hit);'),
+    'dom-bus must coalesce scroll/wheel busy timers without per-event clearTimeout churn and avoid spread push(...hit)'
+  );
+  const slSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'effort-slider', 'slider-coexist.js'), 'utf8');
+  assert.ok(
+    slSrc.includes('const ignCache = new Map();') && slSrc.includes('function isIgnTarget(node, cache)'),
+    'slider-coexist must memoize ignore-target lookups per mutation batch to avoid repeated closest() walks'
+  );
+  const enhSrc = fs.readFileSync(path.join(ROOT, 'host-workbench-enhancer.js'), 'utf8');
+  assert.ok(
+    enhSrc.includes('let cachedFiberKey = \'\';') &&
+      enhSrc.includes("doc.querySelectorAll('iframe[data-testid=\"sidecar-iframe\"], [data-testid=\"sidecar-iframe-slot\"] iframe')"),
+    'host-workbench-enhancer must cache React fiber key and merge sidecar iframe queries'
+  );
+  const omniSrc = fs.readFileSync(path.join(ROOT, 'vendor', 'omni-viewer', 'omni-client.js'), 'utf8');
+  assert.ok(
+    omniSrc.includes('trackedHighlightNodes.size >= 256 ? 1200 : 3000') &&
+      omniSrc.includes('scanWorkSet.has(r)') &&
+      omniSrc.includes('scanWorkHead < scanWorkQueue.length'),
+    'omni-client must keep prune throttle active on >=256 highlights and use O(1) dedup set + head-pointer scan queue'
+  );
 });

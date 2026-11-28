@@ -143,7 +143,7 @@
       pBoxes.forEach(clrEnt);
       clrEnt(orchE);
       emitComp(null);
-      qsa(CV_S).forEach?.(zClr);
+      (trkCvs.size ? trkCvs : qsa(CV_S)).forEach?.(zClr);
       if (immediateShrink) shrinkRims(1);
       else armIdle();
     };
