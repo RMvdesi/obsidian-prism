@@ -119,7 +119,7 @@
     '[data-testid="slash-command-menu"]',
     '[id^="typeahead-item-"][role="option"]',
     'html[data-ag-pp-open="1"]',
-    '#ag-prism-periodic-picker-root',
+    '#ag-prism-periodic-picker-root[data-open="1"]',
     'html[data-ag-cs-model-menu]',
     '[data-testid="model-selector-panel"]',
     '.ag-omni-menu',
@@ -165,7 +165,7 @@
     return nodes.some(isVisibleNode);
   }
 
-  const COMPOSER_EDITOR_SEL = '.surface-composer [data-lexical-editor="true"], .surface-composer [contenteditable="true"], .surface-composer-card [data-lexical-editor="true"], .surface-composer-card [contenteditable="true"], [data-testid="agent-input-box"] [contenteditable="true"], .surface-composer textarea, .surface-composer-card textarea';
+  const COMPOSER_EDITOR_SEL = '.surface-composer [data-lexical-editor="true"], .surface-composer [contenteditable="true"], .surface-composer-card [data-lexical-editor="true"], .surface-composer-card [contenteditable="true"], .agy-composer [contenteditable="true"], [data-testid="agent-input-box"] [contenteditable="true"], [data-testid="composer-editor"], .surface-composer textarea, .surface-composer-card textarea';
 
   function getComposerCandidates(doc) {
     if (!doc || hasVisibleBlockingUi(doc)) return [];
@@ -179,7 +179,7 @@
       const editors = Array.from(view?.querySelectorAll?.(COMPOSER_EDITOR_SEL) || [])
         .filter((node) => isVisibleNode(node) && !isExcludedPaneNode(node) && !isBlockingNode(node));
       for (const editor of editors) {
-        const root = editor?.closest?.('.surface-composer, .surface-composer-card, [data-testid="agent-input-box"]') || null;
+        const root = editor?.closest?.('.surface-composer, .surface-composer-card, .agy-composer, [data-testid="agent-input-box"], [data-testid="composer-editor"]') || null;
         if (!root || seen.has(root) || isExcludedPaneNode(root) || isBlockingNode(root)) continue;
         seen.add(root);
         const owner = view?.closest?.('[data-cascade-id]') || editor?.closest?.('[data-cascade-id]');
@@ -200,6 +200,7 @@
       '[data-testid="input-box-bottom-toolbar"]',
       '.composer-footer',
       '[data-testid="composer-footer"]',
+      '[data-testid="agent-input-footer"]',
       '[data-composer-footer]',
       '[data-testid="agent-input-box-footer"]',
     ];
@@ -209,7 +210,7 @@
         const testId = String(node?.getAttribute?.('data-testid') || '');
         return /(?:^|\s)agy-composer-footer(?:\s|$)|(?:^|\s)composer-footer(?:\s|$)/.test(className) ||
           testId === 'input-box-bottom-toolbar' || testId === 'composer-footer' ||
-          testId === 'agent-input-box-footer' || node?.hasAttribute?.('data-composer-footer');
+          testId === 'agent-input-footer' || testId === 'agent-input-box-footer' || node?.hasAttribute?.('data-composer-footer');
       }) || null;
     if (!footer || footer === editor || !isVisibleNode(footer) || footer.closest?.('[hidden], [inert]')) return null;
     return footer;

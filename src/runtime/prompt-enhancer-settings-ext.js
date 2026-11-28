@@ -9,7 +9,7 @@
   const SLOT_ID = 'prism-prompt-enhancer-slot';
   const ROW_SELECTOR = `[data-ag-cs-row="${ROW_KEY}"]`;
   const SLOT_SELECTOR = `[data-testid="${SLOT_ID}"]`;
-  const sa = (el, key, value) => el?.setAttribute?.(key, String(value));
+  const sa = (el, key, value = '') => el?.setAttribute?.(key, String(value));
   const ga = (el, key) => el?.getAttribute?.(key) ?? null;
   const ra = (el, key) => el?.removeAttribute?.(key);
   const qs = (el, selector) => el?.querySelector?.(selector) || null;
@@ -73,7 +73,7 @@
     const buttons = row.querySelectorAll?.('[data-ag-cs-pe-value]') || [];
     for (const button of buttons) {
       const on = ga(button, 'data-ag-cs-pe-value') === 'on';
-      button.textContent = on ? (ui.onLabel || 'On') : (ui.offLabel || 'Off');
+      button.textContent = on ? (ui.optOn || ui.onLabel || 'On') : (ui.optOff || ui.offLabel || 'Off');
       sa(button, 'aria-pressed', on === enabled ? 'true' : 'false');
       if (on === enabled) sa(button, 'data-pressed');
       else ra(button, 'data-pressed');
