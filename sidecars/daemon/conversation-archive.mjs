@@ -8,6 +8,8 @@ import path from 'node:path';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import runInBgRecovery from '../../src/platform/run-in-bg-recovery.cjs';
+import archiveBreakaway from '../../src/platform/archive-explorer-breakaway.cjs';
+const { trySpawnWindowsExplorerBreakaway, spawnDetachedArchiveWorkerProcess } = archiveBreakaway;
 
 const GUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const DB_FILE_RE = /^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.db(?:-(wal|shm))?$/i;
@@ -3038,30 +3040,18 @@ export function spawnDetachedArchiveTask(task = {}, opts = {}) {
     try { fs.unlinkSync(taskFile); } catch {}
   };
 
-  const spawnFn = typeof opts.spawnFn === 'function' ? opts.spawnFn : spawn;
-  const safeTaskFile = targetPlatform === 'win32' ? assertSafeHelperPath(taskFile, 'taskFile') : taskFile;
-  const spawnOpts = {
-    detached: true,
-    stdio: 'ignore',
-    cwd: os.tmpdir(),
-    env: cleanEnv,
-    ...(targetPlatform === 'win32' ? { windowsHide: true } : {}),
-  };
+  const breakaway = trySpawnWindowsExplorerBreakaway({
+    targetPlatform, opts, archiveDir, defaultArchiveDir: getDefaultArchiveDir(),
+    scriptPath, safePayload, useElectronAsNode, cleanEnv, baseEnv,
+    assertSafeHelperPath, atomicWriteJsonSync, writeActiveArchiveTask, cleanupTaskFile,
+  });
+  if (breakaway) return breakaway;
 
-  try {
-    const child = spawnFn(safeNodeExec, [scriptPath, `--run-task=${safeTaskFile}`], spawnOpts);
-    if (child && typeof child.on === 'function') child.on('error', () => {});
-    if (!child || !child.pid) {
-      cleanupTaskFile();
-      return { spawned: false, code: 'SPAWN_FAILED', error: 'Failed to launch detached archive worker', taskFile: '' };
-    }
-    if (typeof child.unref === 'function') child.unref();
-    writeActiveArchiveTask(archiveDir, { action: safePayload.action, pid: child.pid });
-    return { spawned: true, pid: child.pid, method: 'detached-spawn', useElectronAsNode, taskFile };
-  } catch (err) {
-    cleanupTaskFile();
-    return { spawned: false, code: 'SPAWN_FAILED', error: String(err?.message || err), taskFile: '' };
-  }
+  return spawnDetachedArchiveWorkerProcess({
+    targetPlatform, opts, safeNodeExec, scriptPath, taskFile, archiveDir,
+    safePayload, useElectronAsNode, cleanEnv,
+    assertSafeHelperPath, writeActiveArchiveTask, cleanupTaskFile,
+  });
 }
 
 async function fetchLiveSummariesViaClient() {
