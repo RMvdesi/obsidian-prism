@@ -3300,3 +3300,115 @@ test('Wave 5 P0: Watcher handoff (.archive-task-pending.json) escapes Job Object
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('spawnDetachedArchiveTask uses Windows explorer-breakaway for standard archiveDir when run-archive-task.cmd exists', () => {
+  const tmpRoot = mkTmp('prism-explorer-breakaway-');
+  const convDir = path.join(tmpRoot, 'conversations');
+  const archiveDir = path.join(tmpRoot, 'conversations_archive');
+  fs.mkdirSync(convDir, { recursive: true });
+  fs.mkdirSync(archiveDir, { recursive: true });
+
+  try {
+    const launcherPath = path.join(ROOT, 'sidecars', 'daemon', 'run-archive-task.cmd');
+    assert.equal(fs.existsSync(launcherPath), true, 'sidecars/daemon/run-archive-task.cmd must exist');
+    const launcherText = fs.readFileSync(launcherPath, 'utf8');
+    assert.match(launcherText, /\.archive-task-explorer\.json/);
+    assert.match(launcherText, /conversation-archive\.mjs/);
+
+    const calls = [];
+    const fakeSpawn = (cmd, args, opts) => {
+      calls.push({ cmd, args, opts });
+      return { pid: 43210, on() {}, unref() {} };
+    };
+
+    // 1) Standard archiveDir on win32 -> explorer-breakaway via explorer.exe
+    const res = arch.spawnDetachedArchiveTask(
+      { action: 'archive-and-restart', convDir, archiveDir, gracefulQuit: true, relaunch: true },
+      {
+        platform: 'win32',
+        defaultArchiveDir: archiveDir,
+        scriptPath: path.join(ROOT, 'sidecars', 'daemon', 'conversation-archive.mjs'),
+        nodeExecPath: process.execPath,
+        spawnFn: fakeSpawn,
+        env: { SystemRoot: 'C:\\Windows' },
+        existsSync: (p) => String(p).toLowerCase().endsWith('explorer.exe') || fs.existsSync(p),
+      }
+    );
+    assert.equal(res.spawned, true);
+    assert.equal(res.method, 'explorer-breakaway');
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].cmd, /explorer\.exe$/i);
+    assert.deepEqual(calls[0].args, [launcherPath]);
+    assert.equal(fs.existsSync(path.join(archiveDir, '.archive-task-explorer.json')), true);
+
+    // 2) disableExplorerBreakaway -> falls back to detached-spawn
+    calls.length = 0;
+    const resFallback = arch.spawnDetachedArchiveTask(
+      { action: 'archive-and-restart', convDir, archiveDir, gracefulQuit: true, relaunch: true },
+      {
+        platform: 'win32',
+        defaultArchiveDir: archiveDir,
+        disableExplorerBreakaway: true,
+        scriptPath: path.join(ROOT, 'sidecars', 'daemon', 'conversation-archive.mjs'),
+        nodeExecPath: process.execPath,
+        spawnFn: fakeSpawn,
+      }
+    );
+    assert.equal(resFallback.spawned, true);
+    assert.equal(resFallback.method, 'detached-spawn');
+    assert.equal(calls.length, 1);
+    assert.ok(!/explorer\.exe$/i.test(calls[0].cmd));
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('checkStorageGuardAndNotify suppresses banner when 0 archivable subagents and LS memory is below threshold', async () => {
+  const tmpRoot = mkTmp('prism-sg-nothing-archivable-');
+  const convDir = path.join(tmpRoot, 'conversations');
+  const archiveDir = path.join(tmpRoot, 'conversations_archive');
+  const statePath = path.join(tmpRoot, 'storage-guard-state.json');
+  fs.mkdirSync(convDir, { recursive: true });
+  fs.mkdirSync(archiveDir, { recursive: true });
+
+  const daemon = new PrismDaemon({
+    rootDir: ROOT,
+    enableStorageGuardTimer: false,
+    storageGuardStatePath: statePath,
+  });
+  try {
+    let bannerEvalCount = 0;
+    daemon.sessions.set('ws://local-sg-test', {
+      scopeKey: 'local',
+      session: {
+        closed: false,
+        evaluate: async (expr) => {
+          if (String(expr || '').includes(STORAGE_GUARD_ROOT_ID)) bannerEvalCount += 1;
+          return { shown: true };
+        },
+      },
+    });
+    const now = Date.now();
+    // Simulate >1.5GB of preserved main chats (warn=true via totalMb) with 0 archivable subagents and normal LS RAM (933MB)
+    const mainId = makeGuid(701);
+    const mainDbPath = path.join(convDir, `${mainId}.db`);
+    fs.writeFileSync(mainDbPath, Buffer.alloc(0));
+    fs.truncateSync(mainDbPath, 1600 * 1024 * 1024);
+    const res = await daemon._checkStorageGuardAndNotify({
+      convDir,
+      archiveDir,
+      lsMemoryMb: 933,
+      summaries: new Map([[mainId, { title: 'Main Chat', status: 'IDLE', lastModifiedMs: now - 3600000 }]]),
+      checkIdle: async () => ({ idle: true }),
+      now,
+    });
+    assert.equal(res.shown, false);
+    assert.equal(res.reason, 'nothing-archivable');
+    assert.equal(res.health?.warn, true);
+    assert.equal(res.health?.archivableSubagentCount, 0);
+    assert.equal(bannerEvalCount, 0);
+  } finally {
+    await daemon.stop(false, { skipAutoArchive: true });
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
