@@ -1236,11 +1236,12 @@ test('perf guard 20: Host Turbo alert.css dedup+restore, async img, hidden sidec
     /pre:not\(\[data-ag-cs-rich-pre="1"\]\),pre>div:is\(\.border,\.bg-muted\)>div:nth-child\(2\),\.agy-md-table\.md-table-frame,table:not\(\.md-table-el\)\)\{contain:layout style;?\}/,
     'Read-only code bodies and Markdown tables must have safe contain:layout style without contain:paint'
   );
-  const blurRuleMatch = css.match(/html\[data-ag-cs-style\]:is\(\[data-ag-cs-win-blur="1"\],\[data-ag-pp-open="1"\]\):is\(\[data-ag-cs-perf-mode="performance"\],\[data-ag-cs-perf-mode="eco"\]\)\{[^\n]+\}/);
-  assert.ok(blurRuleMatch, 'style.css must define performance/eco-scoped window-blur & pp-open animation pause rule');
-  assert.ok(
-    blurRuleMatch[0].includes(':is([data-ag-cs-win-blur="1"],[data-ag-pp-open="1"]):is([data-ag-cs-perf-mode="performance"],[data-ag-cs-perf-mode="eco"])'),
-    'Window-blur & periodic-picker animation pause must be scoped strictly to performance/eco modes so default mode stays alive'
+  const blurRuleMatch = css.match(/html\[data-ag-cs-style\]\[data-ag-cs-blur-p="1"\]\{[^\n]+\}/);
+  assert.ok(blurRuleMatch, 'style.css must define performance/eco-scoped decoupled data-ag-cs-blur-p="1" animation pause rule');
+  assert.equal(
+    css.includes('data-ag-cs-win-blur'),
+    false,
+    'style.css must decouple data-ag-cs-win-blur CSS matching onto data-ag-cs-blur-p so balanced mode skips Blink whole-tree recalc'
   );
   assert.ok(
     blurRuleMatch[0].includes('animation-play-state:paused !important;') &&
@@ -1262,6 +1263,7 @@ test('perf guard 20: Host Turbo alert.css dedup+restore, async img, hidden sidec
       parentNode: null,
       children: [],
       childNodes: [],
+      get firstElementChild() { return this.children[0] || null; },
       isConnected: true,
       disabled: false,
       sheet: tag === 'style' ? { disabled: false } : undefined,
@@ -2410,4 +2412,161 @@ test('perf guard 23: ui-runtime isolates model-selector-panel mount (df.o) and i
     uiSrc.includes('|| dirtyFlags.mp)'),
     'scheduleSync highPri must include dirtyFlags.mp for crisp panel hover/update paint'
   );
+});
+
+test('perf guard 24: win-blur CSS pause attribute (data-ag-cs-blur-p) is isolated to performance mode and resizing marks leaf data-ag-cs-rz targets cleanly', () => {
+  const vm = require('node:vm');
+  const cdp = require(path.join(ROOT, 'cdp.js'));
+  const uiMainFactory = require(path.join(ROOT, 'ui-runtime.js'));
+  function makeNode(tag, attrs = {}) {
+    const map = new Map(Object.entries(attrs));
+    const el = {
+      nodeType: 1,
+      tagName: tag.toUpperCase(),
+      parentElement: null,
+      parentNode: null,
+      children: [],
+      childNodes: [],
+      get firstElementChild() { return this.children[0] || null; },
+      isConnected: true,
+      style: { setProperty() {}, removeProperty() {} },
+      classList: { contains: (c) => String(map.get('class') || '').split(/\s+/).includes(c), add() {}, remove() {} },
+      getAttribute: (k) => (map.has(k) ? map.get(k) : null),
+      setAttribute: (k, v) => map.set(k, String(v)),
+      hasAttribute: (k) => map.has(k),
+      removeAttribute: (k) => map.delete(k),
+      appendChild(c) { c.parentElement = this; c.parentNode = this; this.children.push(c); return c; },
+      remove() {},
+      closest(sel) {
+        let cur = this;
+        while (cur) {
+          if (sel.includes('sidebar-split') && cur.getAttribute('data-testid') === 'sidebar-split') return cur;
+          cur = cur.parentElement;
+        }
+        return null;
+      },
+      contains(o) {
+        let cur = o;
+        while (cur) { if (cur === this) return true; cur = cur.parentNode; }
+        return false;
+      },
+      querySelectorAll(sel) {
+        const out = [];
+        const walk = (n) => {
+          for (const c of n.children) {
+            if (sel === '[data-ag-cs-rz]' && c.hasAttribute('data-ag-cs-rz')) out.push(c);
+            else if (sel === 'button,button>span' && (c.tagName === 'BUTTON' || (c.tagName === 'SPAN' && n.tagName === 'BUTTON'))) out.push(c);
+            else if (sel === '[data-testid="sidebar-split"]' && c.getAttribute('data-testid') === 'sidebar-split') out.push(c);
+            else if (sel !== '[data-ag-cs-rz]') {
+              if (sel.includes('sidebar-split') && n.getAttribute('data-testid') === 'sidebar-split' && n.children[0] === c) out.push(c);
+              if (sel.includes('.agy-composer-footer') && c.classList.contains('agy-composer-footer')) out.push(c);
+              if (sel.includes('div:first-child') && c.tagName === 'DIV' && n.classList.contains('agy-composer-footer') && n.children[0] === c) out.push(c);
+              if (sel.includes('-trigger') && String(c.getAttribute('data-testid') || '').endsWith('-trigger')) out.push(c);
+            }
+            walk(c);
+          }
+        };
+        walk(this);
+        return out;
+      },
+      querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+    };
+    return el;
+  }
+  const html = makeNode('html');
+  const head = makeNode('head');
+  const body = makeNode('body');
+  const split = makeNode('div', { 'data-testid': 'sidebar-split' });
+  const sbCol = makeNode('div');
+  const sash = makeNode('div', { role: 'separator' });
+  split.appendChild(sbCol);
+  split.appendChild(sash);
+  const footer = makeNode('div', { class: 'agy-composer-footer' });
+  const footerFirst = makeNode('div');
+  const modelBtn = makeNode('button', { 'data-testid': 'model-selector-trigger' });
+  const modelSpan = makeNode('span');
+  modelBtn.appendChild(modelSpan);
+  footerFirst.appendChild(modelBtn);
+  footer.appendChild(footerFirst);
+  body.appendChild(split);
+  body.appendChild(footer);
+  html.appendChild(head);
+  html.appendChild(body);
+
+  let focused = true;
+  let nextTid = 1;
+  const timers = new Map();
+  const docLs = new Map();
+  const winLs = new Map();
+  const sb = {
+    window: null,
+    document: {
+      hidden: false,
+      documentElement: html,
+      head,
+      body,
+      hasFocus: () => focused,
+      createElement: (t) => makeNode(t),
+      getElementById: () => null,
+      querySelector: (s) => html.querySelector(s),
+      querySelectorAll: (s) => html.querySelectorAll(s),
+      addEventListener(ev, fn) { if (!docLs.has(ev)) docLs.set(ev, new Set()); docLs.get(ev).add(fn); },
+      removeEventListener(ev, fn) { docLs.get(ev)?.delete(fn); },
+    },
+    location: { pathname: '/chat', href: 'http://localhost/chat' },
+    performance: { now: () => 1000 },
+    devicePixelRatio: 1,
+    innerWidth: 1400,
+    innerHeight: 900,
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    getComputedStyle: () => ({ getPropertyValue: () => '' }),
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    addEventListener(ev, fn) { if (!winLs.has(ev)) winLs.set(ev, new Set()); winLs.get(ev).add(fn); },
+    removeEventListener(ev, fn) { winLs.get(ev)?.delete(fn); },
+    MutationObserver: class { observe() {} disconnect() {} takeRecords() { return []; } },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame() {},
+    setTimeout(fn) { const id = nextTid++; timers.set(id, fn); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    setInterval: () => 1,
+    clearInterval() {},
+    __agCsI18nCore: require(path.join(ROOT, 'i18n-core.js')),
+    __agCsLocales: require(path.join(ROOT, 'i18n-locales.js')),
+    Set, WeakSet, Map, WeakMap, Array, Object, Number, Math, String, Boolean, JSON, Promise, Date,
+  };
+  sb.window = sb;
+  sb.globalThis = sb;
+  vm.runInNewContext(`(${uiMainFactory.toString()})(${JSON.stringify({ ...cdp.DEFAULT_CONFIG, performanceMode: 'balanced' })})`, sb);
+
+  // 1) Balanced mode blur sets data-ag-cs-win-blur for JS hibernation, NEVER data-ag-cs-blur-p
+  focused = false;
+  for (const fn of winLs.get('blur') || []) fn();
+  for (const [id, fn] of [...timers.entries()]) { timers.delete(id); fn(); }
+  assert.equal(html.getAttribute('data-ag-cs-win-blur'), '1');
+  assert.equal(html.hasAttribute('data-ag-cs-blur-p'), false, 'balanced mode must not set data-ag-cs-blur-p on win-blur');
+
+  // 2) Switching to performance mode immediately syncs data-ag-cs-blur-p="1"; focusing clears both
+  sb.window.__agPrism.refreshConfig({ performanceMode: 'performance' });
+  assert.equal(html.getAttribute('data-ag-cs-blur-p'), '1', 'performance mode must set data-ag-cs-blur-p="1" while blurred');
+  focused = true;
+  for (const fn of winLs.get('focus') || []) fn();
+  assert.equal(html.hasAttribute('data-ag-cs-win-blur'), false);
+  assert.equal(html.hasAttribute('data-ag-cs-blur-p'), false);
+
+  // 3) Resizing stamps data-ag-cs-rz="1" onto leaf targets directly (not <html>) and clears cleanly after settle
+  for (const fn of docLs.get('pointerdown') || []) fn({ target: sash });
+  assert.equal(html.getAttribute('data-ag-cs-resizing'), '1');
+  assert.equal(html.hasAttribute('data-ag-cs-rz'), false, '<html> must never carry data-ag-cs-rz');
+  assert.equal(sbCol.getAttribute('data-ag-cs-rz'), '1');
+  assert.equal(footer.getAttribute('data-ag-cs-rz'), '1');
+  assert.equal(footerFirst.getAttribute('data-ag-cs-rz'), '1');
+  assert.equal(modelBtn.getAttribute('data-ag-cs-rz'), '1');
+  assert.equal(modelSpan.getAttribute('data-ag-cs-rz'), '1');
+  for (const fn of winLs.get('pointerup') || []) fn();
+  for (const [id, fn] of [...timers.entries()]) { timers.delete(id); fn(); }
+  assert.equal(html.hasAttribute('data-ag-cs-resizing'), false);
+  assert.equal(sbCol.hasAttribute('data-ag-cs-rz'), false);
+  assert.equal(footer.hasAttribute('data-ag-cs-rz'), false);
+  assert.equal(modelSpan.hasAttribute('data-ag-cs-rz'), false);
+  sb.window.__agPrism.destroy();
 });

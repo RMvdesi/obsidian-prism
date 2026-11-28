@@ -1002,8 +1002,13 @@ test('style.css hygiene & PR #10 / P0-1 / P0-2 CSS contracts (0 :has(), 0 non-AS
     'style.css must blend running wash on running glide pill'
   );
   assert.ok(
-    css.includes('html[data-ag-cs-style][data-ag-cs-resizing="1"]') && css.includes('transition:none !important;'),
-    'style.css must freeze layout transitions during html[data-ag-cs-resizing="1"]'
+    css.includes('html[data-ag-cs-style] [data-ag-cs-rz="1"]{transition:none !important;}'),
+    'style.css must freeze layout transitions on direct leaf [data-ag-cs-rz="1"] targets without descendant selectors'
+  );
+  assert.equal(
+    css.includes('data-ag-cs-resizing'),
+    false,
+    'style.css must not match data-ag-cs-resizing on <html> to avoid broad subtree style invalidation'
   );
   assert.ok(
     css.includes('html[data-ag-cs-model-menu="1"] :is([data-ag-cs-model-submenu="1"],[data-testid="context-menu-submenu-popup"]){z-index:65 !important;}'),

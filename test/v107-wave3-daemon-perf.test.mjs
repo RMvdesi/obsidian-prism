@@ -1076,8 +1076,10 @@ test('Audit P0-1, P1-4c & P1-5b: inject.js equal-length config write invalidates
       'data-ag-cs-resizing': '1',
       'data-ag-cs-mascot-drag': '1',
       'data-ag-cs-win-blur': '1',
+      'data-ag-cs-blur-p': '1',
     });
     const rowRunningEl = makeEl('div', { 'data-ag-cs-row-running': '1' });
+    const rzEl = makeEl('div', { 'data-ag-cs-rz': '1' });
     const rowStaggerEl = makeEl('div', { 'data-ag-row-stagger': '1' }, { '--ag-row-i': '4' });
     const overviewShellEl = makeEl(
       'div',
@@ -1086,7 +1088,7 @@ test('Audit P0-1, P1-4c & P1-5b: inject.js equal-length config write invalidates
     );
     const orchBtnEl = makeEl('button', { 'data-ces-orch-b': 'claude', 'data-ces-model-selected': '1' });
     const orchPanelEl = makeEl('div', { 'data-ces-orch-tunable': 'true' });
-    const allEls = [rowRunningEl, rowStaggerEl, overviewShellEl, orchBtnEl, orchPanelEl];
+    const allEls = [rowRunningEl, rzEl, rowStaggerEl, overviewShellEl, orchBtnEl, orchPanelEl];
 
     const matchesSingleAttr = (el, sel) => {
       const m = /^\[([a-z0-9-]+)(?:="([^"]*)")?\]$/i.exec(sel.trim());
@@ -1119,6 +1121,8 @@ test('Audit P0-1, P1-4c & P1-5b: inject.js equal-length config write invalidates
     assert.equal(rootEl.hasAttribute('data-ag-cs-resizing'), false, 'REMOVE_EXPRESSION must strip data-ag-cs-resizing');
     assert.equal(rootEl.hasAttribute('data-ag-cs-mascot-drag'), false, 'REMOVE_EXPRESSION must strip data-ag-cs-mascot-drag');
     assert.equal(rootEl.hasAttribute('data-ag-cs-win-blur'), false);
+    assert.equal(rootEl.hasAttribute('data-ag-cs-blur-p'), false, 'REMOVE_EXPRESSION must strip data-ag-cs-blur-p');
+    assert.equal(rzEl.hasAttribute('data-ag-cs-rz'), false, 'REMOVE_EXPRESSION must strip data-ag-cs-rz');
     assert.equal(rowRunningEl.hasAttribute('data-ag-cs-row-running'), false, 'REMOVE_EXPRESSION must strip data-ag-cs-row-running');
     assert.equal(rowStaggerEl.hasAttribute('data-ag-row-stagger'), false, 'REMOVE_EXPRESSION must strip data-ag-row-stagger');
     assert.equal(rowStaggerEl.style.getPropertyValue('--ag-row-i'), '', 'REMOVE_EXPRESSION must clear inline --ag-row-i');

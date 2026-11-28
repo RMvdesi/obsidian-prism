@@ -134,17 +134,22 @@ test('W7-2: default animations restore smooth GPU linear/ease-in-out (0 low-FPS 
     'performance mode must disable ag-ov-br breathing animation on overview & step-plan'
   );
 
-  // win-blur & pp-open CSS animation pause is scoped strictly to performance/eco so dual-screen default mode stays alive
+  // win-blur & pp-open CSS animation pause uses decoupled data-ag-cs-blur-p="1" (set only in performance/eco) so balanced mode incurs 0 full-tree Blink invalidation on win-blur toggle
   const winBlurLine = cssLines.find(
-    (l) => l.includes('[data-ag-cs-win-blur="1"]') && l.includes('animation-play-state:paused')
+    (l) => l.includes('[data-ag-cs-blur-p="1"]') && l.includes('animation-play-state:paused')
   );
-  assert.ok(winBlurLine, 'style.css must define performance/eco win-blur animation-play-state:paused rule');
+  assert.ok(winBlurLine, 'style.css must define performance/eco decoupled data-ag-cs-blur-p="1" animation-play-state:paused rule');
   assert.ok(
-    winBlurLine.includes(
-      'html[data-ag-cs-style]:is([data-ag-cs-win-blur="1"],[data-ag-pp-open="1"]):is([data-ag-cs-perf-mode="performance"],[data-ag-cs-perf-mode="eco"])'
-    ),
-    'win-blur animation pause must be scoped strictly to performance/eco modes'
+    winBlurLine.startsWith('html[data-ag-cs-style][data-ag-cs-blur-p="1"]{'),
+    'win-blur animation pause must bind to root data-ag-cs-blur-p="1" instead of referencing data-ag-cs-win-blur directly'
   );
+  for (const line of cssLines) {
+    assert.equal(
+      line.includes('data-ag-cs-win-blur'),
+      false,
+      `style.css must not match data-ag-cs-win-blur directly (triggers Blink whole-tree recalc in balanced mode): ${line.slice(0, 160)}`
+    );
+  }
   const requiredPausedSelectors = [
     '.shimmer-text-mask',
     '.shimmer-text-content',

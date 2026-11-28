@@ -278,6 +278,7 @@ return true;
 const getEffectivePalette = () => pickOf(cfg.palette === 'claude' ? 'warm' : cfg.palette, 'obsidian|warm|host', 'obsidian');
 const getLightPreset = () => (cfg.lightPreset === 'alabaster' ? 'alabaster' : 'crystal');
 const getMotionLevel = () => pickOf(cfg.motionLevel, 'off|subtle|standard|ultra', 'ultra');
+const syncBlurCss = (h) => h && tA(h, 'data-ag-cs-blur-p', cfg.performanceMode === 'performance' && (ha(h, BLUR_ATTR) || ha(h, 'data-ag-pp-open')));
 const getTargetFps = () => pickOf(String(cfg.targetFps || ''), '60|120|180|native', '180');
 const getMinFrameGapMs = () => {
 const userGap = ({ native: 0, 60: 15.2, 120: 7.5 })[getTargetFps()] ?? 4.8;
@@ -770,6 +771,7 @@ for (const [k, v] of [['', VERSION], ['-omni', onOffMode('omniModule')], ['-link
 if (cfg.sidebarRestyle === false) { tA(html, 'data-ag-cs-sidebar-collapsed', false); rmAll('.ag-cs-sidebar-glide-pill'); }
 tA(html, 'data-ag-cs-cjk', isFn(i18nCore?.isCjkLanguage) ? i18nCore.isCjkLanguage(lang) : isZh());
 syncMotionOffStyle(mLv === 'off');
+syncBlurCss(html);
 getDomBus()?.applyPerformanceMode?.(cfg.performanceMode, D, W);
 const igRm = !!cfg.ignoreReducedMotion, igFn = W.__agPrismApplyIgnoreReducedMotion;
 if (isFn(igFn)) igFn(igRm, D, W);
@@ -1485,18 +1487,19 @@ savedAlertCss = ''; alertCssHasRtl = false;
   };
 
   let axE = null, axO = null, axF = null, axL = null, axTm = 0;
-  const AX_A = 'data-ag-cs-aux-dual', RESIZE_ATTR = 'data-ag-cs-resizing', MASCOT_DRAG_ATTR = 'data-ag-cs-mascot-drag';
+  const AX_A = 'data-ag-cs-aux-dual', RESIZE_ATTR = 'data-ag-cs-resizing', MASCOT_DRAG_ATTR = 'data-ag-cs-mascot-drag', S_SBS = _ts('sidebar-split');
   let resizeEndTm = 0, splitDragActive = false;
-const isDragSuspendedRoot = () => { const h = de(); return ga(h, RESIZE_ATTR) === '1' || ga(h, MASCOT_DRAG_ATTR) === '1'; };
+const isDragSuspendedRoot = () => { const h = de(); return ha(h, RESIZE_ATTR) || ha(h, MASCOT_DRAG_ATTR); };
+const RZ_A = 'data-ag-cs-rz';
 const finishResizing = (triggerSync = true) => {
 resizeEndTm = cT(resizeEndTm);
 splitDragActive = false;
 const h = de(), had = ha(h, RESIZE_ATTR);
-if (had) runGuardedMut(() => ra(h, RESIZE_ATTR));
+if (had) runGuardedMut(() => { ra(h, RESIZE_ATTR); raAll(RZ_A); });
 if (had && triggerSync && !destroyed) { markRim(); dirtyFlags.a = true; if (hasTt) dirtyFlags.c = true; scheduleSync(); }
 };
 const scheduleResizingEnd = () => { cT(resizeEndTm); resizeEndTm = ST(() => finishResizing(true), 120); };
-const markResizingRoot = () => { const h = de(); if (h && ga(h, RESIZE_ATTR) !== '1') runGuardedMut(() => sa(h, RESIZE_ATTR, '1')); };
+const markResizingRoot = () => { const h = de(); if (h && !ha(h, RESIZE_ATTR)) runGuardedMut(() => { sa(h, RESIZE_ATTR, 1); const s = (e) => sa(e, RZ_A, 1); s(fe(qs(D, S_SBS))); qaE(D, '.agy-composer-footer', (f) => { s(f); s(fe(f)); qaE(f, 'button,button>span', s); }); }); };
 const bumpResizingPulse = () => {
 if (destroyed) return;
 markResizingRoot();
@@ -1504,7 +1507,7 @@ if (!splitDragActive) scheduleResizingEnd();
 };
 const isSplitResizeHandle = (el) => {
 if (!el) return false;
-const split = cl(el, `${S_AP},[data-testid="sidebar-split"]`);
+const split = cl(el, `${S_AP},${S_SBS}`);
 if (split) {
 const sep = chOf(split)?.[1] || null;
 if (sep && (el === sep || hasIn(sep, el))) return true;
@@ -1843,7 +1846,7 @@ if (hb) dirtyAddedRoots.add(el);
     blurTm = cT(blurTm);
     const h = de();
     if (ha(h, BLUR_ATTR)) {
-      runGuardedMut(() => ra(h, BLUR_ATTR));
+      runGuardedMut(() => { ra(h, BLUR_ATTR); syncBlurCss(h); });
       syncRigPwr();
       safe(() => convAuraCtl.wake?.(false));
       safe(() => convAuraCtl.sync(true));
@@ -1867,7 +1870,7 @@ if (hb) dirtyAddedRoots.add(el);
       blurTm = ST(() => safe(() => {
         blurTm = 0;
         const h = de();
-        if (!destroyed && !hasFoc() && ga(h, BLUR_ATTR) !== '1') { runGuardedMut(() => sa(h, BLUR_ATTR, '1')); syncRigPwr(); }
+        if (!destroyed && !hasFoc() && ga(h, BLUR_ATTR) !== '1') { runGuardedMut(() => { sa(h, BLUR_ATTR, 1); syncBlurCss(h); }); syncRigPwr(); }
       }), 1200);
     });
   }
@@ -2059,7 +2062,7 @@ if (mt === 'attributes') {
 if (an === 'data-ag-prism-host-i18n') { dirtyFlags.g = anyRelevant = true; continue; }
 if (an === 'dir') { if (!alertCssHasRtl && savedAlertCss && isRtlEl(tgt)) { dirtyTurboRoots.add(tgt); anyRelevant = true; } continue; }
 if (tgt === D.body || tgt === de()) {
-if (an === 'data-ag-pp-open') { prismRimCtl.markDirty(); dirtyFlags.c = anyRelevant = true; continue; }
+if (an === 'data-ag-pp-open') { runGuardedMut(() => syncBlurCss(tgt)); prismRimCtl.markDirty(); dirtyFlags.c = anyRelevant = true; continue; }
 if (an === 'data-ag-prism-wallpaper' || isHoleA(an)) { dirtyFlags.r = anyRelevant = true; continue; }
 if (an === 'data-ag-prism-mode' || an === 'data-ag-cs-corners') { invRim(); dirtyFlags.c = true; }
 dirtyFlags.t = anyRelevant = true;
@@ -2309,7 +2312,7 @@ qaE(D, '[data-ag-cs-effort]', (e) => { ra(e, 'data-ag-cs-effort'); e[K_CL].remov
 qaE(D, `[${A_Q}],[${A_TK}],[${A_TT}]`, (e) => { ra(e, A_Q); ra(e, A_TK); ra(e, A_TT); rp(e, 'margin-bottom'); });
 qaE(D, '[data-ag-row-stagger]', (e) => { ra(e, 'data-ag-row-stagger'); rp(e, '--ag-row-i'); });
 qaE(D, '.agy-overlay,.agy-fastpick,[data-testid="context-menu-popup"],[data-testid="context-menu-submenu-popup"],[data-ag-cs-overview-shell]', (e) => { rp(e, '--ag-origin-x'); rp(e, '--ag-origin-y'); });
-for (const s of 'placeholder|orch-active|model-overlay|aux-dual|overview-shell|prism-mirror|prism-reflect|settings-dlg|settings-nav|nav-active|conv-seat|conv-ripple-host|vp-wrap|swapping|vp-live|home-sheet|row-running|menu-open|auto-unfolded|outer-open|caustic|fiber-camp|pane-camp|sonar|stage-glide|liftoff-bubble|thought-streaming|spark-streaming|prism-cv|code-folded|bg-cmd-wrap|input-layer|hdr-open|rich-pre|glide-item|crab-anchor|bleed'.split('|')) raAll('data-ag-cs-' + s);
+for (const s of 'placeholder|orch-active|model-overlay|aux-dual|overview-shell|prism-mirror|prism-reflect|settings-dlg|settings-nav|nav-active|conv-seat|conv-ripple-host|vp-wrap|swapping|vp-live|home-sheet|row-running|menu-open|auto-unfolded|outer-open|caustic|fiber-camp|pane-camp|sonar|stage-glide|liftoff-bubble|thought-streaming|spark-streaming|prism-cv|code-folded|bg-cmd-wrap|input-layer|hdr-open|rich-pre|glide-item|crab-anchor|bleed|rz'.split('|')) raAll('data-ag-cs-' + s);
 for (const a of 'data-has-sep,data-pv-warn,data-ag-sp-running'.split(',')) raAll(a);
 safe(() => { getDomBus()?.dispose?.(D, W); getMascotHop()?.dispose?.(D); for (const k of ['__agPrismFontCustomizer', '__agPrismReducedMotionGuard']) wMod(k)?.dispose?.(D); });
 const pfx = (p, s) => s.split(',').map((x) => p + x).join(',');
@@ -2317,7 +2320,7 @@ rmAll(pfx('#ag-prism-', 'overlay-portal,mascot-hop-style,periodic-picker-css,per
 const html = de();
 if (html) {
 ra(html, 'data-ag-perf-busy');
-for (const s of 'style|theme|palette|light-preset|motion|ignore-rm|perf-mode|stream-active|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|chat-font|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);
+for (const s of 'style|theme|palette|light-preset|motion|ignore-rm|perf-mode|stream-active|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|chat-font|code-font|ligatures|ambient|win-blur|blur-p|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);
 for (const s of '|thought-view|omni|link-target|sidebar-studio|sidebar-host-sync|project-partitions'.split('|')) ra(html, s ? 'data-ag-prism-' + s : 'data-ag-prism');
 rp(html, '--ag-spring-sidebar-ease'); rp(html, '--ag-spring-sidebar-dur');
 }
