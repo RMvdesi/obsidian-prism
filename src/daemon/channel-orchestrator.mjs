@@ -262,9 +262,11 @@ export class ChannelOrchestrator {
     }
     const cdp = this.getCdp();
     const cacheFileName =
-      typeof cdp?.BUNDLE_CACHE_FILENAME === 'string' && cdp.BUNDLE_CACHE_FILENAME
-        ? cdp.BUNDLE_CACHE_FILENAME
-        : '.bundle-cache.json';
+      typeof cdp?.BUNDLE_CACHE_SHARD_DIRNAME === 'string' && cdp.BUNDLE_CACHE_SHARD_DIRNAME
+        ? cdp.BUNDLE_CACHE_SHARD_DIRNAME
+        : typeof cdp?.BUNDLE_CACHE_FILENAME === 'string' && cdp.BUNDLE_CACHE_FILENAME
+          ? cdp.BUNDLE_CACHE_FILENAME
+          : '.bundle-cache';
 
     if (!this.isGitSourceDir(this._rootDir) && this.isWritableCacheDir(this._rootDir)) {
       return path.join(this._rootDir, cacheFileName);
@@ -496,19 +498,23 @@ export class ChannelOrchestrator {
         : { cachePath: bundleCachePath }
       : null;
 
-    this.injectExpr = cacheOpts ? cdp.buildInjectExpression(cfg || undefined, cacheOpts) : cdp.buildInjectExpression(cfg || undefined);
-    const m = typeof this.injectExpr === 'string' ? this.injectExpr.match(/"codeHash":"([^"]+)"/) : null;
-    this.codeHash = m ? m[1] : '';
+    const runBuilds = () => {
+      this.injectExpr = cacheOpts ? cdp.buildInjectExpression(cfg || undefined, cacheOpts) : cdp.buildInjectExpression(cfg || undefined);
+      const m = typeof this.injectExpr === 'string' ? this.injectExpr.match(/"codeHash":"([^"]+)"/) : null;
+      this.codeHash = m ? m[1] : '';
 
-    // 表驱动统一预编译全部 precompileOnBoot 通道（14 条），按需通道（swarmI18n / settings）清空延后编译
-    for (const spec of CHANNEL_STATIC_SPECS) {
-      if (!spec.precompileOnBoot) {
-        if (spec.id === 'swarmI18n') this.swarmManager.resetCompiledCache();
-        else this.setChannelExpr(spec.id, '');
-        continue;
+      // 表驱动统一预编译全部 precompileOnBoot 通道（14 条），按需通道（swarmI18n / settings）清空延后编译
+      for (const spec of CHANNEL_STATIC_SPECS) {
+        if (!spec.precompileOnBoot) {
+          if (spec.id === 'swarmI18n') this.swarmManager.resetCompiledCache();
+          else this.setChannelExpr(spec.id, '');
+          continue;
+        }
+        this.buildChannelExpr(spec, cfg, cacheOpts, { allowSidebarWithoutReadConfig: true });
       }
-      this.buildChannelExpr(spec, cfg, cacheOpts, { allowSidebarWithoutReadConfig: true });
-    }
+    };
+    if (typeof cdp?.runWithStatBatch === 'function') cdp.runWithStatBatch(runBuilds);
+    else runBuilds();
 
     if (bundleCachePath) {
       if (deferDiskCacheWrite) {

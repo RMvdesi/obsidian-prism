@@ -192,6 +192,7 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
     'effortSlider',
     'workbenchEnhancer',
     'contextMenu',
+    'rippleSim',
   ];
 
   const descriptors = cdp.getChannelDescriptors();

@@ -235,20 +235,30 @@
       ctx.closePath();
     };
 
-    const drawRefl = (ctx, gx, gy, w, h, dpr, dark, effA, rW, rH, lx, ly) => {
+    const drawRefl = (e, ctx, gx, gy, w, h, dpr, dark, effA, rW, rH, lx, ly) => {
       if ((rW || 0) * (rH || 0) > 120000) return;
       const dO = Math.hypot(lx < 0 ? -lx : lx > rW ? lx - rW : 0, ly < 0 ? -ly : ly > rH ? ly - rH : 0);
       if (dO > 42) return;
       const a = effA * mx(0, 1 - dO / 42) * (dark ? 1 : 0.65);
       if (a <= 0.01) return;
-      const rx = gx + 3.2 * dpr, ry = gy + 4.2 * dpr;
-      fillRad(ctx, rx + 2 * dpr, ry + 3 * dpr, 26 * dpr, w, h, dark ? [0, rg('248,252,255', 0.135 * a), 0.45, rg('216,232,252', 0.05 * a), 1, 'rgba(200,220,250,0)'] : [0, rg('37,99,235', 0.065 * a), 1, 'rgba(37,99,235,0)']);
-      const drawL = (ox, oy, s, x1, y1, st) => {
+      const rx = gx + 3.2 * dpr, ry = gy + 4.2 * dpr, gk = `${dpr}|${dark ? 1 : 0}`;
+      const cx = rx + 2 * dpr, cy = ry + 3 * dpr, rr = 26 * dpr;
+      const x0 = cx > rr ? (cx - rr) | 0 : 0, y0 = cy > rr ? (cy - rr) | 0 : 0;
+      const x1 = mn(w, Math.ceil(cx + rr)), y1 = mn(h, Math.ceil(cy + rr));
+      ctx.save(); ctx.globalAlpha *= a;
+      if (x1 > x0 && y1 > y0) {
+        ctx.save(); ctx.translate(cx, cy);
+        ctx.fillStyle = cGrad(e, 'rr', gk, () => addS(ctx.createRadialGradient(0, 0, 0, 0, 0, rr), dark ? [0, rg('248,252,255', .135), .45, rg('216,232,252', .05), 1, rg('200,220,250', 0)] : [0, rg('37,99,235', .065), 1, rg('37,99,235', 0)]));
+        ctx.fillRect(x0 - cx, y0 - cy, x1 - x0, y1 - y0);
+        ctx.restore();
+      }
+      const drawL = (slot, ox, oy, s, x1, y1, st) => {
         ctx.save(); ctx.translate(rx + ox * dpr, ry + oy * dpr); traceGhost(ctx, s);
-        ctx.fillStyle = addS(ctx.createLinearGradient(0, 0, x1 * s, y1 * s), st); ctx.fill(); ctx.restore();
+        ctx.fillStyle = cGrad(e, slot, gk, () => addS(ctx.createLinearGradient(0, 0, x1 * s, y1 * s), st)); ctx.fill(); ctx.restore();
       };
-      drawL(-0.55, -0.55, 1.18 * dpr, 8, 16, dark ? [0, rg('232,242,255', 0.055 * a), 0.55, rg('204,224,248', 0.024 * a), 1, 'rgba(180,205,238,0)'] : [0, rg('15,23,42', 0.032 * a), 1, 'rgba(15,23,42,0)']);
-      drawL(0, 0, 1.04 * dpr, 7, 15, dark ? [0, rg('252,254,255', 0.115 * a), 0.45, rg('222,235,252', 0.048 * a), 1, rg('190,210,240', 0.006 * a)] : [0, rg('15,23,42', 0.06 * a), 1, 'rgba(15,23,42,0.004)']);
+      drawL('rl1', -0.55, -0.55, 1.18 * dpr, 8, 16, dark ? [0, rg('232,242,255', .055), .55, rg('204,224,248', .024), 1, rg('180,205,238', 0)] : [0, rg('15,23,42', .032), 1, rg('15,23,42', 0)]);
+      drawL('rl2', 0, 0, 1.04 * dpr, 7, 15, dark ? [0, rg('252,254,255', .115), .45, rg('222,235,252', .048), 1, rg('190,210,240', .006)] : [0, rg('15,23,42', .06), 1, rg('15,23,42', .004)]);
+      ctx.restore();
     };
 
     const paintRim = (e, active, lx, ly, radius, dark, toneKey = 'default', amb = 1) => {
@@ -290,7 +300,7 @@
           strokeRR(ctx, 0, 0, w, h, mn(w * 0.5, h * 0.5, cssR * dpr));
           ctx.clip();
           fillRad(ctx, gx, gy, 210 * dpr, w, h, dark ? [0, rg('238,245,255', 0.068 * effA), 0.42, rg('206,224,250', 0.026 * effA), 0.8, rg('180,202,238', 0.006 * effA), 1, 'rgba(180,202,238,0)'] : [0, rg('37,99,235', 0.042 * effA), 0.5, rg('37,99,235', 0.014 * effA), 1, 'rgba(37,99,235,0)']);
-          if (isFn(ctx.translate) && isFn(ctx.createLinearGradient)) drawRefl(ctx, gx, gy, w, h, dpr, dark, effA, e.rect.width, e.rect.height, lx, ly);
+          if (isFn(ctx.translate) && isFn(ctx.createLinearGradient)) drawRefl(e, ctx, gx, gy, w, h, dpr, dark, effA, e.rect.width, e.rect.height, lx, ly);
           ctx.restore();
         }
         const mSt = dark ? [0, 'rgba(255,255,255,.95)', .24, 'rgba(232,240,252,0.56)', .54, 'rgba(186,202,228,.18)', .85, 'rgba(148,168,198,.03)', 1, 'rgba(148,168,198,0)'] : [0, 'rgba(30,64,175,.52)', .42, 'rgba(59,130,246,.2)', 1, 'rgba(59,130,246,0)'];

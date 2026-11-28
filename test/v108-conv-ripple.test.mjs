@@ -802,7 +802,7 @@ test('Issue #63 home-ripple-host conv mode: single WebGL2 canvas on main shell, 
   }
 });
 
-test('Issue #63 conv pointer filtering, streaming 0fps guard, 1200ms idle sleep, and wallpaper/Browser Hole/pp-open/blur avoidance', () => {
+test('Issue #63 conv pointer filtering, active during streaming, 1200ms idle sleep, and wallpaper/Browser Hole/pp-open/blur avoidance', () => {
   const prevDoc = globalThis.document;
   const prevWin = globalThis.window;
   const prevRaf = globalThis.requestAnimationFrame;
@@ -840,7 +840,7 @@ test('Issue #63 conv pointer filtering, streaming 0fps guard, 1200ms idle sleep,
       isDestroyed: () => false,
       isAllowed: () => false, // Even when homeRipple=false / homeLayout='off'
       isConvAllowed: () => true,
-      isConvRunning: () => convRunning,
+      isConvRunning: () => convRunning, // Option A: legacy option accepted but ignored (no streaming pause)
       isDarkTheme: () => true,
       motionReduced: () => motionOff,
       getMinFrameGapMs: () => 0,
@@ -870,21 +870,23 @@ test('Issue #63 conv pointer filtering, streaming 0fps guard, 1200ms idle sleep,
     assert.equal(m.waves.active(), true, 'blank area click should trigger restrained conv wave');
     assert.equal(mascotPressCalls, 0, 'conv click must never trigger home mascot press');
 
-    // 3) Streaming protection (isConvRunning=true) forces 0fps static backdrop immediately
+    // 3) Streaming does NOT force-pause conv ripple: active waves and pointermove stay responsive
     convRunning = true;
     nowMs += 40;
     flushRaf(nowMs);
-    assert.equal(m.sleeping, true, 'isConvRunning()=true must drop conv ripple to 0fps static backdrop');
-    assert.equal(rafQueue.filter((x) => !x.cancelled).length, 0);
-    // Pointermove during streaming must NOT wake rAF
+    assert.equal(m.sleeping, false, 'isConvRunning()=true must NOT force conv ripple to sleep');
+    assert.ok(rafQueue.filter((x) => !x.cancelled).length > 0);
+    // Pointermove during streaming continues waking/animating normally
     nowMs += 100;
     layoutDom.mainBody.dispatchEvent({ type: 'pointermove', clientX: 320, clientY: 260, target: layoutDom.panes[0].blank });
-    assert.equal(m.sleeping, true);
-    assert.equal(rafQueue.filter((x) => !x.cancelled).length, 0);
+    assert.equal(m.sleeping, false);
+    assert.ok(rafQueue.filter((x) => !x.cancelled).length > 0);
 
-    // 4) Streaming ends -> pointermove wakes, and stationary >= 1200ms settles cleanly to 0fps sleep
+    // 4) Streaming ends -> settle prior click wave + glow trail, then stationary >= 1200ms enters 0fps sleep cleanly
     convRunning = false;
-    for (let s = 0; s < 500; s++) m.waves.advance(0.05); // settle prior click wave
+    for (let s = 0; s < 500; s++) m.waves.advance(0.05);
+    for (let s = 0; s < 200 && !m.sleeping; s++) { nowMs += 50; flushRaf(nowMs); }
+    assert.equal(m.sleeping, true, 'settled wave + glow must enter 0fps sleep before stationary pointer check');
     nowMs += 100;
     layoutDom.mainBody.dispatchEvent({ type: 'pointermove', clientX: 300, clientY: 300, target: layoutDom.panes[0].blank });
     assert.equal(m.sleeping, false);
@@ -1143,7 +1145,7 @@ test('Issue #64 convRipple protection: async webglcontextlost self-heals on conv
       isDestroyed: () => false,
       isAllowed: () => false,
       getConvLevel: () => 'medium',
-      isConvRunning: () => false,
+      isConvRunning: () => false, // Option A: legacy option accepted for compat
       isDarkTheme: () => true,
       motionReduced: () => false,
       getMinFrameGapMs: () => 0,
@@ -1157,6 +1159,16 @@ test('Issue #64 convRipple protection: async webglcontextlost self-heals on conv
     assert.equal(m.mode, 'conv');
     assert.equal(m.field.mode, 'webgl2');
     const firstCv = m.canvas;
+
+    // 0) pace() is kept as a legacy API-compat no-op and preserves active wave energy & awake state
+    m.waves.disturb(4, 4);
+    m.wake();
+    assert.equal(m.waves.active(), true);
+    ctl.pace(350);
+    assert.equal(m.waves.active(), true, 'pace() must preserve active waves');
+    assert.equal(m.sleeping, false, 'pace() must keep ripple alive instead of freezing');
+    flushRaf(nowMs += 45);
+    assert.equal(m.waves.active(), true, 'ripple must keep advancing after legacy pace() call');
 
     // 1) Async webglcontextlost in conv mode (e.g. Ctrl+J xterm GPU preemption) while WebGL2 now fails -> swaps canvas & recovers in true 2D!
     webglFails = true;

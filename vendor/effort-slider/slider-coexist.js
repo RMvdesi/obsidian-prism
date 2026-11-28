@@ -95,39 +95,46 @@
     }
   }
 
-  function isIgnTarget(node) {
+  function isIgnTarget(node, cache) {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     if (!el || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
-    if (el.classList?.contains?.('ag-prism-thought-chunk') || el.classList?.contains?.('ag-prism-thought-overlay')) return true;
-    const h = (n, k) => !!n?.hasAttribute?.(k), f = el.firstElementChild;
-    if (h(el, HC_A) || h(f, HC_A) || h(f?.firstElementChild, HC_A) || (h(el, 'data-base-ui-portal') && !!qs(el, '[data-hover-card-popup]'))) return true;
-    return !!el.closest?.(IGNORED_CHAT_SEL);
+    const hit = cache?.get(el);
+    if (hit !== undefined) return hit;
+    let res = false;
+    if (el.classList?.contains?.('ag-prism-thought-chunk') || el.classList?.contains?.('ag-prism-thought-overlay')) res = true;
+    else {
+      const h = (n, k) => !!n?.hasAttribute?.(k), f = el.firstElementChild;
+      if (h(el, HC_A) || h(f, HC_A) || h(f?.firstElementChild, HC_A) || (h(el, 'data-base-ui-portal') && !!qs(el, '[data-hover-card-popup]'))) res = true;
+      else res = !!el.closest?.(IGNORED_CHAT_SEL);
+    }
+    cache?.set(el, res);
+    return res;
   }
 
-  function isIgnRec(rec) {
+  function isIgnRec(rec, cache) {
     const t = rec?.target;
     if (!t) return false;
-    if (isIgnTarget(t)) return true;
+    if (isIgnTarget(t, cache)) return true;
     const a = rec.addedNodes, r = rec.removedNodes, n = (a?.length || 0) + (r?.length || 0);
     if (!n) return false;
-    for (const l of [a, r]) if (l) for (let i = 0; i < l.length; i++) if (!isIgnTarget(l[i])) return false;
+    for (const l of [a, r]) if (l) for (let i = 0; i < l.length; i++) if (!isIgnTarget(l[i], cache)) return false;
     return true;
   }
 
-  const allIgn = (recs) => Array.isArray(recs) && recs.length > 0 && recs.every(isIgnRec);
+  const allIgn = (recs, cache) => Array.isArray(recs) && recs.length > 0 && recs.every((r) => isIgnRec(r, cache));
 
   const TR_SEL = '[data-testid="model-selector-trigger"],button[aria-label^="Select model"]';
   const SUB_TID = 'context-menu-submenu-popup';
   const SUB_SEL = `[data-testid="${SUB_TID}"]`;
   const MDL_SEL = `[data-testid="model-selector-panel"],${TR_SEL},${SUB_SEL},[role="menu"],[role="listbox"]`;
-  function touchesModel(recs) {
+  function touchesModel(recs, cache) {
     if (!Array.isArray(recs) || !recs.length) return true;
     for (const rec of recs) {
-      if (isIgnRec(rec)) continue;
+      if (isIgnRec(rec, cache)) continue;
       const t = rec?.target, el = t && (t.nodeType === 1 ? t : t.parentElement);
       if (el?.getAttribute && ((ga(el, 'data-testid') || '').includes('model-selector') || el.closest?.(MDL_SEL))) return true;
       for (const n of rec?.addedNodes || []) {
-        if (!n || n.nodeType !== 1 || isIgnTarget(n)) continue;
+        if (!n || n.nodeType !== 1 || isIgnTarget(n, cache)) continue;
         const r = ga(n, 'role') || '', tid = ga(n, 'data-testid') || '';
         if (tid.includes('model-selector') || tid === SUB_TID || r === 'menu' || r === 'listbox' || r === 'dialog' || n.classList?.contains?.('agy-overlay') || ((n.tagName === 'DIV' || n.tagName === 'BUTTON') && qs(n, MDL_SEL))) return true;
       }
@@ -135,10 +142,12 @@
     return false;
   }
 
+  let tmoSeq = 0;
   function mkThrottledMO(BaseMO, doc, stats) {
     if (typeof BaseMO !== 'function') return null;
     return function TMO(cb) {
-      let tm = null, closeTm = null, lastAt = 0, q = [], disc = false, wasOpen = false, curTrig = null;
+      const subId = 'effort-slider-' + ++tmoSeq;
+      let tm = null, closeTm = null, lastAt = 0, q = [], disc = false, wasOpen = false, curTrig = null, unBus = null;
       const syncTrig = () => {
         if (disc) return;
         const tr = qs(doc, TR_SEL);
@@ -152,7 +161,8 @@
         const batch = q;
         q = [];
         const open = isMenu(doc), closed = wasOpen && !open;
-        if (!(fSync || closed) && !touchesModel(batch)) {
+        const cache = new WeakMap();
+        if (!(fSync || closed) && !touchesModel(batch, cache)) {
           wasOpen = open;
           stats.skippedIrrelevant += 1;
           return;
@@ -170,12 +180,13 @@
           closeTm?.unref?.();
         }
       };
-      const inner = new BaseMO((recs) => {
+      const onRecords = (recs) => {
         if (disc) return;
         stats.rawMutations += 1;
-        if (allIgn(recs)) { stats.skippedIrrelevant += 1; return; }
+        const cache = new WeakMap();
+        if (allIgn(recs, cache)) { stats.skippedIrrelevant += 1; return; }
         const open = isMenu(doc), closed = wasOpen && !open;
-        if (!closed && !touchesModel(recs)) { stats.skippedIrrelevant += 1; return; }
+        if (!closed && !touchesModel(recs, cache)) { stats.skippedIrrelevant += 1; return; }
         if (Array.isArray(recs)) for (let i = 0; i < recs.length && q.length < 48; i++) q.push(recs[i]);
         const el = Date.now() - lastAt, wMs = open ? MENU_THROTTLE_MS : THROTTLE_MS;
         let subAdded = false;
@@ -198,11 +209,30 @@
           tm = setTimeout(() => flush(false), Math.max(16, wMs - el));
           tm?.unref?.();
         }
-      });
+      };
+      const inner = new BaseMO(onRecords);
       const wrap = {
         observe(t, o) {
           disc = false;
-          const r = inner.observe(t, t === doc?.body && o?.characterData ? { ...o, characterData: false } : o);
+          const normOpts = t === doc?.body && o?.characterData ? { ...o, characterData: false } : o;
+          const bus = doc?.defaultView?.__agDomBus || doc?.defaultView?.__agPrismDomBus;
+          if (t === doc?.body && typeof bus?.subscribe === 'function') {
+            if (unBus) { try { unBus(); } catch {} unBus = null; }
+            try {
+              unBus = bus.subscribe(subId, onRecords, {
+                priority: 'low',
+                observeOptions: {
+                  childList: normOpts?.childList !== false,
+                  subtree: normOpts?.subtree !== false,
+                  attributes: !!normOpts?.attributes,
+                  attributeFilter: normOpts?.attributeFilter,
+                },
+              });
+              syncTrig();
+              return;
+            } catch { unBus = null; }
+          }
+          const r = inner.observe(t, normOpts);
           syncTrig();
           return r;
         },
@@ -210,6 +240,7 @@
           disc = true;
           if (tm !== null) { clearTimeout(tm); tm = null; }
           if (closeTm !== null) { clearTimeout(closeTm); closeTm = null; }
+          if (unBus) { try { unBus(); } catch {} unBus = null; }
           curTrig = null;
           q = [];
           return inner.disconnect();

@@ -210,9 +210,13 @@ function decodeSimpleTemplateBody(body) {
   return out;
 }
 
-function packTextJsExpr(text, maxDict = 5200) {
+function packTextJsExpr(text, maxDict = 5200, options = null) {
   if (text.length >= 8192) {
-    const lzPacked = packLzssJsExpr(text, ['ag-cs-home-panel', 'SIDEBAR_STUDIO_CLIENT_V2']);
+    const lzPacked = packLzssJsExpr(
+      text,
+      ['ag-cs-home-panel', 'SIDEBAR_STUDIO_CLIENT_V2'],
+      options && options.lzHelper ? options.lzHelper : null
+    );
     if (lzPacked && Buffer.byteLength(lzPacked, 'utf8') + 12 < Buffer.byteLength(serializeJsValue(text), 'utf8')) {
       return lzPacked;
     }

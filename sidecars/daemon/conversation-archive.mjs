@@ -1311,6 +1311,7 @@ export async function scanConversationStorageAsync({
   convDir = getDefaultConversationsDir(),
   archiveDir = getDefaultArchiveDir(),
   summaries = null,
+  catalogIndex = undefined,
   extraSignals = null,
   subagentMaxAgeHours = DEFAULT_SUBAGENT_MAX_AGE_HOURS,
   mainMaxAgeDays = DEFAULT_MAIN_MAX_AGE_DAYS,
@@ -1330,7 +1331,7 @@ export async function scanConversationStorageAsync({
     catalogEntries = extractCatalogIndexFromSummaries(summaries, extraSignals);
     catalogUpdatedAt = new Date(now).toISOString();
   } else {
-    const loaded = await loadCatalogIndexAsync(safeArchiveDir);
+    const loaded = catalogIndex && typeof catalogIndex === 'object' ? catalogIndex : await loadCatalogIndexAsync(safeArchiveDir);
     if (loaded) {
       catalogEntries = loaded.entries;
       catalogUpdatedAt = loaded.updatedAt || null;

@@ -327,6 +327,15 @@ function mangleSafeLocals(tokens) {
   const paramOpenIndices = new Set();
   const paramCloseIndices = new Set();
   const exprArrowIndices = new Set();
+  const matchClose = new Int32Array(sig.length).fill(-1);
+  {
+    const pOpen = [];
+    for (let i = 0; i < sig.length; i++) {
+      const v = sig[i].val;
+      if (v === '(') pOpen.push(i);
+      else if (v === ')' && pOpen.length) matchClose[pOpen.pop()] = i;
+    }
+  }
 
   let scanBlockDepth = 0;
   const scanStack = [];
@@ -407,6 +416,9 @@ function mangleSafeLocals(tokens) {
     const isFnParams =
       (prev && prev.val === 'function') ||
       (prev && prev.type === 'id' && prev2 && prev2.val === 'function');
+    const preClose = matchClose[i];
+    const preAfter = preClose >= 0 && preClose + 1 < sig.length ? sig[preClose + 1] : null;
+    if (!(isFnParams || (preAfter && preAfter.val === '=>'))) continue;
     let depth = 1;
     let braceDepth = 0;
     let bracketDepth = 0;

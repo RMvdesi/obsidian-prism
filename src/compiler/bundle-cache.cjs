@@ -685,6 +685,7 @@ function createBundleCache({
     computeBundleConfigHash: io.computeBundleConfigHash,
     getBundleCacheStats,
     resetBundleCacheStats,
+    runWithStatBatch: io.runWithStatBatch,
     resolveChannelAssetsWithDiskCache,
     flushPendingBundleCache,
     resolveCurrentBundleCodeHash,

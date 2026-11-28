@@ -567,8 +567,8 @@ activeHomeStudioInst = mod.createHomeStudioPanelController({ usageCore: uc, stor
 return activeHomeStudioInst;
 };
 const homeStudioCtl = mkDel(resolveHomeStudioCtl, HS_KS);
-const rippleCtl = homeRippleMod?.createHomeRippleController ? homeRippleMod.createHomeRippleController({ rippleCore, isDestroyed: () => destroyed, isAllowed: () => cfg.homeRipple !== false && cfg.homeLayout !== 'off', isConvAllowed: () => cfg.convRipple !== 'off', getConvLevel: () => cfg.convRipple, isConvRunning, isDarkTheme, motionReduced, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getAccentTone, getEffectivePalette, setAttrIfChanged, onPointerPressMascot: (x) => { if (msRig && msRoot) safe(() => { const mr = rc(msRoot); if (mr) notifyMascot('ripple', { x: x - mr.left }); }); } }) : mkStub('sync|refreshTheme|unmount|getMount');
-const convAuraCtl = convAuraMod?.createConvAuraController ? convAuraMod.createConvAuraController({ isDestroyed: () => destroyed, isHomeRippleEnabled: () => getAmbientFloat() > 0, isMotionStandardOrUltra, isDarkTheme, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getSpectrumMode: resolveAuraSpectrumMode, isWindowFocused: () => (isFn(D.hasFocus) ? D.hasFocus() : !D.hidden), rippleCore, setAttrIfChanged, runGuardedMut }) : mkStub('sync|refreshTheme|unmount|getInstance|setActiveView|setSemanticState|prime|wake|triggerStart', { advancePhase: () => 'off' });
+const rippleCtl = homeRippleMod?.createHomeRippleController ? homeRippleMod.createHomeRippleController({ rippleCore, isDestroyed: () => destroyed, isAllowed: () => cfg.homeRipple !== false && cfg.homeLayout !== 'off', isConvAllowed: () => cfg.convRipple !== 'off', getConvLevel: () => cfg.convRipple, isDarkTheme, motionReduced, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getAccentTone, setAttrIfChanged, onPointerPressMascot: (x) => { if (msRig && msRoot) safe(() => { const mr = rc(msRoot); if (mr) notifyMascot('ripple', { x: x - mr.left }); }); } }) : mkStub('sync|refreshTheme|unmount|getMount');
+const convAuraCtl = convAuraMod?.createConvAuraController ? convAuraMod.createConvAuraController({ isDestroyed: () => destroyed, isHomeRippleEnabled: () => getAmbientFloat() > 0, isMotionStandardOrUltra, isDarkTheme, getMinFrameGapMs, getAmbientIntensity: getAmbientFloat, getSpectrumMode: resolveAuraSpectrumMode, isWindowFocused: () => (isFn(D.hasFocus) ? D.hasFocus() : !D.hidden), extPane: true, rippleCore, setAttrIfChanged, runGuardedMut }) : mkStub('sync|refreshTheme|unmount|getInstance|setActiveView|setSemanticState|prime|wake|triggerStart', { advancePhase: () => 'off' });
 const HE_KS = 'sync|onThemeChange|destroy';
 const hostEnhancerFallback = mkStub(HE_KS);
 let activeHostEnhancerMod = null, activeHostEnhancerInst = null;
@@ -1006,12 +1006,12 @@ const trackActivePaneFromTarget = (t, sched = true) => {
 if (destroyed || !t?.closest || cl(t, '#' + SETTINGS_SEC_ID + ',#ag-prism-periodic-picker-root,[role="dialog"]')) return false;
 const nc = findCardForTarget(t), nv = findConvForTarget(t, nc);
 if (!nc && !nv) return false;
-if (nc && isMascotEnabled() && !canHopFocus(t, nc, activePaneCard || msAnc, AF(qa(D, S_IBCC)).filter(isLiveMainCard))) return false;
 const chg = (nc && nc !== activePaneCard) || (nv && nv !== activeConvView);
+if (!chg) return false;
+if (nc && isMascotEnabled() && !canHopFocus(t, nc, activePaneCard || msAnc, AF(qa(D, S_IBCC)).filter(isLiveMainCard))) return false;
 if (nc) activePaneCard = nc;
 if (nv) activeConvView = nv;
-if (chg) { notifyActivePaneModules(activePaneCard, activeConvView); if (sched) { dirtyFlags.c = true; scheduleSync(); } return true; }
-return false;
+notifyActivePaneModules(activePaneCard, activeConvView); if (sched) { dirtyFlags.c = true; scheduleSync(); } return true;
 };
 const resolveActivePrimaryCard = (cards) => {
 if (!cards?.length) { activePaneCard = null; if (activeConvView && !isLiveMainConv(activeConvView)) activeConvView = null; return null; }
@@ -1035,7 +1035,8 @@ const measureCrabClearanceAll = () => {
 const cards = AF(qa(D, S_IBCC)), pri = resolveActivePrimaryCard(cards), priCv = findConvForTarget(pri, pri);
 const mOn = isMascotEnabled(), m = new Map(), pTk = new Set(), byCard = new Map();
 for (const c of pri ? [pri, ...cards.filter((x) => x !== pri)] : cards) byCard.set(c, measureCardClr(c, cl(c, S_IB), c === pri && mOn, c === pri, m, pTk));
-return { cards, primaryCard: pri, primaryConv: priCv, byCard, awaitingDecision: detectVisibleDecisionTakeover(m, priCv) };
+const aw = detectVisibleDecisionTakeover(m, priCv);
+return { cards, primaryCard: pri, primaryConv: priCv, byCard, awaitingDecision: aw, awA: aw || detectVisibleDecisionTakeover(m, priCv, true) };
 };
 const syncConvAuraSemantics = (activeInfo, preAwaiting) => {
 if (!isFn(convAuraCtl.setSemanticState)) return;
@@ -1130,7 +1131,7 @@ latestPaneModelMap = paneModelMap;
 if (primaryCard || primaryConv) notifyActivePaneModules(primaryCard, primaryConv);
 const pPl = primaryCard ? cPlan.byCard.get(primaryCard) : null, pO = readOpenPulseCardState();
 const pCov = !!(pO.openNow && (!pO.openHost || !primaryConv || primaryConv.contains?.(pO.openHost) || primaryCard?.contains?.(pO.openHost)));
-const mascotShouldPeek = !!(cPlan.awaitingDecision || pPl?.tko || pPl?.mo || pPl?.ops?.some(([, a, o]) => o && a !== A_TT) || detectVisibleDecisionTakeover(null, primaryConv, true) || pCov || ga(de(), 'data-ag-pp-open') === '1');
+const mascotShouldPeek = !!(cPlan.awA || pPl?.tko || pPl?.mo || pPl?.ops?.some(([, a, o]) => o && a !== A_TT) || pCov || ga(de(), 'data-ag-pp-open') === '1');
 const activeInfoForCrab = getLightweightActiveInfo(primaryCard);
 queuedCrabAnchor = pPl?.queuedAnchor || null;
 syncCrab(primaryCard, activeInfoForCrab, primaryModelInfo, mascotShouldPeek ? 'peek' : 'none', pPl?.queuedRoofH || 0);
@@ -1783,7 +1784,7 @@ if (hb) dirtyAddedRoots.add(el);
       }
       if (flags.f || flags.g) ensureSettingsSection();
       if (frc || flags.t) ensurePulseBridge(!!(flags.f || flags.t));
-      if (effectiveFull || flags.s || flags.c || flags.o || flags.r || offObs.size > 0) syncOffscreenRunningIo();
+      if (effectiveFull || flags.s || flags.c || flags.o || flags.r) syncOffscreenRunningIo();
     });
     if (effectiveFull || flags.c || flags.r || routeJumped) safe(() => W.__agPrismPeriodicPicker?.onHostTriggerChanged?.());
     if (!deferHeavyConvWork && (frc || flags.l || flags.b || flags.t || flags.s || flags.g || flags.o)) {
@@ -1959,7 +1960,7 @@ if (hb) dirtyAddedRoots.add(el);
     if (t?.closest) {
       trackActivePaneFromTarget(t, true);
       const sbRow = cl(t, '[data-testid="conversation-row-sidebar"]');
-      if (sbRow) streamChoreoCtl.lockSidebarRowRunningOnPointerDown?.(sbRow);
+      if (sbRow) { streamChoreoCtl.lockSidebarRowRunningOnPointerDown?.(sbRow); }
       if (isSplitResizeHandle(t)) {
         splitDragActive = true;
         const h = de(); if (h && ga(h, RESIZE_ATTR) !== '1') runGuardedMut(() => sa(h, RESIZE_ATTR, '1'));
@@ -2107,7 +2108,7 @@ if (tidOf(tgt) === 'aux-pane-split') dirtyFlags.a = anyRelevant = true;
 }
 const inComposerBox = !!(pCtx && pCtx.inComp), inEditor = !!(pCtx && pCtx.inEd);
 if (inEditor && (m.addedNodes?.length || m.removedNodes?.length)) caretDirty = true;
-const isSibHost = !!(isElementLike(tgt) && !inComposerBox && !pCtx?.inSide && !pCtx?.inDlg && tgt !== D.body && tgt !== de() && qs(tgt, S_IB));
+const isSibHost = !!(isElementLike(tgt) && !inComposerBox && !pCtx?.inSide && !pCtx?.inDlg && tgt !== D.body && tgt !== de() && (!pCtx?.inConv || tidOf(tgt) === 'conversation-view') && qs(tgt, S_IB));
 const scanList = (list, isAdd) => {
 if (!list || !list.length) return;
 for (let j = 0; j < list.length; j++) {

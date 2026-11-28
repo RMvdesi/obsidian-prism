@@ -605,7 +605,7 @@ for(const a of ancs){const it=insts.get(a);if(!it||!isConn(doc,it.host)||it.host
 return false;
 };
 
-const readBoxText=n=>{const b=n?.closest?.(IB_S),ed=(b&&qS(b,'[contenteditable="true"],textarea,input'))||n;return String(ed?.value??ed?.innerText??ed?.textContent??'').replace(/\u200B/g,'').trim();};
+const readBoxText=n=>{const b=n?.closest?.(IB_S),ed=(b&&qS(b,'[contenteditable="true"],textarea,input'))||n;return String(ed?.value??ed?.textContent??'').replace(/\u200B/g,'').trim();};
 const hasBusyBtn=doc=>{const e=qS(doc,BUSY_SEL);return!!(e&&e.hidden!==true&&e.style?.display!=='none');};
 const isCompactedDrop=(b,s)=>{
 const x=s?.speed?.context;if(!x||s?.connection===LE)return false;
@@ -687,7 +687,7 @@ if(insts.size){
 if(mode==='auto'&&hasExt(gB(),true)){schedHeal(true);return;}
 const nowB=hasBusyBtn(doc);
 if(wasBusy&&!nowB){wasBusy=false;armCompactBurst(null,null,[180,650,1100]);}else wasBusy=nowB;
-const sw=checkConvSwitch(doc,w,false);if(anchorsChanged(doc)){schedHeal(sw);return;}if(sw)return;
+const sw=checkConvSwitch(doc,w,false);if(healTm===null&&anchorsChanged(doc)){schedHeal(sw);return;}if(sw)return;
 }else if(waitTm===null&&!hasExt(gB(),true)&&hasAnyAnchor(doc,true)){schedHeal(true);return;}
 if(healTm!==null)return;
 const extMissingTier=gB().some(b=>visB(b)&&b.shadowRoot&&!qS(b.shadowRoot,`style[${TIER_STYLE_ATTR}="1"]`));

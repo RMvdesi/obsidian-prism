@@ -262,7 +262,7 @@ const REMOVE_EXPRESSION = `(() => {
   delete globalThis.__agCsRippleCore;
   delete globalThis.__agCsUsageCore;
   delete globalThis.__agCsI18nCore;
-  for (const k of ['__agPrismDomBus', '__agPrismPerfCaps', '__agPrismReducedMotion', '__agPrismApplyIgnoreReducedMotion', '__agPrismReducedMotionGuard', '__agPrismFontCustomizer', '__agPrismI18nExtBeta4', '__agPrismSettingsExtBeta4', '__agPrismRippleWorker']) {
+  for (const k of ['__agPrismDomBus', '__agPrismPerfCaps', '__agPrismReducedMotion', '__agPrismApplyIgnoreReducedMotion', '__agPrismReducedMotionGuard', '__agPrismFontCustomizer', '__agPrismI18nExtBeta4', '__agPrismSettingsExtBeta4', '__agPrismRippleWorker', '__agPrismRippleSim', '__agPrismSimReady']) {
     try { delete window[k]; } catch {}
     try { delete globalThis[k]; } catch {}
   }

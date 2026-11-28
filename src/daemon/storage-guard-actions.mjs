@@ -391,8 +391,7 @@ export async function handleStorageAction(upd, action, _testOverrides = null, ra
     if (action === 'storage-health' && !forceFresh && upd._storageHealthCache) {
       const sameConvDir =
         convDirMtimeMs > 0 &&
-        upd._storageHealthConvMtimeMs === convDirMtimeMs &&
-        !upd._storageHealthCache.warn;
+        upd._storageHealthConvMtimeMs === convDirMtimeMs;
       const idleStreak = sameConvDir ? Math.max(0, Number(upd._storageHealthIdleStreak) || 0) : 0;
       const effectiveTtlMs = sameConvDir
         ? Math.min(30 * 60 * 1000, 300000 * Math.pow(2, Math.min(3, idleStreak)))
@@ -567,13 +566,27 @@ export async function handleStorageAction(upd, action, _testOverrides = null, ra
       const mem = await _testOverrides.getMemoryStats();
       if (mem?.ok && Number.isFinite(mem.totalMb)) lsMemoryMb = mem.totalMb;
     } else if (!_testOverrides?.convDir) {
-      const mem = await arch.getLanguageServerMemoryStatsAsync();
-      if (mem?.ok && Number.isFinite(mem.totalMb) && mem.totalMb > 0) lsMemoryMb = mem.totalMb;
+      const cachedLs = upd._lsMemStatsCache;
+      if (
+        !forceFresh &&
+        action === 'storage-health' &&
+        cachedLs &&
+        now - cachedLs.at < 600000
+      ) {
+        lsMemoryMb = cachedLs.totalMb;
+      } else {
+        const mem = await arch.getLanguageServerMemoryStatsAsync();
+        if (mem?.ok && Number.isFinite(mem.totalMb) && mem.totalMb > 0) {
+          lsMemoryMb = mem.totalMb;
+          upd._lsMemStatsCache = { at: now, totalMb: lsMemoryMb };
+        }
+      }
     }
 
     const subagentHours = Number.isFinite(Number(rawInput?.subagentMaxAgeHours))
       ? Number(rawInput.subagentMaxAgeHours)
       : arch.AUTO_ARCHIVE_SUBAGENT_MAX_AGE_HOURS;
+    const reusedCatalogIdx = mustRefreshIndex ? undefined : existingIdx;
 
     const scan =
       typeof arch.scanConversationStorageAsync === 'function'
@@ -581,6 +594,7 @@ export async function handleStorageAction(upd, action, _testOverrides = null, ra
             convDir,
             archiveDir,
             summaries: null,
+            catalogIndex: reusedCatalogIdx,
             subagentMaxAgeHours: subagentHours,
             lsMemoryMb,
             now,
@@ -746,12 +760,11 @@ export async function handleStorageAction(upd, action, _testOverrides = null, ra
       };
     }
 
-    const unchangedHealthy =
+    const unchangedConvDir =
       convDirMtimeMs > 0 &&
-      upd._storageHealthConvMtimeMs === convDirMtimeMs &&
-      !base.warn;
+      upd._storageHealthConvMtimeMs === convDirMtimeMs;
     upd._storageHealthConvMtimeMs = convDirMtimeMs;
-    upd._storageHealthIdleStreak = unchangedHealthy
+    upd._storageHealthIdleStreak = unchangedConvDir
       ? Math.min(3, (Number(upd._storageHealthIdleStreak) || 0) + 1)
       : 0;
     upd._storageHealthCache = base;

@@ -555,6 +555,119 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
   })()`;
   }
 
+  // ── Channel 17: Off-Main-Thread Ripple Simulation Worker (src/runtime/ripple-field-sim-worker.js) ──
+  function shouldEnableRippleSim(config = null) {
+    const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
+    if (cfg.motionLevel === 'off') return false;
+    const homeOff = cfg.homeRipple === false || cfg.ripple === false || cfg.homeLayout === 'off' || cfg.homeMode === 'off';
+    const convOff = cfg.convRipple === 'off' || cfg.convRipple === false;
+    return !(homeOff && convOff);
+  }
+
+  function readCompiledRippleSimAssets(opts = null) {
+    const rel = 'src/runtime/ripple-field-sim-worker.js';
+    const filePath = path.join(rootDir, 'src', 'runtime', 'ripple-field-sim-worker.js');
+    if (!fs.existsSync(filePath)) {
+      return { sig: '', minRuntime: '', codeHash: '' };
+    }
+    const sig = getFileSig(filePath);
+    const cachePath = resolveBundleCachePathOption(opts);
+    const curMem = bundleCache.getChannelMemCache('rippleSim');
+    if (!cachePath && curMem && curMem.sig === sig && curMem.codeHash) {
+      return curMem;
+    }
+    return bundleCache.resolveChannelAssetsWithDiskCache({
+      channelName: 'rippleSim',
+      sig,
+      fileEntries: [{ rel, fullPath: filePath }],
+      opts,
+      compileFn: () => {
+        const minRuntime = minifySingleSource(fs.readFileSync(filePath, 'utf8'), { allowMemberProps: false });
+        const codeHash = computeHash(minRuntime);
+        return { minRuntime, codeHash };
+      },
+      toCacheEntry: (assets, sourceHash) => ({
+        sourceHash,
+        codeHash: assets.codeHash,
+        minRuntime: assets.minRuntime,
+        payloadSha256: sha256Text(`${assets.codeHash}\0${assets.minRuntime}`),
+        updatedAt: Date.now(),
+      }),
+      fromCacheEntry: (entry) => ({
+        minRuntime: entry.minRuntime,
+        codeHash: entry.codeHash,
+      }),
+    });
+  }
+
+  function buildRippleSimChannelExpression(config = null, opts = null) {
+    const { resolvedCfg, resolvedOpts } = unwrapConfigAndOpts(config, opts, ['homeRipple', 'convRipple', 'homeLayout', 'homeMode', 'ripple', 'motionLevel']);
+    const cfg = resolvedCfg && typeof resolvedCfg === 'object' ? reconcileConfigAliases(resolvedCfg) : readConfig();
+    if (!shouldEnableRippleSim(cfg)) return '';
+    const { minRuntime, codeHash } = readCompiledRippleSimAssets(resolvedOpts);
+    if (!minRuntime || !codeHash) return '';
+
+    const hashJson = serializeJsonForEval(codeHash);
+
+    return `(() => {
+  try {
+${CHANNEL_MAIN_FRAME_HOST_GUARD}
+
+    const cleanupSim = () => {
+      try { delete window.__agPrismRippleSim; } catch {}
+      try { delete globalThis.__agPrismRippleSim; } catch {}
+    };
+    const getLiveCfg = () => {
+      try {
+        const st = (window.__agPrism || window.__agClaudeStyle)?.getState?.();
+        return st && st.cfg && typeof st.cfg === 'object' ? st.cfg : null;
+      } catch { return null; }
+    };
+
+    const targetHash = ${hashJson};
+    const mountOrReuse = () => {
+      if (needDomMarkerOnReady && !hasDomMarker() && (isPlainHttpLocalhost || !/\\bantigravity\\b/i.test(String(document.title || '')))) {
+        return { ok: false, status: 'skipped-non-host' };
+      }
+      const liveCfg = getLiveCfg();
+      if (liveCfg) {
+        const hOff = liveCfg.homeRipple === false || liveCfg.ripple === false || liveCfg.homeLayout === 'off' || liveCfg.homeMode === 'off';
+        const cOff = liveCfg.convRipple === 'off' || liveCfg.convRipple === false;
+        if (liveCfg.motionLevel === 'off' || (hOff && cOff)) {
+          cleanupSim();
+          return { ok: true, status: 'off', skippedByLiveCfg: true };
+        }
+      }
+      const existing = window.__agPrismRippleSim || globalThis.__agPrismRippleSim;
+      if (existing && existing.__prismCodeHash === targetHash) {
+        try { window.__agPrismSimReady?.(); } catch {}
+        return { ok: true, reused: true, codeHash: targetHash };
+      }
+
+      cleanupSim();
+      ;${minRuntime};
+
+      const mounted = window.__agPrismRippleSim || globalThis.__agPrismRippleSim;
+      if (mounted && typeof mounted === 'object') {
+        mounted.__prismCodeHash = targetHash;
+        try { window.__agPrismRippleSim = mounted; } catch {}
+        try { globalThis.__agPrismRippleSim = mounted; } catch {}
+      }
+      try { window.__agPrismSimReady?.(true); } catch {}
+      return { ok: true, status: 'mounted', codeHash: targetHash };
+    };
+
+    if ((needDomMarkerOnReady || !document.documentElement) && typeof document.addEventListener === 'function') {
+      document.addEventListener('DOMContentLoaded', () => { try { mountOrReuse(); } catch {} }, { once: true });
+      return { ok: true, status: 'deferred', codeHash: targetHash };
+    }
+    return mountOrReuse();
+  } catch (err) {
+    return { ok: false, status: 'error', channel: 'rippleSim', error: String(err && err.message || err).slice(0, 300), stack: String(err && err.stack || '').slice(0, 600) };
+  }
+  })()`;
+  }
+
   return {
     shouldEnableTelemetry,
     buildTelemetryChannelExpression,
@@ -564,6 +677,8 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     buildWorkbenchEnhancerChannelExpression,
     shouldEnableContextMenu,
     buildContextMenuChannelExpression,
+    shouldEnableRippleSim,
+    buildRippleSimChannelExpression,
   };
 }
 

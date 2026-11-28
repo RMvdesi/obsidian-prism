@@ -2716,6 +2716,16 @@ trackedWaitPanels.delete(panel);
  const hasVisIo = () => Boolean(getDomBus()?.observeVisibility || typeof W.IntersectionObserver === 'function');
  let offVis = new WeakMap(), ioVis = new WeakMap(), offIo = null, ioFlushT = null;
  const offUnsubs = new Map(), ioPP = new Set(), ioPT = new Set(), ioPC = new Set();
+ const pruneOffUnsubs = () => {
+ if (!offUnsubs.size) return;
+ for (const [el, u] of offUnsubs) {
+ if (!isConn(el)) {
+ try { u(); } catch {}
+ offUnsubs.delete(el);
+ offVis.delete(el);
+ }
+ }
+ };
  const clrVis = () => {
  if (ioFlushT) { clearTimeout(ioFlushT); ioFlushT = null; }
  for (const u of offUnsubs.values()) try { u(); } catch {}
@@ -3688,6 +3698,7 @@ const { containers, thoughtPanelSet } = preRead || collectToolSummaryTargets(rea
  function scanNow() {
  scanTimer = null;
  if (currentMode === 'off') return;
+ pruneOffUnsubs();
  const triggers = queryTriggers();
  if (!triggers.length) { if (translateToolSummaries) scanToolSummaryContainers(); if (translateTitles) scanConversationTitles(); return; }
  const lastIdx = triggers.length - 1, candidates = [], activePanelSet = new Set(), vp = readViewportDims();
@@ -3719,6 +3730,7 @@ const { containers, thoughtPanelSet } = preRead || collectToolSummaryTargets(rea
  const preToolTargets = translateToolSummaries && typeof document !== 'undefined' ? collectToolSummaryTargets(vp) : null;
  hasOffscreenLazyPanels = sawOffscreenLazy;
  if (inflightBySig.size > 0) pruneUnneededPendingRequests(activePanelSet);
+ if (translateTitles) scanConversationTitles();
  if (candidates.length) {
  candidates.sort((x, y) => y.p - x.p);
  syncHydrateBudget = 1;
@@ -3726,7 +3738,6 @@ const { containers, thoughtPanelSet } = preRead || collectToolSummaryTargets(rea
  finally { syncHydrateBudget = 99; }
  }
  if (translateToolSummaries) scanToolSummaryContainers(preToolTargets);
- if (translateTitles) scanConversationTitles();
  }
  function scheduleScan(delayMs = 55) {
  if (currentMode === 'off') return;
