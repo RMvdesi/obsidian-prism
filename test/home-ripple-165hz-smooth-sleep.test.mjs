@@ -245,3 +245,156 @@ test('home-ripple-host wake() stays idempotent when paused/reduced-motion while 
   assert.equal(attrChanges, flipsBefore, 'repeated wake() while paused/sleeping must perform 0 data-ripple-sleep attribute flips');
   ctl.unmount();
 });
+
+test('home-ripple-host conv glide: caches browser-hole querySelector, updates aura every pointermove without 16-32ms stepping, and avoids 30fps cap', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'home-ripple-host.js'), 'utf8');
+  let now = 2000, rafSeq = 1, holeQs = 0;
+  const rafs = new Map(), auraXs = [];
+  const fakeCanvas = { width: 1200, height: 720, style: {}, isConnected: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1200, height: 720 }), getContext: () => null, setAttribute() {}, getAttribute: () => null, removeAttribute() {} };
+  const fakeConv = { isConnected: true, hidden: false, style: {}, getAttribute: (k) => (k === 'data-testid' ? 'conversation-view' : null), closest: (s) => (s.includes('main-content-body') ? fakeBody : null) };
+  const fakeBody = { isConnected: true, style: {}, clientWidth: 1200, clientHeight: 720, contains: (n) => n === fakeConv, insertBefore() {}, appendChild() {}, addEventListener() {}, removeEventListener() {}, querySelector: () => null, getAttribute: () => null, setAttribute() {}, hasAttribute: () => false, removeAttribute() {}, closest: () => null };
+  const fakeTarget = { closest: () => null };
+  const makeHostEl = () => { const a = new Map(); return { style: {}, isConnected: true, className: '', children: [], setAttribute(k, v) { a.set(k, String(v)); }, getAttribute(k) { return a.get(k) ?? null; }, hasAttribute(k) { return a.has(k); }, removeAttribute(k) { a.delete(k); }, appendChild(c) { this.children.push(c); return c; }, insertBefore(c) { this.children.unshift(c); return c; }, remove() { this.isConnected = false; } }; };
+  const fakeDoc = {
+    hidden: false,
+    documentElement: { getAttribute: () => null, setAttribute() {}, hasAttribute: () => false, removeAttribute() {} },
+    body: { getAttribute: () => null },
+    createElement: (tag) => (tag === 'canvas' ? { ...fakeCanvas } : makeHostEl()),
+    querySelector: (sel) => { if (sel.includes('browser-hole')) holeQs += 1; return null; },
+    querySelectorAll: (sel) => (sel.includes('conversation-view') ? [fakeConv] : []),
+    addEventListener() {}, removeEventListener() {},
+  };
+  const sb = {
+    window: null, document: fakeDoc, performance: { now: () => now },
+    requestAnimationFrame(cb) { const id = rafSeq++; rafs.set(id, cb); return id; },
+    cancelAnimationFrame(id) { rafs.delete(id); },
+    getComputedStyle: () => ({ getPropertyValue: () => '' }),
+    ResizeObserver: class { observe() {} disconnect() {} },
+    setTimeout: () => 0, clearTimeout() {}, Math, Number, String, Boolean, Array, Object, Map, Set,
+  };
+  sb.window = sb; sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+  const ctl = sb.__agPrismHomeRippleHost.createHomeRippleController({
+    rippleCore: {
+      RIPPLE: { cellWidth: 7, cellHeight: 15 }, parseCssColorToRgb: () => null,
+      createWaveField: () => ({ advance() {}, active: () => false, disturb() {}, skimmer() {} }),
+      createGlyphField: () => ({ mode: 'webgl2', busy: () => false, needsDraw: () => false, draw(_t, pal) { if (pal?.aura?.active) auraXs.push(pal.aura.x); }, invalidate() {}, setCalmZones() {}, dispose() {} }),
+      mountBrandHorizonGlow: () => ({ mode: 'none', resize() {}, draw() {}, clear() {}, dispose() {} }),
+    },
+    isDestroyed: () => false, isAllowed: () => false, isConvAllowed: () => true, getConvLevel: () => 'medium', isConvRunning: () => false,
+    isDarkTheme: () => true, motionReduced: () => false, getMinFrameGapMs: () => 0, getAmbientIntensity: () => 1, getAccentTone: () => 'follow',
+    setAttrIfChanged(el, k, v) { el.setAttribute(k, v); },
+  });
+  const flush = () => { const cbs = [...rafs.values()]; rafs.clear(); for (const cb of cbs) cb(now); };
+  ctl.sync(); flush();
+  const qsAfterMount = holeQs;
+  // Glide 20 frames at 165Hz (6.06ms step) in 'medium' conv mode -> aura must update smoothly every frame & do 0 redundant browser-hole querySelector walks
+  for (let i = 1; i <= 20; i++) {
+    now += 6.06;
+    ctl.getMount().onMove({ clientX: 200 + i * 10, clientY: 300, target: fakeTarget });
+    flush();
+  }
+  assert.equal(holeQs - qsAfterMount, 0, `Expected 0 browser-hole querySelector calls during 120ms glide, got ${holeQs - qsAfterMount}`);
+  assert.ok(auraXs.length >= 18, `Expected smooth native 165Hz draws during conv medium glide (not 30fps cap), got ${auraXs.length}`);
+  assert.equal(new Set(auraXs).size, auraXs.length, 'Every 6.06ms pointermove must advance cursor aura without 22ms stepping judder');
+  ctl.unmount();
+});
+
+test('conv-aura isConvRunning isolates document vs convView caches without scope-thrashing querySelectorAll', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'conv-aura.js'), 'utf8');
+  let now = 1000, docQsa = 0, viewQsa = 0;
+  const stopBtn = { nodeType: 1, isConnected: true, hidden: false, style: {}, matches: () => true, closest: () => null, checkVisibility: () => true };
+  const fakeView = { contains: () => true, querySelectorAll: () => { viewQsa += 1; return [stopBtn]; } };
+  const fakeDoc = { querySelectorAll: () => { docQsa += 1; return [stopBtn]; } };
+  const sb = { window: null, document: fakeDoc, performance: { now: () => now }, WeakMap, WeakSet, Set, Map, Array, Object, Math, Number, String, Boolean };
+  sb.window = sb; sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+  const api = sb.__agPrismConvAura;
+  for (let i = 0; i < 20; i++) {
+    now += 8;
+    assert.equal(api.isConvRunning(true), true);
+    assert.equal(api.isConvRunning(true, fakeView), true);
+  }
+  assert.equal(docQsa, 1, `document scope should querySelectorAll once within 200ms TTL, got ${docQsa}`);
+  assert.equal(viewQsa, 1, `convView scope should querySelectorAll once within 200ms TTL, got ${viewQsa}`);
+});
+
+test('rapid background clicks reuse cached canvas rect, avoid redundant invalidate, and pace WebGL2 wave uploads at ~66Hz while keeping 165Hz draws', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'home-ripple-host.js'), 'utf8');
+  let now = 3000, rafSeq = 1, gbrCalls = 0, invCalls = 0, waveActive = false;
+  const rafs = new Map();
+  const fakeCanvas = {
+    width: 1200, height: 720, style: {}, isConnected: true,
+    getBoundingClientRect: () => { gbrCalls += 1; return { left: 0, top: 0, width: 1200, height: 720 }; },
+    getContext: () => null, setAttribute() {}, getAttribute: () => null, removeAttribute() {},
+  };
+  const fakeConv = { isConnected: true, hidden: false, style: {}, getAttribute: (k) => (k === 'data-testid' ? 'conversation-view' : null), closest: (s) => (s.includes('main-content-body') ? fakeBody : null) };
+  const fakeBody = { isConnected: true, style: {}, clientWidth: 1200, clientHeight: 720, contains: (n) => n === fakeConv, insertBefore() {}, appendChild() {}, addEventListener() {}, removeEventListener() {}, querySelector: () => null, getAttribute: () => null, setAttribute() {}, hasAttribute: () => false, removeAttribute() {}, closest: () => null };
+  const fakeTarget = { closest: () => null };
+  const makeHostEl = () => { const a = new Map(); return { style: {}, isConnected: true, className: '', children: [], setAttribute(k, v) { a.set(k, String(v)); }, getAttribute(k) { return a.get(k) ?? null; }, hasAttribute(k) { return a.has(k); }, removeAttribute(k) { a.delete(k); }, appendChild(c) { this.children.push(c); return c; }, insertBefore(c) { this.children.unshift(c); return c; }, remove() { this.isConnected = false; } }; };
+  const fakeDoc = {
+    hidden: false, documentElement: { getAttribute: () => null, setAttribute() {}, hasAttribute: () => false, removeAttribute() {} }, body: { getAttribute: () => null },
+    createElement: (tag) => (tag === 'canvas' ? { ...fakeCanvas } : makeHostEl()),
+    querySelector: () => null, querySelectorAll: (sel) => (sel.includes('conversation-view') ? [fakeConv] : []),
+    addEventListener() {}, removeEventListener() {},
+  };
+  const sb = {
+    window: null, document: fakeDoc, performance: { now: () => now },
+    requestAnimationFrame(cb) { const id = rafSeq++; rafs.set(id, cb); return id; }, cancelAnimationFrame(id) { rafs.delete(id); },
+    getComputedStyle: () => ({ getPropertyValue: () => '' }), ResizeObserver: class { observe() {} disconnect() {} },
+    setTimeout: () => 0, clearTimeout() {}, Math, Number, String, Boolean, Array, Object, Map, Set,
+  };
+  sb.window = sb; sb.globalThis = sb;
+  vm.runInNewContext(src, sb);
+  const ctl = sb.__agPrismHomeRippleHost.createHomeRippleController({
+    rippleCore: {
+      RIPPLE: { cellWidth: 7, cellHeight: 15 }, parseCssColorToRgb: () => null,
+      createWaveField: () => ({ advance() {}, active: () => waveActive, disturb() { waveActive = true; }, skimmer() {} }),
+      createGlyphField: () => ({ mode: 'webgl2', busy: () => waveActive, needsDraw: () => waveActive, draw() {}, invalidate() { invCalls += 1; }, setCalmZones() {}, dispose() {} }),
+      mountBrandHorizonGlow: () => ({ mode: 'none', resize() {}, draw() {}, clear() {}, dispose() {} }),
+    },
+    isDestroyed: () => false, isAllowed: () => false, isConvAllowed: () => true, getConvLevel: () => 'full', isConvRunning: () => false,
+    isDarkTheme: () => true, motionReduced: () => false, getMinFrameGapMs: () => 0, getAmbientIntensity: () => 1, getAccentTone: () => 'follow',
+    setAttrIfChanged(el, k, v) { el.setAttribute(k, v); },
+  });
+  ctl.sync();
+  const baseGbr = gbrCalls, baseInv = invCalls;
+  for (let i = 0; i < 10; i++) {
+    now += 60;
+    ctl.getMount().onPress({ button: 0, clientX: 300 + i * 20, clientY: 250, target: fakeTarget });
+  }
+  assert.equal(gbrCalls - baseGbr, 1, `10 rapid clicks within 1500ms must read canvas rect once, got ${gbrCalls - baseGbr}`);
+  assert.equal(invCalls - baseInv, 1, `Only first click while wave is inactive should invalidate full field, got ${invCalls - baseInv}`);
+  ctl.unmount();
+
+  // Verify ripple-core paces sustained 165Hz WebGL2 wave uploads (~66Hz) while still drawing every 165Hz frame
+  let ups = 0, drws = 0;
+  const gl = {
+    VERTEX_SHADER: 35633, FRAGMENT_SHADER: 35632, COMPILE_STATUS: 35713, LINK_STATUS: 35714,
+    COLOR_BUFFER_BIT: 16384, TRIANGLES: 4, TEXTURE_2D: 3553, TEXTURE0: 33984, TEXTURE1: 33985,
+    RGBA: 6408, RGBA8: 32856, UNSIGNED_BYTE: 5121, LINEAR: 9729, NEAREST: 9728, CLAMP_TO_EDGE: 33071,
+    TEXTURE_MIN_FILTER: 10241, TEXTURE_MAG_FILTER: 10240, TEXTURE_WRAP_S: 10242, TEXTURE_WRAP_T: 10243,
+    isContextLost: () => false, createShader: () => ({}), shaderSource() {}, compileShader() {}, getShaderParameter: () => true,
+    getShaderInfoLog: () => '', deleteShader() {}, createProgram: () => ({}), attachShader() {}, linkProgram() {},
+    getProgramParameter: () => true, getProgramInfoLog: () => '', useProgram() {}, deleteProgram() {},
+    getUniformLocation: () => ({}), createTexture: () => ({}), deleteTexture() {}, activeTexture() {}, bindTexture() {},
+    texParameteri() {}, texStorage2D() {}, texImage2D() {}, texSubImage2D() { ups += 1; }, viewport() {},
+    uniform1i() {}, uniform1f() {}, uniform2f() {}, uniform3f() {}, uniform4f() {}, clearColor() {}, clear() {},
+    drawArrays() { drws += 1; }, getExtension: () => null,
+  };
+  const actx = { setTransform() {}, clearRect() {}, fillText() {} };
+  const cv = { width: 280, height: 150, ownerDocument: { hidden: false, createElement: () => ({ width: 1, height: 1, getContext: () => actx }) }, getContext: (t) => (t === 'webgl2' ? gl : null) };
+  const wf = rippleCore.createWaveField(40, 10, () => 0.5);
+  const f = rippleCore.createGlyphField(cv, 40, 10, wf);
+  const pal = { dark: true, ink: [146, 148, 156], wave: [214, 218, 228], aura: { x: 100, y: 80, radius: 230, strength: 1, active: true } };
+  f.draw(1000, pal, false);
+  const u0 = ups, d0 = drws;
+  wf.disturb(20, 5);
+  for (let i = 1; i <= 30; i++) {
+    wf.advance(0.006, 12);
+    f.draw(1000 + i * 6.06, pal, false);
+  }
+  assert.equal(drws - d0, 30, 'All 30 165Hz frames must draw smoothly on GPU');
+  assert.ok(ups - u0 >= 8 && ups - u0 <= 14, `Expected ~66Hz wave texture uploads over 182ms (8..14), got ${ups - u0}`);
+  f.dispose();
+});

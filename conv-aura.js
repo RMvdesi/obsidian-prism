@@ -18,9 +18,9 @@
     return skipSyncVis || !el.checkVisibility || Boolean(el.checkVisibility());
   }
 
-  let cachedRunningVal = false, cachedRunningAt = -1, cachedRunningEl = null, cachedRunningScope = null;
-  let cachedDecisionVal = false, cachedDecisionAt = -1, cachedDecisionEl = null, cachedDecisionScope = null;
-  let cachedErrorAt = -1, lastFullVisAt = -1;
+  const rCache = new WeakMap(), dCache = new WeakMap();
+  let indGen = 0, cachedErrorAt = -1, lastFullVisAt = -1;
+  const resetIndCache = () => { indGen += 1; cachedErrorAt = -1; };
   const seenErrorNodes = typeof WeakSet === 'function' ? new WeakSet() : null;
 
   function readNowMs() {
@@ -32,79 +32,52 @@
   const DECISION_SEL = '[data-testid="interaction-takeover-card"], [data-testid="side-question-panel"]';
   const SUBAGENT_SEL = '[data-testid="subagent-tab-conversation"]';
 
+  const isF = (v) => typeof v === 'function';
   function isWithinScope(el, scope) {
     if (!el) return false;
     const d = getD();
     if (!scope || scope === d || el === scope) return true;
-    if (typeof scope.contains === 'function' && scope.contains(el)) return true;
+    if (isF(scope.contains) && scope.contains(el)) return true;
     const ownerView = el.closest?.('[data-testid="conversation-view"]') || null;
     if (ownerView) return ownerView === scope;
-    const allViews = typeof d?.querySelectorAll === 'function'
-      ? d.querySelectorAll('[data-testid="conversation-view"]') : null;
+    const allViews = isF(d?.querySelectorAll) ? d.querySelectorAll('[data-testid="conversation-view"]') : null;
     return !allViews || allViews.length <= 1;
   }
-
   function isLiveMatchedIndicator(el, sel, skipSyncVis = false, scope = null) {
-    return !!(
-      el && el.isConnected === true && typeof el.nodeType === 'number' && typeof el.matches === 'function' &&
-      el.matches(sel) && !el.closest?.(SUBAGENT_SEL) && isWithinScope(el, scope) && isVisibleAuraNode(el, skipSyncVis)
-    );
+    return !!(el && el.isConnected === true && typeof el.nodeType === 'number' && isF(el.matches) && el.matches(sel) && !el.closest?.(SUBAGENT_SEL) && isWithinScope(el, scope) && isVisibleAuraNode(el, skipSyncVis));
   }
-
   function queryScopedIndicator(scope, sel, skipSyncVis) {
     for (const n of scope.querySelectorAll(sel)) {
-      if (n.closest?.(SUBAGENT_SEL)) continue;
-      if (isVisibleAuraNode(n, skipSyncVis)) return n;
+      if (!n.closest?.(SUBAGENT_SEL) && isVisibleAuraNode(n, skipSyncVis)) return n;
     }
     const d = getD();
-    if (scope !== d && typeof d?.querySelectorAll === 'function') {
-      const allViews = d.querySelectorAll('[data-testid="conversation-view"]');
-      const singlePane = !allViews || allViews.length <= 1;
+    if (scope !== d && isF(d?.querySelectorAll)) {
+      const allViews = d.querySelectorAll('[data-testid="conversation-view"]'), singlePane = !allViews || allViews.length <= 1;
       for (const n of d.querySelectorAll(sel)) {
         if (n.closest?.(SUBAGENT_SEL)) continue;
         const ownerView = n.closest?.('[data-testid="conversation-view"]') || null;
-        if (ownerView && ownerView !== scope) continue;
-        if (!ownerView && !singlePane) continue;
-        if (isVisibleAuraNode(n, skipSyncVis)) return n;
+        if ((ownerView ? ownerView === scope : singlePane) && isVisibleAuraNode(n, skipSyncVis)) return n;
       }
     }
     return null;
   }
-
-  function isConvRunning(skipSyncVis = false, scopeEl = null) {
+  function checkInd(cache, sel, skipSyncVis, scopeEl, markVis) {
     const d = getD();
     if (!d) return false;
-    const scope = scopeEl && typeof scopeEl.querySelectorAll === 'function' ? scopeEl : d;
-    const now = readNowMs();
-    if (cachedRunningScope === scope && cachedRunningAt >= 0 && M.abs(now - cachedRunningAt) < 200) return cachedRunningVal;
-    if (cachedRunningScope === scope && isLiveMatchedIndicator(cachedRunningEl, RUNNING_SEL, skipSyncVis, scope)) {
-      cachedRunningVal = true; cachedRunningAt = now;
-      if (!skipSyncVis) lastFullVisAt = now;
+    const scope = isF(scopeEl?.querySelectorAll) ? scopeEl : d, now = readNowMs(), rec = cache.get(scope);
+    if (rec && rec.g === indGen && M.abs(now - rec.at) < 200) return rec.val;
+    if (rec && isLiveMatchedIndicator(rec.el, sel, skipSyncVis, scope)) {
+      rec.val = true; rec.at = now; rec.g = indGen;
+      if (markVis && !skipSyncVis) lastFullVisAt = now;
       return true;
     }
-    cachedRunningEl = queryScopedIndicator(scope, RUNNING_SEL, skipSyncVis);
-    const running = !!(cachedRunningEl);
-    cachedRunningScope = scope; cachedRunningVal = running; cachedRunningAt = now;
-    if (!skipSyncVis) lastFullVisAt = now;
-    return running;
+    const el = queryScopedIndicator(scope, sel, skipSyncVis);
+    cache.set(scope, { el, val: !!(el), at: now, g: indGen });
+    if (markVis && !skipSyncVis) lastFullVisAt = now;
+    return !!(el);
   }
-
-  function isAwaitingDecision(skipSyncVis = false, scopeEl = null) {
-    const d = getD();
-    if (!d) return false;
-    const scope = scopeEl && typeof scopeEl.querySelectorAll === 'function' ? scopeEl : d;
-    const now = readNowMs();
-    if (cachedDecisionScope === scope && cachedDecisionAt >= 0 && M.abs(now - cachedDecisionAt) < 200) return cachedDecisionVal;
-    if (cachedDecisionScope === scope && isLiveMatchedIndicator(cachedDecisionEl, DECISION_SEL, skipSyncVis, scope)) {
-      cachedDecisionVal = true; cachedDecisionAt = now;
-      return true;
-    }
-    cachedDecisionEl = queryScopedIndicator(scope, DECISION_SEL, skipSyncVis);
-    const awaiting = !!(cachedDecisionEl);
-    cachedDecisionScope = scope; cachedDecisionVal = awaiting; cachedDecisionAt = now;
-    return awaiting;
-  }
-
+  const isConvRunning = (skip = false, scopeEl = null) => checkInd(rCache, RUNNING_SEL, skip, scopeEl, 1);
+  const isAwaitingDecision = (skip = false, scopeEl = null) => checkInd(dCache, DECISION_SEL, skip, scopeEl, 0);
   function consumeFreshDomError(convView) {
     const d = getD();
     if (!seenErrorNodes || !d) return false;
@@ -112,12 +85,10 @@
     if (cachedErrorAt >= 0 && M.abs(now - cachedErrorAt) < 240) return false;
     cachedErrorAt = now;
     const scope = convView || d;
-    if (typeof scope.querySelectorAll !== 'function') return false;
-    const errs = scope.querySelectorAll('.ag-cs-thinking-spark[data-state="error"], [data-testid="agent-error"], [role="alert"][data-error="true"]');
+    if (!isF(scope.querySelectorAll)) return false;
     let hitFresh = false;
-    for (const n of errs) {
-      if (n.closest?.(SUBAGENT_SEL)) continue;
-      if (!seenErrorNodes.has(n) && isVisibleAuraNode(n)) { seenErrorNodes.add(n); hitFresh = true; }
+    for (const n of scope.querySelectorAll('.ag-cs-thinking-spark[data-state="error"], [data-testid="agent-error"], [role="alert"][data-error="true"]')) {
+      if (!n.closest?.(SUBAGENT_SEL) && !seenErrorNodes.has(n) && isVisibleAuraNode(n, true)) { seenErrorNodes.add(n); hitFresh = true; }
     }
     return hitFresh;
   }
@@ -196,12 +167,12 @@
       extra.reach = opt.reach; extra.prism = opt.prism; extra.surge = opt.surge; extra.speed = opt.speed;
       extra.semantic = opt.semantic || 'none'; extra.ambientIntensity = ambientIntensity;
       extra.still = !!(still); extra.spectrum = spectrum !== undefined && spectrum !== null ? spectrum : undefined;
-      if (still && typeof glow.drawStaticSnapshot === 'function') {
+      if (still && isF(glow.drawStaticSnapshot)) {
         extra.still = true;
         glow.drawStaticSnapshot(now, dark, opt.strength, extra);
         return;
       }
-      if (typeof glow.draw === 'function') glow.draw(now, dark, opt.strength, extra);
+      if (isF(glow.draw)) glow.draw(now, dark, opt.strength, extra);
     } catch {}
   }
 
@@ -239,7 +210,7 @@
 
     function resolveAmbient() {
       if (overrideAmbient !== null) return normAmbientVal(overrideAmbient);
-      if (typeof getAmbientIntensity === 'function') return normAmbientVal(getAmbientIntensity());
+      if (isF(getAmbientIntensity)) return normAmbientVal(getAmbientIntensity());
       try {
         const raw = ga('data-ag-cs-ambient');
         if (raw !== null && raw !== '') return normAmbientVal(raw);
@@ -253,9 +224,9 @@
     }
 
     function checkWindowFocused() {
-      if (typeof isWindowFocused === 'function') return !!(isWindowFocused());
+      if (isF(isWindowFocused)) return !!(isWindowFocused());
       const d = getD();
-      try { return typeof d?.hasFocus === 'function' ? !!(d.hasFocus()) : true; } catch { return true; }
+      try { return isF(d?.hasFocus) ? !!(d.hasFocus()) : true; } catch { return true; }
     }
 
     function isValidConvView(cv) {
@@ -309,10 +280,10 @@
       } catch {}
     }
 
-    function advancePhase(now = readNowMs(), fromAnimLoop = false) {
+    function advancePhase(now = readNowMs(), fromAnimLoop = false, forceSkipVis = false) {
       const a = convAura;
       if (!a || !a.host || !a.host.isConnected) return 'off';
-      const skipSyncVis = !!(fromAnimLoop && lastFullVisAt >= 0 && M.abs(now - lastFullVisAt) < 2000);
+      const skipSyncVis = !!(forceSkipVis || (fromAnimLoop && lastFullVisAt >= 0 && M.abs(now - lastFullVisAt) < 2000));
       const scope = a.convView || null, runningNow = isConvRunning(skipSyncVis, scope);
       const awaitingNow = externalAwaiting !== null ? !!(externalAwaiting) : isAwaitingDecision(skipSyncVis, scope);
       const freshErr = externalErrorPending || (!runningNow && consumeFreshDomError(scope));
@@ -376,17 +347,19 @@
       a.host?.remove(); a.seatParent = a.convView = null; a.releaseBacking?.(); a.sleeping = a.parked = true;
     }
 
-    function prime() {
-      cachedRunningAt = cachedDecisionAt = cachedErrorAt = -1;
+    function prime(skipVis = false) {
+      resetIndCache();
       if (isDestroyed() || !isHomeRippleEnabled()) return;
       const cv = findConvAuraView();
       if (!cv) return;
-      isConvRunning(false, cv);
-      if (externalAwaiting === null) isAwaitingDecision(false, cv);
+      if (skipVis) lastFullVisAt = readNowMs();
+      isConvRunning(skipVis, cv);
+      if (externalAwaiting === null) isAwaitingDecision(skipVis, cv);
     }
 
-    function sync(preserveCache = false) {
-      if (!preserveCache) { cachedRunningAt = cachedDecisionAt = cachedErrorAt = -1; }
+    function sync(preserveCache = false, skipVis = false) {
+      if (!preserveCache) resetIndCache();
+      if (skipVis) lastFullVisAt = readNowMs();
       if (isDestroyed() || !isHomeRippleEnabled()) { unmount(); return; }
       const convView = findConvAuraView(), docRef = getD();
       const seatParent = convView ? convView.parentElement || convView : null;
@@ -397,15 +370,15 @@
 
       const readSize = () => [seatParent.clientWidth || convView.clientWidth || 0, seatParent.clientHeight || convView.clientHeight || 0];
       const readPhase = () => {
-        const r = isConvRunning(false, convView);
-        const a = externalAwaiting !== null ? !!(externalAwaiting) : isAwaitingDecision(false, convView);
+        const r = isConvRunning(skipVis, convView);
+        const a = externalAwaiting !== null ? !!(externalAwaiting) : isAwaitingDecision(skipVis, convView);
         return [r, a ? 'awaiting-decision' : r ? 'running' : 'idle'];
       };
       if (convAura) {
         const a = convAura;
         if (a.seatParent !== seatParent || a.convView !== convView || !a.host.isConnected || !a.canvas.isConnected) {
-          const switchedPane = a.convView !== convView, nowRe = readNowMs(), [runRe, phaseRe] = readPhase();
-          const canDeferRelayout = !switchedPane && !a.backingReleased && !!(a.ro) && a.width > 0 && a.height > 0 && typeof requestAnimationFrame === 'function' && !docRef.hidden;
+          const nowRe = readNowMs(), [runRe, phaseRe] = readPhase();
+          const canDeferRelayout = !a.backingReleased && !!(a.ro) && a.width > 0 && a.height > 0 && isF(G.requestAnimationFrame) && !docRef.hidden;
           const [reW, reH] = canDeferRelayout ? [0, 0] : readSize();
           try { a.ro?.disconnect(); } catch {}
           a.seatParent = seatParent; a.convView = convView; a.parked = false;
@@ -417,7 +390,7 @@
           setAttrIfChanged(a.host, 'data-aura-phase', phaseRe); a.wake(!canDeferRelayout);
           return;
         }
-        const prevPhase = a.phase, nextPhase = advancePhase(readNowMs());
+        const prevPhase = a.phase, nextPhase = advancePhase(readNowMs(), false, preserveCache || skipVis);
         if (!isAB()) wb = false;
         if (isH()) { a.releaseBacking?.(); return; }
         if (!a.sleeping && (!isMotionStandardOrUltra() || isP())) { a.wake(true); return; }
@@ -464,7 +437,7 @@
 
       const RESIZE_DEBOUNCE_MS = 120;
       const RESIZE_BURST_WINDOW_MS = 180;
-      const isResizing = () => getHtml()?.getAttribute?.('data-ag-cs-resizing') === '1';
+      const isResizing = () => ga('data-ag-cs-resizing') === '1';
       const isWorkerGlow = () => state.glow?.mode === 'worker-webgl2';
       const hasCvBuf = () => {
         if (isWorkerGlow()) { const s = state.glow.getBufferSize?.(); return !!(s && s.width > 0 && s.height > 0); }
@@ -636,7 +609,7 @@
         const dark = isDarkTheme();
         const spectrum = resolveSpectrum();
 
-        const da = getHtml()?.getAttribute?.('data-ag-cs-dark-aura') || 'balanced';
+        const da = ga('data-ag-cs-dark-aura') || 'balanced';
         let opt = computeConvAuraOptics(phase, state.phaseAt, now, dark, state.wasRunning, OPTICS_BUF, da);
         if (inLiftoffEbb) {
           const p = M.max(0, M.min(1, liftElapsed / 520));
@@ -651,7 +624,7 @@
 
         // Split-Rate VSync throttle (14.5ms VSync-safe 60fps floor / 33ms pre-sleep)
         const isGpuGlow = !!(state.glow && (state.glow.mode === 'webgl2' || state.glow.mode === 'worker-webgl2'));
-        const smoothGpu = isGpuGlow && typeof getMinFrameGapMs === 'function';
+        const smoothGpu = isGpuGlow && isF(getMinFrameGapMs);
         const rawPGap = rw()?.getPerfMinGapMs?.(getD() || docRef) || 0;
         const perfGap = rawPGap > 0 ? rawPGap * 0.88 : (isPerf() ? 14.5 : 0);
         const minGap = smoothGpu ? M.max(perfGap, Number(getMinFrameGapMs()) || 0) : perfGap;
@@ -800,7 +773,7 @@
       const onPaneAct = (ev) => {
         if (isDestroyed()) return;
         const cv = resolveConvViewTarget(ev?.target);
-        if (cv && cv !== preferredView) { preferredView = cv; if (convAura && convAura.convView !== cv) sync(false); }
+        if (cv && cv !== preferredView) { preferredView = cv; if (convAura && convAura.convView !== cv) sync(false, true); }
       };
       const capOpt = { capture: true, passive: true };
       docRef.addEventListener('visibilitychange', onVis);
@@ -860,7 +833,7 @@
     function setActiveView(target = null) {
       const next = target ? resolveConvViewTarget(target) : null;
       preferredView = next;
-      if (convAura && next && convAura.convView !== next) sync(false);
+      if (convAura && next && convAura.convView !== next) sync(false, true);
       return convAura?.convView || preferredView || null;
     }
 
@@ -897,7 +870,7 @@
 
     function setSpectrumMode(mode) {
       overrideSpectrum = mode === null || mode === undefined ? null : String(mode);
-      if (convAura && typeof convAura.refreshTheme === 'function') convAura.refreshTheme();
+      if (isF(convAura?.refreshTheme)) convAura.refreshTheme();
     }
 
     function setSemanticState(patch = {}) {
@@ -905,7 +878,7 @@
       if ('awaitingDecision' in patch) externalAwaiting = patch.awaitingDecision === null ? null : !!(patch.awaitingDecision);
       if (patch.hasError === true) externalErrorPending = true;
       if (convAura) {
-        const prev = convAura.phase, next = advancePhase(readNowMs());
+        const prev = convAura.phase, next = advancePhase(readNowMs(), false, true);
         if (next !== prev || externalErrorPending) { convAura.sleepReason = ''; convAura.wake(true); }
       }
     }

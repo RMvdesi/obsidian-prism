@@ -318,3 +318,79 @@ test('同一 surface-composer-card 节点圆角从 28px 切换为 10px/14px/6px 
     'ui-runtime.js 必须在 data-ag-prism-mode 或 data-ag-cs-corners 变更时立即调用 invRim()'
   );
 });
+
+test('侧栏切换会话（!ptrIn）时 rfBox/mountNewBoxes 0 次 getComputedStyle，且 markDirty(true) 将同帧 rAF 推迟至下一帧', () => {
+  const { doc, boxes, makeEl } = createMockRimDom();
+  const prevDoc = globalThis.document;
+  const prevRaf = globalThis.requestAnimationFrame;
+  const prevCancel = globalThis.cancelAnimationFrame;
+  const prevPerf = globalThis.performance;
+  const prevGcs = globalThis.getComputedStyle;
+  const prevDpr = globalThis.devicePixelRatio;
+  let rafSeq = 0;
+  const rafs = new Map();
+  let canceled = 0;
+  let gcsCalls = 0;
+  let now = 100;
+
+  globalThis.document = doc;
+  globalThis.requestAnimationFrame = (cb) => { const id = ++rafSeq; rafs.set(id, cb); return id; };
+  globalThis.cancelAnimationFrame = (id) => { if (rafs.delete(id)) canceled += 1; };
+  globalThis.performance = { now: () => now };
+  globalThis.devicePixelRatio = 1;
+  globalThis.getComputedStyle = () => { gcsCalls += 1; return { borderTopLeftRadius: '12px' }; };
+
+  const composerCard = makeEl(
+    'div',
+    { class: 'surface-composer-card', 'data-ag-cs-prism-box': '1' },
+    { left: 100, top: 760, width: 420, height: 96, right: 520, bottom: 856 }
+  );
+  const sbRow = makeEl('div', { 'data-testid': 'conversation-row-sidebar' });
+  sbRow.closest = (s) => (s.includes('conversation-row-sidebar') ? sbRow : null);
+  boxes.push(composerCard);
+
+  const ctl = createPrismRimCanvasController({
+    isDestroyed: () => false,
+    isDarkTheme: () => true,
+    motionReduced: () => false,
+    getMinFrameGapMs: () => 0,
+    getAmbientIntensity: () => 1,
+    getAccentTone: () => 'default',
+    canMountRealCanvas: () => true,
+    setAttrIfChanged: (el, k, v) => { if (el.getAttribute(k) !== v) el.setAttribute(k, v); },
+    runGuardedMut: (fn) => fn(),
+  });
+
+  try {
+    // 1) 鼠标悬停侧栏会话行（未点亮任何 rim）-> ptr 重置为 -9999，mountNewBoxes / rescanNow 必须 0 次 getComputedStyle 且不空排 rAF
+    ctl.onPointerMove({ clientX: 80, clientY: 220, target: sbRow });
+    ctl.mountNewBoxes();
+    assert.equal(rafs.size, 0, '侧栏状态下 mountNewBoxes() 不应排入空 flushPtr rAF');
+    ctl.rescanNow();
+    assert.equal(gcsCalls, 0, '!ptrIn 时 rescanNow()/rfBox() 绝不能触发 getComputedStyle 强制样式重算');
+
+    // 2) 鼠标进入输入区排入 rAF 后，markDirty(true) 必须取消同帧 rAF 并顺延到下一帧
+    ctl.onPointerMove({ clientX: 260, clientY: 770, target: composerCard });
+    assert.equal(rafs.size, 1);
+    const firstId = [...rafs.keys()][0];
+    ctl.markDirty(true);
+    assert.equal(canceled, 1, 'markDirty(true) 必须取消同帧已排入的 flushPtr rAF');
+    assert.equal(rafs.size, 1);
+    assert.notEqual([...rafs.keys()][0], firstId, 'markDirty(true) 必须将 flushPtr 重新排到下一帧');
+
+    // 3) 真正进入下一帧绘制时懒读一次 borderTopLeftRadius 并正常绘制
+    for (const [id, cb] of [...rafs]) { rafs.delete(id); cb(now += 16); }
+    assert.equal(gcsCalls, 1, '进入绘制帧后应懒读 1 次 borderTopLeftRadius');
+    const compCv = composerCard.querySelector('.ag-cs-prism-rim-cv');
+    const rr = compCv._ctx.ops.find((op) => op[0] === 'roundRect');
+    assert.equal(rr[5], 12, '懒读后的 roundRect 半径应为 12px');
+  } finally {
+    ctl.teardown();
+    globalThis.document = prevDoc;
+    globalThis.requestAnimationFrame = prevRaf;
+    globalThis.cancelAnimationFrame = prevCancel;
+    globalThis.performance = prevPerf;
+    globalThis.getComputedStyle = prevGcs;
+    globalThis.devicePixelRatio = prevDpr;
+  }
+});

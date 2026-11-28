@@ -29,7 +29,8 @@
     const html = () => docOf()?.documentElement || null, rw = () => G.__agPrismRippleWorker || null, gH = (k) => ga(html(), k);
     const pMode = () => String(html()?.dataset?.agCsPerfMode || gH(PMA) || '').trim().toLowerCase();
     const setCS = (on, el) => { const h = html(); if (h) on ? sa(h, CA, '1') : ra(h, CA); if (cHost && cHost !== el) ra(cHost, HHA); cHost = on && el ? el : null; if (cHost) sa(cHost, HHA, '1'); };
-    const isCB = () => { const d = docOf(); return !!(mRed() || gH('data-ag-cs-motion') === 'off' || gH('data-ag-prism-wallpaper') === 'on' || hasH(html()) || hasH(d?.body) || d?.querySelector?.(`[${HA}="true"],[${DHA}="true"]`)); };
+    let hSub = false, hAt = -1;
+    const isCB = (f) => { const d = docOf(); if (mRed() || gH('data-ag-cs-motion') === 'off' || gH('data-ag-prism-wallpaper') === 'on' || hasH(html()) || hasH(d?.body)) return true; const n = nowOf(); return f || hAt < 0 || n - hAt >= 400 ? ((hAt = n), (hSub = !!d?.querySelector?.(`[${HA}="true"],[${DHA}="true"]`))) : hSub; };
     const convLv = () => { if (isF(isConvAllowed) && !isConvAllowed()) return 'off'; if (isF(getConvLevel)) { const v = getConvLevel(); return v === true || v === 'true' || v === 'on' ? 'medium' : v === 'subtle' || v === 'medium' || v === 'full' ? v : 'off'; } return isF(isConvAllowed) && isConvAllowed() ? 'medium' : 'off'; };
 
     function resolveTarget() {
@@ -38,7 +39,7 @@
       const home = d.querySelector('.agy-home');
       if (home) return isAllowed() ? { mode: 'home', root: home, level: 'off' } : null;
       const lv = convLv();
-      if (lv === 'off' || isCB() || !isF(d.querySelectorAll)) return null;
+      if (lv === 'off' || isCB(1) || !isF(d.querySelectorAll)) return null;
       const vs = Array.from(d.querySelectorAll('[data-testid="conversation-view"]')).filter((v) => !v.hidden && v.style?.display !== 'none' && v.style?.visibility !== 'hidden' && !v.closest?.('[data-testid="subagent-tab-conversation"]'));
       if (!vs.length) return null;
       const ok = (el) => !!(el && el !== d.documentElement && el !== d.body && ga(el, 'data-testid') !== 'conversation-view' && !hasH(el) && !el.closest?.(SB) && !el.querySelector?.(SB + ',[data-testid="sidebar-split"]>div:first-child') && vs.every((v) => !isF(el.contains) || el.contains(v)));
@@ -148,7 +149,7 @@
 
       const as = { x: 0, y: 0, active: false };
       mAt = nowOf(); tideAt = 0;
-      let lx = null, ly = null, lsa = 0, lcma = 0, carry = 0, tok = null, cRect = null, cRectAt = 0;
+      let lx = null, ly = null, lsa = 0, lcma = 0, carry = 0, tok = null, cRect = null, cRectAt = 0, ignT = null, ignR = false, ignAt = 0;
       let prev = mAt, lastDraw = 0, lastTs = 0, wanted = false, drawn = false, f1 = true, gZero = false;
       let wb = false, pw = 0, ph = 0, shrunk = false, fLost = false, gLost = false, recN = 0, aT = null, wSlp = 0, aWk = 0;
       let rzPend = false, lastLayAt = -1, lastPM = pMode(), wFail = false, fWFail = false;
@@ -364,7 +365,7 @@
         const still = mRed() || str, vsDt = lastTs > 0 && now > lastTs ? now - lastTs : now - lastDraw;
         lastTs = now;
         const rawGap = M.max(pGap(), +(getMinFrameGapMs?.() || 0) || 0);
-        const minGap = (st.mode === 'home' || st.convLevel === 'full') && (st.waves?.active?.() || (as.active && lsa > 0 && now - lsa < 650) || (tideAt > 0 && now - tideAt < 480)) ? rawGap : M.max(33, rawGap);
+        const minGap = (st.waves?.active?.() || (as.active && lsa > 0 && now - lsa < 650) || (tideAt > 0 && now - tideAt < 480)) ? rawGap : M.max(33, rawGap);
         if (!still && drawn && !f1 && minGap > 0 && lastDraw > 0 && now - lastDraw < minGap && !hP()) {
           const rem = minGap - (now - lastDraw);
           if (isST() && rem > M.max(8, vsDt + 2)) { timer = cT(timer); timer = setTimeout(() => { timer = 0; wake(); }, M.max(4, M.ceil(rem))); }
@@ -414,43 +415,50 @@
       };
 
       const invNG = () => { if (st.field?.mode !== 'webgl2' && !isW(st.field)) st.field?.invalidate?.(); };
+      const rectAt = (t) => (!cRect || t - cRectAt > 1500 ? ((cRectAt = t), (cRect = gbr(cv))) : cRect);
       st.onMove = (ev) => {
         if (mRed()) return;
         if (!isAB()) wb = false;
         if (hP() || isStr()) return;
         const c = st.mode === 'conv', cp = c ? CP[st.convLevel] || CP.medium : null, nr = nowOf();
-        if (c) { if ((lcma > 0 && nr - lcma < cp[4]) || isIgnC(ev.target, false)) return; lcma = nr; }
-        if (!cRect || nr - cRectAt > 1500) { cRect = gbr(cv); cRectAt = nr; }
-        const x = ev.clientX - cRect.left, y = ev.clientY - cRect.top;
-        if (x < 0 || y < 0 || x > cRect.width || y > cRect.height) { lx = ly = null; carry = 0; if (as.active) { as.active = false; f1 = true; invNG(); wake(); } return; }
-        const now = nowOf();
-        if (lx !== null && ly !== null) {
-          const dist = M.hypot(x - lx, y - ly), spd = dist / M.max(0.004, (now - lsa) / 1000), ms = cp ? cp[5] : 220, cs = cp ? cp[6] : 42;
-          if (spd >= ms) { carry += dist; if (carry >= cs) { carry = M.min(20, carry - cs); st.waves.skimmer?.(M.floor(x / CW), M.floor(y / CH), cl((spd - ms) / 1800, 0.05, 1) * (cp ? cp[3] : 1)); } }
-          else carry *= 0.85;
+        if (c) {
+          const t = ev.target;
+          if (t !== ignT || nr - ignAt > 120) { ignT = t; ignR = isIgnC(t, false); ignAt = nr; }
+          if (ignR) return;
         }
-        lx = x; ly = y; lsa = now;
-        if (ambScale() > 0.001) { if (!as.active || st.sleeping) aWk = now; as.x = x; as.y = y; as.active = true; if (st.sleeping) prev = now; invNG(); wake(); }
-        else if (st.waves.active()) { if (st.sleeping) prev = now; st.field.invalidate(); wake(); }
+        const r = rectAt(nr), x = ev.clientX - r.left, y = ev.clientY - r.top;
+        if (x < 0 || y < 0 || x > r.width || y > r.height) { lx = ly = null; carry = 0; if (as.active) { as.active = false; f1 = true; invNG(); wake(); } return; }
+        if (!c || lcma === 0 || nr - lcma >= cp[4]) {
+          if (lx !== null && ly !== null) {
+            const dist = M.hypot(x - lx, y - ly), spd = dist / M.max(0.004, (nr - (c ? lcma : lsa)) / 1000), ms = cp ? cp[5] : 220, cs = cp ? cp[6] : 42;
+            if (spd >= ms) { carry += dist; if (carry >= cs) { carry = M.min(20, carry - cs); st.waves.skimmer?.(M.floor(x / CW), M.floor(y / CH), cl((spd - ms) / 1800, 0.05, 1) * (cp ? cp[3] : 1)); } }
+            else carry *= 0.85;
+          }
+          lx = x; ly = y; if (c) lcma = nr;
+        }
+        lsa = nr;
+        if (ambScale() > 0.001) { if (!as.active || st.sleeping) aWk = nr; as.x = x; as.y = y; as.active = true; if (st.sleeping) prev = nr; invNG(); wake(); }
+        else if (st.waves.active()) { if (st.sleeping) prev = nr; st.field.invalidate(); wake(); }
       };
 
-      st.onLeave = () => { lx = ly = null; carry = 0; if (as.active) { as.active = false; f1 = true; invNG(); wake(); } };
+      st.onLeave = () => { lx = ly = ignT = null; carry = 0; if (as.active) { as.active = false; f1 = true; invNG(); wake(); } };
 
       st.onPress = (ev) => {
         if (ev.button !== 0 || mRed() || ambScale() <= 0.001 || hP() || isStr()) return;
         const c = st.mode === 'conv';
         if (c && isIgnC(ev.target, true)) return;
-        const cp = c ? CP[st.convLevel] || CP.medium : null, r = gbr(cv);
-        cRect = r; cRectAt = nowOf();
-        if (st.sleeping) prev = cRectAt;
+        const cp = c ? CP[st.convLevel] || CP.medium : null, now = nowOf(), r = rectAt(now), wasA = st.waves.active();
+        if (st.sleeping) prev = now;
         st.waves.disturb(M.floor((ev.clientX - r.left) / CW), M.floor((ev.clientY - r.top) / CH), cp && st.convLevel !== 'full' ? { amplitudeScale: cp[3], radiusScale: 0.72 + 0.28 * cp[3], duration: cp[9], loadWeight: cp[10] } : undefined);
-        st.field.invalidate(); wake();
+        if (!wasA) st.field.invalidate();
+        wake();
         if (!c) onPointerPressMascot?.(ev.clientX);
       };
 
       const onVis = () => {
+        hAt = -1;
         if (d.hidden) return reclaim();
-        if (st.mode === 'conv' || convLv() !== 'off') { if (isCB()) { if (!st.parked) parkRipple(); return; } if (st.parked) return syncRipple(); }
+        if (st.mode === 'conv' || convLv() !== 'off') { if (isCB(1)) { if (!st.parked) parkRipple(); return; } if (st.parked) return syncRipple(); }
         if (st.parked) return;
         const s = shrunk, pChg = pMode() !== lastPM;
         if (s || pChg || !hasFSz()) layout();
