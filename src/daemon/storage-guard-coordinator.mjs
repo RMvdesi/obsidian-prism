@@ -306,6 +306,11 @@ export async function checkStorageGuardAndNotify(upd, _testOverrides = null) {
   if (!health?.ok || !health.warn) {
     return { shown: false, reason: 'healthy', health };
   }
+  const hasArchivableSubagents = Number(health.archivableSubagentCount || 0) > 0;
+  const hasHighLsMemory = Number(health.lsMemoryMb || 0) >= conversationArchive.WARN_LS_MEMORY_MB;
+  if (!hasArchivableSubagents && !hasHighLsMemory) {
+    return { shown: false, reason: 'nothing-archivable', health };
+  }
 
   const idleState = await checkActiveHostIdleState(upd, _testOverrides);
   if (!idleState?.idle) {

@@ -3362,3 +3362,53 @@ test('spawnDetachedArchiveTask uses Windows explorer-breakaway for standard arch
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('checkStorageGuardAndNotify suppresses banner when 0 archivable subagents and LS memory is below threshold', async () => {
+  const tmpRoot = mkTmp('prism-sg-nothing-archivable-');
+  const convDir = path.join(tmpRoot, 'conversations');
+  const archiveDir = path.join(tmpRoot, 'conversations_archive');
+  const statePath = path.join(tmpRoot, 'storage-guard-state.json');
+  fs.mkdirSync(convDir, { recursive: true });
+  fs.mkdirSync(archiveDir, { recursive: true });
+
+  const daemon = new PrismDaemon({
+    rootDir: ROOT,
+    enableStorageGuardTimer: false,
+    storageGuardStatePath: statePath,
+  });
+  try {
+    let bannerEvalCount = 0;
+    daemon.sessions.set('ws://local-sg-test', {
+      scopeKey: 'local',
+      session: {
+        closed: false,
+        evaluate: async (expr) => {
+          if (String(expr || '').includes(STORAGE_GUARD_ROOT_ID)) bannerEvalCount += 1;
+          return { shown: true };
+        },
+      },
+    });
+    const now = Date.now();
+    // Simulate >1.5GB of preserved main chats (warn=true via totalMb) with 0 archivable subagents and normal LS RAM (933MB)
+    const mainId = makeGuid(701);
+    const mainDbPath = path.join(convDir, `${mainId}.db`);
+    fs.writeFileSync(mainDbPath, Buffer.alloc(0));
+    fs.truncateSync(mainDbPath, 1600 * 1024 * 1024);
+    const res = await daemon._checkStorageGuardAndNotify({
+      convDir,
+      archiveDir,
+      lsMemoryMb: 933,
+      summaries: new Map([[mainId, { title: 'Main Chat', status: 'IDLE', lastModifiedMs: now - 3600000 }]]),
+      checkIdle: async () => ({ idle: true }),
+      now,
+    });
+    assert.equal(res.shown, false);
+    assert.equal(res.reason, 'nothing-archivable');
+    assert.equal(res.health?.warn, true);
+    assert.equal(res.health?.archivableSubagentCount, 0);
+    assert.equal(bannerEvalCount, 0);
+  } finally {
+    await daemon.stop(false, { skipAutoArchive: true });
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
