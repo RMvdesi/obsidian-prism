@@ -373,20 +373,20 @@ test('1) CSS bucket classifier: 0 mixed-rule misrouting, step-plan/overview rim-
   const darkChatActive = ['core', 'viewSidebar', 'motionFull'].reduce((s, k) => s + Buffer.byteLength(buckets[k] || '', 'utf8'), 0);
   assert.ok(darkChatActive < 180 * 1024, `Dark-chat active CSS (${darkChatActive} B) must stay strictly < 180 KB`);
 
-  // Sidebar selected & selected-running restrained obsidian-glass optics + strict 0 content-visibility on conversation-row-sidebar
+  // Sidebar selected & running liquid-glass optics + strict 0 content-visibility on conversation-row-sidebar
   const sbDarkLine =
     rawCss.split('\n').find((l) => l.includes('[data-testid="conversation-row-sidebar"],.agy-sidebar-row') && l.includes('[data-ag-cs-row-running="1"]')) || '';
   const sbLightLine =
-    rawCss.split('\n').find((l) => l.includes('[data-testid="conversation-row-sidebar"],.agy-sidebar-row)[data-selected="true"]')) || '';
+    rawCss.split('\n').find((l) => l.includes('[data-testid="conversation-row-sidebar"],.agy-sidebar-row){') && l.includes('rgba(244,249,255,.88)')) || '';
   assert.ok(
     rawCss.includes('--_ss:rgba(255,255,255,.068);') &&
       rawCss.includes('--_sy:inset 0 1px 0 rgba(255,255,255,.15),inset 0 0 0 1px rgba(255,255,255,.085),0 2px 10px -4px rgba(0,0,0,.52);') &&
-      sbDarkLine.includes('radial-gradient(58% 130% at 0% 50%,color-mix(in srgb,var(--ag-cs-accent) 13%,transparent),transparent 68%)') &&
-      sbDarkLine.includes('&[data-selected="true"]{background-image:radial-gradient(58% 130% at 0% 50%,color-mix(in srgb,var(--ag-cs-accent) 13%,transparent),transparent 68%),var(--ag-cs-run-wash)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.11),0 4px 12px -4px rgba(0,0,0,.58)!important}') &&
+      sbDarkLine.includes('isolation:isolate') &&
+      sbDarkLine.includes('var(--ag-cs-run-wash)') &&
       !sbDarkLine.includes('var(--_s1)') &&
-      sbLightLine.includes('radial-gradient(54% 130% at 0% 50%') &&
+      sbLightLine.includes('rgba(244,249,255,.88)') &&
       !sbLightLine.includes('var(--_s1)'),
-    'style.css must use restrained obsidian-glass card + subtle left-edge diffusion for selected and selected-running sidebar rows without harsh --_s1 outline'
+    'style.css must use liquid-glass skeuomorphic capsule optics + sheen for selected and running sidebar rows without harsh --_s1 outline'
   );
   const sbRowRules = coreRules.concat(cssPack.splitTopLevelCssRules(buckets.viewSidebar)).filter((r) => r.includes('conversation-row-sidebar'));
   assert.equal(
