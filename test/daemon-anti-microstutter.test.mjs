@@ -8,6 +8,7 @@ import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { setImmediate } from 'node:timers/promises';
 
 import {
   buildRendererRpcExpression,
@@ -852,7 +853,7 @@ test('6. inline-diff-service caches LRU up to 128, deduplicates repo git status 
   }
 });
 
-test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer without dropping logs & 72ms thought-stream frame coalescing', async () => {
+test('7. telemetry-cache 0-JSON.stringify dirty diff and DaemonLogger async buffer without dropping logs', async () => {
   // 7a. telemetry-cache avoids JSON.stringify while detecting deep nested changes accurately
   const tmpDir = makeTempDir('prism-microstutter-misc-');
   const origStringify = JSON.stringify;
@@ -919,64 +920,77 @@ test('7. telemetry-cache 0-JSON.stringify dirty diff, DaemonLogger async buffer 
     logger.log('[!] fatal crash line');
     assert.equal(appendSyncCalls, 2, 'Error/fatal log must flush synchronously to preserve crash diagnostics');
     assert.ok(fs.readFileSync(logFile, 'utf8').includes('fatal crash line'));
-    fs.appendFileSync = origAppendSync;
-
-    // 7c. RpcDispatcher translate-stream 72ms frame coalescing
-    const chunkExprs = [];
-    const entry = {
-      mainFrameId: 'F1',
-      hasFrameTree: true,
-      contextFrames: new Map([[1, { isDefault: true, type: 'default', frameId: 'F1' }]]),
-      session: {
-        closed: false,
-        async send(method, params) {
-          if (method === 'Runtime.evaluate') chunkExprs.push(params.expression);
-          return {};
-        },
-      },
-    };
-    const dispatcher = new RpcDispatcher({
-      channelOrchestrator: {
-        async ensureThoughtService() {
-          return {
-            async translateThought({ onPartial }) {
-              const tokens = ['A', 'AB', 'ABC', 'ABCD', 'ABCDE', 'ABCDEF', 'ABCDEFG', 'ABCDEFGH'];
-              for (const tok of tokens) {
-                onPartial(tok);
-                await new Promise((r) => setTimeout(r, 6));
-              }
-              await new Promise((r) => setTimeout(r, 90));
-              onPartial('ABCDEFGHIJ');
-              await new Promise((r) => setTimeout(r, 20));
-              return { ok: true, translated: 'ABCDEFGHIJ' };
-            },
-          };
-        },
-      },
-    });
-    await dispatcher.handleBindingCall(entry, {
-      name: '__agPrismThoughtCall',
-      payload: JSON.stringify({ id: 7, action: 'translate-stream', input: { text: 'hello' } }),
-      executionContextId: 1,
-    });
-    const onChunkExprs = chunkExprs.filter((e) => e.includes('__agPrismThoughtOnChunk'));
-    assert.ok(onChunkExprs.length >= 2 && onChunkExprs.length <= 4, `Expected 72ms coalescing to compress 9 partials into 2..4 CDP frames, got ${onChunkExprs.length}`);
-    // Reconstruct streamed text from delta frames
-    let acc = '';
-    for (const expr of onChunkExprs) {
-      vm.runInNewContext(expr, {
-        window: {
-          __agPrismThoughtOnChunk(_id, frame) {
-            if (typeof frame === 'string') acc = frame;
-            else if (frame && typeof frame.a === 'string') acc = acc.slice(0, frame.o) + frame.a;
-          },
-        },
-      });
-    }
-    assert.ok(acc.startsWith('A') && acc.length >= 8, `Coalesced delta frames must preserve ordered content, got "${acc}"`);
   } finally {
     JSON.stringify = origStringify;
     fs.appendFileSync = origAppendSync;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('8. RpcDispatcher coalesces thought-stream partials at the 72ms frame boundary', async (t) => {
+  // A positive epoch matches the dispatcher's nonzero last-frame timestamp check.
+  const start = 1000;
+  const { timers } = t.mock;
+  timers.enable({ apis: ['Date', 'setTimeout'], now: start });
+  const evals = [];
+  const entry = {
+    mainFrameId: 'F1',
+    hasFrameTree: true,
+    contextFrames: new Map([[1, { isDefault: true, type: 'default', frameId: 'F1' }]]),
+    session: {
+      closed: false,
+      async send(method, params) {
+        if (method === 'Runtime.evaluate') evals.push([Date.now() - start, params.expression]);
+        return {};
+      },
+    },
+  };
+  const dispatcher = new RpcDispatcher({
+    channelOrchestrator: {
+      async ensureThoughtService() {
+        return {
+          async translateThought({ onPartial }) {
+            onPartial('A');
+            // Let the mocked CDP send settle without advancing the virtual clock.
+            await setImmediate();
+            for (const partial of ['AB', 'ABC', 'ABCD', 'ABCDE', 'ABCDEF', 'ABCDEFG', 'ABCDEFGH']) {
+              timers.tick(6);
+              onPartial(partial);
+            }
+            timers.tick(29); // t = 71: no frame yet.
+            timers.tick(1); // t = 72: flush only the latest partial in the burst.
+            await setImmediate();
+            timers.tick(25);
+            onPartial('ABCDEFGHIJ'); // Still pending when the final result arrives.
+            return { ok: true, translated: 'ABCDEFGHIJ' };
+          },
+        };
+      },
+    },
+  });
+  await dispatcher.handleBindingCall(entry, {
+    name: '__agPrismThoughtCall',
+    payload: JSON.stringify({ id: 7, action: 'translate-stream', input: { text: 'hello' } }),
+    executionContextId: 1,
+  });
+  timers.tick(72); // Completing the RPC must not emit a late partial.
+
+  const received = [];
+  let text = '';
+  const window = {
+    __agPrismThoughtOnChunk(id, frame) {
+      text = typeof frame === 'string' ? frame : text.slice(0, frame.o) + frame.a;
+      received.push(['chunk', id, text]);
+    },
+    __agPrismThoughtResolve(id, result) {
+      received.push(['resolve', id, result.ok, result.translated]);
+    },
+  };
+  assert.deepEqual(evals.map(([ms]) => ms), [0, 72, 97]);
+  for (const [, expression] of evals) vm.runInNewContext(expression, { window });
+  assert.deepEqual(received, [
+    ['chunk', 7, 'A'],
+    ['chunk', 7, 'ABCDEFGH'],
+    ['resolve', 7, true, 'ABCDEFGHIJ'],
+  ]);
 });
