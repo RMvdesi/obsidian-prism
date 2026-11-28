@@ -83,7 +83,8 @@ const isElementLike = (n) => !!(n && (n.nodeType === 1 || (n.nodeType === undefi
 const safeParseJsonObj = (raw) => { if (!raw || typeof raw !== 'string') return null; try { const p = JSON.parse(raw); return p && typeof p === 'object' && !isA(p) ? p : null; } catch { return null; } };
 
 const BOOL_ALIAS_PAIRS = [['homeRipple', 'ripple'], ['composerRestyle', 'composer'], ['sidebarRestyle', 'sidebar']];
-const ONOFF_STR_KEYS = 'telemetryModule|effortSliderModule|effortMemory|periodicModelPicker|omniModule|sidebarStudio|autoUpdate|sidebarNavFold|projectPartitions'.split('|');
+const STR_ALIAS_PAIRS = [['language', 'lang'], ['homeLayout', 'homeMode'], ['placeholderStyle', 'promptStyle']];
+const ONOFF_STR_KEYS = 'telemetryModule|effortSliderModule|effortMemory|periodicModelPicker|omniModule|sidebarStudio|autoUpdate|sidebarNavFold|projectPartitions|sidePanelVerticalTabs'.split('|');
 const BF_KEYS = 'sidebarCompact|codeLigatures|autoArchiveOnExit|ignoreReducedMotion'.split('|'), BT_KEYS = ['homeGlow', 'smoothCaret', 'contextMenu'];
 const PICK_SETS = new Map();
 const pickOf = (v, s, d) => { let set = PICK_SETS.get(s); if (!set) PICK_SETS.set(s, set = new Set(s.split('|'))); return set.has(v) ? v : d; };
@@ -112,11 +113,11 @@ out.placeholderStyle = out.promptStyle = (out.placeholderStyle ?? out.promptStyl
 out.mascot = out.mascot === 'off' || out.mascot === false ? 'off' : /^(minis|quad(-minis)?|r:[ckdw0-4,+m]+)$/.test(out.mascot) ? out.mascot : 'crab';
 out.convRipple = normConvRipple(out.convRipple);
 for (const k of BF_KEYS) out[k] = out[k] === true || out[k] === 'on';
-for (const k of ['sidebarNavFold', 'projectPartitions', 'sidebarStudio', 'autoUpdate']) out[k] = out[k] === 'on' || out[k] === true ? 'on' : 'off';
+for (const k of ONOFF_STR_KEYS.slice(5)) out[k] = out[k] === 'on' || out[k] === true ? 'on' : 'off';
 for (const k of BT_KEYS) out[k] = out[k] === undefined ? true : out[k] !== false && out[k] !== 'off';
 for (const k of ['chatFontCustom', 'codeFontCustom']) out[k] = typeof out[k] === 'string' ? out[k].replace(/[\0\r\n]/g, '').slice(0, 160) : '';
-for (const k of ['omniModule', 'effortMemory', 'periodicModelPicker']) out[k] = out[k] === 'off' || out[k] === false ? 'off' : 'on';
-for (const [k, a, b] of [['lightPreset','alabaster','crystal'],['darkAuraStyle','neon','prism'],['thoughtTrigger','expand','preload'],['scrollBottomMotion','instant','smooth'],['thoughtView','bilingual','immersive'],['linkTarget','external','builtin'],['updateChannel','beta','stable'],['telemetryQuotaMode','both','compact']]) out[k] = out[k] === a ? a : b;
+for (const k of ONOFF_STR_KEYS.slice(2, 5)) out[k] = out[k] === 'off' || out[k] === false ? 'off' : 'on';
+for (const s of 'lightPreset:alabaster:crystal|darkAuraStyle:neon:prism|thoughtTrigger:expand:preload|scrollBottomMotion:instant:smooth|thoughtView:bilingual:immersive|linkTarget:external:builtin|updateChannel:beta:stable|telemetryQuotaMode:both:compact'.split('|')) { const [k, a, b] = s.split(':'); out[k] = out[k] === a ? a : b; }
 const mig = (v) => { if (typeof v !== 'string') return ''; const t = v.trim(); if (!t) return ''; const low = t.toLowerCase().replace(/_/g, '-'); return low === 'yue' || low.startsWith('yue-') || low === 'zh-yue' || incS(low, 'cantonese') ? 'zh-CN' : t; };
 const rawLang = (out.language && out.language !== 'auto' ? mig(out.language) : '') || (out.lang && out.lang !== 'auto' ? mig(out.lang) : '');
 if (rawLang) out.language = out.lang = rawLang;
@@ -128,7 +129,7 @@ const patch = { ...(rawPatch || {}) };
 if (patch.palette === 'claude') patch.palette = 'warm';
 if (patch.mascot === 'dual') patch.mascot = 'crab';
 if ('performanceMode' in patch) patch.performanceMode = normPerfMode(patch.performanceMode);
-for (const [a, b] of [['language', 'lang'], ['homeLayout', 'homeMode'], ['placeholderStyle', 'promptStyle']]) if (a in patch) patch[b] = patch[a]; else if (b in patch) patch[a] = patch[b];
+for (const [a, b] of STR_ALIAS_PAIRS) if (a in patch) patch[b] = patch[a]; else if (b in patch) patch[a] = patch[b];
 for (const [bKey, sKey] of BOOL_ALIAS_PAIRS) if (bKey in patch || sKey in patch) { const v = bKey in patch ? patch[bKey] : patch[sKey], on = v !== false && v !== 'off'; patch[bKey] = on; patch[sKey] = on ? 'on' : 'off'; }
 if ('convRipple' in patch) patch.convRipple = normConvRipple(patch.convRipple);
 for (const k of BF_KEYS) if (typeof patch[k] === 'string') patch[k] = patch[k] === 'on' || patch[k] === 'true';
@@ -198,16 +199,8 @@ const markAllDirty = () => setAllDirty(true);
 
 const resolveWireSettingPair = (key, value) => {
 const base = currentBaseConfig || {};
-for (const [a, b, boolStr] of [
-['homeLayout', 'homeMode'],
-['homeRipple', 'ripple', 1],
-['composerRestyle', 'composer', 1],
-['placeholderStyle', 'promptStyle'],
-['sidebarRestyle', 'sidebar', 1],
-['language', 'lang'],
-]) {
-if (key === a && b in base && !(a in base)) return [b, boolStr ? (value ? 'on' : 'off') : value];
-}
+for (const [a, b] of STR_ALIAS_PAIRS) if (key === a && b in base && !(a in base)) return [b, value];
+for (const [a, b] of BOOL_ALIAS_PAIRS) if (key === a && b in base && !(a in base)) return [b, value ? 'on' : 'off'];
 if (incS('sidebarCompact|smoothCaret|contextMenu'.split('|'), key) && typeof base[key] === 'string') return [key, value ? 'on' : 'off'];
 if (incS(ONOFF_STR_KEYS, key) && typeof value === 'boolean') return [key, value ? 'on' : 'off'];
 if (key === 'palette' && value === 'claude') return ['palette', 'warm'];
@@ -538,7 +531,7 @@ const mkDel = (res, ks, ext) => { const o = ext ? O.defineProperties({}, O.getOw
 
 const HS_KS = 'wasHero|getScopeKey|getUsageRecordsCount|hasConnectedPanel|syncGreeting|renderHomePanel|unmountPanelSeat|parkPanelSeat|scheduleUsageRollupRefresh|flushUsageCacheNow|restoreGreetings|dispose';
 const homeStudioFallback = mkStub(HS_KS, { wasHero: () => false, getScopeKey: () => 'local', getUsageRecordsCount: () => 0, hasConnectedPanel: () => false });
-let lastHomeStudioChannelReqAt = 0;
+let lastHomeStudioChannelReqAt = 0, vtReqAt = 0;
 const resolveManagedCtl = (getMod, key, fb, st, disp, cmp, mk) => {
 const mod = getMod(), fn = mod?.[key];
 if (!isFn(fn)) { if (st.i) disp(); return fb; }
@@ -556,8 +549,9 @@ if (isFn(p.dispose)) return safe(() => p.dispose());
 for (const k of ['flushUsageCacheNow', 'unmountPanelSeat', 'restoreGreetings']) safe(() => p[k]?.());
 };
 const emitHostAction = (action) => { const fn = W[currentBaseConfig?.binding || cfg?.binding || '__agPrismSetting']; if (isFn(fn)) try { fn(SJ({ action })); return true; } catch {} return false; };
+const reqCh = (a, t) => { const n = dNow(); return !destroyed && n - t >= 1000 && emitHostAction(a) ? n : t; };
 const requestHomeStudioChannelIfNeeded = () => {
-if (!destroyed && isStudioHome() && dNow() - lastHomeStudioChannelReqAt >= 1000 && qs(D, '.agy-home') && emitHostAction('request-home-studio-panel')) lastHomeStudioChannelReqAt = dNow();
+if (isStudioHome() && qs(D, '.agy-home')) lastHomeStudioChannelReqAt = reqCh('request-home-studio-panel', lastHomeStudioChannelReqAt);
 };
 const baseCtlOpts = { isDestroyed: () => destroyed, isDarkTheme, motionReduced, getMinFrameGapMs, canMountRealCanvas, setAttrIfChanged, runGuardedMut };
 const mkCtl = (fn, opts, fb) => (isFn(fn) ? fn({ ...baseCtlOpts, ...opts }) : fb);
@@ -734,16 +728,17 @@ safe(() => { const r = motionEngine.springLinear({ stiffness: 420, damping: 32, 
 function syncAbsorbedModules(force = false) {
 const tel = getTel(), eff = W.__agPrismEffortSlider, th = getTh(), thUi = W.__agPrismThoughtSettingsUi;
 const omni = W.__agPrismOmni, meta = W.__agPrismOmniServerMeta || null, sb = W.__agPrismSidebar, sbMeta = W.__agPrismSidebarMeta || null;
-const ctxMenu = getCtx(), hiInst = W.__agPrismHostI18n;
+const ctxMenu = getCtx(), hiInst = W.__agPrismHostI18n, vt = wMod('__agPrismSidePanelVtabs');
 ownedCtxMenu = ctxMenu || null;
-const motionLv = getMotionLevel(), ctxEnabled = cfg.contextMenu !== false && cfg.contextMenu !== 'off' && !destroyed, hiMode = aoMode('hostLocalization'), curLang = getLang();
-const key = [VERSION, curLang, motionLv, getTelemetryMode(), cfg.telemetryQuotaMode, aoMode('effortSliderModule'), onOffMode('effortMemory'), hiMode, getThoughtTranslateMode(), cfg.thoughtTrigger === 'expand' ? 'expand' : 'preload', getThoughtView(), onOffMode('omniModule'), getLinkTarget(), +(cfg.sidebarStudio === 'on'), +ctxEnabled, meta?.baseUrl || '', sbMeta?.version || '', +!!sbMeta?.serviceReady, +!!tel, +!!eff, +!!hiInst, +!!th, +!!thUi, +!!omni, +!!sb, +!!ctxMenu].join('|');
+const motionLv = getMotionLevel(), ctxEnabled = cfg.contextMenu !== false && cfg.contextMenu !== 'off' && !destroyed, hiMode = aoMode('hostLocalization'), curLang = getLang(), vtOn = cfg.sidePanelVerticalTabs === 'on';
+const key = [VERSION, curLang, motionLv, getTelemetryMode(), cfg.telemetryQuotaMode, aoMode('effortSliderModule'), onOffMode('effortMemory'), hiMode, getThoughtTranslateMode(), cfg.thoughtTrigger === 'expand' ? 'expand' : 'preload', getThoughtView(), onOffMode('omniModule'), getLinkTarget(), +(cfg.sidebarStudio === 'on'), +ctxEnabled, +vtOn, meta?.baseUrl || '', sbMeta?.version || '', +!!sbMeta?.serviceReady, +!!tel, +!!eff, +!!hiInst, +!!th, +!!thUi, +!!omni, +!!sb, +!!ctxMenu, +!!vt].join('|');
 if (!force && key === lastAbsorbedSyncKey) return;
 lastAbsorbedSyncKey = key;
 safe(() => tel?.sync?.(cfg)); safe(() => eff?.sync?.(cfg));
 safe(() => { if (hiMode === 'auto' && curLang !== 'zh-CN' && curLang !== 'tr') { hiInst?.destroy?.(); ra(de(), 'data-ag-prism-host-i18n'); } else if (isFn(hiInst?.setMode)) hiInst.setMode(hiMode === 'on' ? 'on' : hiMode === 'off' ? 'off' : 'auto'); });
 safe(() => th?.sync?.(cfg)); safe(() => (onOffMode('omniModule') === 'off' ? omni?.destroy?.() : omni?.sync?.(cfg, meta)));
 safe(() => sb?.sync?.(cfg, sbMeta)); safe(() => ctxMenu?.sync?.({ enabled: ctxEnabled, lang: curLang, motionLevel: motionLv }));
+safe(() => (!vtOn ? (vtReqAt = 0, vt?.destroy?.()) : vt?.sync ? vt.sync(cfg) : (vtReqAt = reqCh('request-side-panel-vtabs', vtReqAt))));
 safe(() => byId(SETTINGS_SEC_ID)?.__prismMountThoughtUi?.());
 }
 
@@ -763,7 +758,7 @@ style: '1', theme: dk ? 'dark' : 'light', palette: pal, 'light-preset': lp, moti
 'scroll-bottom': cfg.scrollBottomMotion, 'code-font': cf, ligatures: lig,
 ambient: String(Number(amb) / 100), 'dark-aura': cfg.darkAura, 'dark-aura-style': cfg.darkAuraStyle, home: cfg.homeLayout,
 composer: cfg.composer, 'logo-ink': cfg.logoInk === 'foreground' ? 'foreground' : 'accent',
-sidebar: cfg.sidebar, 'sidebar-compact': cfg.sidebarCompact ? 'on' : 'off', 'sb-fold': cfg.sidebarNavFold, lang,
+sidebar: cfg.sidebar, 'sidebar-compact': cfg.sidebarCompact ? 'on' : 'off', 'sb-fold': cfg.sidebarNavFold, 'side-panel-vertical-tabs': cfg.sidePanelVerticalTabs, lang,
 };
 for (const [k, v] of O.entries(csA)) setAttrIfChanged(html, 'data-ag-cs-' + k, v);
 for (const [k, v] of [['', VERSION], ['-omni', onOffMode('omniModule')], ['-link-target', getLinkTarget()], ['-sidebar-studio', cfg.sidebarStudio]]) setAttrIfChanged(html, 'data-ag-prism' + k, v);
@@ -1274,7 +1269,7 @@ streamChoreoCtl.scheduleTransient(() => pill.remove(), 240);
 const isSettingButtonMatch = (key, btnValJson, curVal) => SJ(curVal) === btnValJson || (key === 'palette' && (curVal === 'warm' || curVal === 'claude') && (btnValJson === '"warm"' || btnValJson === '"claude"'));
 let lastSettingsChannelReqAt = 0;
 function requestSettingsChannelIfDialogOpen() {
-if (!destroyed && dNow() - lastSettingsChannelReqAt >= 1000 && (qs(D, S_DLG) || byId(SETTINGS_SEC_ID)) && emitHostAction('request-settings-panel')) lastSettingsChannelReqAt = dNow();
+if (qs(D, S_DLG) || byId(SETTINGS_SEC_ID)) lastSettingsChannelReqAt = reqCh('request-settings-panel', lastSettingsChannelReqAt);
 }
   function ensureSettingsSection() {
     const spm = getSettingsPanelMod(), loc = getLocalesMod();
@@ -2298,7 +2293,7 @@ modelInfo: latestPrimaryModelInfo ? { ...latestPrimaryModelInfo } : null, perf: 
 suppressEntryMotion(ms) { streamChoreoCtl.suppressEntryMotion?.(ms); },
 destroy() {
 teardownCore();
-for (const k of 'Telemetry,EffortSlider,Thought,Omni,Sidebar,PeriodicStub,PeriodicPicker,ProjectPartitions,HostI18n,Wallpaper,Suggester'.split(',')) safe(() => wMod('__agPrism' + k)?.destroy?.());
+for (const k of 'Telemetry,EffortSlider,Thought,Omni,Sidebar,PeriodicStub,PeriodicPicker,ProjectPartitions,HostI18n,Wallpaper,Suggester,SidePanelVtabs'.split(',')) safe(() => wMod('__agPrism' + k)?.destroy?.());
 for (const k of 'PrismPeriodicStub,PrismPeriodicStubFactory,PeriodicPendingOpen,PeriodicFullLoaded,PeriodicStubHash'.split(',')) { safe(() => delete W['__ag' + k]); safe(() => delete GT['__ag' + k]); }
 safe(() => W.__agPrismInlineDiff?.unbindHooks?.());
 safe(() => (ownedCtxMenu || getCtx())?.destroy?.());
@@ -2317,7 +2312,7 @@ rmAll(pfx('#ag-prism-', 'overlay-portal,mascot-hop-style,periodic-picker-css,per
 const html = de();
 if (html) {
 ra(html, 'data-ag-perf-busy');
-for (const s of 'style|theme|palette|light-preset|motion|ignore-rm|perf-mode|stream-active|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|chat-font|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);
+for (const s of 'style|theme|palette|light-preset|motion|ignore-rm|perf-mode|stream-active|target-fps|telemetry|effort-slider|thought-translate|home|composer|logo-ink|sidebar|sidebar-compact|sidebar-collapsed|sb-fold|side-panel-vertical-tabs|has-crab|model-menu|takeover-open|lang|cjk|accent|corners|chat-font|code-font|ligatures|ambient|win-blur|scroll-bottom|resizing|mascot-drag|conv-ripple'.split('|')) ra(html, 'data-ag-cs-' + s);
 for (const s of '|thought-view|omni|link-target|sidebar-studio|sidebar-host-sync|project-partitions'.split('|')) ra(html, s ? 'data-ag-prism-' + s : 'data-ag-prism');
 rp(html, '--ag-spring-sidebar-ease'); rp(html, '--ag-spring-sidebar-dur');
 }

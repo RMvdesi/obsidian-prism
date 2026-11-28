@@ -135,6 +135,8 @@ function makeMinimalDaemon({
   daemon.effortSliderExpr = '';
   daemon.workbenchEnhancerExpr = '';
   daemon.contextMenuExpr = '';
+  daemon.projectPartitionsExpr = '';
+  daemon.sidePanelVtabsExpr = '';
   daemon.sessions = new Map();
   daemon.swarmSessions = new Map();
   daemon._swarmAttaching = new Set();
@@ -167,6 +169,8 @@ function makeMinimalDaemon({
     effortSliderModule: 'off',
     workbenchEnhancer: 'off',
     contextMenu: false,
+    projectPartitions: 'off',
+    sidePanelVerticalTabs: 'off',
   };
   daemon.cdp = {
     PLUGIN_VERSION: cdp.PLUGIN_VERSION,
@@ -190,6 +194,8 @@ function makeMinimalDaemon({
     shouldEnableEffortSlider: () => false,
     shouldEnableWorkbenchEnhancer: () => false,
     shouldEnableContextMenu: () => false,
+    shouldEnableProjectPartitions: () => false,
+    shouldEnableSidePanelVerticalTabs: () => false,
     buildConfigRefreshExpression: () => `/* CFG_SYNC ${JSON.stringify(daemon.cdp.readConfig())} */`,
   };
   daemon.rebuildBundle = () => {};
@@ -739,7 +745,7 @@ test('Hot-reload P0: _readCdpTreeSig detects src/**/*.cjs edits, clears src requ
   }
 });
 
-test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 prototype mixins) and drives all 16 channels from CHANNEL_REGISTRY', () => {
+test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 prototype mixins) and drives all 18 channels from CHANNEL_REGISTRY', () => {
   const daemon = new PrismDaemon({
     rootDir: ROOT_DIR,
     silent: true,
@@ -792,7 +798,7 @@ test('Phase 4B True Microkernel: PrismDaemon composes 4 isolated subsystems (0 p
   assert.equal(daemon2.periodicPickerExpr, '');
 });
 
-test('Phase 4D: all 16 channel builders wrap execution in structured try/catch error boundaries without throwing into host', () => {
+test('Phase 4D: all 18 channel builders wrap execution in structured try/catch error boundaries without throwing into host', () => {
   const allEnabledCfg = {
     ...cdp.DEFAULT_CONFIG,
     omniModule: 'on',
@@ -808,6 +814,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
     workbenchEnhancer: 'on',
     contextMenu: true,
     projectPartitions: 'on',
+    sidePanelVerticalTabs: 'on',
   };
 
   for (const ch of cdp.CHANNEL_REGISTRY) {
@@ -850,7 +857,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
         ? { protocol: 'plugin:', hostname: 'swarm--swarm_board-1', pathname: '/', port: '', username: '', password: '' }
         : { href: 'vscode-file://vscode-app/workbench.html' },
       document: hostileDoc,
-      __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', projectPartitions: 'on', language: 'zh-CN' } }) },
+      __agPrism: { getState: () => ({ cfg: { sidebarStudio: 'on', omniModule: 'on', thoughtTranslate: 'ai', homeLayout: 'studio', mascot: 'crab', telemetryModule: 'on', effortSliderModule: 'on', workbenchEnhancer: 'on', contextMenu: true, periodicModelPicker: 'on', hostLocalization: 'on', projectPartitions: 'on', language: 'zh-CN', sidePanelVerticalTabs: 'on' } }) },
       __agPrismOmni: trapExisting,
       __agPrismSidebar: trapExisting,
       __agPrismInlineDiff: trapExisting,
@@ -868,6 +875,7 @@ test('Phase 4D: all 16 channel builders wrap execution in structured try/catch e
       __agPrismHostEnhancer: trapExisting,
       __agPrismContextMenu: trapExisting,
       __agPrismProjectPartitions: trapExisting,
+      __agPrismSidePanelVtabs: trapExisting,
     };
     hostileWin.self = hostileWin;
     hostileWin.top = hostileWin;

@@ -9,7 +9,7 @@
   const STORAGE_SETTINGS_OPEN_KEY = 'ag-prism:settings-open';
   const STORAGE_SETTINGS_SUBTAB_KEY = 'ag-prism:settings-subtab';
   const SETTINGS_STYLE_ID = 'ag-prism-settings-v101-css';
-  const PRISM_STORAGE_KEYS = 'ag-prism:config|ag-prism:lastFileConfig|agClaudeStyle.settings.v3|ag-claude-style:config|ag-prism:trajRollup.v1|ag-prism:homeSessionScope.v1|ag-prism:settings-open|ag-prism:settings-subtab|__op_chroma_v1|agCs.pulseVialMode.v1|ag_prism_thought_zh_cache_v1|ag_prism_thought_view_mode_v1|ag_prism_thought_style_tag_v1|ag_prism_pp_muted|ag.prism.effortMemory.v1|ag.codexEffortSlider.settings.v1'.split('|');
+  const PRISM_STORAGE_KEYS = 'ag-prism:config|ag-prism:lastFileConfig|agClaudeStyle.settings.v3|ag-claude-style:config|ag-prism:trajRollup.v1|ag-prism:homeSessionScope.v1|ag-prism:settings-open|ag-prism:settings-subtab|ag-prism:side-panel-vtabs-collapsed|ag-prism:side-panel-vtabs-width|__op_chroma_v1|agCs.pulseVialMode.v1|ag_prism_thought_zh_cache_v1|ag_prism_thought_view_mode_v1|ag_prism_thought_style_tag_v1|ag_prism_pp_muted|ag.prism.effortMemory.v1|ag.codexEffortSlider.settings.v1'.split('|');
   const PRISM_STORAGE_PREFIXES = ['ag-prism:trajRollup.v1:'];
 
   const clearPrismLocalStorage = (store) => {

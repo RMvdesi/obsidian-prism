@@ -355,7 +355,17 @@ export class ChannelOrchestrator {
     if (!bypassCache && this._clientFileExistsCache instanceof Map && this._clientFileExistsCache.has(id)) {
       return this._clientFileExistsCache.get(id);
     }
-    const exists = hasChannelAssetFile(this._rootDir, this.getCdp(), id);
+    let exists;
+    if (id === 'sidePanelVtabs') {
+      const reg = this.getRegisteredChannel(id);
+      exists = Boolean(this._rootDir && Array.isArray(reg?.files) && reg.files.length > 0);
+      if (exists) {
+        try { exists = reg.files.every((rel) => fs.existsSync(path.join(this._rootDir, ...rel.split('/')))); }
+        catch { exists = false; }
+      }
+    } else {
+      exists = hasChannelAssetFile(this._rootDir, this.getCdp(), id);
+    }
     if (this._clientFileExistsCache instanceof Map) {
       this._clientFileExistsCache.set(id, exists);
     }
@@ -683,6 +693,66 @@ export class ChannelOrchestrator {
       return false;
     } finally {
       entry._homeStudioChannelInFlight = false;
+    }
+  }
+
+  async deliverSidePanelVtabsChannelToEntry(entry, executionContextId = null) {
+    if (!entry || entry.session?.closed || entry._sidePanelVtabsChannelInFlight) return false;
+    entry._sidePanelVtabsChannelInFlight = true;
+    const exec = async () => {
+      if (!entry || entry.session?.closed) return false;
+      const cdp = this.getCdp();
+      const cfgNow = typeof cdp?.readConfig === 'function' ? cdp.readConfig() : null;
+      const spec = this.getRegisteredChannel('sidePanelVtabs');
+      if (!spec || !this.hasChannelFile(spec) || !this.isChannelEnabled(spec, cfgNow)) return false;
+      const expr = this.ensureChannelExpr(spec, cfgNow);
+      if (!expr) return false;
+      const vtHash = this.getChannelExprHash(spec, expr);
+      const vtSig = this.getChannelCfgSig(spec, cfgNow, expr);
+      if (!entry.sidePanelVtabsScriptId || entry.lastSidePanelVtabsScriptSig !== vtSig) {
+        const id = await replaceEntryNewDocScript(entry, 'sidePanelVtabsScriptId', expr);
+        if (id) {
+          if (!this.isChannelEnabled(spec) || !this.hasChannelFile(spec) || entry.session.closed) {
+            await cleanupChannelOnEntry(this, entry, spec);
+            return false;
+          }
+          entry.lastSidePanelVtabsScriptSig = vtSig;
+        }
+      }
+      const evalParams = { expression: expr, returnByValue: true };
+      if (typeof executionContextId === 'number' && executionContextId > 0) evalParams.contextId = executionContextId;
+      let caughtErr = null;
+      const res = await entry.session.send('Runtime.evaluate', evalParams, 5000).catch((err) => {
+        caughtErr = err;
+        return null;
+      });
+      if (!this.isChannelEnabled(spec) || !this.hasChannelFile(spec)) {
+        await cleanupChannelOnEntry(this, entry, spec);
+        return false;
+      }
+      const val = res?.result?.value;
+      if (val?.ok) {
+        entry.sidePanelVtabsMounted = !val.skippedByLiveCfg;
+        entry.lastSidePanelVtabsSig = vtSig;
+        if (val.skippedByLiveCfg) recordChannelSkipped(entry, 'sidePanelVtabs', { codeHash: vtHash });
+        else recordChannelSuccess(entry, 'sidePanelVtabs', { codeHash: vtHash, scriptId: entry.sidePanelVtabsScriptId });
+        return true;
+      }
+      const errObj = caughtErr
+        ? { ok: false, status: 'eval-error', error: String(caughtErr.message || caughtErr).slice(0, 300), stack: String(caughtErr.stack || '').slice(0, 600) }
+        : res?.exceptionDetails
+          ? { ok: false, status: 'eval-error', error: String(res.exceptionDetails.exception?.description || res.exceptionDetails.text || 'exception').slice(0, 300) }
+          : val;
+      recordChannelEvalFailure(this, entry, 'sidePanelVtabs', errObj, { stage: 'apply' });
+      return false;
+    };
+    try {
+      if (typeof this.sessionRegistry?.runExclusive === 'function') {
+        return await this.sessionRegistry.runExclusive(entry, exec);
+      }
+      return await exec();
+    } finally {
+      entry._sidePanelVtabsChannelInFlight = false;
     }
   }
 

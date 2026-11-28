@@ -20,7 +20,7 @@ const mkContract = (id, tier, scope, sinceHostVersion, affectedModules, primary,
 const HOST_SELECTOR_CONTRACTS = Object.freeze([
   mkContract(
     'sidebarSplit', 'critical', 'shell', '2.33.0',
-    ['style.css', 'ui-runtime.js', 'host-workbench-enhancer.js'],
+    ['style.css', 'ui-runtime.js', 'host-workbench-enhancer.js', 'vendor/side-panel-vertical-tabs/vtabs-layout.css'],
     ['[data-testid="sidebar-split"]', '主侧栏分屏容器稳定测试锚点'],
     ['[data-testid="conversation-list-sidebar"], .agy-shell [data-testid="sidebar-sash"]', '会话列表侧栏或分屏拖拽条语义锚点'],
     ['.agy-shell aside, .agy-shell nav', '侧栏结构标签兜底']
@@ -76,7 +76,7 @@ const HOST_SELECTOR_CONTRACTS = Object.freeze([
   ),
   mkContract(
     'overviewPanelHost', 'major', 'shell', '2.34.0',
-    ['style.css', 'ui-runtime.js', 'vendor/omni-viewer/omni-client.js'],
+    ['style.css', 'ui-runtime.js', 'vendor/omni-viewer/omni-client.js', 'vendor/side-panel-vertical-tabs/vtabs-controller.js'],
     ['[data-testid="overview-panel-host"], [data-testid="overview-panel"]', '右侧概览/辅助宿主面板锚点'],
     ['[data-testid="aux-pane-split"], [data-testid="overview-panel-host-sibling"]', '辅助分屏或兄弟容器锚点'],
     ['.agy-shell aside:last-of-type', '外壳尾部侧栏结构兜底']
@@ -254,6 +254,11 @@ const HOST_INTERACTION_SELECTORS = Object.freeze({
   scrollToBottomButton: '.agy-scroll-bottom',
   autoscrollOverlayHost: '[data-autoscroll-overlay-host]',
   auxPaneSplit: '[data-testid="aux-pane-split"]',
+  sidePanelBody: '[data-side-panel-body]',
+  sidePanelExcludedRoot: '[data-testid="subagent-tab-conversation"], [data-side-panel-body], [data-testid="side-question-panel"]',
+  sidePanelTablist: '[data-side-panel-tablist], [role="tablist"]',
+  sidePanelTopRightCluster: '[data-testid="toggle-aux-sidebar"], [data-testid="toggle-maximize-pane"]',
+  splitSized: '[data-split-sized]',
 });
 
 module.exports = {

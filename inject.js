@@ -5,48 +5,16 @@ const ensurePartBind = (...a) => (typeof cdpMod.ensurePartitionsBinding === 'fun
 const rmPartBind = (...a) => (typeof cdpMod.removePartitionsBinding === 'function' ? cdpMod.removePartitionsBinding(...a) : Promise.resolve());
 const handlePartitionsBindingCall = (...a) => (typeof cdpMod.handlePartitionsBindingCall === 'function' ? cdpMod.handlePartitionsBindingCall(...a) : Promise.resolve(false));
 const {
-  PORT_FILE,
-  PID_FILE,
-  CONFIG_FILE,
-  SETTING_BINDING,
-  LEGACY_SETTING_BINDING,
-  OMNI_BINDING,
-  SIDEBAR_BINDING,
-  INLINE_DIFF_BINDING,
-  PARTITIONS_BINDING,
-  validateConfigEntry,
-  reconcileConfigAliases,
-  isEligibleTarget,
-  readConfig,
-  writeConfig,
-  readProjectPartitionsData,
-  writeProjectPartitionsData,
-  readPidFromLockFile,
-  isExpectedDaemonProcess,
-  readPort,
-  listPages,
-  CdpSession,
-  buildInjectExpression,
-  buildConfigRefreshExpression,
-  buildOmniClientExpression,
-  buildSidebarStudioExpression,
-  shouldEnableHostI18n,
-  buildHostI18nExpression,
-  HOST_I18N_REMOVE_EXPRESSION,
-  ISOLATED_HOST_I18N_PAUSE_EXPRESSION,
-  ISOLATED_HOST_I18N_RESUME_EXPRESSION,
-  shouldEnableThought,
-  buildThoughtExpression,
-  THOUGHT_REMOVE_EXPRESSION,
-  buildInlineDiffInjectExpression,
-  INLINE_DIFF_REMOVE_EXPRESSION,
-  shouldEnablePeriodicPicker,
-  buildPeriodicPickerExpression,
-  PERIODIC_PICKER_REMOVE_EXPRESSION,
-  buildSettingsChannelExpression,
-  shouldEnableMascot,
-  buildMascotChannelExpression,
-  MASCOT_REMOVE_EXPRESSION,
+  PORT_FILE, PID_FILE, CONFIG_FILE, SETTING_BINDING, LEGACY_SETTING_BINDING, OMNI_BINDING, SIDEBAR_BINDING,
+  INLINE_DIFF_BINDING, PARTITIONS_BINDING, validateConfigEntry, reconcileConfigAliases, isEligibleTarget,
+  readConfig, writeConfig, readProjectPartitionsData, writeProjectPartitionsData, readPidFromLockFile,
+  isExpectedDaemonProcess, readPort, listPages, CdpSession, buildInjectExpression, buildConfigRefreshExpression,
+  buildOmniClientExpression, buildSidebarStudioExpression, shouldEnableHostI18n, buildHostI18nExpression,
+  HOST_I18N_REMOVE_EXPRESSION, ISOLATED_HOST_I18N_PAUSE_EXPRESSION, ISOLATED_HOST_I18N_RESUME_EXPRESSION,
+  shouldEnableThought, buildThoughtExpression, THOUGHT_REMOVE_EXPRESSION, buildInlineDiffInjectExpression,
+  INLINE_DIFF_REMOVE_EXPRESSION, shouldEnablePeriodicPicker, buildPeriodicPickerExpression,
+  PERIODIC_PICKER_REMOVE_EXPRESSION, buildSettingsChannelExpression, shouldEnableMascot,
+  buildMascotChannelExpression, MASCOT_REMOVE_EXPRESSION,
 } = cdpMod;
 
 const FALLBACK_THOUGHT_REMOVE_EXPRESSION =
@@ -56,10 +24,10 @@ const FALLBACK_INLINE_DIFF_REMOVE_EXPRESSION =
 const INLINE_DIFF_MAX_PAYLOAD_BYTES = 16384;
 const INLINE_DIFF_MAX_URI_LENGTH = 2048;
 
-// 全部运行期下沉通道（Ch13~Ch16）与清理句柄均直接从 cdp.CHANNEL_REGISTRY 唯一真相源派生
+// 全部运行期下沉通道（Ch13~Ch16）、Ch17 分区目录与 Ch18 纵向标签栏均从 cdp.CHANNEL_REGISTRY 派生
 function getRuntimeRegistryChannels(mod) {
   return Array.isArray(mod?.CHANNEL_REGISTRY)
-    ? mod.CHANNEL_REGISTRY.filter((ch) => ch && (ch.tier === 'runtime' || ch.id === 'projectPartitions'))
+    ? mod.CHANNEL_REGISTRY.filter((ch) => ch && (ch.tier === 'runtime' || ch.id === 'projectPartitions' || ch.id === 'sidePanelVtabs'))
     : [];
 }
 function buildRuntimeChannelBundleMap(mod, cfg, cacheOpts = null) {
@@ -76,30 +44,71 @@ async function applyRuntimeChannelsOnce(session, mod, cfg, cacheOpts = null) {
     else if (!item.enabled && item.removeExpr) await session.evaluate(item.removeExpr).catch(() => {});
   }
 }
-async function evalRuntimeChannelsOnEntry(entry, items) {
+async function evalRuntimeChannelsOnEntry(entry, items, isStale = null) {
+  const seqMap = (entry._rtEvalSeq ||= new Map());
+  const wantMap = (entry._rtWantEnabled ||= new Map());
+  const exprMap = (entry._rtLastExpr ||= new Map());
+  const inF = (entry._rtEvalInFlight ||= new Map());
+  const bumpF = (id, d) => { const n = (inF.get(id) || 0) + d; if (n <= 0) inF.delete(id); else inF.set(id, n); };
   for (const item of items) {
-    if (item.expr && item.enabled) {
-      const res = await entry.session.evaluate(item.expr).catch(() => null);
+    if (isStale?.() || entry.session.closed) return;
+    const seq = (seqMap.get(item.id) || 0) + 1;
+    seqMap.set(item.id, seq);
+    const wantOn = Boolean(item.expr && item.enabled);
+    wantMap.set(item.id, wantOn);
+    if (wantOn) {
+      exprMap.set(item.id, item.expr);
+      bumpF(item.id, 1);
+      let res = null;
+      try { res = await entry.session.evaluate(item.expr).catch(() => null); } finally { bumpF(item.id, -1); }
+      if (seqMap.get(item.id) !== seq || isStale?.()) {
+        if (!wantMap.get(item.id) && item.removeExpr && !entry.session.closed) {
+          await entry.session.evaluate(item.removeExpr).catch(() => {});
+          if (!wantMap.get(item.id)) entry[item.mountedKey] = false;
+        }
+        continue;
+      }
       if (res && res.ok) entry[item.mountedKey] = !res.skippedByLiveCfg;
-    } else if (!item.enabled && (entry[item.scriptKey] || entry[item.mountedKey])) {
-      if (item.removeExpr) await entry.session.evaluate(item.removeExpr).catch(() => {});
-      entry[item.mountedKey] = false;
+    } else if (entry[item.scriptKey] || entry[item.mountedKey] || inF.has(item.id)) {
+      if (item.removeExpr) {
+        bumpF(item.id, 1);
+        try { await entry.session.evaluate(item.removeExpr).catch(() => {}); } finally { bumpF(item.id, -1); }
+      }
+      if (seqMap.get(item.id) === seq && !isStale?.()) {
+        entry[item.mountedKey] = false;
+      } else if (wantMap.get(item.id) && !entry.session.closed) {
+        const latest = exprMap.get(item.id);
+        if (latest) {
+          const r = await entry.session.evaluate(latest).catch(() => null);
+          if (wantMap.get(item.id) && r && r.ok) entry[item.mountedKey] = !r.skippedByLiveCfg;
+        }
+      }
     }
   }
 }
-async function syncEntryNewDocScript(entry, prop, source) {
-  if (entry[prop]) {
-    await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry[prop] }).catch(() => {});
-    entry[prop] = null;
-  }
-  if (!source) return null;
+async function syncEntryNewDocScript(entry, prop, source, isStale = null) {
+  if (isStale?.() || entry.session.closed) return null;
+  const seqMap = (entry._newDocSeq ||= new Map());
+  const seq = (seqMap.get(prop) || 0) + 1;
+  seqMap.set(prop, seq);
+  const prevId = entry[prop];
+  entry[prop] = null;
+  if (prevId) await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: prevId }).catch(() => {});
+  if (!source || seqMap.get(prop) !== seq || isStale?.() || entry.session.closed) return null;
   const add = await entry.session.send('Page.addScriptToEvaluateOnNewDocument', { source }).catch(() => null);
-  entry[prop] = add && add.identifier ? add.identifier : null;
-  return entry[prop];
+  const newId = add?.identifier || null;
+  if (!newId) return null;
+  if (seqMap.get(prop) !== seq || isStale?.() || entry.session.closed) {
+    await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: newId }).catch(() => {});
+    return null;
+  }
+  entry[prop] = newId;
+  return newId;
 }
-async function syncRuntimeChannelScriptsOnEntry(entry, items) {
+async function syncRuntimeChannelScriptsOnEntry(entry, items, isStale = null) {
   for (const item of items) {
-    await syncEntryNewDocScript(entry, item.scriptKey, item.expr && item.enabled ? item.expr : '');
+    if (isStale?.() || entry.session.closed) return;
+    await syncEntryNewDocScript(entry, item.scriptKey, item.expr && item.enabled ? item.expr : '', isStale);
   }
 }
 async function clearAllEntryScripts(entry, mod = cdpMod) {
@@ -107,9 +116,11 @@ async function clearAllEntryScripts(entry, mod = cdpMod) {
     ? mod.CHANNEL_REGISTRY.map((c) => c?.fields?.scriptField).filter(Boolean)
     : ['omniScriptId', 'sidebarScriptId', 'hostI18nScriptId', 'thoughtScriptId', 'inlineDiffScriptId', 'periodicPickerScriptId', 'mascotScriptId'];
   for (const key of ['scriptId', ...regKeys]) {
-    if (entry[key]) {
-      await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: entry[key] }).catch(() => {});
-      entry[key] = null;
+    if (entry._newDocSeq) entry._newDocSeq.set(key, (entry._newDocSeq.get(key) || 0) + 1);
+    const oldId = entry[key];
+    entry[key] = null;
+    if (oldId) {
+      await entry.session.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldId }).catch(() => {});
     }
   }
   for (const ch of getRuntimeRegistryChannels(mod)) {
@@ -259,44 +270,23 @@ function createFastConfigRefreshBroadcaster({
     const omniEnabled = cfgNow?.omniModule !== 'off';
     const sidebarEnabled = cfgNow?.sidebarStudio === 'on';
     const expr = buildInj();
-    const omniExpr =
-      omniEnabled && typeof buildOmni === 'function'
-        ? buildOmni(getOmniServerInfo())
-        : '';
-    const sidebarExpr =
-      sidebarEnabled && typeof buildSidebar === 'function'
-        ? buildSidebar({ binding: sidebarBinding, serviceReady: Boolean(getSidebarServiceReady()) })
-        : '';
+    const omniExpr = omniEnabled && typeof buildOmni === 'function' ? buildOmni(getOmniServerInfo()) : '';
+    const sidebarExpr = sidebarEnabled && typeof buildSidebar === 'function' ? buildSidebar({ binding: sidebarBinding, serviceReady: Boolean(getSidebarServiceReady()) }) : '';
     const hostI18nEnabled = typeof shouldHostI18n === 'function' ? shouldHostI18n(cfgNow) : false;
-    const hostI18nExpr =
-      hostI18nEnabled && typeof buildHostI18n === 'function'
-        ? buildHostI18n(cfgNow)
-        : '';
+    const hostI18nExpr = hostI18nEnabled && typeof buildHostI18n === 'function' ? buildHostI18n(cfgNow) : '';
     const thoughtHooks = getThoughtHooks() || {};
     const thoughtEnabled = isThoughtEnabledForConfig(cfgNow, thoughtHooks.shouldEnable);
-    const thoughtExpr =
-      thoughtEnabled && typeof thoughtHooks.buildExpression === 'function'
-        ? thoughtHooks.buildExpression(cfgNow)
-        : '';
+    const thoughtExpr = thoughtEnabled && typeof thoughtHooks.buildExpression === 'function' ? thoughtHooks.buildExpression(cfgNow) : '';
     const thoughtRemoveExpr = thoughtHooks.removeExpression || FALLBACK_THOUGHT_REMOVE_EXPRESSION;
     const inlineDiffHooks = getInlineDiffHooks() || {};
-    const inlineDiffExpr =
-      typeof inlineDiffHooks.buildExpression === 'function'
-        ? inlineDiffHooks.buildExpression(cfgNow)
-        : '';
+    const inlineDiffExpr = typeof inlineDiffHooks.buildExpression === 'function' ? inlineDiffHooks.buildExpression(cfgNow) : '';
     const inlineDiffHashMatch = inlineDiffExpr ? /const targetHash = "([^"]+)"/.exec(inlineDiffExpr) : null;
     const inlineDiffHash = inlineDiffHashMatch ? inlineDiffHashMatch[1] : inlineDiffExpr;
     const inlineDiffRemoveExpr = inlineDiffHooks.removeExpression || FALLBACK_INLINE_DIFF_REMOVE_EXPRESSION;
     const periodicPickerEnabled = typeof shouldPeriodicPicker === 'function' ? shouldPeriodicPicker(cfgNow) : false;
-    const periodicPickerExpr =
-      periodicPickerEnabled && typeof buildPeriodicPicker === 'function'
-        ? buildPeriodicPicker(cfgNow)
-        : '';
+    const periodicPickerExpr = periodicPickerEnabled && typeof buildPeriodicPicker === 'function' ? buildPeriodicPicker(cfgNow) : '';
     const mascotEnabled = typeof resolveShouldMascot === 'function' ? Boolean(resolveShouldMascot(cfgNow)) : false;
-    const mascotExpr =
-      mascotEnabled && typeof resolveBuildMascot === 'function'
-        ? resolveBuildMascot(cfgNow)
-        : '';
+    const mascotExpr = mascotEnabled && typeof resolveBuildMascot === 'function' ? resolveBuildMascot(cfgNow) : '';
     const rtCdp = typeof resolveRuntimeCdp === 'function' ? resolveRuntimeCdp() : null;
     const runtimeChannelItems = rtCdp ? buildRuntimeChannelBundleMap(rtCdp, cfgNow, PERIODIC_PICKER_CACHE_OPTS) : [];
     if (typeof onExpressionsUpdated === 'function') {
@@ -306,6 +296,8 @@ function createFastConfigRefreshBroadcaster({
     const baseRefreshExpr = canFastRefresh ? buildRefresh() : null;
     for (const entry of attached.values()) {
       if (!entry || entry.session.closed) continue;
+      const bSeq = (entry._bcastSeq = (entry._bcastSeq || 0) + 1);
+      const isStale = () => entry._bcastSeq !== bSeq || entry.session.closed;
       try {
         await ensureSidebarBinding(entry.session, entry, cfgNow);
         await ensurePartitionsBinding(entry.session, entry, cfgNow);
@@ -316,6 +308,54 @@ function createFastConfigRefreshBroadcaster({
           canFastRefresh && entryAck > 0
             ? buildRefresh(null, { __ackEpoch: entryAck })
             : baseRefreshExpr;
+        const syncTailChannels = async (checkInlineDiffCache) => {
+          if (thoughtExpr && thoughtEnabled) {
+            const thRes = await entry.session.evaluate(thoughtExpr).catch(() => null);
+            if (thRes && thRes.ok) entry.thoughtMounted = true;
+          } else if (entry.thoughtScriptId || entry.thoughtMounted) {
+            if (thoughtRemoveExpr) await entry.session.evaluate(thoughtRemoveExpr).catch(() => {});
+            entry.thoughtMounted = false;
+          }
+          if (inlineDiffExpr) {
+            if (!checkInlineDiffCache || (!entry.inlineDiffSkipped && (!entry.inlineDiffMounted || !entry.inlineDiffScriptId || entry.lastInlineDiffHash !== inlineDiffHash))) {
+              const idRes = await entry.session.evaluate(inlineDiffExpr).catch(() => null);
+              const idSkipped = Boolean(idRes && typeof idRes.status === 'string' && idRes.status.startsWith('skipped-'));
+              if (idRes && idRes.ok) {
+                entry.inlineDiffMounted = true;
+                entry.inlineDiffSkipped = false;
+                entry.lastInlineDiffHash = inlineDiffHash;
+              } else if (idSkipped) {
+                entry.inlineDiffMounted = false;
+                entry.inlineDiffSkipped = true;
+                entry.lastInlineDiffHash = inlineDiffHash;
+                if (idRes.status === 'skipped-non-host' && INLINE_DIFF_BINDING) {
+                  await entry.session.send('Runtime.removeBinding', { name: INLINE_DIFF_BINDING }).catch(() => {});
+                  entry.inlineDiffBindingAdded = false;
+                }
+              }
+            }
+          } else if (entry.inlineDiffScriptId || entry.inlineDiffMounted) {
+            if (inlineDiffRemoveExpr) await entry.session.evaluate(inlineDiffRemoveExpr).catch(() => {});
+            entry.inlineDiffMounted = false;
+            entry.inlineDiffSkipped = false;
+            entry.lastInlineDiffHash = '';
+          }
+          if (periodicPickerExpr && periodicPickerEnabled) {
+            const ppRes = await entry.session.evaluate(periodicPickerExpr).catch(() => null);
+            if (ppRes && ppRes.ok) entry.periodicPickerMounted = true;
+          } else if (!periodicPickerEnabled && (entry.periodicPickerScriptId || entry.periodicPickerMounted)) {
+            if (periodicPickerRemoveExpression) await entry.session.evaluate(periodicPickerRemoveExpression).catch(() => {});
+            entry.periodicPickerMounted = false;
+          }
+          if (mascotExpr && mascotEnabled) {
+            const mRes = await entry.session.evaluate(mascotExpr).catch(() => null);
+            if (mRes && mRes.ok) entry.mascotMounted = true;
+          } else if (!mascotEnabled && (entry.mascotScriptId || entry.mascotMounted)) {
+            if (mascotRemoveExpression) await entry.session.evaluate(mascotRemoveExpression).catch(() => {});
+            entry.mascotMounted = false;
+          }
+          if (runtimeChannelItems.length && !isStale()) await evalRuntimeChannelsOnEntry(entry, runtimeChannelItems, isStale);
+        };
         if (refreshExpr) {
           const fast = await entry.session.evaluate(refreshExpr).catch(() => null);
           if (fast && fast.refreshed) {
@@ -330,52 +370,7 @@ function createFastConfigRefreshBroadcaster({
               } else if (!hostI18nOffNow && entry.isolatedHostI18nPaused) {
                 await syncIsolatedHostI18nOnEntry(entry, false);
               }
-              if (thoughtExpr && thoughtEnabled) {
-                const thRes = await entry.session.evaluate(thoughtExpr).catch(() => null);
-                if (thRes && thRes.ok) entry.thoughtMounted = true;
-              } else if (entry.thoughtScriptId || entry.thoughtMounted) {
-                if (thoughtRemoveExpr) await entry.session.evaluate(thoughtRemoveExpr).catch(() => {});
-                entry.thoughtMounted = false;
-              }
-              if (inlineDiffExpr) {
-                if (!entry.inlineDiffSkipped && (!entry.inlineDiffMounted || !entry.inlineDiffScriptId || entry.lastInlineDiffHash !== inlineDiffHash)) {
-                  const idRes = await entry.session.evaluate(inlineDiffExpr).catch(() => null);
-                  const idSkipped = Boolean(idRes && typeof idRes.status === 'string' && idRes.status.startsWith('skipped-'));
-                  if (idRes && idRes.ok) {
-                    entry.inlineDiffMounted = true;
-                    entry.inlineDiffSkipped = false;
-                    entry.lastInlineDiffHash = inlineDiffHash;
-                  } else if (idSkipped) {
-                    entry.inlineDiffMounted = false;
-                    entry.inlineDiffSkipped = true;
-                    entry.lastInlineDiffHash = inlineDiffHash;
-                    if (idRes.status === 'skipped-non-host' && INLINE_DIFF_BINDING) {
-                      await entry.session.send('Runtime.removeBinding', { name: INLINE_DIFF_BINDING }).catch(() => {});
-                      entry.inlineDiffBindingAdded = false;
-                    }
-                  }
-                }
-              } else if (entry.inlineDiffScriptId || entry.inlineDiffMounted) {
-                if (inlineDiffRemoveExpr) await entry.session.evaluate(inlineDiffRemoveExpr).catch(() => {});
-                entry.inlineDiffMounted = false;
-                entry.inlineDiffSkipped = false;
-                entry.lastInlineDiffHash = '';
-              }
-              if (periodicPickerExpr && periodicPickerEnabled) {
-                const ppRes = await entry.session.evaluate(periodicPickerExpr).catch(() => null);
-                if (ppRes && ppRes.ok) entry.periodicPickerMounted = true;
-              } else if (!periodicPickerEnabled && (entry.periodicPickerScriptId || entry.periodicPickerMounted)) {
-                if (periodicPickerRemoveExpression) await entry.session.evaluate(periodicPickerRemoveExpression).catch(() => {});
-                entry.periodicPickerMounted = false;
-              }
-              if (mascotExpr && mascotEnabled) {
-                const mRes = await entry.session.evaluate(mascotExpr).catch(() => null);
-                if (mRes && mRes.ok) entry.mascotMounted = true;
-              } else if (!mascotEnabled && (entry.mascotScriptId || entry.mascotMounted)) {
-                if (mascotRemoveExpression) await entry.session.evaluate(mascotRemoveExpression).catch(() => {});
-                entry.mascotMounted = false;
-              }
-              if (runtimeChannelItems.length) await evalRuntimeChannelsOnEntry(entry, runtimeChannelItems);
+              await syncTailChannels(true);
             }
           } else {
             const reRes = await entry.session.evaluate(expr).catch(() => null);
@@ -399,63 +394,21 @@ function createFastConfigRefreshBroadcaster({
             if (sidebarEnabled && sidebarExpr) await entry.session.evaluate(sidebarExpr).catch(() => {});
             if (hostI18nExpr && hostI18nEnabled) await entry.session.evaluate(hostI18nExpr).catch(() => {});
             else if (hostI18nRemoveExpression) await entry.session.evaluate(hostI18nRemoveExpression).catch(() => {});
-            if (thoughtExpr && thoughtEnabled) {
-              const thRes = await entry.session.evaluate(thoughtExpr).catch(() => null);
-              if (thRes && thRes.ok) entry.thoughtMounted = true;
-            } else if (entry.thoughtScriptId || entry.thoughtMounted) {
-              if (thoughtRemoveExpr) await entry.session.evaluate(thoughtRemoveExpr).catch(() => {});
-              entry.thoughtMounted = false;
-            }
-            if (inlineDiffExpr) {
-              const idRes = await entry.session.evaluate(inlineDiffExpr).catch(() => null);
-              const idSkipped = Boolean(idRes && typeof idRes.status === 'string' && idRes.status.startsWith('skipped-'));
-              if (idRes && idRes.ok) {
-                entry.inlineDiffMounted = true;
-                entry.inlineDiffSkipped = false;
-                entry.lastInlineDiffHash = inlineDiffHash;
-              } else if (idSkipped) {
-                entry.inlineDiffMounted = false;
-                entry.inlineDiffSkipped = true;
-                entry.lastInlineDiffHash = inlineDiffHash;
-                if (idRes.status === 'skipped-non-host' && INLINE_DIFF_BINDING) {
-                  await entry.session.send('Runtime.removeBinding', { name: INLINE_DIFF_BINDING }).catch(() => {});
-                  entry.inlineDiffBindingAdded = false;
-                }
-              }
-            } else if (entry.inlineDiffScriptId || entry.inlineDiffMounted) {
-              if (inlineDiffRemoveExpr) await entry.session.evaluate(inlineDiffRemoveExpr).catch(() => {});
-              entry.inlineDiffMounted = false;
-              entry.inlineDiffSkipped = false;
-              entry.lastInlineDiffHash = '';
-            }
-            if (periodicPickerExpr && periodicPickerEnabled) {
-              const ppRes = await entry.session.evaluate(periodicPickerExpr).catch(() => null);
-              if (ppRes && ppRes.ok) entry.periodicPickerMounted = true;
-            } else if (!periodicPickerEnabled && (entry.periodicPickerScriptId || entry.periodicPickerMounted)) {
-              if (periodicPickerRemoveExpression) await entry.session.evaluate(periodicPickerRemoveExpression).catch(() => {});
-              entry.periodicPickerMounted = false;
-            }
-            if (mascotExpr && mascotEnabled) {
-              const mRes = await entry.session.evaluate(mascotExpr).catch(() => null);
-              if (mRes && mRes.ok) entry.mascotMounted = true;
-            } else if (!mascotEnabled && (entry.mascotScriptId || entry.mascotMounted)) {
-              if (mascotRemoveExpression) await entry.session.evaluate(mascotRemoveExpression).catch(() => {});
-              entry.mascotMounted = false;
-            }
-            if (runtimeChannelItems.length) await evalRuntimeChannelsOnEntry(entry, runtimeChannelItems);
+            await syncTailChannels(false);
           }
         }
-        await syncEntryNewDocScript(entry, 'scriptId', expr);
-        await syncEntryNewDocScript(entry, 'omniScriptId', omniEnabled && omniExpr ? omniExpr : '');
-        await syncEntryNewDocScript(entry, 'sidebarScriptId', sidebarEnabled && sidebarExpr ? sidebarExpr : '');
-        await syncEntryNewDocScript(entry, 'hostI18nScriptId', hostI18nExpr && hostI18nEnabled ? hostI18nExpr : '');
-        await syncEntryNewDocScript(entry, 'thoughtScriptId', thoughtExpr && thoughtEnabled ? thoughtExpr : '');
-        if (await syncEntryNewDocScript(entry, 'inlineDiffScriptId', inlineDiffExpr || '')) {
+        if (isStale()) continue;
+        await syncEntryNewDocScript(entry, 'scriptId', expr, isStale);
+        await syncEntryNewDocScript(entry, 'omniScriptId', omniEnabled && omniExpr ? omniExpr : '', isStale);
+        await syncEntryNewDocScript(entry, 'sidebarScriptId', sidebarEnabled && sidebarExpr ? sidebarExpr : '', isStale);
+        await syncEntryNewDocScript(entry, 'hostI18nScriptId', hostI18nExpr && hostI18nEnabled ? hostI18nExpr : '', isStale);
+        await syncEntryNewDocScript(entry, 'thoughtScriptId', thoughtExpr && thoughtEnabled ? thoughtExpr : '', isStale);
+        if (await syncEntryNewDocScript(entry, 'inlineDiffScriptId', inlineDiffExpr || '', isStale)) {
           entry.lastInlineDiffHash = inlineDiffHash;
         }
-        await syncEntryNewDocScript(entry, 'periodicPickerScriptId', periodicPickerExpr && periodicPickerEnabled ? periodicPickerExpr : '');
-        await syncEntryNewDocScript(entry, 'mascotScriptId', mascotExpr && mascotEnabled ? mascotExpr : '');
-        if (runtimeChannelItems.length) await syncRuntimeChannelScriptsOnEntry(entry, runtimeChannelItems);
+        await syncEntryNewDocScript(entry, 'periodicPickerScriptId', periodicPickerExpr && periodicPickerEnabled ? periodicPickerExpr : '', isStale);
+        await syncEntryNewDocScript(entry, 'mascotScriptId', mascotExpr && mascotEnabled ? mascotExpr : '', isStale);
+        if (runtimeChannelItems.length && !isStale()) await syncRuntimeChannelScriptsOnEntry(entry, runtimeChannelItems, isStale);
       } catch {}
     }
   };
@@ -481,76 +434,33 @@ async function injectOnce() {
   const sidebarEnabled = cfgNow?.sidebarStudio === 'on';
   const expr = buildInjectExpression();
   const omniExpr = omniEnabled && typeof buildOmniClientExpression === 'function' ? buildOmniClientExpression(null) : '';
-  const sidebarExpr =
-    sidebarEnabled && typeof buildSidebarStudioExpression === 'function'
-      ? buildSidebarStudioExpression({ binding: SIDEBAR_BINDING })
-      : '';
-  const hostI18nExpr =
-    typeof buildHostI18nExpression === 'function'
-      ? buildHostI18nExpression()
-      : '';
-  const thoughtExpr =
-    isThoughtEnabledForConfig(cfgNow) && typeof buildThoughtExpression === 'function'
-      ? buildThoughtExpression(cfgNow)
-      : '';
-  const inlineDiffExpr =
-    typeof buildInlineDiffInjectExpression === 'function'
-      ? buildInlineDiffInjectExpression(cfgNow)
-      : '';
-  const periodicPickerEnabled =
-    typeof shouldEnablePeriodicPicker === 'function' ? shouldEnablePeriodicPicker(cfgNow) : true;
-  const periodicPickerExpr =
-    periodicPickerEnabled && typeof buildPeriodicPickerExpression === 'function'
-      ? buildPeriodicPickerExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS)
-      : '';
-  const settingsExpr =
-    typeof buildSettingsChannelExpression === 'function'
-      ? buildSettingsChannelExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS)
-      : '';
-  const mascotEnabled =
-    typeof shouldEnableMascot === 'function' ? shouldEnableMascot(cfgNow) : cfgNow?.mascot !== 'off';
-  const mascotExpr =
-    mascotEnabled && typeof buildMascotChannelExpression === 'function'
-      ? buildMascotChannelExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS)
-      : '';
+  const sidebarExpr = sidebarEnabled && typeof buildSidebarStudioExpression === 'function' ? buildSidebarStudioExpression({ binding: SIDEBAR_BINDING }) : '';
+  const hostI18nExpr = typeof buildHostI18nExpression === 'function' ? buildHostI18nExpression() : '';
+  const thoughtExpr = isThoughtEnabledForConfig(cfgNow) && typeof buildThoughtExpression === 'function' ? buildThoughtExpression(cfgNow) : '';
+  const inlineDiffExpr = typeof buildInlineDiffInjectExpression === 'function' ? buildInlineDiffInjectExpression(cfgNow) : '';
+  const periodicPickerEnabled = typeof shouldEnablePeriodicPicker === 'function' ? shouldEnablePeriodicPicker(cfgNow) : true;
+  const periodicPickerExpr = periodicPickerEnabled && typeof buildPeriodicPickerExpression === 'function' ? buildPeriodicPickerExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS) : '';
+  const settingsExpr = typeof buildSettingsChannelExpression === 'function' ? buildSettingsChannelExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS) : '';
+  const mascotEnabled = typeof shouldEnableMascot === 'function' ? shouldEnableMascot(cfgNow) : cfgNow?.mascot !== 'off';
+  const mascotExpr = mascotEnabled && typeof buildMascotChannelExpression === 'function' ? buildMascotChannelExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS) : '';
   for (const page of targets) {
     let session = null;
     try {
       session = await CdpSession.connect(page.webSocketDebuggerUrl);
       const res = await session.evaluate(expr);
       await applyRuntimeChannelsOnce(session, cdpMod, cfgNow, PERIODIC_PICKER_CACHE_OPTS);
-      if (settingsExpr) {
-        await session.evaluate(settingsExpr).catch(() => {});
-      }
-      if (mascotExpr) {
-        await session.evaluate(mascotExpr).catch(() => {});
-      } else if (!mascotEnabled && MASCOT_REMOVE_EXPRESSION) {
-        await session.evaluate(MASCOT_REMOVE_EXPRESSION).catch(() => {});
-      }
-      if (omniExpr) {
-        await session.evaluate(omniExpr).catch(() => {});
-      }
-      if (sidebarExpr) {
-        await session.evaluate(sidebarExpr).catch(() => {});
-      }
-      if (hostI18nExpr) {
-        await session.evaluate(hostI18nExpr).catch(() => {});
-      } else if (HOST_I18N_REMOVE_EXPRESSION) {
-        await session.evaluate(HOST_I18N_REMOVE_EXPRESSION).catch(() => {});
-      }
-      if (thoughtExpr) {
-        await session.evaluate(thoughtExpr).catch(() => {});
-      } else if (THOUGHT_REMOVE_EXPRESSION) {
-        await session.evaluate(THOUGHT_REMOVE_EXPRESSION).catch(() => {});
-      }
-      if (inlineDiffExpr) {
-        await session.evaluate(inlineDiffExpr).catch(() => {});
-      }
-      if (periodicPickerExpr) {
-        await session.evaluate(periodicPickerExpr).catch(() => {});
-      } else if (!periodicPickerEnabled && PERIODIC_PICKER_REMOVE_EXPRESSION) {
-        await session.evaluate(PERIODIC_PICKER_REMOVE_EXPRESSION).catch(() => {});
-      }
+      if (settingsExpr) await session.evaluate(settingsExpr).catch(() => {});
+      if (mascotExpr) await session.evaluate(mascotExpr).catch(() => {});
+      else if (!mascotEnabled && MASCOT_REMOVE_EXPRESSION) await session.evaluate(MASCOT_REMOVE_EXPRESSION).catch(() => {});
+      if (omniExpr) await session.evaluate(omniExpr).catch(() => {});
+      if (sidebarExpr) await session.evaluate(sidebarExpr).catch(() => {});
+      if (hostI18nExpr) await session.evaluate(hostI18nExpr).catch(() => {});
+      else if (HOST_I18N_REMOVE_EXPRESSION) await session.evaluate(HOST_I18N_REMOVE_EXPRESSION).catch(() => {});
+      if (thoughtExpr) await session.evaluate(thoughtExpr).catch(() => {});
+      else if (THOUGHT_REMOVE_EXPRESSION) await session.evaluate(THOUGHT_REMOVE_EXPRESSION).catch(() => {});
+      if (inlineDiffExpr) await session.evaluate(inlineDiffExpr).catch(() => {});
+      if (periodicPickerExpr) await session.evaluate(periodicPickerExpr).catch(() => {});
+      else if (!periodicPickerEnabled && PERIODIC_PICKER_REMOVE_EXPRESSION) await session.evaluate(PERIODIC_PICKER_REMOVE_EXPRESSION).catch(() => {});
       log(`[✓] ${shortTitle(page)} (obsidian-prism ${res.version} · 状态: ${res.status})`);
     } catch (err) {
       log(`[!] 跳过异常窗口 ${shortTitle(page)}: ${err.message}`);
@@ -657,37 +567,20 @@ async function watch() {
   const initCfg = readConfig();
   let activeRuntimeCdp = cdpMod;
   let expr = buildInjectExpression();
-  let omniExpr =
-    initCfg?.omniModule !== 'off' && typeof buildOmniClientExpression === 'function'
-      ? buildOmniClientExpression(omniServer ? omniServer.getServerInfo() : null)
-      : '';
-  let sidebarExpr =
-    initCfg?.sidebarStudio === 'on' && typeof buildSidebarStudioExpression === 'function'
-      ? buildSidebarStudioExpression({ binding: SIDEBAR_BINDING, serviceReady: Boolean(sidebarService) })
-      : '';
-  let hostI18nExpr =
-    typeof buildHostI18nExpression === 'function'
-      ? buildHostI18nExpression()
-      : '';
+  let omniExpr = initCfg?.omniModule !== 'off' && typeof buildOmniClientExpression === 'function' ? buildOmniClientExpression(omniServer ? omniServer.getServerInfo() : null) : '';
+  let sidebarExpr = initCfg?.sidebarStudio === 'on' && typeof buildSidebarStudioExpression === 'function' ? buildSidebarStudioExpression({ binding: SIDEBAR_BINDING, serviceReady: Boolean(sidebarService) }) : '';
+  let hostI18nExpr = typeof buildHostI18nExpression === 'function' ? buildHostI18nExpression() : '';
   let activeShouldEnableThought = shouldEnableThought;
   let activeBuildThoughtExpression = buildThoughtExpression;
   let activeThoughtRemoveExpression = THOUGHT_REMOVE_EXPRESSION || FALLBACK_THOUGHT_REMOVE_EXPRESSION;
   let thoughtExpr = (() => {
     const cfg = readConfig();
-    return isThoughtEnabledForConfig(cfg, activeShouldEnableThought) && typeof activeBuildThoughtExpression === 'function'
-      ? activeBuildThoughtExpression(cfg)
-      : '';
+    return isThoughtEnabledForConfig(cfg, activeShouldEnableThought) && typeof activeBuildThoughtExpression === 'function' ? activeBuildThoughtExpression(cfg) : '';
   })();
   let activeBuildInlineDiffExpression = buildInlineDiffInjectExpression;
   let activeInlineDiffRemoveExpression = INLINE_DIFF_REMOVE_EXPRESSION || FALLBACK_INLINE_DIFF_REMOVE_EXPRESSION;
-  let inlineDiffExpr =
-    typeof activeBuildInlineDiffExpression === 'function'
-      ? activeBuildInlineDiffExpression(initCfg)
-      : '';
-  let periodicPickerExpr =
-    typeof buildPeriodicPickerExpression === 'function'
-      ? buildPeriodicPickerExpression(initCfg, PERIODIC_PICKER_CACHE_OPTS)
-      : '';
+  let inlineDiffExpr = typeof activeBuildInlineDiffExpression === 'function' ? activeBuildInlineDiffExpression(initCfg) : '';
+  let periodicPickerExpr = typeof buildPeriodicPickerExpression === 'function' ? buildPeriodicPickerExpression(initCfg, PERIODIC_PICKER_CACHE_OPTS) : '';
   let _lazyReadSafeInlineDiff = null;
   async function loadReadSafeInlineDiff() {
     if (typeof _lazyReadSafeInlineDiff === 'function') return _lazyReadSafeInlineDiff;
@@ -935,6 +828,8 @@ async function watch() {
         projectPartitionsMounted: false,
         projectPartitionsBindingAdded: false,
         projectPartitionsBindingPending: null,
+        sidePanelVtabsScriptId: null,
+        sidePanelVtabsMounted: false,
         docGen: 0,
         mainFrameId: null,
         hasFrameTree: false,
@@ -1140,6 +1035,33 @@ async function watch() {
             }
             return;
           }
+          if (parsed && parsed.action === 'request-side-panel-vtabs') {
+            const readNow = () => (typeof activeRuntimeCdp?.readConfig === 'function' ? activeRuntimeCdp.readConfig() : readConfig());
+            const bSeq = entry._bcastSeq || 0;
+            const stillOn = () => !entry.session.closed && (entry._bcastSeq || 0) === bSeq && readNow()?.sidePanelVerticalTabs === 'on';
+            const cfgNow = readNow();
+            if (stillOn() && typeof activeRuntimeCdp?.buildSidePanelVerticalTabsExpression === 'function') {
+              const vtExpr = activeRuntimeCdp.buildSidePanelVerticalTabsExpression(cfgNow, PERIODIC_PICKER_CACHE_OPTS);
+              if (vtExpr) {
+                await syncEntryNewDocScript(entry, 'sidePanelVtabsScriptId', vtExpr, () => !stillOn());
+                if (!stillOn()) return;
+                const ep = { expression: vtExpr, returnByValue: true };
+                if (typeof executionContextId === 'number' && executionContextId > 0) ep.contextId = executionContextId;
+                const vtRes = await entry.session.send('Runtime.evaluate', ep).catch(() => null);
+                if (!stillOn()) {
+                  if (readNow()?.sidePanelVerticalTabs !== 'on') {
+                    await syncEntryNewDocScript(entry, 'sidePanelVtabsScriptId', '');
+                    const rm = activeRuntimeCdp?.SIDE_PANEL_VTABS_REMOVE_EXPRESSION;
+                    if (rm && !entry.session.closed) await entry.session.evaluate(rm).catch(() => {});
+                    entry.sidePanelVtabsMounted = false;
+                  }
+                  return;
+                }
+                if (vtRes?.result?.value?.ok) entry.sidePanelVtabsMounted = !vtRes.result.value.skippedByLiveCfg;
+              }
+            }
+            return;
+          }
           let changed = false;
           if (parsed && parsed.action === 'patch-batch' && parsed.entries && typeof parsed.entries === 'object') {
             selfConfigWriteUntil = Date.now() + 650;
@@ -1224,35 +1146,17 @@ async function watch() {
         activeRuntimeCdp = freshCdp;
         const freshCfg = typeof freshCdp.readConfig === 'function' ? freshCdp.readConfig() : readConfig();
         expr = freshCdp.buildInjectExpression();
-        omniExpr =
-          freshCfg?.omniModule !== 'off' && typeof freshCdp.buildOmniClientExpression === 'function'
-            ? freshCdp.buildOmniClientExpression(omniServer ? omniServer.getServerInfo() : null)
-            : '';
-        sidebarExpr =
-          freshCfg?.sidebarStudio === 'on' && typeof freshCdp.buildSidebarStudioExpression === 'function'
-            ? freshCdp.buildSidebarStudioExpression({ binding: SIDEBAR_BINDING, serviceReady: Boolean(sidebarService) })
-            : '';
-        hostI18nExpr =
-          typeof freshCdp.buildHostI18nExpression === 'function'
-            ? freshCdp.buildHostI18nExpression()
-            : '';
+        omniExpr = freshCfg?.omniModule !== 'off' && typeof freshCdp.buildOmniClientExpression === 'function' ? freshCdp.buildOmniClientExpression(omniServer ? omniServer.getServerInfo() : null) : '';
+        sidebarExpr = freshCfg?.sidebarStudio === 'on' && typeof freshCdp.buildSidebarStudioExpression === 'function' ? freshCdp.buildSidebarStudioExpression({ binding: SIDEBAR_BINDING, serviceReady: Boolean(sidebarService) }) : '';
+        hostI18nExpr = typeof freshCdp.buildHostI18nExpression === 'function' ? freshCdp.buildHostI18nExpression() : '';
         activeShouldEnableThought = freshCdp.shouldEnableThought;
         activeBuildThoughtExpression = freshCdp.buildThoughtExpression;
         activeThoughtRemoveExpression = freshCdp.THOUGHT_REMOVE_EXPRESSION || FALLBACK_THOUGHT_REMOVE_EXPRESSION;
-        thoughtExpr =
-          isThoughtEnabledForConfig(freshCfg, activeShouldEnableThought) && typeof activeBuildThoughtExpression === 'function'
-            ? activeBuildThoughtExpression(freshCfg)
-            : '';
+        thoughtExpr = isThoughtEnabledForConfig(freshCfg, activeShouldEnableThought) && typeof activeBuildThoughtExpression === 'function' ? activeBuildThoughtExpression(freshCfg) : '';
         activeBuildInlineDiffExpression = freshCdp.buildInlineDiffInjectExpression;
         activeInlineDiffRemoveExpression = freshCdp.INLINE_DIFF_REMOVE_EXPRESSION || FALLBACK_INLINE_DIFF_REMOVE_EXPRESSION;
-        inlineDiffExpr =
-          typeof activeBuildInlineDiffExpression === 'function'
-            ? activeBuildInlineDiffExpression(freshCfg)
-            : '';
-        periodicPickerExpr =
-          typeof freshCdp.buildPeriodicPickerExpression === 'function'
-            ? freshCdp.buildPeriodicPickerExpression(freshCfg, PERIODIC_PICKER_CACHE_OPTS)
-            : '';
+        inlineDiffExpr = typeof activeBuildInlineDiffExpression === 'function' ? activeBuildInlineDiffExpression(freshCfg) : '';
+        periodicPickerExpr = typeof freshCdp.buildPeriodicPickerExpression === 'function' ? freshCdp.buildPeriodicPickerExpression(freshCfg, PERIODIC_PICKER_CACHE_OPTS) : '';
       } catch (err) {
         log(`[!] 读取文件失败: ${err.message}`);
         return;

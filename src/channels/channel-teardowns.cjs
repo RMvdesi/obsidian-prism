@@ -440,6 +440,70 @@ const PROJECT_PARTITIONS_REMOVE_EXPRESSION = `(() => {
   return { ok: true, status: 'off' };
 })()`;
 
+const SIDE_PANEL_VTABS_ATTRS = Object.freeze([
+  'data-ag-vtabs-host',
+  'data-ag-vtabs-body',
+  'data-ag-vtabs-body-slot',
+  'data-ag-vtabs-strip',
+  'data-ag-vtabs-strip-slot',
+  'data-ag-vtabs-strip-wrap',
+  'data-ag-vtabs-list',
+  'data-ag-vtabs-wrap',
+  'data-ag-vtabs-actions',
+  'data-ag-vtabs-tab',
+  'data-ag-vtabs-close',
+  'data-ag-vtabs-label',
+  'data-ag-vtabs-meta',
+  'data-ag-vtabs-icon',
+  'data-ag-vtabs-no-icon',
+  'data-ag-vtabs-title',
+  'data-ag-vtabs-flat',
+  'data-ag-vtabs-collapsed',
+  'data-ag-vtabs-auto-collapsed',
+  'data-ag-vtabs-hole',
+  'data-ag-vtabs-dragging',
+  'data-ag-vtabs-cat',
+  'data-ag-vtabs-tone',
+  'data-ag-vtabs-ord',
+  'data-ag-vtabs-active',
+  'data-ag-vtabs-gliding',
+  'data-ag-vtabs-caustic',
+  'data-ag-vtabs-ready',
+  'data-ag-vtabs-top-inset',
+]);
+
+const SIDE_PANEL_VTABS_CLEANUP_BODY = `
+  try { (window.__agPrismSidePanelVtabs || globalThis.__agPrismSidePanelVtabs)?.destroy?.(); } catch {}
+  try { document.getElementById?.('ag-prism-side-panel-vtabs-css')?.remove?.(); } catch {}
+  try { document.querySelectorAll?.('.ag-cs-vtabs-head, .ag-cs-vtabs-toggle, .ag-cs-vtabs-sash, .ag-cs-vtabs-glide-bar, .ag-cs-vtabs-ord')?.forEach?.((n) => n.remove()); } catch {}
+  try {
+    document.querySelectorAll?.('[data-ag-vtabs-title="1"]')?.forEach?.((el) => {
+      el.removeAttribute('title');
+      el.removeAttribute('data-ag-vtabs-title');
+    });
+  } catch {}
+  try {
+    document.querySelectorAll?.('[data-ag-vtabs-host], [data-ag-vtabs-strip]')?.forEach?.((el) => {
+      el.style?.removeProperty?.('--ag-vtabs-w');
+      el.style?.removeProperty?.('--ag-vtabs-top-inset');
+    });
+  } catch {}
+  try {
+    ${JSON.stringify(SIDE_PANEL_VTABS_ATTRS)}.forEach((a) => {
+      document.querySelectorAll?.('[' + a + ']')?.forEach?.((el) => el.removeAttribute(a));
+    });
+  } catch {}
+  try { delete window.__agPrismSidePanelVtabs; } catch {}
+  try { delete globalThis.__agPrismSidePanelVtabs; } catch {}
+  try { delete window.__agPrismSidePanelVtabsCss; } catch {}
+  try { delete globalThis.__agPrismSidePanelVtabsCss; } catch {}
+`.trim();
+
+const SIDE_PANEL_VTABS_REMOVE_EXPRESSION = `(() => {
+  ${SIDE_PANEL_VTABS_CLEANUP_BODY}
+  return { ok: true, status: 'off' };
+})()`;
+
 const CHANNEL_TEARDOWN_MAP = Object.freeze({
   omni: OMNI_REMOVE_EXPRESSION,
   sidebar: SIDEBAR_REMOVE_EXPRESSION,
@@ -458,6 +522,7 @@ const CHANNEL_TEARDOWN_MAP = Object.freeze({
   workbenchEnhancer: WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   contextMenu: CONTEXT_MENU_REMOVE_EXPRESSION,
   projectPartitions: PROJECT_PARTITIONS_REMOVE_EXPRESSION,
+  sidePanelVtabs: SIDE_PANEL_VTABS_REMOVE_EXPRESSION,
 });
 
 module.exports = {
@@ -480,5 +545,8 @@ module.exports = {
   WORKBENCH_ENHANCER_REMOVE_EXPRESSION,
   CONTEXT_MENU_REMOVE_EXPRESSION,
   PROJECT_PARTITIONS_REMOVE_EXPRESSION,
+  SIDE_PANEL_VTABS_ATTRS,
+  SIDE_PANEL_VTABS_CLEANUP_BODY,
+  SIDE_PANEL_VTABS_REMOVE_EXPRESSION,
   CHANNEL_TEARDOWN_MAP,
 };

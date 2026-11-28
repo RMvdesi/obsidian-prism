@@ -22,7 +22,7 @@ function isProbeChannelHealthy(spec, probe) {
   }
   if (!probe[spec.probeKey]) return false;
   for (const extraKey of spec.probeExtraKeys || []) {
-    if (extraKey === 'needsSettingsChannel' || extraKey === 'needsHomeStudioChannel') continue;
+    if (extraKey === 'needsSettingsChannel' || extraKey === 'needsHomeStudioChannel' || extraKey === 'needsSidePanelVtabsChannel') continue;
     if (!probe[extraKey]) return false;
   }
   return true;
@@ -33,7 +33,7 @@ function hasProbeChannelResidue(spec, probe) {
   if (probe[spec.probeKey]) return true;
   for (const extraKey of spec.probeExtraKeys || []) {
     if (extraKey === 'hasOmniBridge' || extraKey === 'hasOmniServerMeta' || extraKey === 'hasSidebarBridge') continue;
-    if (extraKey === 'needsSettingsChannel' || extraKey === 'needsHomeStudioChannel') continue;
+    if (extraKey === 'needsSettingsChannel' || extraKey === 'needsHomeStudioChannel' || extraKey === 'needsSidePanelVtabsChannel') continue;
     if (probe[extraKey]) return true;
   }
   return false;
@@ -120,7 +120,7 @@ export function planChannelsForHeal(orch, entry, cfg, probe, now) {
     }
 
     // 通用表驱动通道：Ch5 thought / Ch6 inlineDiff / Ch7 wallpaper / Ch8 periodicPicker /
-    // Ch10 mascot / Ch11 suggester / Ch12 homeStudio / Ch13~Ch17 runtime & addons
+    // Ch10 mascot / Ch11 suggester / Ch12 homeStudio / Ch13~Ch18 runtime & addons
     const cfgEnabled = orch.isChannelEnabled(spec, cfg);
     const hasFile = orch.hasChannelFile(spec);
     const exprNow = orch.getChannelExpr(id);
@@ -150,7 +150,9 @@ export function planChannelsForHeal(orch, entry, cfg, probe, now) {
         (expectedSig && !isAlwaysOnTrackable && id !== 'thought' && f.scriptSigField && entry[f.scriptSigField] !== expectedSig)
     );
     const missingMount = !isProbeChannelHealthy(spec, probe) || (spec.tracksSkippedNonHost || id === 'thought' ? !entry[f.mountedField] : false);
-    const extraNeed = id === 'homeStudio' && Boolean(probe.needsHomeStudioChannel);
+    const extraNeed =
+      (id === 'homeStudio' && Boolean(probe.needsHomeStudioChannel)) ||
+      (id === 'sidePanelVtabs' && Boolean(probe.needsSidePanelVtabsChannel));
     const needsHeal =
       available &&
       !skipped &&

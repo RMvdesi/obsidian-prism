@@ -45,6 +45,7 @@ const ROOT_WATCH_FILES = [
   'home-ripple-host.js',
   'conv-aura.js',
   path.join('vendor', 'inline-diff', 'inline-diff-client.js'),
+  ...'vtabs-constants.js,vtabs-dom.js,vtabs-fiber.js,vtabs-sash.js,vtabs-motion.js,vtabs-controller.js,vtabs-layout.css,vtabs-theme.css'.split(',').map((f) => path.join('vendor', 'side-panel-vertical-tabs', f)),
 ];
 
 const PRISM_CACHE_SOURCE_PATHS = Array.from(
@@ -124,6 +125,7 @@ function parseReplicaPrismConfig(searchParams) {
     lightPreset: ['crystal', 'alabaster'],
     cornerStyle: ['sharp', 'balanced', 'soft'],
     sidebarNavFold: ['off', 'on'],
+    sidePanelVerticalTabs: ['off', 'on'],
     scrollBottomMotion: ['smooth', 'instant'],
     motionLevel: ['off', 'subtle', 'standard', 'ultra'],
     accentTone: ['follow', 'mono', 'cobalt', 'iris', 'amber'],
@@ -744,6 +746,8 @@ function createWorkbenchServer(options = {}) {
             const ch6 = cdpMod.buildInlineDiffInjectExpression(cfg);
             if (ch6) expr = `${expr};\n${ch6}`;
           }
+          const ch18 = cdpMod.buildSidePanelVerticalTabsExpression?.(cfg);
+          if (ch18) expr = `${expr};\n${ch18}`;
           putPrismCache(cache, cacheKey, expr);
         }
         res.writeHead(200, {
@@ -848,46 +852,19 @@ function createWorkbenchServer(options = {}) {
   server.close = (cb) => {
     closing = true;
     clearTimeout(reloadTimer);
-    if (watcher) {
-      try {
-        watcher.close();
-      } catch {}
-      watcher = null;
-    }
-    while (rootWatchers.length) {
-      const w = rootWatchers.pop();
-      try {
-        w.close();
-      } catch {}
-    }
-    for (const client of sseClients) {
-      try {
-        client.end();
-      } catch {}
-    }
+    if (watcher) { try { watcher.close(); } catch {} watcher = null; }
+    while (rootWatchers.length) { try { rootWatchers.pop().close(); } catch {} }
+    for (const client of sseClients) { try { client.end(); } catch {} }
     sseClients.clear();
-
     const cleanupStudio = async () => {
       try {
-        if (studioServicePromise) {
-          const svc = await studioServicePromise.catch(() => null);
-          if (svc && typeof svc.dispose === 'function') {
-            await svc.dispose();
-          }
-        } else if (studioService && typeof studioService.dispose === 'function') {
-          await studioService.dispose();
-        }
-      } catch {
-        // 忽略关闭期间排空异常
-      }
+        const svc = studioServicePromise ? await studioServicePromise.catch(() => null) : studioService;
+        if (typeof svc?.dispose === 'function') await svc.dispose();
+      } catch {}
       if (studioSandboxRoot) {
         const rootToClean = studioSandboxRoot;
         studioSandboxRoot = null;
-        try {
-          fs.rmSync(rootToClean, { recursive: true, force: true });
-        } catch {
-          // 忽略临时目录清理异常
-        }
+        try { fs.rmSync(rootToClean, { recursive: true, force: true }); } catch {}
       }
     };
 

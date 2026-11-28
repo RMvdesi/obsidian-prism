@@ -339,6 +339,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
   _resolveBundleCachePath() { return this._s().channelOrchestrator.resolveBundleCachePath(); }
   _buildWallpaperExprForConfig(cfg, opts) { return this._s().channelOrchestrator.buildChannelExpr('wallpaper', cfg, opts); }
   _syncHomeStudioOnEntry(entry, cfg, opts) { return this._s().channelOrchestrator.syncChannelOnEntry('homeStudio', entry, cfg, opts); }
+  _syncSidePanelVtabsOnEntry(entry, cfg, opts) { return this._s().channelOrchestrator.syncChannelOnEntry('sidePanelVtabs', entry, cfg, opts); }
   _scheduleBundleCacheFlush() { return this._s().channelOrchestrator.scheduleBundleCacheFlush(); }
   _getChannelCacheOpts(defer = true) { return this._s().channelOrchestrator.getChannelCacheOpts(defer); }
   _hasSafeV2SidebarClientFile() { return this._s().channelOrchestrator.hasSafeV2SidebarClientFile(); }
@@ -347,6 +348,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
   _hasPeriodicPickerClientFile() { return this._s().channelOrchestrator.hasChannelFile('periodicPicker'); }
   _hasMascotClientFile() { return this._s().channelOrchestrator.hasChannelFile('mascot'); }
   _hasHomeStudioClientFile() { return this._s().channelOrchestrator.hasChannelFile('homeStudio'); }
+  _hasSidePanelVtabsFile() { return this._s().channelOrchestrator.hasChannelFile('sidePanelVtabs'); }
   _isOmniEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('omni', cfg); }
   _isSidebarStudioEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('sidebar', cfg); }
   _isHostI18nEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('hostI18n', cfg); }
@@ -357,6 +359,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
   _isPeriodicPickerEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('periodicPicker', cfg); }
   _isMascotEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('mascot', cfg); }
   _isHomeStudioEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('homeStudio', cfg); }
+  _isSidePanelVtabsEnabled(cfg) { return this._s().channelOrchestrator.isChannelEnabled('sidePanelVtabs', cfg); }
   _getChannelCodeHash(id, expr) { return this._s().channelOrchestrator.getChannelExprHash(id, expr); }
   _getChannelCfgSig(id, cfg, expr) { return this._s().channelOrchestrator.getChannelCfgSig(id, cfg, expr); }
   _getPeriodicPickerCodeHash(expr) { return this._getChannelCodeHash('periodicPicker', expr); }
@@ -373,10 +376,14 @@ export class PrismDaemon extends PrismDaemonCompatBase {
   _getMascotCfgSig(cfg, expr) { return this._getChannelCfgSig('mascot', cfg, expr); }
   _getHomeStudioCodeHash(expr) { return this._getChannelCodeHash('homeStudio', expr); }
   _getHomeStudioCfgSig(cfg, expr) { return this._getChannelCfgSig('homeStudio', cfg, expr); }
+  _getSidePanelVtabsCodeHash(expr) { return this._getChannelCodeHash('sidePanelVtabs', expr); }
+  _getSidePanelVtabsCfgSig(cfg, expr) { return this._getChannelCfgSig('sidePanelVtabs', cfg, expr); }
   _ensureSettingsExpr(o) { return this._s().channelOrchestrator.ensureSettingsExpr(o); }
   _ensureHomeStudioExpr(c, o) { return this._s().channelOrchestrator.ensureChannelExpr('homeStudio', c, o); }
+  _ensureSidePanelVtabsExpr(c, o) { return this._s().channelOrchestrator.ensureChannelExpr('sidePanelVtabs', c, o); }
   _deliverSettingsChannelToEntry(e, ctx) { return this._s().channelOrchestrator.deliverSettingsChannelToEntry(e, ctx); }
   _deliverHomeStudioChannelToEntry(e, ctx) { return this._s().channelOrchestrator.deliverHomeStudioChannelToEntry(e, ctx); }
+  _deliverSidePanelVtabsChannelToEntry(e, ctx) { return this._s().channelOrchestrator.deliverSidePanelVtabsChannelToEntry(e, ctx); }
   _deliverPeriodicPickerFullToEntry(e, ctx) { return deliverPeriodicPickerFullToEntry(this._s().channelOrchestrator, e, ctx); }
   _teardownAllEntryChannelScripts(e, s, o) { return this._s().channelOrchestrator.teardownAllEntryChannelScripts(e, s, o); }
   _resolveWatchedConfigPath() { return this._s().channelOrchestrator.resolveWatchedConfigPath(); }

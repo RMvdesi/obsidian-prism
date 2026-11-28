@@ -237,6 +237,12 @@ export class PrismDaemonCompatBase {
   set contextMenuCodeHash(v) { this._s().channelOrchestrator.setChannelHash('contextMenu', v); }
   get _contextMenuHashSource() { return this._s().channelOrchestrator.getChannelHashSource('contextMenu'); }
   set _contextMenuHashSource(v) { this._s().channelOrchestrator.setChannelHashSource('contextMenu', v); }
+  get sidePanelVtabsExpr() { return this._s().channelOrchestrator.getChannelExpr('sidePanelVtabs'); }
+  set sidePanelVtabsExpr(v) { this._s().channelOrchestrator.setChannelExpr('sidePanelVtabs', v); }
+  get sidePanelVtabsCodeHash() { return this._s().channelOrchestrator.getChannelHash('sidePanelVtabs'); }
+  set sidePanelVtabsCodeHash(v) { this._s().channelOrchestrator.setChannelHash('sidePanelVtabs', v); }
+  get _sidePanelVtabsHashSource() { return this._s().channelOrchestrator.getChannelHashSource('sidePanelVtabs'); }
+  set _sidePanelVtabsHashSource(v) { this._s().channelOrchestrator.setChannelHashSource('sidePanelVtabs', v); }
 
   // ---- TelemetrySubsystem ----
   get _lazyStore() { return this._s().telemetrySubsystem._lazyStore; }

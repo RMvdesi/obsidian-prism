@@ -174,7 +174,7 @@ test('CONFIG_SCHEMA is the single source of truth for DEFAULT_CONFIG, VALIDATORS
   assert.equal(wbSpec.cfgSig({ sidebarRestyle: false, sidebarNavFold: false, scrollBottomMotion: 'off', motionLevel: 'minimal' }), 'off');
 });
 
-test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with valid metadata and gating', () => {
+test('CHANNEL_REGISTRY contract covers all 18 delayed/on-demand channels with valid metadata and gating', () => {
   const expectedIds = [
     'omni',
     'sidebar',
@@ -193,6 +193,7 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
     'workbenchEnhancer',
     'contextMenu',
     'projectPartitions',
+    'sidePanelVtabs',
   ];
 
   const descriptors = cdp.getChannelDescriptors();
@@ -264,6 +265,8 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
     sidebarRestyle: false,
     motionLevel: 'off',
     contextMenu: false,
+    projectPartitions: 'off',
+    sidePanelVerticalTabs: 'off',
   };
   assert.equal(cdp.findChannel('omni').shouldEnable(gatedOffCfg), false);
   assert.equal(cdp.findChannel('sidebar').shouldEnable(gatedOffCfg), false);
@@ -287,10 +290,12 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
   assert.equal(cdp.findChannel('workbenchEnhancer').build(gatedOffCfg), '');
   assert.equal(cdp.findChannel('contextMenu').shouldEnable(gatedOffCfg), false);
   assert.equal(cdp.findChannel('contextMenu').build(gatedOffCfg), '');
+  assert.equal(cdp.findChannel('sidePanelVtabs').shouldEnable(gatedOffCfg), false);
+  assert.equal(cdp.findChannel('sidePanelVtabs').build(gatedOffCfg), '');
 
   const offReport = cdp.getChannelBudgetReport(gatedOffCfg, { noDiskCache: true });
   assert.equal(offReport.ok, true);
-  for (const id of ['omni', 'sidebar', 'swarmI18n', 'thought', 'periodicPicker', 'mascot', 'homeStudio', 'telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu', 'projectPartitions']) {
+  for (const id of ['omni', 'sidebar', 'swarmI18n', 'thought', 'periodicPicker', 'mascot', 'homeStudio', 'telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu', 'projectPartitions', 'sidePanelVtabs']) {
     const row = offReport.channels.find((c) => c.id === id);
     assert.equal(row.enabled, false);
     assert.equal(row.bytes, 0);
@@ -412,6 +417,8 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
     'ag_prism_pp_muted',
     'ag.prism.effortMemory.v1',
     'ag.codexEffortSlider.settings.v1',
+    'ag-prism:side-panel-vtabs-collapsed',
+    'ag-prism:side-panel-vtabs-width',
   ]) {
     assert.ok(settingsPanel.PRISM_STORAGE_KEYS.includes(k), `PRISM_STORAGE_KEYS missing ${k}`);
   }
@@ -420,6 +427,8 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
     ['ag_prism_pp_muted', '1'],
     ['ag.prism.effortMemory.v1', '{}'],
     ['ag.codexEffortSlider.settings.v1', '{}'],
+    ['ag-prism:side-panel-vtabs-collapsed', '1'],
+    ['ag-prism:side-panel-vtabs-width', '200'],
     ['ag-prism:trajRollup.v1:ws1', '{}'],
     ['ag-prism:trajRollup.v1:ws2', '{}'],
     ['ag-pulse-enabled', '1'],
@@ -434,6 +443,8 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
   assert.equal(map.has('ag_prism_pp_muted'), false);
   assert.equal(map.has('ag.prism.effortMemory.v1'), false);
   assert.equal(map.has('ag.codexEffortSlider.settings.v1'), false);
+  assert.equal(map.has('ag-prism:side-panel-vtabs-collapsed'), false);
+  assert.equal(map.has('ag-prism:side-panel-vtabs-width'), false);
   assert.equal(map.has('ag-prism:trajRollup.v1:ws1'), false);
   assert.equal(map.has('ag-prism:trajRollup.v1:ws2'), false);
   assert.equal(map.has('ag-pulse-enabled'), true, 'External Pulse key must remain untouched');
@@ -516,10 +527,10 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
   assert.equal(rootAttrs.get('data-theme'), 'dark', 'REMOVE_EXPRESSION must NEVER delete host documentElement[data-theme]');
 });
 
-test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 56 keys in src/config/schema.cjs', () => {
+test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 57 keys in src/config/schema.cjs', () => {
   const schema = cdp.CONFIG_SCHEMA;
   const allSchemaKeys = Object.keys(schema).sort();
-  assert.equal(allSchemaKeys.length, 56, 'CONFIG_SCHEMA expected 56 keys');
+  assert.equal(allSchemaKeys.length, 57, 'CONFIG_SCHEMA expected 57 keys');
 
   const canonicalLangs = [...schema.language.values];
   const autoOnOff = ['auto', 'on', 'off'];

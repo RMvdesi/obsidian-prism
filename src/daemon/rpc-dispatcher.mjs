@@ -151,6 +151,10 @@ async function handleSettingBinding(rpc, entry, payload, executionContextId) {
       await deliverPeriodicPickerFullToEntry(rpc.channelOrchestrator, entry, executionContextId);
       return;
     }
+    if (parsed.action === 'request-side-panel-vtabs') {
+      await rpc.channelOrchestrator.deliverSidePanelVtabsChannelToEntry(entry, executionContextId);
+      return;
+    }
     const updated =
       parsed.action === 'patch-batch' && parsed.entries && typeof parsed.entries === 'object'
         ? rpc.channelOrchestrator.updateConfigBatch(parsed.entries)

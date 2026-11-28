@@ -562,7 +562,7 @@ test('PrismDaemon executeRepoAction uninstall enforces confirm:true, symlink che
   }
 });
 
-test('settings-panel.js inline uninstall UI works across 5 languages and purgeData clears all 16 Prism keys + dynamic trajRollup shards while preserving external Pulse keys', async () => {
+test('settings-panel.js inline uninstall UI works across 5 languages and purgeData clears all 18 Prism keys + dynamic trajRollup shards while preserving external Pulse keys', async () => {
   const prevDoc = globalThis.document;
   const prevWin = globalThis.window;
   const prevStorage = globalThis.localStorage;
@@ -585,6 +585,8 @@ test('settings-panel.js inline uninstall UI works across 5 languages and purgeDa
     'ag_prism_pp_muted',
     'ag.prism.effortMemory.v1',
     'ag.codexEffortSlider.settings.v1',
+    'ag-prism:side-panel-vtabs-collapsed',
+    'ag-prism:side-panel-vtabs-width',
   ];
   const dynamicShardKeys = [
     'ag-prism:trajRollup.v1:ws-alpha',
@@ -673,7 +675,7 @@ test('settings-panel.js inline uninstall UI works across 5 languages and purgeDa
     for (const k of prismKeys) assert.ok(storage.getItem(k), `Key ${k} must remain when purgeData=false`);
     assert.equal(uChip.getAttribute('data-status'), 'ok');
 
-    // Confirm WITH purgeData -> deletes all 16 Prism keys + dynamic trajRollup shards and preserves external Pulse keys
+    // Confirm WITH purgeData -> deletes all 18 Prism keys + dynamic trajRollup shards and preserves external Pulse keys
     uBtn.click();
     uCb.checked = true;
     uConfirm.click();

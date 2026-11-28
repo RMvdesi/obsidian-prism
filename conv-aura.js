@@ -25,68 +25,62 @@
   const readNowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
   const RUNNING_SEL =
-    '[data-testid="input-cancel-button"], [data-testid="stop-button"], [data-testid="cancel-button"], [data-testid="agent-loading"], [data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
-  const DECISION_SEL = '[data-testid="interaction-takeover-card"], [data-testid="side-question-panel"]';
+    '[data-testid="input-cancel-button"],[data-testid="stop-button"],[data-testid="cancel-button"],[data-testid="agent-loading"],[data-testid="thinking-collapsible-trigger"][data-op-thought-state="streaming"]';
+  const DECISION_SEL = '[data-testid="interaction-takeover-card"],[data-testid="side-question-panel"]';
   const SUBAGENT_SEL = '[data-testid="subagent-tab-conversation"]';
+  const RUN_EXCL = SUBAGENT_SEL + ',[data-side-panel-body],[data-testid="side-question-panel"]';
   const CV_SEL = '[data-testid="conversation-view"]';
 
   function isWithinScope(el, scope) {
     if (!el) return false;
     const d = getD();
-    if (!scope || scope === d || el === scope) return true;
-    if (isF(scope.contains) && scope.contains(el)) return true;
-    const ownerView = el.closest?.(CV_SEL) || null;
-    if (ownerView) return ownerView === scope;
-    const allViews = isF(d?.querySelectorAll) ? d.querySelectorAll(CV_SEL) : null;
-    return !allViews || allViews.length <= 1;
+    if (!scope || scope === d || el === scope || scope.contains?.(el)) return true;
+    const ov = el.closest?.(CV_SEL);
+    if (ov) return ov === scope;
+    const av = d?.querySelectorAll?.(CV_SEL);
+    return !av || av.length <= 1;
   }
 
-  function isLiveMatchedIndicator(el, sel, syncVis = false, scope = null) {
+  function isLiveMatchedIndicator(el, sel, syncVis = false, scope = null, ex = SUBAGENT_SEL) {
     return !!(
       el && el.isConnected === true && typeof el.nodeType === 'number' && isF(el.matches) &&
-      el.matches(sel) && !el.closest?.(SUBAGENT_SEL) && isWithinScope(el, scope) && isVisibleAuraNode(el, syncVis)
+      el.matches(sel) && !el.closest?.(ex) && isWithinScope(el, scope) && isVisibleAuraNode(el, syncVis)
     );
   }
 
-  function queryScopedIndicator(scope, sel, syncVis) {
-    for (const n of scope.querySelectorAll(sel)) {
-      if (n.closest?.(SUBAGENT_SEL)) continue;
-      if (isVisibleAuraNode(n, syncVis)) return n;
-    }
+  function queryScopedIndicator(scope, sel, syncVis, ex = SUBAGENT_SEL) {
+    for (const n of scope.querySelectorAll(sel)) if (!n.closest?.(ex) && isVisibleAuraNode(n, syncVis)) return n;
     const d = getD();
     if (scope !== d && isF(d?.querySelectorAll)) {
-      const allViews = d.querySelectorAll(CV_SEL);
-      const singlePane = !allViews || allViews.length <= 1;
+      const av = d.querySelectorAll(CV_SEL), sp = !av || av.length <= 1;
       for (const n of d.querySelectorAll(sel)) {
-        if (n.closest?.(SUBAGENT_SEL)) continue;
-        const ownerView = n.closest?.(CV_SEL) || null;
-        if (ownerView && ownerView !== scope) continue;
-        if (!ownerView && !singlePane) continue;
-        if (isVisibleAuraNode(n, syncVis)) return n;
+        if (n.closest?.(ex)) continue;
+        const ov = n.closest?.(CV_SEL);
+        if ((ov ? ov === scope : sp) && isVisibleAuraNode(n, syncVis)) return n;
       }
     }
     return null;
   }
 
-  function queryCachedScope(cache, sel, syncOpt, scopeEl) {
+  function queryCachedScope(cache, sel, syncOpt, scopeEl, ex = SUBAGENT_SEL) {
     const d = getD();
     if (!d) return false;
     const scope = isF(scopeEl?.querySelectorAll) ? scopeEl : d;
     const syncVis = wantSyncVis(syncOpt), now = readNowMs();
     const cur = cache.get(scope);
     if (cur && cur.ep === cacheEpoch && cur.at >= 0 && M.abs(now - cur.at) < 200 && (!syncVis || cur.sync)) return cur.val;
-    if (cur && isLiveMatchedIndicator(cur.el, sel, syncVis, scope)) {
+    if (cur && isLiveMatchedIndicator(cur.el, sel, syncVis, scope, ex)) {
       cur.ep = cacheEpoch; cur.val = true; cur.at = now; cur.sync = syncVis;
       return true;
     }
-    const el = queryScopedIndicator(scope, sel, syncVis);
+    const el = queryScopedIndicator(scope, sel, syncVis, ex);
     const val = !!el;
     cache.set(scope, { ep: cacheEpoch, val, at: now, el, sync: syncVis });
     return val;
   }
 
   function isConvRunning(syncOpt = false, scopeEl = null) {
-    return queryCachedScope(runCache, RUNNING_SEL, syncOpt, scopeEl);
+    return queryCachedScope(runCache, RUNNING_SEL, syncOpt, scopeEl, RUN_EXCL);
   }
 
   function isAwaitingDecision(syncOpt = false, scopeEl = null) {
@@ -304,35 +298,35 @@
       const scope = a.convView || null, rNow = isConvRunning(false, scope);
       const aNow = externalAwaiting !== null ? !!(externalAwaiting) : isAwaitingDecision(false, scope);
       const fErr = externalErrorPending || (!rNow && consumeFreshDomError(scope));
+      const pTo = (ph, t = now) => { a.phase = ph; a.phaseAt = t; };
       if (externalErrorPending) externalErrorPending = false;
 
       if (fErr) {
         detFW(a);
-        a.wasRunning = a.decisionHolding = a.unfocusedHold = false; a.sleepReason = ''; a.phase = 'error-halted'; a.phaseAt = now;
+        a.wasRunning = a.decisionHolding = a.unfocusedHold = false; a.sleepReason = ''; pTo('error-halted');
       } else if (aNow) {
         detFW(a);
         a.wasRunning = rNow; a.unfocusedHold = false;
-        if (a.phase !== 'awaiting-decision') { a.decisionHolding = false; a.sleepReason = ''; a.phase = 'awaiting-decision'; a.phaseAt = now; }
+        if (a.phase !== 'awaiting-decision') { a.decisionHolding = false; a.sleepReason = ''; pTo('awaiting-decision'); }
       } else if (a.phase === 'awaiting-decision') {
         a.decisionHolding = false; a.sleepReason = '';
-        if (rNow) { a.wasRunning = true; a.runStartedAt = now; a.phase = 'start'; a.phaseAt = now; }
-        else { a.phase = 'decision-clear'; a.phaseAt = now; }
+        if (rNow) { a.wasRunning = true; a.runStartedAt = now; pTo('start'); }
+        else pTo('decision-clear');
       } else if (rNow && !a.wasRunning) {
         detFW(a);
         a.unfocusedHold = a.decisionHolding = false; a.sleepReason = ''; a.wasRunning = true; a.runStartedAt = now;
-        if (a.phase !== 'start') { a.phase = 'start'; a.phaseAt = now; }
+        if (a.phase !== 'start') pTo('start');
       } else if (!rNow && a.wasRunning) {
         a.wasRunning = false; a.sleepReason = '';
         const dur = a.runStartedAt > 0 ? now - a.runStartedAt : 0; a.runStartedAt = 0;
-        a.phase = dur >= LONG_TH_MS ? 'long-task-complete' : 'complete'; a.phaseAt = now;
+        pTo(dur >= LONG_TH_MS ? 'long-task-complete' : 'complete');
       }
 
-      if (a.phase === 'start' && now - a.phaseAt >= START_MS) { a.phase = a.wasRunning ? 'running' : 'idle'; a.phaseAt = now; }
-      else if (a.phase === 'complete' && now - a.phaseAt >= COMP_MS) { a.phase = 'idle'; a.phaseAt = now; }
-      else if (a.phase === 'decision-clear' && now - a.phaseAt >= DEC_CLR_MS) { a.phase = 'idle'; a.phaseAt = now; }
-      else if (a.phase === 'error-halted' && now - a.phaseAt >= ERR_MS) { a.pendingErrorClear = true; a.phase = 'idle'; a.phaseAt = now - IDLE_MS; }
-      else if (a.phase === 'focus-fade' && now - a.phaseAt >= FOC_MS) { a.phase = 'idle'; a.phaseAt = now - IDLE_MS; }
-      else if (a.phase === 'long-task-complete' && !a.unfocusedHold && now - a.phaseAt >= LONG_C_MS && checkWindowFocused()) { a.phase = 'idle'; a.phaseAt = now - IDLE_MS; }
+      const pe = now - a.phaseAt;
+      if (a.phase === 'start' && pe >= START_MS) pTo(a.wasRunning ? 'running' : 'idle');
+      else if ((a.phase === 'complete' && pe >= COMP_MS) || (a.phase === 'decision-clear' && pe >= DEC_CLR_MS)) pTo('idle');
+      else if (a.phase === 'error-halted' && pe >= ERR_MS) { a.pendingErrorClear = true; pTo('idle', now - IDLE_MS); }
+      else if ((a.phase === 'focus-fade' && pe >= FOC_MS) || (a.phase === 'long-task-complete' && !a.unfocusedHold && pe >= LONG_C_MS && checkWindowFocused())) pTo('idle', now - IDLE_MS);
 
       if (a.host.getAttribute('data-aura-phase') !== a.phase) runGuardedMut(() => { a.host.setAttribute('data-aura-phase', a.phase); });
       return a.phase;
@@ -452,7 +446,8 @@
 
       const RESIZE_DEBOUNCE_MS = 120;
       const RESIZE_BURST_WINDOW_MS = 180;
-      const isResizing = () => getHtml()?.getAttribute?.('data-ag-cs-resizing') === '1';
+      const isLive = () => !isDestroyed() && convAura === state;
+      const isResizing = () => ga('data-ag-cs-resizing') === '1';
       const isWorkerGlow = () => state.glow?.mode === 'worker-webgl2';
       const hasCvBuf = () => {
         if (isWorkerGlow()) { const s = state.glow.getBufferSize?.(); return !!(s && s.width > 0 && s.height > 0); }
@@ -471,7 +466,7 @@
 
       function onLost(e) {
         e?.preventDefault?.();
-        if (isDestroyed() || convAura !== state) return;
+        if (!isLive()) return;
         gLost = true;
         if (glowCanvas?.style) glowCanvas.style.display = 'none';
         if (recTries >= 3 || state.recTimer) return;
@@ -490,8 +485,8 @@
           g = wm.mountManagedGlow({
             getCanvas: () => glowCanvas, swapCanvas: swapCv, rippleCore, doc: getD() || docRef,
             prefer2D: !!p2d, allowWorker: !workerFailed, antialias: false, onContextLost: onLost,
-            onFallbackDone: () => { workerFailed = true; if (isDestroyed() || convAura !== state) return; try { state.glow?.dispose?.(); } catch {} mountGlow(0, 1); resyncGlow(); },
-            onUpgradeReady: () => { if (!isDestroyed() && convAura === state && !workerFailed && state.glow?.mode === 'webgl2') { mountGlow(0, 1); resyncGlow(); } },
+            onFallbackDone: () => { workerFailed = true; if (!isLive()) return; try { state.glow?.dispose?.(); } catch {} mountGlow(0, 1); resyncGlow(); },
+            onUpgradeReady: () => { if (isLive() && !workerFailed && state.glow?.mode === 'webgl2') { mountGlow(0, 1); resyncGlow(); } },
           });
         } else {
           const mk = (u) => {
@@ -507,14 +502,11 @@
       }
 
       function recoverLost() {
-        if (isDestroyed() || convAura !== state || !gLost) return;
+        if (!isLive() || !gLost) return;
         if (isH()) return releaseBacking();
         gLost = false;
-        const p2d = ++recTries >= 2;
-        mountGlow(p2d, 1);
-        if (state.width > 0 && state.height > 0 && state.glow?.mode !== 'none') {
-          resizeGlow(state.width, state.height, state.dpr || CONV_GLOW_SCALE);
-        }
+        mountGlow(++recTries >= 2, 1);
+        if (state.width > 0 && state.height > 0 && state.glow?.mode !== 'none') resizeGlow(state.width, state.height, state.dpr || CONV_GLOW_SCALE);
         drawnOnce = false;
         state.glow?.invalidate?.();
         wake(true);
@@ -522,12 +514,14 @@
 
       mountGlow(0, 0);
 
+      const clrT = () => { if (state.timer) { clearTimeout(state.timer); state.timer = 0; } };
+      const clrRaf = () => { if (state.rafId && isF(G.cancelAnimationFrame)) { cancelAnimationFrame(state.rafId); state.rafId = 0; } };
       const clearResizeTimer = () => { if (state.resizeTimer) { clearTimeout(state.resizeTimer); state.resizeTimer = 0; } };
       const clrPend = () => { hasPendingResize = false; pendingW = pendingH = 0; };
 
       function flushPendingResize() {
         state.resizeTimer = 0;
-        if (isDestroyed() || convAura !== state) return;
+        if (!isLive()) return;
         if (isH()) { clrPend(); return releaseBacking(); }
         if (isResizing()) { state.resizeTimer = setTimeout(flushPendingResize, RESIZE_DEBOUNCE_MS); return; }
         if (!hasPendingResize) return;
@@ -588,8 +582,7 @@
       }
 
       function enterAuraSleep(reason = 'settled') {
-        if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
-        if (state.rafId && isF(G.cancelAnimationFrame)) { cancelAnimationFrame(state.rafId); state.rafId = 0; }
+        clrT(); clrRaf();
         frameWanted = false;
         state.sleeping = true;
         state.sleepReason = reason;
@@ -600,7 +593,7 @@
       function drawNow(now) {
         state.rafId = 0;
         frameWanted = false;
-        if (isDestroyed() || convAura !== state) return;
+        if (!isLive()) return;
         if (isH()) { releaseBacking(); return; }
         if (rippleCore?.mountBrandHorizonGlow && state.glow?.mode === 'none') { enterAuraSleep('settled'); return; }
 
@@ -608,15 +601,14 @@
         if (ambient <= 0) {
           if (hasCvBuf()) { try { state.glow?.clear?.(); } catch {} }
           state.lastOptics = fillOptics(OPTICS_BUF, 0, 0.08, 0, 0, 0, 'none', 0);
-          enterAuraSleep('ambient-zero');
-          return;
+          return enterAuraSleep('ambient-zero');
         }
 
         const flow = isMotionStandardOrUltra() && !isP();
         const lEl = state.liftoffAt > 0 ? now - state.liftoffAt : -1, inLift = flow && lEl >= 0 && lEl < 520;
         if (state.liftoffAt > 0 && !inLift) state.liftoffAt = 0;
         const pBefore = state.phase, phase = advancePhase(now, true), pChg = phase !== pBefore;
-        const dark = isDarkTheme(), spectrum = resolveSpectrum(), da = getHtml()?.getAttribute?.('data-ag-cs-dark-aura') || 'balanced';
+        const dark = isDarkTheme(), spectrum = resolveSpectrum(), da = ga('data-ag-cs-dark-aura') || 'balanced';
         let opt = computeConvAuraOptics(phase, state.phaseAt, now, dark, state.wasRunning, OPTICS_BUF, da);
         if (inLift) {
           const p = M.max(0, M.min(1, lEl / 520)), ease = 1 - M.pow(1 - p, 2.25), dt = gDa(dark, da) || (dark ? DA_FD : DA_FL);
@@ -646,6 +638,7 @@
         lastGpuDrawAt = now; layout();
         const hasBuf = state.width > 0 && state.height > 0 && hasCvBuf();
         const paint = (o, st) => { if (!hasBuf) return; if (st) state.glow?.invalidate?.(); invokeConvGlowDraw(state.glow, now, dark, st, o, ambient, spectrum); state.drawCount += 1; drawnOnce = true; };
+        const stopAt = (o, r) => { state.lastOptics = o; paint(o, true); return enterAuraSleep(r); };
         if (stErr) {
           state.pendingErrorClear = false; if (hasCvBuf()) try { state.glow?.clear?.(); } catch {}
           setPh(state, 'idle', now - IDLE_MS);
@@ -653,24 +646,20 @@
           return enterAuraSleep();
         }
         if (stDec) {
-          const hOpt = fillOptics(OPTICS_BUF, dark ? 0.22 : 0.42, scaleConvReach(0.18), 0.30, 0, 0, 'awaiting-decision', 0);
-          state.lastOptics = hOpt; state.decisionHolding = true; paint(hOpt, true);
-          return enterAuraSleep();
+          state.decisionHolding = true;
+          return stopAt(fillOptics(OPTICS_BUF, dark ? 0.22 : 0.42, scaleConvReach(0.18), 0.30, 0, 0, 'awaiting-decision', 0));
         }
         if (stLng) {
           if (!checkWindowFocused()) {
-            const jOpt = fillOptics(OPTICS_BUF, dark ? 0.16 : 0.30, scaleConvReach(0.17), 0.24, 0, 0, 'long-task-complete', 0);
-            state.lastOptics = jOpt; state.unfocusedHold = true; paint(jOpt, true); attFW(state);
-            return enterAuraSleep('settled');
+            state.unfocusedHold = true; attFW(state);
+            return stopAt(fillOptics(OPTICS_BUF, dark ? 0.16 : 0.30, scaleConvReach(0.17), 0.24, 0, 0, 'long-task-complete', 0), 'settled');
           }
           setPh(state, 'idle', now - IDLE_MS);
-          const iOpt = computeConvAuraOptics('idle', state.phaseAt, now, dark, false, OPTICS_BUF, da);
-          state.lastOptics = iOpt; paint(iOpt, true);
-          return enterAuraSleep();
+          return stopAt(computeConvAuraOptics('idle', state.phaseAt, now, dark, false, OPTICS_BUF, da));
         }
         const still = !flow || stIdl;
         state.lastOptics = opt; paint(opt, still);
-        if (isDestroyed() || !flow || stIdl) { enterAuraSleep(!flow ? (isP() ? 'hidden' : 'motion-still') : 'settled'); return; }
+        if (isDestroyed() || !flow || stIdl) return enterAuraSleep(!flow ? (isP() ? 'hidden' : 'motion-still') : 'settled');
         state.sleeping = false; state.sleepReason = '';
         if (host.hasAttribute('data-aura-sleep')) host.removeAttribute('data-aura-sleep');
         const PD = { start: START_MS, complete: COMP_MS, 'awaiting-decision': DEC_MS, 'error-halted': ERR_MS, 'long-task-complete': LONG_C_MS, idle: IDLE_MS };
@@ -684,19 +673,15 @@
 
       const drawImm = () => { forceImmediateDraw = true; drawNow(readNowMs()); };
       function wake(immediate = false) {
-        if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
-        if (isDestroyed() || convAura !== state) return;
+        clrT();
+        if (!isLive()) return;
         if (isH()) return releaseBacking();
         if (bkRel) layout(true);
         if (isP()) {
           if (!drawnOnce && hasCvBuf()) drawImm();
           return enterAuraSleep('hidden');
         }
-        if (immediate) {
-          if (state.rafId && isF(G.cancelAnimationFrame)) { cancelAnimationFrame(state.rafId); state.rafId = 0; }
-          frameWanted = false;
-          return drawImm();
-        }
+        if (immediate) { clrRaf(); frameWanted = false; return drawImm(); }
         if (frameWanted) return;
         frameWanted = true;
         if (isF(G.requestAnimationFrame)) state.rafId = requestAnimationFrame(drawNow);

@@ -32,6 +32,7 @@
   "sidebarCompact": false,
   "sidebarNavFold": "off",
   "projectPartitions": "off",
+  "sidePanelVerticalTabs": "off",
   "smoothCaret": true,
   "scrollBottomMotion": "smooth",
   "contextMenu": true,

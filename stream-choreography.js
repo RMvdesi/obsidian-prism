@@ -21,7 +21,7 @@
   const K_PE = 'parentElement', K_CL = 'classList', K_IC = 'isConnected';
   const A_TID = 'data-testid', A_EXP = 'aria-expanded', A_SB = 'data-ag-cs-sidebar', A_RR = 'data-ag-cs-row-running';
   const A_AU = 'data-ag-cs-auto-unfolded', A_OO = 'data-ag-cs-outer-open', A_TS = 'data-ag-cs-thought-streaming';
-  const S_SUB = '[data-testid="subagent-tab-conversation"]', S_CV = '[data-testid="conversation-view"]', S_TKT = '[data-testid="thinking-collapsible-trigger"]';
+  const S_SUB = '[data-testid="subagent-tab-conversation"]', S_CX = S_SUB + ',[data-side-panel-body],[data-testid="side-question-panel"]', S_CV = '[data-testid="conversation-view"]', S_TKT = '[data-testid="thinking-collapsible-trigger"]';
   const S_WF = '[data-testid="worked-for-collapsible"]', S_SBR = '[data-testid="conversation-row-sidebar"]', S_IB = '[data-testid="agent-input-box"]', S_SLS = '[data-testid="status-loading-spinner"]';
   const S_VP = '[data-testid="autoscroll-viewport"]', S_UMB = '[data-testid="user-message-bubble"]', S_CFH = '[data-testid="changed-files-card-header"]', S_OVP = '[data-testid="overview-panel"]', S_SC = '.surface-composer-card';
 
@@ -40,7 +40,7 @@
   const qsa = (e, s) => e?.querySelectorAll?.(s) || [];
   const closestOf = (e, s) => e?.closest?.(s) || null;
   const isF = (v) => typeof v === 'function', T = (f) => { try { return f(); } catch {} }, isTxt = (n) => n?.nodeType === 3, txtOf = (n) => n?.data ?? n?.nodeValue ?? '';
-  const isSub = (e) => !!closestOf(e, S_SUB), rmAll = (d, s) => { if (d) for (const n of qsa(d, s)) n.remove(); }, raAll = (d, a) => { if (d) for (const n of qsa(d, `[${a}]`)) ra(n, a); };
+  const isSub = (e) => !!closestOf(e, S_SUB), notCx = (e) => !closestOf(e, S_CX), rmAll = (d, s) => { if (d) for (const n of qsa(d, s)) n.remove(); }, raAll = (d, a) => { if (d) for (const n of qsa(d, `[${a}]`)) ra(n, a); };
   const TH_STOP = new Set('planner-response-text|background-task-command|tool-group-collapsible|conversation-view|autoscroll-viewport'.split('|'));
   const rectOf = (e) => (isF(e?.getBoundingClientRect) ? e.getBoundingClientRect() : null);
   const setProp = (e, k, v) => e?.style?.setProperty?.(k, v);
@@ -813,7 +813,7 @@ states.push([r, run]);
       let pCh = false;
       if (vs.length > 1) {
         for (const cv of vs) {
-          const rP = !!(qs(cv, PRS)), ps = paneRunState.get(cv);
+          const rP = AF(qsa(cv, PRS)).some(notCx), ps = paneRunState.get(cv);
           if (!ps) paneRunState.set(cv, { r: rP, t: rP ? now : 0 });
           else if (rP && !ps.r) { ps.r = true; ps.t = now; }
           else if (!rP && ps.r) {
@@ -821,8 +821,8 @@ states.push([r, run]);
             const dur = ps.t > 0 ? now - ps.t : 0;
             ps.t = 0;
             if (dur >= 6000 && isMotionUltra()) {
-              const c = qs(cv, `${S_IB} ${S_SC}`);
-              if (c && !isSub(c)) { applyCaustic(c); pCh = true; }
+              const c = AF(qsa(cv, `${S_IB} ${S_SC}`)).find(notCx);
+              if (c) { applyCaustic(c); pCh = true; }
             }
           }
         }
@@ -838,7 +838,7 @@ states.push([r, run]);
           convAuraCtl?.triggerErrorHalted?.(now);
           notifyMascot('streamDone', { error: true, durationMs: el });
         } else {
-          if (!pCh && el >= 6000 && isMotionUltra()) for (const c of qsa(d, `${S_IB} ${S_SC}`)) if (!isSub(c)) applyCaustic(c);
+          if (!pCh && el >= 6000 && isMotionUltra()) for (const c of qsa(d, `${S_IB} ${S_SC}`)) if (notCx(c)) applyCaustic(c);
           if (el >= 15000) { convAuraCtl?.triggerLongTaskComplete?.(now); notifyMascot('aura-complete', { durationMs: el }); }
           else notifyMascot('complete', { durationMs: el });
           if (qs(d, '[data-ag-prism-pulse-bar][data-pv-warn="1"], #ag-prism-pulse-bar[data-pv-warn="1"]') && now - lastVialHighNotifyAt >= 600000) {

@@ -87,6 +87,7 @@ const CONFIG_SCHEMA = Object.freeze({
   sidebarCompact: Object.freeze({ type: 'boolean', default: false, stringBoolMode: 'strictOn' }),
   sidebarNavFold: Object.freeze({ type: 'enum', values: Object.freeze(['off', 'on']), default: 'off', coerceBoolToOnOff: true }),
   projectPartitions: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
+  sidePanelVerticalTabs: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
   smoothCaret: Object.freeze({ type: 'boolean', default: true, stringBoolMode: 'notOff' }),
   scrollBottomMotion: Object.freeze({ type: 'enum', values: Object.freeze(['smooth', 'instant']), default: 'smooth' }),
   contextMenu: Object.freeze({ type: 'boolean', default: true, stringBoolMode: 'notOff' }),

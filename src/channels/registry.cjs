@@ -1,4 +1,4 @@
-// 声明式多通道微内核注册表（全仓 17 通道唯一真相源：CHANNEL_REGISTRY / 磁盘缓存格式 / 探针片段 / 打包清单 / 预算报表）
+// 声明式多通道微内核注册表（全仓 18 通道唯一真相源：CHANNEL_REGISTRY / 磁盘缓存格式 / 探针片段 / 打包清单 / 预算报表）
 'use strict';
 
 const { reconcileConfigAliases } = require('../config/schema.cjs');
@@ -15,6 +15,20 @@ const PERIODIC_PICKER_MODULE_FILES = Object.freeze([
   'keyboard-3d-gl.js',
   'bento-ui.js',
   'periodic-picker.js',
+]);
+
+// Ch18 右侧侧面板纵向标签栏模块与样式清单（唯一声明源，按严格加载顺序排列）
+const SIDE_PANEL_VTABS_JS_FILES = Object.freeze([
+  'vtabs-constants.js',
+  'vtabs-dom.js',
+  'vtabs-fiber.js',
+  'vtabs-sash.js',
+  'vtabs-motion.js',
+  'vtabs-controller.js',
+]);
+const SIDE_PANEL_VTABS_CSS_FILES = Object.freeze([
+  'vtabs-layout.css',
+  'vtabs-theme.css',
 ]);
 
 function cap(id) {
@@ -75,7 +89,7 @@ function defineSpec(cfg) {
   });
 }
 
-// 静态元数据清单（全部 17 条延迟/按需通道 Ch2~Ch17 唯一真相源）
+// 静态元数据清单（全部 18 条延迟/按需通道 Ch2~Ch18 唯一真相源）
 const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'omni', cacheFormat: 'minCode', channelNumber: 2, order: 20, tier: 'core', topLevelPack: true,
@@ -229,7 +243,7 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
   defineSpec({
     id: 'settings', channelNumber: 9, order: 90, tier: 'addon', injectMode: 'on-demand-rpc', precompileOnBoot: false,
     label: 'Settings Panel & Full Locales',
-    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode', 'homeGlow', 'projectPartitions'],
+    configKeys: ['language', 'performanceMode', 'ignoreReducedMotion', 'chatFont', 'chatFontCustom', 'codeFont', 'codeFontCustom', 'telemetryQuotaMode', 'homeGlow', 'projectPartitions', 'sidePanelVerticalTabs'],
     files: [
       'src/runtime/i18n-tr-locale.js', 'i18n-locales.js', 'assets/brand-mark-svg.js', 'vendor/clawd-mascot/tavern-atlas-data.js',
       'vendor/clawd-mascot/octopath-stage-webgl.js', 'src/runtime/i18n-ext-beta4.js',
@@ -393,6 +407,35 @@ const CHANNEL_STATIC_SPECS = Object.freeze([
     defaultShouldEnable: (cfg) => cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true,
     cfgSig: (cfg) => (cfg?.projectPartitions === 'on' || cfg?.projectPartitions === true ? 'on' : 'off'),
   }),
+  defineSpec({
+    id: 'sidePanelVtabs', cacheKey: 'sidePanelVtabs', cacheFormat: 'minRuntime',
+    channelNumber: 18, order: 180, tier: 'studio', injectMode: 'main-page-persistent',
+    precompileOnBoot: true, topLevelPack: false, staticRuntimePack: false,
+    label: 'Side Panel Vertical Tabs',
+    configKeys: ['sidePanelVerticalTabs', 'language', 'motionLevel', 'ignoreReducedMotion', 'performanceMode'],
+    files: [
+      ...SIDE_PANEL_VTABS_JS_FILES.map((name) => `vendor/side-panel-vertical-tabs/${name}`),
+      ...SIDE_PANEL_VTABS_CSS_FILES.map((name) => `vendor/side-panel-vertical-tabs/${name}`),
+    ],
+    mountGlobal: '__agPrismSidePanelVtabs',
+    probeKey: 'hasSidePanelVtabs',
+    probeHashKey: 'sidePanelVtabsCodeHash',
+    probeExtraKeys: ['needsSidePanelVtabsChannel'],
+    respectSkippedByLiveCfg: true,
+    budgetBytes: 96 * 1024,
+    probeLines: [
+      'hasSidePanelVtabs: Boolean(window.__agPrismSidePanelVtabs || globalThis.__agPrismSidePanelVtabs)',
+      "sidePanelVtabsCodeHash: String((window.__agPrismSidePanelVtabs || globalThis.__agPrismSidePanelVtabs)?.__prismCodeHash || '')",
+      "needsSidePanelVtabsChannel: Boolean(st?.cfg?.sidePanelVerticalTabs === 'on' && !(window.__agPrismSidePanelVtabs || globalThis.__agPrismSidePanelVtabs))",
+    ],
+    fieldOverrides: {
+      cdpShouldFn: 'shouldEnableSidePanelVerticalTabs',
+      cdpBuildFn: 'buildSidePanelVerticalTabsExpression',
+      cdpRemoveConst: 'SIDE_PANEL_VTABS_REMOVE_EXPRESSION',
+    },
+    defaultShouldEnable: (cfg) => cfg?.sidePanelVerticalTabs === 'on',
+    cfgSig: (cfg) => (cfg?.sidePanelVerticalTabs === 'on' ? 'on' : 'off'),
+  }),
 ]);
 
 // 从唯一真相源自动派生：磁盘缓存键清单、缓存格式映射、Runtime 下沉通道 ID 清单
@@ -501,6 +544,7 @@ function createChannelRegistry({ builders, readConfig }) {
     bindEntry('workbenchEnhancer', builders.shouldEnableWorkbenchEnhancer, builders.buildWorkbenchEnhancerChannelExpression),
     bindEntry('contextMenu', builders.shouldEnableContextMenu, builders.buildContextMenuChannelExpression),
     bindEntry('projectPartitions', builders.shouldEnableProjectPartitions, builders.buildProjectPartitionsExpression),
+    bindEntry('sidePanelVtabs', builders.shouldEnableSidePanelVerticalTabs, builders.buildSidePanelVerticalTabsExpression),
   ]);
 
   const registryById = new Map(CHANNEL_REGISTRY.map((ch) => [ch.id, ch]));
@@ -571,6 +615,8 @@ function createChannelRegistry({ builders, readConfig }) {
 
 module.exports = {
   PERIODIC_PICKER_MODULE_FILES,
+  SIDE_PANEL_VTABS_JS_FILES,
+  SIDE_PANEL_VTABS_CSS_FILES,
   CHANNEL_STATIC_SPECS,
   CHANNEL_CACHE_NAMES,
   CHANNEL_CACHE_FORMAT_MAP,
