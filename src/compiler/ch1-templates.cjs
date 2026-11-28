@@ -281,23 +281,21 @@ function createCh1Templates({
       const T = (f) => { try { return f(); } catch {} }, sp = (s) => s.split(',');
       const gid = (i) => D.getElementById?.(i), qa = (s) => D.querySelectorAll?.(s) || [], qs = (s) => T(() => D.querySelector(s));
       const VER = ${JSON.stringify(pluginVersion)}, SID = ${JSON.stringify(STYLE_ID)}, LSID = ${JSON.stringify(LEGACY_STYLE_ID)}, OFF_MSG = 'Sidecar daemon offline';
-      const expIs = (s) => {
-        const sc = (x) => {
-          let o = [], t = 0, d = 0, i = 0, c;
-          for (; i <= x.length; i++) (c = x[i]) == '(' || c == '[' ? d++ : c == ')' || c == ']' ? d-- : (!c || c == ',' && !d) && (o.push(x.slice(t, i).trim()), t = i + 1);
-          return o;
-        };
-        const ex = (x) => {
-          for (let a = -1, d = 0, i = 0, c; i < x.length; i++)
-            if ((c = x[i]) == '(') d++;
-            else if (c == ')') { if (!--d && a >= 0) return sc(x.slice(a + 4, i)).flatMap((v) => ex(x.slice(0, a) + v + x.slice(i + 1))); }
-            else if (a < 0 && !d && x.startsWith(':is(', i)) a = i, i += 3, d = 1;
-          return [x];
-        };
-        return T(() => s.replace(/(^|[{}])([^{}@]+)(?=\\{)/g, (M, k, h) => (h.includes(':is(') ? k + sc(h).flatMap(ex).join(',') : M))) || s;
+      const __agLz = (s, n, ts, te, lb, ss, ls) => {
+        let o = new Uint16Array(n), p = 0, g = (c) => c - 32 - (c > 34) - (c > 60) - (c > 62) - (c > 92), r = '', i = 0;
+        for (; i < s.length;) {
+          let c = s.charCodeAt(i++);
+          if (c < ts || c >= te) { o[p++] = c; continue; }
+          let v = g(s.charCodeAt(i++)), t, l, d;
+          if (c < lb) { t = (c - ts) * 91 + v; l = 3 + t % ss; d = 1 + (t / ss | 0); }
+          else { t = ((c - lb) * 91 + v) * 91 + g(s.charCodeAt(i++)); l = 4 + t % ls; d = 1 + (t / ls | 0); }
+          for (let q = p - d; l--;) o[p++] = o[q++];
+        }
+        for (i = 0; i < p; i += 16384) r += String.fromCharCode.apply(null, o.subarray(i, i + 16384 < p ? i + 16384 : p));
+        return r;
       };
       let _css = null;
-      const getCss = () => (_css === null ? (_css = expIs(__AG_INJ_CSS__)) : _css);
+      const getCss = () => (_css === null ? (_css = __AG_INJ_CSS__) : _css);
       const cleanOld = () => {
         T(() => gid(LSID)?.remove());
         T(() => {
@@ -443,25 +441,24 @@ function createCh1Templates({
         W.__agPrismUsageBridge = b; W.__agPrismUsageResolve = c.resolve;
       });
 
-      const spP = (s) => sp(s).map((k) => '__agPrism' + k);
       const destroyMods = (extra) => {
         T(() => W.__agPrismRippleWorker?.disposeAll?.());
-        const ks = spP('Telemetry,EffortSlider,Thought,Omni,ContextMenu');
-        if (extra) ks.push(...spP(extra));
+        const ks = sp('__agPrismTelemetry,__agPrismEffortSlider,__agPrismThought,__agPrismOmni,__agPrismContextMenu');
+        if (extra) ks.push(...sp(extra));
         for (const k of ks) T(() => W[k]?.destroy?.());
       };
 
       const stripForeign = () => {
-        destroyMods(',InlineDiff,HostI18n,PeriodicStub,PeriodicPicker,CssMgr');
+        destroyMods('__agPrism,__agPrismInlineDiff,__agPrismHostI18n,__agPrismPeriodicStub,__agPrismPeriodicPicker,__agPrismCssMgr');
         T(() => {
           const de = D.documentElement;
           for (const a of sp('data-ag-prism-host-i18n,data-ag-prism-periodic-picker,data-ag-pp-open,data-ag-cs-model-menu')) de?.removeAttribute?.(a);
           for (const a of sp('data-ag-cs-aux-dual,data-ag-cs-model-overlay')) qa('[' + a + ']').forEach((el) => el.removeAttribute(a));
           qa('[data-testid="prism-thought-ai-config"],[data-testid="prism-thought-general-config"],.ag-cs-ctx-menu,.ag-cs-ctx-toast,.ag-cs-inline-diff-box,.ag-cs-diff-ctx-menu,.ag-pp-hold-ring,.ag-pp-mini-keycap').forEach((el) => el.remove());
         });
-        for (const k of spP('RepoBridge,ThoughtBridge,UsageBridge,OmniBridge')) T(() => W[k]?.dispose?.());
-        for (const id of [SID, LSID, ...sp('settings-v101,studio-v101,omni,inline-diff,periodic-stub,periodic-picker').map((x) => 'ag-prism-' + x + '-css')]) T(() => gid(id)?.remove());
-        for (const k of [...spP('CssMgr,PeriodicStub,PeriodicStubFactory,Thought,ThoughtSettingsUi,InlineDiff,InlineDiffFactory,InlineDiffResolve,Omni,ContextMenu,'), ...sp('__agPeriodicPendingOpen,__agPeriodicFullLoaded,__agPeriodicStubHash,__agClaudeStyle')]) { delete W[k]; delete G[k]; }
+        for (const k of sp('__agPrismRepoBridge,__agPrismThoughtBridge,__agPrismUsageBridge,__agPrismOmniBridge')) T(() => W[k]?.dispose?.());
+        for (const id of [SID, LSID, ...sp('ag-prism-settings-v101-css,ag-prism-studio-v101-css,ag-prism-omni-css,ag-prism-inline-diff-css,ag-prism-periodic-stub-css,ag-prism-periodic-picker-css')]) T(() => gid(id)?.remove());
+        for (const k of sp('__agPrismCssMgr,__agPrismPeriodicStub,__agPrismPeriodicStubFactory,__agPeriodicPendingOpen,__agPeriodicFullLoaded,__agPeriodicStubHash,__agPrismThought,__agPrismThoughtSettingsUi,__agPrismInlineDiff,__agPrismInlineDiffFactory,__agPrismInlineDiffResolve,__agPrismOmni,__agPrismContextMenu,__agPrism,__agClaudeStyle')) { delete W[k]; delete G[k]; }
       };
 
       const hasMarkers = () => !!T(() => {
