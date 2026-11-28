@@ -111,6 +111,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
       listPagesFallbackIntervalMs = 60000,
       _testUpdateService = null,
       _testAddonRegistry = null,
+      _testRestartHooks = null,
       addonsDir = null,
       updateCheckInitialDelayMs = 45000,
       updateCheckIntervalMs = 6 * 60 * 60 * 1000,
@@ -226,6 +227,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
       portFile,
       _testUpdateService,
       _testAddonRegistry,
+      _testRestartHooks,
       addonsDir,
       updateCheckInitialDelayMs,
       updateCheckIntervalMs,
@@ -244,7 +246,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
       invokeRebuildBundle: (o) => this.rebuildBundle(o),
       invokeApplyToEntry: (e) => this.applyToEntry(e),
       invokeBroadcastConfigRefresh: () => this.broadcastConfigRefresh(),
-      invokeStop: (c) => this.stop(c),
+      invokeStop: (c, o) => this.stop(c, o),
       getCdpPort: () => this.cdpPort || 0,
     });
 
@@ -451,6 +453,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
   _buildCombinedUpdateStatus(o) { return this._s().updateStorageSubsystem.buildCombinedUpdateStatus(o); }
   runUpdateCheck(o) { return this._s().updateStorageSubsystem.runUpdateCheck(o); }
   executeRepoAction(r, s) { return this._s().updateStorageSubsystem.executeRepoAction(r, s); }
+  scheduleDaemonRestart(o) { return this._s().updateStorageSubsystem.scheduleDaemonRestart(o); }
   _getAutoArchiveOnExitSetting() { return this._s().updateStorageSubsystem.getAutoArchiveOnExitSetting(); }
   _readStorageGuardState() { return this._s().updateStorageSubsystem.readStorageGuardState(); }
   _writeStorageGuardState(p) { return this._s().updateStorageSubsystem.writeStorageGuardState(p); }

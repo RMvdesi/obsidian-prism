@@ -166,6 +166,7 @@ export async function executeGitPullHotReload(upd, gitState, actionName = 'pull'
         changedFiles = diffOut.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       } catch {}
     }
+    const prevVersion = cdp?.PLUGIN_VERSION || PKG_VERSION;
     const needsHardReload = changedFiles.some((f) => /^(?:sidecars\/|src\/|installer\/|cdp\.js$)/.test(f));
 
     let hotReloaded = false;
@@ -176,10 +177,21 @@ export async function executeGitPullHotReload(upd, gitState, actionName = 'pull'
     }
     upd.invokeRebuildBundle({ forceReloadCdp: updated });
     const latestCdp = upd.getCdp();
+    const nextVersion = latestCdp?.PLUGIN_VERSION || PKG_VERSION;
+    const versionChanged = Boolean(updated && prevVersion && nextVersion && prevVersion !== nextVersion);
+    const shouldRestartDaemon = Boolean(updated && (needsHardReload || versionChanged || changedFiles.length === 0));
     const activeItems = [...upd.getSessions().values()].filter((item) => item && !item.session.closed);
     if (activeItems.length > 0) {
       await Promise.allSettled(activeItems.map((item) => upd.invokeApplyToEntry(item)));
       hotReloaded = true;
+    }
+
+    let daemonRestartScheduled = false;
+    if (shouldRestartDaemon && typeof upd.scheduleDaemonRestart === 'function') {
+      const restartRes = upd.scheduleDaemonRestart({
+        reason: needsHardReload ? 'git-core-update' : versionChanged ? 'git-version-update' : 'git-update',
+      });
+      daemonRestartScheduled = Boolean(restartRes?.scheduled);
     }
 
     return {
@@ -204,8 +216,10 @@ export async function executeGitPullHotReload(upd, gitState, actionName = 'pull'
       hotReloaded,
       needsHardReload,
       needsHardReloadHint: needsHardReload,
+      shouldRestartDaemon,
+      daemonRestartScheduled,
       changedFiles,
-      version: latestCdp?.PLUGIN_VERSION || PKG_VERSION,
+      version: nextVersion,
       message: sanitizeSecretText(pullOut || (updated ? `Updated ${prevCommit} -> ${nextCommit}` : 'Already up to date')),
     };
   } catch (err) {
@@ -321,6 +335,19 @@ export function buildCombinedUpdateStatus(
   };
 }
 
+function maybeScheduleReleaseRestart(upd, applyRes, reason) {
+  if (
+    applyRes?.ok &&
+    applyRes?.applied &&
+    applyRes?.mode !== 'installer' &&
+    !applyRes?.scheduled &&
+    typeof upd?.scheduleDaemonRestart === 'function'
+  ) {
+    return Boolean(upd.scheduleDaemonRestart({ reason })?.scheduled);
+  }
+  return false;
+}
+
 export async function runUpdateCheck(upd, { force = false, manual = false, allowAutoApply = false, channel = null } = {}) {
   const explicitChannel = channel === 'beta' || channel === 'stable' ? channel : null;
   const { channel: activeChannel, changed: channelChanged } = explicitChannel
@@ -372,10 +399,12 @@ export async function runUpdateCheck(upd, { force = false, manual = false, allow
           };
         } else if (!gitState.hasRemote && relState?.hasUpdate) {
           const applyRes = await upd.updateService.applyReleaseUpdate({ confirm: true, auto: true });
+          const daemonRestartScheduled = maybeScheduleReleaseRestart(upd, applyRes, 'release-auto-update');
+          const mergedApply = daemonRestartScheduled ? { ...applyRes, daemonRestartScheduled } : applyRes;
           upd._lastUpdateState = {
             ...combined,
-            lastError: applyRes.ok ? null : applyRes.error || combined.lastError,
-            lastAutoApply: applyRes,
+            lastError: mergedApply.ok ? null : mergedApply.error || combined.lastError,
+            lastAutoApply: mergedApply,
           };
         }
       }
@@ -558,9 +587,11 @@ export async function executeRepoAction(upd, rawInput = {}, secondArg = undefine
       };
     }
     const applyRes = await upd.updateService.applyReleaseUpdate({ confirm: true, auto: false });
+    const daemonRestartScheduled = maybeScheduleReleaseRestart(upd, applyRes, 'release-update');
     const cdp = upd.getCdp();
     return {
       ...applyRes,
+      ...(daemonRestartScheduled ? { daemonRestartScheduled } : {}),
       action: 'apply-update',
       channel,
       currentVersion: cdp?.PLUGIN_VERSION || upd.updateService?.currentVersion || PKG_VERSION,

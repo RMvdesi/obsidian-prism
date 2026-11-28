@@ -1,5 +1,8 @@
 // Obsidian Prism 更新与存储守卫子系统（UpdateStorageSubsystem：封装更新检查、Git 热更、存储体检弹窗、退出归档、GoMemLimit、Addons 与卸载，无原型 Mixin）
+import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { isAutomatedTestRuntime } from './pid-lock.mjs';
 import { UpdateService } from '../../sidecars/daemon/update-service.mjs';
 import { AddonRegistry } from '../../sidecars/daemon/addon-registry.mjs';
 import { PKG_VERSION, resolveStorageGuardStatePath } from './constants.mjs';
@@ -46,6 +49,7 @@ export class UpdateStorageSubsystem {
     portFile = null,
     _testUpdateService = null,
     _testAddonRegistry = null,
+    _testRestartHooks = null,
     addonsDir = null,
     updateCheckInitialDelayMs = 45000,
     updateCheckIntervalMs = 6 * 60 * 60 * 1000,
@@ -114,6 +118,9 @@ export class UpdateStorageSubsystem {
     this._lastUpdateState = null;
     this._updateCheckInFlight = null;
     this._updateCheckInFlightChannel = null;
+    this._testRestartHooks = _testRestartHooks;
+    this._restartScheduled = false;
+    this._restartTimer = null;
 
     const initialUpdateChannel = getUpdateChannelSetting(this);
     const cdp = this.getCdp();
@@ -180,9 +187,91 @@ export class UpdateStorageSubsystem {
     return this.channelOrchestrator.broadcastConfigRefresh();
   }
 
-  invokeStop(cleanPageDom) {
-    if (typeof this._invokeStop === 'function') return this._invokeStop(cleanPageDom);
+  invokeStop(cleanPageDom, opts = null) {
+    if (typeof this._invokeStop === 'function') return this._invokeStop(cleanPageDom, opts);
     return Promise.resolve();
+  }
+
+  /**
+   * 源码或核心通道热更新后，待 RPC 响应回传完毕再优雅停机并拉起新 ESM 守护进程。
+   */
+  scheduleDaemonRestart({ reason = 'hot-reload', delayMs = null } = {}) {
+    if (this._restartScheduled) {
+      return { scheduled: true, alreadyScheduled: true, reason };
+    }
+    const hooks = this._testRestartHooks;
+    const rawArgv = Array.isArray(hooks?.argv) ? hooks.argv : process.argv;
+    if (rawArgv.includes('--once')) {
+      return { scheduled: false, skipped: 'once_mode', reason };
+    }
+    if (isAutomatedTestRuntime() && !hooks?.allowInTest && typeof hooks?.spawn !== 'function') {
+      this.log(`[↻] Skipping daemon auto-restart in test runtime (${reason})`);
+      return { scheduled: false, skipped: 'test_runtime', reason };
+    }
+
+    const execPath = hooks?.execPath || process.execPath;
+    const execArgv = Array.isArray(hooks?.execArgv) ? [...hooks.execArgv] : [...process.execArgv];
+    const hasEntryArg = typeof rawArgv[1] === 'string' && rawArgv[1].trim().length > 0;
+    const fallbackScript = path.join(this.rootDir || '.', 'sidecars', 'daemon', 'main.mjs');
+    const scriptAndArgs = hasEntryArg
+      ? rawArgv.slice(1)
+      : [
+          fallbackScript,
+          ...(this.rootDir ? ['--root', this.rootDir] : []),
+          ...(this._overridePort ? ['--port', String(this._overridePort)] : []),
+        ];
+    const entryScript = scriptAndArgs[0];
+    if (typeof hooks?.spawn !== 'function' && (!entryScript || !fs.existsSync(entryScript))) {
+      this.log(`[!] Skipping daemon auto-restart: missing entrypoint (${entryScript || 'unknown'})`);
+      return { scheduled: false, skipped: 'missing_entrypoint', reason };
+    }
+
+    const resolvedDelay = Number(hooks?.delayMs ?? delayMs);
+    const waitMs = Number.isFinite(resolvedDelay) && resolvedDelay >= 0 ? resolvedDelay : 180;
+    const spawnFn = typeof hooks?.spawn === 'function' ? hooks.spawn : spawn;
+    const exitFn = typeof hooks?.exit === 'function' ? hooks.exit : (code) => process.exit(code);
+    const stopFn =
+      typeof hooks?.stop === 'function'
+        ? hooks.stop
+        : () => this.invokeStop(false, { skipAutoArchive: true });
+    const spawnCwd =
+      hooks?.cwd ||
+      (this.rootDir && fs.existsSync(this.rootDir)
+        ? this.rootDir
+        : entryScript && fs.existsSync(path.dirname(entryScript))
+          ? path.dirname(entryScript)
+          : undefined);
+    const spawnArgs = [...execArgv, ...scriptAndArgs];
+
+    this._restartScheduled = true;
+    this.log(`[↻] Scheduling seamless daemon restart (${reason}) in ${waitMs}ms...`);
+    const timer = setTimeout(() => {
+      this._restartTimer = null;
+      Promise.resolve()
+        .then(() => stopFn())
+        .catch(() => {})
+        .then(() => {
+          let exitCode = 0;
+          try {
+            const child = spawnFn(execPath, spawnArgs, {
+              detached: true,
+              ...(spawnCwd ? { cwd: spawnCwd } : {}),
+              stdio: 'ignore',
+              windowsHide: true,
+            });
+            child?.on?.('error', () => {});
+            child?.unref?.();
+            this.log(`[✓] Spawned replacement daemon process (${reason}); exiting old process`);
+          } catch (err) {
+            exitCode = 1;
+            this.log(`[!] Failed to spawn replacement daemon process: ${err?.message || err}`);
+          }
+          exitFn(exitCode);
+        });
+    }, waitMs);
+    this._restartTimer = timer;
+    timer.unref?.();
+    return { scheduled: true, reason, delayMs: waitMs };
   }
 
   resolveGitRepoDir() { return resolveGitRepoDir(this); }
@@ -333,6 +422,10 @@ export class UpdateStorageSubsystem {
     if (this._updateIntervalTimer) {
       clearInterval(this._updateIntervalTimer);
       this._updateIntervalTimer = null;
+    }
+    if (this._restartTimer) {
+      clearTimeout(this._restartTimer);
+      this._restartTimer = null;
     }
   }
 }

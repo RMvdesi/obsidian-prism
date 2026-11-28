@@ -1176,3 +1176,156 @@ test('UpdateService on linux selects obsidian-prism-linux-portable.tar.gz (with 
   assert.equal(stFallback.downloadUrl, linuxFallbackUrl);
   assert.equal(stFallback.expectedSha256, fallbackDigest);
 });
+
+test('Hot-upgrade Issue #187: auto-restarts daemon seamlessly after core/version git hot-reload and skips pure CSS updates', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-hot-restart-'));
+  try {
+    const remoteGit = path.join(workDir, 'remote.git');
+    const localGit = path.join(workDir, 'local-git');
+    const pusherGit = path.join(workDir, 'pusher-git');
+    const pluginDir = path.join(workDir, 'plugin-dir');
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    const makeCdpSource = (ver) =>
+      `module.exports={PLUGIN_VERSION:${JSON.stringify(ver)},DEFAULT_CONFIG:{autoUpdate:'off',updateChannel:'beta'},SYNC_ROOT_FILES:['cdp.js','style.css'],SYNC_SUBDIRS:['src'],readConfig:()=>({autoUpdate:'off',updateChannel:'beta'}),validateConfigEntry:()=>true,buildInjectExpression:()=>'(()=>{})()'};\n`;
+
+    execFileSync('git', ['init', '--bare', remoteGit], { stdio: 'ignore' });
+    execFileSync('git', ['clone', remoteGit, localGit], { stdio: 'ignore' });
+    execFileSync('git', ['-C', localGit, 'config', 'user.email', 'test@obsidian-prism.local'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', localGit, 'config', 'user.name', 'Test'], { stdio: 'ignore' });
+
+    fs.mkdirSync(path.join(localGit, 'src', 'daemon'), { recursive: true });
+    fs.writeFileSync(path.join(localGit, 'cdp.js'), makeCdpSource('1.0.8-beta.2'), 'utf8');
+    fs.writeFileSync(path.join(localGit, 'style.css'), '/* beta.2 */\n', 'utf8');
+    fs.writeFileSync(path.join(localGit, 'src', 'daemon', 'channel-orchestrator.mjs'), '// beta.2\n', 'utf8');
+    execFileSync('git', ['-C', localGit, 'add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', localGit, 'commit', '-m', 'init beta.2'], { stdio: 'ignore' });
+    const branch = execFileSync('git', ['-C', localGit, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim();
+    execFileSync('git', ['-C', localGit, 'push', '-u', 'origin', branch], { stdio: 'ignore' });
+
+    fs.mkdirSync(path.join(pluginDir, 'src', 'daemon'), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'cdp.js'), makeCdpSource('1.0.8-beta.2'), 'utf8');
+    fs.writeFileSync(path.join(pluginDir, 'style.css'), '/* beta.2 */\n', 'utf8');
+    fs.writeFileSync(path.join(pluginDir, 'src', 'daemon', 'channel-orchestrator.mjs'), '// beta.2\n', 'utf8');
+
+    execFileSync('git', ['clone', remoteGit, pusherGit], { stdio: 'ignore' });
+    execFileSync('git', ['-C', pusherGit, 'config', 'user.email', 'test@obsidian-prism.local'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', pusherGit, 'config', 'user.name', 'Test'], { stdio: 'ignore' });
+
+    // 1. 纯 CSS 改动且版本号未变化：热推送但不触发守护进程重启
+    fs.writeFileSync(path.join(pusherGit, 'style.css'), '/* beta.2 patch */\n', 'utf8');
+    execFileSync('git', ['-C', pusherGit, 'add', 'style.css'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', pusherGit, 'commit', '-m', 'css only'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', pusherGit, 'push', 'origin', branch], { stdio: 'ignore' });
+
+    const events = [];
+    const spawnCalls = [];
+    const exitCodes = [];
+    const mockSvc = {
+      currentVersion: '1.0.8-beta.2',
+      applying: false,
+      channel: 'beta',
+      getStatus: () => ({ ok: true, currentVersion: '1.0.8-beta.2', latestVersion: '1.0.8-beta.2', hasUpdate: false, checkedAt: null }),
+      checkForUpdates: async () => ({ ok: true, currentVersion: '1.0.8-beta.2', latestVersion: '1.0.8-beta.2', hasUpdate: false, checkedAt: Date.now() }),
+    };
+
+    const daemon = new PrismDaemon({
+      rootDir: pluginDir,
+      gitRepoDir: localGit,
+      silent: true,
+      enableAutoUpdateTimer: false,
+      enableStorageGuardTimer: false,
+      _testUpdateService: mockSvc,
+      _testRestartHooks: {
+        delayMs: 10,
+        execPath: process.execPath,
+        execArgv: [],
+        argv: [process.execPath, path.join(pluginDir, 'sidecars', 'daemon', 'main.mjs'), '--port', '9222'],
+        spawn: (cmd, args, opts) => {
+          events.push('spawn');
+          spawnCalls.push({ cmd, args, opts });
+          return { on() {}, unref() { events.push('unref'); } };
+        },
+        exit: (code) => {
+          events.push(`exit:${code}`);
+          exitCodes.push(code);
+        },
+      },
+    });
+    const origStop = daemon.stop.bind(daemon);
+    const stopCalls = [];
+    daemon.stop = async (cleanPageDom = false, opts = null) => {
+      events.push('stop');
+      stopCalls.push({ cleanPageDom, opts });
+      return origStop(cleanPageDom, opts);
+    };
+
+    const cssRes = await daemon.executeRepoAction({ action: 'apply-update', confirm: true });
+    assert.equal(cssRes.ok, true);
+    assert.equal(cssRes.updated, true);
+    assert.equal(cssRes.needsHardReload, false);
+    assert.equal(cssRes.shouldRestartDaemon, false);
+    assert.equal(cssRes.daemonRestartScheduled, false);
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(spawnCalls.length, 0, 'Pure CSS hot-reload must not restart daemon');
+
+    // 2. 跨版本及 src/daemon/* 更新（模拟 beta.2 -> beta.6）：先停旧释放锁（保留页面 DOM + 跳过归档），再 detached 拉起新进程，最后退出
+    fs.writeFileSync(path.join(pusherGit, 'cdp.js'), makeCdpSource('1.0.8-beta.6'), 'utf8');
+    fs.writeFileSync(path.join(pusherGit, 'src', 'daemon', 'channel-orchestrator.mjs'), '// beta.6\n', 'utf8');
+    execFileSync('git', ['-C', pusherGit, 'add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', pusherGit, 'commit', '-m', 'upgrade to beta.6'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', pusherGit, 'push', 'origin', branch], { stdio: 'ignore' });
+
+    const upgradeRes = await daemon.executeRepoAction({ action: 'apply-update', confirm: true });
+    assert.equal(upgradeRes.ok, true);
+    assert.equal(upgradeRes.updated, true);
+    assert.equal(upgradeRes.needsHardReload, true);
+    assert.equal(upgradeRes.shouldRestartDaemon, true);
+    assert.equal(upgradeRes.daemonRestartScheduled, true);
+    assert.equal(upgradeRes.version, '1.0.8-beta.6');
+
+    // 防重复调度验证
+    const dupSched = daemon.scheduleDaemonRestart({ reason: 'duplicate' });
+    assert.equal(dupSched.alreadyScheduled, true);
+
+    const waitDeadline = Date.now() + 1500;
+    while (exitCodes.length === 0 && Date.now() < waitDeadline) {
+      await new Promise((r) => setTimeout(r, 15));
+    }
+
+    assert.deepEqual(events, ['stop', 'spawn', 'unref', 'exit:0'], 'Restart must cleanly stop before spawning and exiting');
+    assert.equal(stopCalls.length, 1);
+    assert.equal(stopCalls[0].cleanPageDom, false, 'Restart stop must keep page DOM intact');
+    assert.equal(stopCalls[0].opts?.skipAutoArchive, true, 'Restart stop must skip exit archive');
+    assert.equal(spawnCalls.length, 1);
+    assert.equal(spawnCalls[0].opts.detached, true);
+    assert.equal(spawnCalls[0].opts.stdio, 'ignore');
+    assert.equal(spawnCalls[0].opts.windowsHide, true);
+    assert.ok(spawnCalls[0].args.includes('--port'));
+    assert.ok(spawnCalls[0].args.includes('9222'));
+
+    // 3. 当 replacement spawn 失败时，应以退出码 1 退出以触发宿主 sidecar 重拉
+    const failDaemon = new PrismDaemon({
+      rootDir: pluginDir,
+      silent: true,
+      enableAutoUpdateTimer: false,
+      enableStorageGuardTimer: false,
+      _testRestartHooks: {
+        delayMs: 5,
+        argv: [process.execPath, path.join(pluginDir, 'sidecars', 'daemon', 'main.mjs')],
+        spawn: () => { throw new Error('spawn_blocked'); },
+        stop: async () => {},
+        exit: (code) => { exitCodes.push(`fail:${code}`); },
+      },
+    });
+    const failSched = failDaemon.scheduleDaemonRestart({ reason: 'spawn-error-test' });
+    assert.equal(failSched.scheduled, true);
+    const failDeadline = Date.now() + 1500;
+    while (!exitCodes.includes('fail:1') && Date.now() < failDeadline) {
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    assert.ok(exitCodes.includes('fail:1'));
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
