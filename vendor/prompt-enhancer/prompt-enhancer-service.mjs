@@ -111,6 +111,18 @@ export function buildEnhancementSystemPrompt(taskType = 'general', options = {})
   return parts.join('\n\n');
 }
 
+export function compactContextText(text = '', maxChars = 3000) {
+  const s = String(text ?? '').trim();
+  const cap = Math.max(1, Number(maxChars) || 3000);
+  if (s.length <= cap) return s;
+  if (cap <= 20) return s.slice(-cap);
+  const marker = '\n...\n';
+  const avail = cap - marker.length;
+  const head = Math.floor(avail * 0.4);
+  const tail = avail - head;
+  return `${s.slice(0, head)}${marker}${s.slice(-tail)}`;
+}
+
 export function sanitizeEnhancerTurns(rawTurns = [], options = {}) {
   if (!Array.isArray(rawTurns)) return [];
   if (options?.paired) {
@@ -123,21 +135,51 @@ export function sanitizeEnhancerTurns(rawTurns = [], options = {}) {
       if (!text) continue;
       normalized.push({ role: turn.role, text });
     }
+    const grouped = [];
+    let pendingUser = [];
+    let pendingAssistant = '';
+    const flushRound = () => {
+      if (pendingUser.length && pendingAssistant) {
+        grouped.push({ user: pendingUser.join('\n'), assistant: pendingAssistant });
+      }
+      pendingUser = [];
+      pendingAssistant = '';
+    };
+    for (const turn of normalized) {
+      if (turn.role === 'user') {
+        if (pendingAssistant) flushRound();
+        pendingUser.push(turn.text);
+      } else if (pendingUser.length) {
+        pendingAssistant = turn.text;
+      }
+    }
+    flushRound();
+
     const collected = [];
-    let total = 0;
+    let remaining = maxTotalChars;
     let rounds = 0;
-    for (let i = normalized.length - 1; i >= 1 && rounds < maxRounds;) {
-      const assistant = normalized[i];
-      const user = normalized[i - 1];
-      if (assistant.role === 'assistant' && user.role === 'user') {
-        const pairLen = user.text.length + assistant.text.length;
-        if (total + pairLen > maxTotalChars) break;
-        total += pairLen;
-        collected.unshift(user, assistant);
+    for (let i = grouped.length - 1; i >= 0 && rounds < maxRounds; i--) {
+      const round = grouped[i];
+      const rawLen = round.user.length + round.assistant.length;
+      if (rawLen <= remaining) {
+        remaining -= rawLen;
+        collected.unshift({ role: 'user', text: round.user }, { role: 'assistant', text: round.assistant });
         rounds += 1;
-        i -= 2;
+      } else if (rounds === 0 || remaining >= 800) {
+        let userBudget = Math.min(round.user.length, Math.max(200, Math.floor(remaining * 0.45)));
+        let assistantBudget = Math.max(200, remaining - userBudget);
+        if (round.assistant.length < assistantBudget) {
+          assistantBudget = round.assistant.length;
+          userBudget = Math.max(200, remaining - assistantBudget);
+        }
+        const userText = compactContextText(round.user, userBudget);
+        const assistantText = compactContextText(round.assistant, assistantBudget);
+        remaining -= userText.length + assistantText.length;
+        collected.unshift({ role: 'user', text: userText }, { role: 'assistant', text: assistantText });
+        rounds += 1;
+        if (remaining < 800) break;
       } else {
-        i -= 1;
+        break;
       }
     }
     return collected;

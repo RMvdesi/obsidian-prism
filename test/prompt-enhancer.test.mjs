@@ -12,6 +12,7 @@ import {
   buildEnhancementSystemPrompt,
   classifyEnhancementTask,
   cleanEnhancedOutput,
+  compactContextText,
   detectOutputIssue,
   extractAssistantResult,
   extractProtectedTokens,
@@ -291,6 +292,62 @@ test('context is bounded to recent turns and explicit character limits', () => {
   assert.ok(turns.every((turn) => turn.text.length <= 1500));
   assert.ok(turns.reduce((sum, turn) => sum + turn.text.length, 0) <= 4800);
   assert.equal(turns.at(-1).text, 'recent');
+
+  const compacted = compactContextText('HEAD_' + 'x'.repeat(200) + '_TAIL', 60);
+  assert.ok(compacted.length <= 60);
+  assert.match(compacted, /^HEAD_/);
+  assert.match(compacted, /_TAIL$/);
+  assert.match(compacted, /\n\.\.\.\n/);
+
+  const multiSeg = sanitizeEnhancerTurns([
+    { role: 'user', text: '问题一' },
+    { role: 'assistant', text: '中间分析' },
+    { role: 'assistant', text: '最终方案二' },
+  ], { paired: true, maxRounds: 1 });
+  assert.deepEqual(multiSeg, [
+    { role: 'user', text: '问题一' },
+    { role: 'assistant', text: '最终方案二' },
+  ]);
+
+  const overBudget = sanitizeEnhancerTurns([
+    { role: 'user', text: 'START_U_' + 'u'.repeat(3500) + '_END_U' },
+    { role: 'assistant', text: 'START_A_' + 'a'.repeat(4500) + '_END_A' },
+  ], { paired: true, maxRounds: 1, maxTotalChars: 6000 });
+  assert.equal(overBudget.length, 2);
+  assert.ok(overBudget[0].text.length + overBudget[1].text.length <= 6000);
+  assert.match(overBudget[0].text, /^START_U_/);
+  assert.match(overBudget[0].text, /_END_U$/);
+  assert.match(overBudget[1].text, /^START_A_/);
+  assert.match(overBudget[1].text, /_END_A$/);
+});
+
+test('Prompt Enhancer client groups multi-segment assistant replies, keeps long tails, and reports context status/hints', async () => {
+  const { win, doc, editor, requests, runtime } = createUiHarness({
+    initialConfig: { enabled: true, profileId: 'shared', model: 'gpt-mini', includeRecentContext: true, recentContextCount: 1 },
+  });
+  const longFinalReply = new FakeNode('div', doc);
+  longFinalReply.setAttribute('data-testid', 'agent-response');
+  longFinalReply.textContent = 'BEGIN_MSG_' + 'm'.repeat(3500) + '_FINAL_OPTION_2';
+  doc.view.children.splice(doc.view.children.indexOf(doc.view.children.at(-1)), 0, longFinalReply);
+  await until(() => doc.querySelector('[data-testid="prism-prompt-enhancer-trigger"]'));
+  const trigger = doc.querySelector('[data-testid="prism-prompt-enhancer-trigger"]');
+  trigger.click();
+  await until(() => requests.some((r) => r.action === 'enhance'));
+  const req1 = requests.find((r) => r.action === 'enhance');
+  assert.equal(req1.payload.context.length, 2);
+  assert.match(req1.payload.context[1].text, /^BEGIN_MSG_/);
+  assert.match(req1.payload.context[1].text, /_FINAL_OPTION_2$/);
+  win.__agPrismPromptEnhancerBridge.resolve(req1.id, { ok: true, enhanced: '附带上文后的结果', usedContext: true });
+  await until(() => trigger.getAttribute('data-status')?.includes('(with context)'));
+
+  runtime.applyConfig({ enabled: true, profileId: 'shared', model: 'gpt-mini', includeRecentContext: false, recentContextCount: 1 });
+  editor.textContent = '按刚才的方案二继续修复';
+  trigger.click();
+  await until(() => requests.filter((r) => r.action === 'enhance').length === 2);
+  const req2 = requests.filter((r) => r.action === 'enhance')[1];
+  win.__agPrismPromptEnhancerBridge.resolve(req2.id, { ok: true, enhanced: '未开上文时的结果', usedContext: false });
+  await until(() => trigger.getAttribute('data-status')?.includes('enable context in settings'));
+  runtime.destroy();
 });
 
 test('service reuses shared provider credentials, omits context by default, and formats paired context when enabled', async () => {

@@ -37,7 +37,7 @@
   ].join('\n');
 
   const FALLBACK_TEXT = {
-    en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', restore: 'Restore', restored: 'Original draft restored', working: 'Enhancing prompt…', done: 'Review before replacing', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt', replaced: 'Prompt replaced automatically', replaceFailed: 'Could not replace input; copy manually', replaceUnverified: 'Replacement attempted but unverified; check input before pasting.', replaceConflict: 'Input changed; draft preserved. Review or copy manually.', emptyResult: 'The enhanced result is empty. Nothing replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is unavailable. Nothing replaced.', cancelled: 'Request cancelled. Original kept.', failed: 'Enhancement failed. Original kept. Retry: ', tooLong: 'Exceeds 10,000 char limit', tokensChanged: 'Protected code, paths, URLs, or identifiers changed. Original kept.', languagePrefaceIssue: 'Model returned meta note. Original kept.', languageMismatchIssue: 'Output language differs from draft. Original kept.', truncated: 'Truncated by token limit; shorten input.', refused: 'Model refused request.', analysisOutput: 'Model returned analysis tags; switch models.' },
+    en: { button: 'Enhance Prompt', title: 'Prompt Enhancer', close: 'Close', original: 'Original', result: 'Enhanced', copy: 'Copy', edit: 'Edit result', retry: 'Enhance again', replace: 'Replace input', cancel: 'Cancel request', restore: 'Restore', restored: 'Original draft restored', working: 'Enhancing prompt…', done: 'Review before replacing', copied: 'Copied', copyFailed: 'Copy failed', editHint: 'Edit the enhanced prompt', replaced: 'Prompt replaced automatically', contextAttached: ' (with context)', contextUnavailable: ' (no context)', contextHint: ' (tip: enable context in settings)', replaceFailed: 'Could not replace input; copy manually', replaceUnverified: 'Replacement attempted but unverified; check input before pasting.', replaceConflict: 'Input changed; draft preserved. Review or copy manually.', emptyResult: 'The enhanced result is empty. Nothing replaced.', emptyInput: 'Enter text to enhance.', targetMissing: 'The original input is unavailable. Nothing replaced.', cancelled: 'Request cancelled. Original kept.', failed: 'Enhancement failed. Original kept. Retry: ', tooLong: 'Exceeds 10,000 char limit', tokensChanged: 'Protected code, paths, URLs, or identifiers changed. Original kept.', languagePrefaceIssue: 'Model returned meta note. Original kept.', languageMismatchIssue: 'Output language differs from draft. Original kept.', truncated: 'Truncated by token limit; shorten input.', refused: 'Model refused request.', analysisOutput: 'Model returned analysis tags; switch models.' },
   };
 
   function strings(doc) {
@@ -155,26 +155,10 @@
   }
 
   function findComposerFooter(root, editor) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    const selectors = [
-      '.agy-composer-footer',
-      '[data-testid="input-box-bottom-toolbar"]',
-      '.composer-footer',
-      '[data-testid="composer-footer"]',
-      '[data-testid="agent-input-footer"]',
-      '[data-composer-footer]',
-      '[data-testid="agent-input-box-footer"]',
-    ];
-    const footer = selectors.map((selector) => root.querySelector(selector)).find(Boolean) ||
-      Array.from(root.children || []).find((node) => {
-        const className = String(node?.className || '');
-        const testId = String(node?.getAttribute?.('data-testid') || '');
-        return /(?:^|\s)agy-composer-footer(?:\s|$)|(?:^|\s)composer-footer(?:\s|$)/.test(className) ||
-          testId === 'input-box-bottom-toolbar' || testId === 'composer-footer' ||
-          testId === 'agent-input-footer' || testId === 'agent-input-box-footer' || node?.hasAttribute?.('data-composer-footer');
-      }) || null;
-    if (!footer || footer === editor || !isVisibleNode(footer) || footer.closest?.('[hidden], [inert]')) return null;
-    return footer;
+    if (!root?.querySelector) return null;
+    const sels = ['.agy-composer-footer', '[data-testid="input-box-bottom-toolbar"]', '.composer-footer', '[data-testid="composer-footer"]', '[data-testid="agent-input-footer"]', '[data-composer-footer]', '[data-testid="agent-input-box-footer"]'];
+    const footer = sels.map((s) => root.querySelector(s)).find(Boolean) || Array.from(root.children || []).find((n) => /(?:^|\s)(?:agy-)?composer-footer(?:\s|$)/.test(String(n?.className || '')) || ['input-box-bottom-toolbar', 'composer-footer', 'agent-input-footer', 'agent-input-box-footer'].includes(String(n?.getAttribute?.('data-testid') || '')) || n?.hasAttribute?.('data-composer-footer')) || null;
+    return !footer || footer === editor || !isVisibleNode(footer) || footer.closest?.('[hidden],[inert]') ? null : footer;
   }
 
   function readEditor(editor) {
@@ -296,32 +280,26 @@
 
   const CONTEXT_EXCLUDE_SEL = '[data-message-type="reasoning"],[data-testid*="reasoning"],[data-testid*="tool"],[hidden],[inert]';
   const CONTEXT_STREAM_SEL = '[aria-busy="true"],[data-is-streaming="true"],[data-streaming="true"],[data-message-status="in_progress"],[data-status="streaming"]';
+  const trimContext = (s, max = 3000) => s.length <= max ? s : `${s.slice(0, 1100)}\n...\n${s.slice(-(max - 1105))}`;
+  const hasBackRef = (s) => /(?:按刚才|方案[一二三四1-4]|继续(?:修复|排查|实现|处理|改)|这个(?:问题|错误|bug|方案|改动)|\b(?:continue|above|previous|that fix|option\s*[1-4])\b)/i.test(String(s || ''));
 
   function extractContext(view, maxRounds = 1) {
     if (!view) return [];
     const nodes = Array.from(view.querySelectorAll?.('[data-testid="user-message-content"], [data-testid="user-message-bubble"], [data-testid="agent-response"], [data-testid="planner-response-text"]') || []);
-    const raw = [];
+    const rounds = [];
+    let uBuf = [], aLast = '';
+    const flush = () => { if (uBuf.length && aLast) rounds.push({ u: uBuf.join('\n'), a: aLast }); uBuf = []; aLast = ''; };
     for (const node of nodes.slice(-24)) {
       if (node.closest?.(CONTEXT_EXCLUDE_SEL) || node.matches?.(CONTEXT_STREAM_SEL) || node.querySelector?.(CONTEXT_STREAM_SEL)) continue;
-      const text = textOf(node);
-      if (!text) continue;
+      const txt = textOf(node);
+      if (!txt) continue;
       const isUser = Boolean(node.closest?.('[data-testid="user-message"], [data-message-role="user"], [data-role="user"]')) || /user-message/i.test(String(node.getAttribute?.('data-testid') || ''));
-      raw.push({ role: isUser ? 'user' : 'assistant', text: text.slice(0, 3000) });
+      if (isUser) { if (aLast) flush(); uBuf.push(txt); }
+      else if (uBuf.length) aLast = txt;
     }
+    flush();
     const limit = [1, 2, 3, 4].includes(Number(maxRounds)) ? Number(maxRounds) : 1;
-    const paired = [];
-    let total = 0;
-    for (let i = raw.length - 1, rounds = 0; i >= 1 && rounds < limit;) {
-      if (raw[i].role === 'assistant' && raw[i - 1].role === 'user') {
-        const len = raw[i - 1].text.length + raw[i].text.length;
-        if (total + len > 6000) break;
-        total += len;
-        paired.unshift(raw[i - 1], raw[i]);
-        rounds += 1;
-        i -= 2;
-      } else i -= 1;
-    }
-    return paired;
+    return rounds.slice(-limit).flatMap((r) => [{ role: 'user', text: trimContext(r.u) }, { role: 'assistant', text: trimContext(r.a) }]);
   }
 
   function injectStyle(doc) {
@@ -648,7 +626,8 @@
           const replacement = await reqState.replace(enhanced);
           if (replacement.status === 'applied') {
             if (entry) { entry.lastUndo = { original: editorSnapshot, enhanced }; if (entry.restoreBtn) entry.restoreBtn.hidden = false; }
-            msg = labels.replaced;
+            const suffix = config.includeRecentContext ? (result.usedContext ? labels.contextAttached : labels.contextUnavailable) : (hasBackRef(original) ? labels.contextHint : '');
+            msg = labels.replaced + suffix;
           } else if (replacement.reason === 'target-missing') msg = labels.targetMissing;
           else if (replacement.reason === 'target-changed') showPreviewPanel(reqState, labels.replaceConflict);
           else if (replacement.status === 'empty') msg = labels.emptyResult;
