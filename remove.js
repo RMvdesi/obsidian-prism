@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Stop watch/daemon processes and remove Obsidian Prism from every open Antigravity window.
 // Passing --purge-data additionally removes Prism user configs, caches (including usage rollup cache), and telemetry safely.
 const fs = require('fs');
@@ -39,6 +40,7 @@ const PURGE_EXACT_FILES = sharedPurgeDataFiles || [
   'obsidian-prism-sidebar.json.lock',
   'obsidian-prism-wallpaper.json',
   'obsidian-prism-suggester.json',
+  'obsidian-prism-prompt-enhancer.json',
 ];
 
 function parseCliArgs(argv = process.argv.slice(2)) {

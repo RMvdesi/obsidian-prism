@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Beta.4 独立 9 语种扩展词典（Issue #98 自定义字体 + Issue #101 忽略系统减弱动效 + 性能模式）
 // 严格遵循 9 语种规范：zh-CN / zh-TW / en / ja / ko / es / fr / de / tr；非 CJK 语种 0 汉字、0 yue、0 禁用词
 (function (root, factory) {
@@ -291,6 +292,21 @@
       'Affichage du quota',
       'Kontingent-Anzeige',
       'Alt Çubuk Kota Görünümü',
+    ],
+    setPromptEnhancerTitle: [
+      '提示词增强器 (Beta)', '提示詞增強器 (Beta)', 'Prompt Enhancer (Beta)', 'プロンプト強化 (Beta)', '프롬프트 강화 (Beta)',
+      'Mejorador de prompts (Beta)', 'Améliorateur de prompt (Bêta)', 'Prompt-Verbesserer (Beta)', 'İstem Geliştirici (Beta)',
+    ],
+    setPromptEnhancerDesc: [
+      '实验性功能，默认关闭。复用现有 API Profile，仅在主动点击增强按钮时发送提示词与有限会话上下文。',
+      '實驗性功能，預設關閉。重用現有 API Profile，僅在主動點擊增強按鈕時傳送提示詞與有限工作階段上下文。',
+      'Experimental and off by default. Reuses an existing API profile and sends the prompt with limited conversation context only when you click Enhance.',
+      '実験的機能（既定オフ）。既存の API Profile を再利用し、強化ボタンを押したときだけプロンプトと限定された会話文脈を送信します。',
+      '실험 기능이며 기본적으로 꺼져 있습니다. 기존 API 프로필을 재사용하고 강화 버튼을 누를 때만 프롬프트와 제한된 대화 문맥을 보냅니다.',
+      'Experimental y desactivado por defecto. Reutiliza un perfil API existente y solo envía el prompt con contexto limitado al pulsar Mejorar.',
+      'Expérimental et désactivé par défaut. Réutilise un profil API existant et n’envoie le prompt avec un contexte limité qu’au clic sur Améliorer.',
+      'Experimentell und standardmäßig deaktiviert. Verwendet ein vorhandenes API-Profil und sendet Prompt mit begrenztem Gesprächskontext erst nach Klick auf Verbessern.',
+      'Deneysel ve varsayılan olarak kapalıdır. Mevcut API profilini kullanır; istemi ve sınırlı konuşma bağlamını yalnızca Geliştir düğmesine basınca gönderir.',
     ],
     setTelemetryQuotaModeDesc: [
       '控制输入框底部栏配额槽位：紧凑单槽仅显示更吃紧的窗口（5h 或周），悬停或点击即可查看全部详情；双槽模式在宽度充裕时同时显示 5h 与周。',

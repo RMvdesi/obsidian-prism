@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -34,6 +35,7 @@ function runExe(exePath, args, timeoutMs = 20000, customEnv = null) {
 }
 
 import { VALIDATORS, buildInstaller } from '../scripts/build-installer.mjs';
+import { collectNativePluginEntries } from '../scripts/build-common.mjs';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +43,13 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const cdp = require(path.join(ROOT_DIR, 'cdp.js'));
 const cliInstaller = require(path.join(ROOT_DIR, 'tools', 'install-plugin.cjs'));
+
+test('Native installer payload retains upstream license, notices, and citation', () => {
+  const entries = new Map(collectNativePluginEntries().map(({ name, data }) => [name, data]));
+  for (const file of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'CITATION.cff']) {
+    assert.deepEqual(entries.get('native-plugin/' + file), fs.readFileSync(path.join(ROOT_DIR, file)), file);
+  }
+});
 
 function createMockCdpServer(options = {}) {
   const extraTargets = Array.isArray(options.extraTargets) ? options.extraTargets : [];
@@ -2416,7 +2425,7 @@ test('Phase 4A P0: C# CdpClient fixes bundleUnchanged/destroy() and static runti
 });
 
 test(
-  'Windows C# CdpClient 54-key schema runtime parity: defaults, validators, deserialization tolerance & zero silent key drop',
+  'Windows C# CdpClient 55-key schema runtime parity: defaults, validators, deserialization tolerance & zero silent key drop',
   { skip: process.platform !== 'win32' ? 'Windows-only csc runtime verification' : false },
   () => {
     const winDir = process.env.WINDIR || 'C:\\Windows';
@@ -2426,7 +2435,7 @@ test(
     ].find((p) => fs.existsSync(p));
     assert.ok(csc, 'Expected .NET Framework csc.exe on Windows');
 
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-cs-schema54-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-prism-cs-schema55-'));
     try {
       const cfgDir = path.join(tmpDir, 'plugin');
       fs.mkdirSync(cfgDir, { recursive: true });

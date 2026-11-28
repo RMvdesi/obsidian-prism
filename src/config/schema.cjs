@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // 声明式配置单一真相源（L0 契约层，零副作用、零外部依赖）
 // 自动派生 DEFAULT_CONFIG、VALIDATORS、validateConfigEntry 与 reconcileConfigAliases。
 'use strict';
@@ -11,6 +12,7 @@ const SIDEBAR_BINDING = '__agPrismSidebarCall';
 const INLINE_DIFF_BINDING = '__agPrismInlineDiffCall';
 const WALLPAPER_BINDING = '__agPrismWallpaperCall';
 const SUGGESTER_BINDING = '__agPrismSuggestCall';
+const PROMPT_ENHANCER_BINDING = '__agPrismPromptEnhancerCall';
 
 const CANONICAL_LANG_VALUES = Object.freeze(['auto', 'zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'tr']);
 const ON_OFF_VALUES = Object.freeze(['on', 'off']);
@@ -100,6 +102,7 @@ const CONFIG_SCHEMA = Object.freeze({
   omniModule: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'on', coerceBoolToOnOff: true }),
   linkTarget: Object.freeze({ type: 'enum', values: Object.freeze(['builtin', 'external']), default: 'builtin' }),
   sidebarStudio: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
+  promptEnhancer: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
   hostLocalization: Object.freeze({ type: 'enum', values: AUTO_ON_OFF_VALUES, default: 'auto' }),
   autoUpdate: Object.freeze({ type: 'enum', values: ON_OFF_VALUES, default: 'off', coerceBoolToOnOff: true }),
   updateChannel: Object.freeze({ type: 'enum', values: Object.freeze(['stable', 'beta']), default: 'stable' }),
@@ -282,6 +285,7 @@ module.exports = {
   INLINE_DIFF_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   CONFIG_SCHEMA,
   DEFAULT_CONFIG,
   VALIDATORS,

@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 // Phase 2A 契约测试：CONFIG_SCHEMA 单一真相源、CHANNEL_REGISTRY 微内核、cdp.js Facade 兼容与三端打包完整性
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ const cdp = require(path.join(ROOT, 'cdp.js'));
 const LEGACY_CDP_EXPORTS = [
   'STYLE_ID', 'LEGACY_STYLE_ID', 'PLUGIN_VERSION',
   'SETTING_BINDING', 'LEGACY_SETTING_BINDING', 'OMNI_BINDING', 'SIDEBAR_BINDING',
-  'INLINE_DIFF_BINDING', 'WALLPAPER_BINDING', 'SUGGESTER_BINDING',
+  'INLINE_DIFF_BINDING', 'WALLPAPER_BINDING', 'SUGGESTER_BINDING', 'PROMPT_ENHANCER_BINDING',
   'PORT_FILE', 'PID_FILE', 'CONFIG_FILE', 'DEFAULT_CONFIG', 'VALIDATORS',
   'validateConfigEntry', 'reconcileConfigAliases',
   'isEligibleTarget', 'isSwarmSidecarUrl', 'redactSensitiveUrl',
@@ -174,7 +175,7 @@ test('CONFIG_SCHEMA is the single source of truth for DEFAULT_CONFIG, VALIDATORS
   assert.equal(wbSpec.cfgSig({ sidebarRestyle: false, sidebarNavFold: false, scrollBottomMotion: 'off', motionLevel: 'minimal' }), 'off');
 });
 
-test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with valid metadata and gating', () => {
+test('CHANNEL_REGISTRY contract covers all 17 delayed/on-demand channels with valid metadata and gating', () => {
   const expectedIds = [
     'omni',
     'sidebar',
@@ -192,6 +193,7 @@ test('CHANNEL_REGISTRY contract covers all 16 delayed/on-demand channels with va
     'effortSlider',
     'workbenchEnhancer',
     'contextMenu',
+    'promptEnhancer',
   ];
 
   const descriptors = cdp.getChannelDescriptors();
@@ -301,7 +303,7 @@ test('PURGE_DATA_FILES aligns 100% with src/platform/install-manifest.cjs and cd
   const undefs = LEGACY_CDP_EXPORTS.filter((k) => cdp[k] === undefined);
   assert.deepEqual(missing, [], `Missing legacy cdp.js exports: ${missing.join(', ')}`);
   assert.deepEqual(undefs, [], `Undefined legacy cdp.js exports: ${undefs.join(', ')}`);
-  assert.equal(LEGACY_CDP_EXPORTS.length, 151);
+  assert.equal(LEGACY_CDP_EXPORTS.length, 152);
 
   // Re-requiring cdp.js yields an isolated stateful instance
   const cdpPath = require.resolve(path.join(ROOT, 'cdp.js'));
@@ -513,10 +515,10 @@ test('Phase 4D: settings-panel schema aligns with schema.cjs, cdp.js prunes 8 zo
   assert.equal(rootAttrs.get('data-theme'), 'dark', 'REMOVE_EXPRESSION must NEVER delete host documentElement[data-theme]');
 });
 
-test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 54 keys in src/config/schema.cjs', () => {
+test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 55 keys in src/config/schema.cjs', () => {
   const schema = cdp.CONFIG_SCHEMA;
   const allSchemaKeys = Object.keys(schema).sort();
-  assert.equal(allSchemaKeys.length, 54, 'CONFIG_SCHEMA expected 54 keys');
+  assert.equal(allSchemaKeys.length, 55, 'CONFIG_SCHEMA expected 55 keys');
 
   const canonicalLangs = [...schema.language.values];
   const autoOnOff = ['auto', 'on', 'off'];
@@ -530,7 +532,7 @@ test('Native CdpClient.cs & CdpClient.swift align 100% bidirectionally with all 
   };
 
   const verifyNativeSchema = (label, src, patterns) => {
-    // 1) All 54 schema keys must be explicitly present in native source
+    // 1) All 55 schema keys must be explicitly present in native source
     for (const k of allSchemaKeys) {
       assert.ok(src.includes(`"${k}"`), `${label} missing explicit schema key "${k}"`);
     }

@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: cover downstream Prompt Enhancer integration.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -78,7 +79,7 @@ test('Law 4: Channel 1 (auto + 9 locales) < 390,000 B, pulse-vial-bridge.js < 31
 });
 
 test('Law 4+: Declarative CHANNEL_REGISTRY multi-channel payloads stay within per-channel budgets', () => {
-  assert.ok(Array.isArray(cdp.CHANNEL_REGISTRY) && cdp.CHANNEL_REGISTRY.length >= 16, 'CHANNEL_REGISTRY must cover all 16 delayed/on-demand channels');
+  assert.ok(Array.isArray(cdp.CHANNEL_REGISTRY) && cdp.CHANNEL_REGISTRY.length >= 17, 'CHANNEL_REGISTRY must cover all 17 delayed/on-demand channels');
   const seenIds = new Set();
   for (const ch of cdp.CHANNEL_REGISTRY) {
     assert.equal(typeof ch.id, 'string');
@@ -105,6 +106,7 @@ test('Law 4+: Declarative CHANNEL_REGISTRY multi-channel payloads stay within pe
     telemetryModule: 'auto',
     effortSliderModule: 'on',
     contextMenu: true,
+    promptEnhancer: 'on',
     sidebarNavFold: true,
     scrollBottomMotion: 'on',
     sidebarRestyle: true,
@@ -134,7 +136,7 @@ test('Law 4+: Declarative CHANNEL_REGISTRY multi-channel payloads stay within pe
     contextMenu: false,
   };
   const offReport = cdp.getChannelBudgetReport(offloadedDisabledCfg, { noDiskCache: true });
-  for (const id of ['telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu']) {
+  for (const id of ['telemetry', 'effortSlider', 'workbenchEnhancer', 'contextMenu', 'promptEnhancer']) {
     const ch = cdp.findChannel(id);
     assert.ok(ch, `Offloaded channel ${id} must be registered`);
     assert.equal(ch.shouldEnable(offloadedDisabledCfg), false, `${id} shouldEnable must be false when gated off`);

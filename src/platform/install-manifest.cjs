@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism 统一安装清单（schemaVersion: 2, layoutVersion: 2）与 4 阶段原子事务升级引擎（纯 CJS，兼容 Node 22.0+）
 // 零外部依赖（仅 Node.js >= 22 内置模块），全仓受保护用户路径与清理白名单单一真相源。
 'use strict';
@@ -35,6 +36,7 @@ const PURGE_DATA_FILES = Object.freeze([
   'obsidian-prism-sidebar.json.lock',
   'obsidian-prism-wallpaper.json',
   'obsidian-prism-suggester.json',
+  'obsidian-prism-prompt-enhancer.json',
 ]);
 const DEFAULT_OBSOLETE_PATHS = Object.freeze([
   // 历史已退役模块（10 项：原 Swarm 独立包与旧版壁纸 Studio/HUD/程序化脚本，仓内已清零）

@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // .bundle-cache.json v2 格式常量、完整性校验器与只读冻结辅助（纯无状态逻辑）
 'use strict';
 
@@ -17,7 +18,7 @@ const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 const CODE_HASH_RE = /^[0-9a-z]{1,16}$/;
 const BUNDLE_CACHE_ROOT_MEM_TTL_MS = 500;
 
-// 通道附属分片槽位（如 Ch8 轻桩），不污染 CHANNEL_CACHE_NAMES 唯一 16 通道清单
+// 通道附属分片槽位（如 Ch8 轻桩），不污染 CHANNEL_CACHE_NAMES 唯一 17 通道清单
 const CHANNEL_SUB_SLOTS = Object.freeze({
   periodicPickerStub: Object.freeze({
     parentChannel: 'periodicPicker',

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism 守护进程兼容入口壳（薄 Facade：保持 plugin.json 启动路径、CLI 行为与全部 named exports 100% 兼容）
 import module from 'node:module';
 import os from 'node:os';
@@ -24,6 +25,7 @@ import {
   SIDEBAR_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   OmniServer,
   OMNI_BINDING,
   resolveStorageGuardStatePath,
@@ -84,6 +86,7 @@ export {
   SIDEBAR_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   OmniServer,
   OMNI_BINDING,
   resolveStorageGuardStatePath,

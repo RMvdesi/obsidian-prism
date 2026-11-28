@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism 守护进程顶层薄编排器（真组件化组合：零原型 Mixin，L3 Assembly）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,6 +16,7 @@ import {
   SIDEBAR_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   resolveStorageGuardStatePath,
   resolveUsageCachePath,
   resolvePortFileCandidates,
@@ -101,6 +103,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
       thoughtService = null,
       wallpaperService = null,
       suggesterService = null,
+      promptEnhancerService = null,
       omniExecHooks = null,
       sidebarService = null,
       relaunchHooks = null,
@@ -202,6 +205,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
       thoughtService,
       wallpaperService,
       suggesterService,
+      promptEnhancerService,
       sessionRegistry: this.sessionRegistry,
       getCdp,
       setCdp: (nextCdp) => { this._cdp = nextCdp; },
@@ -395,6 +399,7 @@ export class PrismDaemon extends PrismDaemonCompatBase {
   ensureThoughtService() { return this._s().channelOrchestrator.services.ensureThoughtService(); }
   ensureWallpaperService() { return this._s().channelOrchestrator.services.ensureWallpaperService(); }
   ensureSuggesterService() { return this._s().channelOrchestrator.services.ensureSuggesterService(); }
+  ensurePromptEnhancerService() { return this._s().channelOrchestrator.services.ensurePromptEnhancerService(); }
 
   _isSwarmI18nEnabled(cfg) { return this._s().channelOrchestrator.swarmManager.isSwarmI18nEnabled(cfg); }
   _isSwarmTargetInfo(info) { return this._s().channelOrchestrator.swarmManager.isSwarmTargetInfo(info); }
@@ -581,6 +586,7 @@ export {
   SIDEBAR_BINDING,
   WALLPAPER_BINDING,
   SUGGESTER_BINDING,
+  PROMPT_ENHANCER_BINDING,
   OmniServer,
   OMNI_BINDING,
   resolveStorageGuardStatePath,

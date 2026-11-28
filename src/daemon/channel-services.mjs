@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Obsidian Prism 通道专属本地后端服务懒启停管理器（Omni / Sidebar / Thought / Wallpaper / Suggester，无原型 Mixin）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +19,7 @@ export class ChannelServiceManager {
     thoughtService = null,
     wallpaperService = null,
     suggesterService = null,
+    promptEnhancerService = null,
   } = {}) {
     this._rootDir = rootDir;
     this._getCdp = getCdp;
@@ -39,6 +41,9 @@ export class ChannelServiceManager {
     this._lazySuggesterService = suggesterService;
     this._suggesterServicePromise = null;
     this._suggesterStopped = false;
+    this._lazyPromptEnhancerService = promptEnhancerService;
+    this._promptEnhancerServicePromise = null;
+    this._promptEnhancerStopped = false;
   }
 
   setRootDir(dir) {
@@ -49,12 +54,14 @@ export class ChannelServiceManager {
     this._sidebarStopped = false;
     this._wallpaperStopped = false;
     this._suggesterStopped = false;
+    this._promptEnhancerStopped = false;
   }
 
   markStopping() {
     this._sidebarStopped = true;
     this._wallpaperStopped = true;
     this._suggesterStopped = true;
+    this._promptEnhancerStopped = true;
   }
 
   getSidebarServerMeta() {
@@ -130,6 +137,37 @@ export class ChannelServiceManager {
     } finally {
       this._suggesterServicePromise = null;
     }
+  }
+
+  async ensurePromptEnhancerService() {
+    const enabled = () => !this._promptEnhancerStopped && this._getCdp?.()?.readConfig?.()?.promptEnhancer === 'on';
+    if (!enabled()) return null;
+    if (this._lazyPromptEnhancerService) return this._lazyPromptEnhancerService;
+    if (this._promptEnhancerServicePromise) return this._promptEnhancerServicePromise;
+    this._promptEnhancerServicePromise = (async () => {
+      const svcPath = path.join(this._rootDir, 'vendor', 'prompt-enhancer', 'prompt-enhancer-service.mjs');
+      if (!fs.existsSync(svcPath)) return null;
+      const mod = await import(pathToFileURL(svcPath).href);
+      const factory = mod?.createPromptEnhancerService || mod?.default;
+      if (!enabled() || typeof factory !== 'function') return null;
+      const svc = factory({
+        getTranslatorService: () => this.ensureThoughtService(),
+        getEnabled: enabled,
+      });
+      this._lazyPromptEnhancerService = svc;
+      return svc;
+    })();
+    try {
+      return await this._promptEnhancerServicePromise;
+    } finally {
+      this._promptEnhancerServicePromise = null;
+    }
+  }
+
+  async releasePromptEnhancerService() {
+    const service = this._lazyPromptEnhancerService;
+    this._lazyPromptEnhancerService = null;
+    try { await service?.dispose?.(); } catch {}
   }
 
   async ensureSidebarService() {
@@ -234,5 +272,7 @@ export class ChannelServiceManager {
         if (typeof sg.dispose === 'function') await sg.dispose();
       } catch {}
     }
+    await this._promptEnhancerServicePromise?.catch(() => null);
+    await this.releasePromptEnhancerService();
   }
 }

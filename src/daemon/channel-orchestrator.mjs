@@ -1,4 +1,5 @@
-// Obsidian Prism 通道编排子系统（ChannelOrchestrator：唯一消费 CHANNEL_REGISTRY，封装 16 通道编译态、盘缓存、配置广播、自愈与后端服务）
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
+// Obsidian Prism 通道编排子系统（ChannelOrchestrator：唯一消费 CHANNEL_REGISTRY，封装 17 通道编译态、盘缓存、配置广播、自愈与后端服务）
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -80,6 +81,7 @@ export class ChannelOrchestrator {
       thoughtService: deps.thoughtService || null,
       wallpaperService: deps.wallpaperService || null,
       suggesterService: deps.suggesterService || null,
+      promptEnhancerService: deps.promptEnhancerService || null,
       onOmniServerStarted: (srv) => {
         const cdp = this.getCdp();
         if (typeof cdp?.buildOmniClientExpression === 'function') {
@@ -712,4 +714,5 @@ export class ChannelOrchestrator {
   ensureThoughtService() { return this.services.ensureThoughtService(); }
   ensureWallpaperService() { return this.services.ensureWallpaperService(); }
   ensureSuggesterService() { return this.services.ensureSuggesterService(); }
+  ensurePromptEnhancerService() { return this.services.ensurePromptEnhancerService(); }
 }

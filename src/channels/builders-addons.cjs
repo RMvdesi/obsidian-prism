@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // 扩展功能独立通道构建器：通道 5（思维链转译）、通道 9（设置面板与全量词典）、通道 10（双桌宠）、通道 11（Prompt Suggester）
 'use strict';
 
@@ -209,13 +210,15 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     const stageGlPath = path.join(rootDir, 'vendor', 'clawd-mascot', 'octopath-stage-webgl.js');
     const i18nExtPath = path.join(rootDir, 'src', 'runtime', 'i18n-ext-beta4.js');
     const setExtPath = path.join(rootDir, 'src', 'runtime', 'settings-ext-beta4.js');
+    const peSetExtPath = path.join(rootDir, 'src', 'runtime', 'prompt-enhancer-settings-ext.js');
     const hasLocTr = fs.existsSync(locTrPath);
     const hasBrand = fs.existsSync(brandPath);
     const hasAtlas = fs.existsSync(atlasPath);
     const hasStageGl = fs.existsSync(stageGlPath);
     const hasI18nExt = fs.existsSync(i18nExtPath);
     const hasSetExt = fs.existsSync(setExtPath);
-    const sig = `${hasLocTr ? getFileSig(locTrPath) : '0'}|${getFileSig(locPath)}|${hasBrand ? getFileSig(brandPath) : '0'}|${hasAtlas ? getFileSig(atlasPath) : '0'}|${hasStageGl ? getFileSig(stageGlPath) : '0'}|${getFileSig(setPath)}|${hasI18nExt ? getFileSig(i18nExtPath) : '0'}|${hasSetExt ? getFileSig(setExtPath) : '0'}`;
+    const hasPeSetExt = fs.existsSync(peSetExtPath);
+    const sig = `${hasLocTr ? getFileSig(locTrPath) : '0'}|${getFileSig(locPath)}|${hasBrand ? getFileSig(brandPath) : '0'}|${hasAtlas ? getFileSig(atlasPath) : '0'}|${hasStageGl ? getFileSig(stageGlPath) : '0'}|${getFileSig(setPath)}|${hasI18nExt ? getFileSig(i18nExtPath) : '0'}|${hasSetExt ? getFileSig(setExtPath) : '0'}|${hasPeSetExt ? getFileSig(peSetExtPath) : '0'}`;
     const cachePath = resolveBundleCachePathOption(opts);
     const curMem = bundleCache.getChannelMemCache('settings');
     if (!cachePath && curMem && curMem.sig === sig && curMem.codeHash) {
@@ -230,6 +233,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     if (hasI18nExt) fileEntries.push({ rel: 'src/runtime/i18n-ext-beta4.js', fullPath: i18nExtPath });
     fileEntries.push({ rel: 'settings-panel.js', fullPath: setPath });
     if (hasSetExt) fileEntries.push({ rel: 'src/runtime/settings-ext-beta4.js', fullPath: setExtPath });
+    if (hasPeSetExt) fileEntries.push({ rel: 'src/runtime/prompt-enhancer-settings-ext.js', fullPath: peSetExtPath });
     return bundleCache.resolveChannelAssetsWithDiskCache({
       channelName: 'settings',
       sig,
@@ -251,6 +255,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
         if (hasI18nExt) parts.push(minifySingleSource(fs.readFileSync(i18nExtPath, 'utf8'), { allowMemberProps: false }));
         parts.push(minifySingleSource(fs.readFileSync(setPath, 'utf8'), { allowMemberProps: false }));
         if (hasSetExt) parts.push(minifySingleSource(fs.readFileSync(setExtPath, 'utf8'), { allowMemberProps: false }));
+        if (hasPeSetExt) parts.push(minifySingleSource(fs.readFileSync(peSetExtPath, 'utf8'), { allowMemberProps: false }));
         const minRuntime = parts.join(';\n');
         const codeHash = computeHash(minRuntime);
         return { minRuntime, codeHash };
@@ -299,6 +304,7 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
       if (staleSec) {
         try { staleSec.querySelector?.('[data-testid="prism-wallpaper-slot"]')?.__agPrismWpUiHandle?.destroy?.(); } catch {}
         try { staleSec.querySelector?.('[data-testid="prism-suggester-slot"]')?.__agPrismSgUiHandle?.destroy?.(); } catch {}
+        try { staleSec.querySelector?.('[data-testid="prism-prompt-enhancer-slot"]')?.__agPrismPeUiHandle?.destroy?.(); } catch {}
         try { staleSec.__agMascotStageApi?.dispose?.(); } catch {}
         try { staleSec.__prismThoughtUiHandle = null; } catch {}
         staleSec.remove?.();
@@ -619,6 +625,72 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
   })()`;
   }
 
+  function readCompiledPromptEnhancerAssets(opts = null) {
+    const files = [
+      'vendor/prompt-enhancer/prompt-enhancer-i18n.js',
+      'vendor/prompt-enhancer/prompt-enhancer-client.js',
+      'vendor/prompt-enhancer/prompt-enhancer-settings-ui.js',
+    ].map((rel) => ({ rel, fullPath: path.join(rootDir, ...rel.split('/')) }));
+    if (files.some(({ fullPath }) => !fs.existsSync(fullPath))) return { minRuntime: '', codeHash: '' };
+    const sig = files.map(({ fullPath }) => getFileSig(fullPath)).join('|');
+    const cachePath = resolveBundleCachePathOption(opts);
+    const cached = bundleCache.getChannelMemCache('promptEnhancer');
+    if (!cachePath && cached?.sig === sig && cached.codeHash) return cached;
+    return bundleCache.resolveChannelAssetsWithDiskCache({
+      channelName: 'promptEnhancer', sig, fileEntries: files, opts,
+      compileFn: () => {
+        const minRuntime = files.map(({ fullPath }) => minifySingleSource(fs.readFileSync(fullPath, 'utf8'), { allowMemberProps: false })).join(';\n');
+        return { minRuntime, codeHash: computeHash(minRuntime) };
+      },
+      toCacheEntry: (assets, sourceHash) => ({ sourceHash, codeHash: assets.codeHash, minRuntime: assets.minRuntime, payloadSha256: sha256Text(`${assets.codeHash}\0${assets.minRuntime}`), updatedAt: Date.now() }),
+      fromCacheEntry: (entry) => ({ minRuntime: entry.minRuntime, codeHash: entry.codeHash }),
+    });
+  }
+
+  // Channel 17 is compiled and injected only while the schema feature flag is on.
+  function buildPromptEnhancerExpression(config = null, opts = null) {
+    const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
+    if (cfg.promptEnhancer !== 'on') return '';
+    const { minRuntime, codeHash } = readCompiledPromptEnhancerAssets(opts);
+    if (!minRuntime || !codeHash) return '';
+    const hashJson = serializeJsonForEval(codeHash);
+    return `(() => {
+  try {
+${CHANNEL_MAIN_FRAME_HOST_GUARD}
+    const targetHash = ${hashJson};
+    const cleanup = () => {
+      try { (window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer)?.destroy?.(); } catch {}
+      try { (window.__agPrismPromptEnhancerBridge || globalThis.__agPrismPromptEnhancerBridge)?.dispose?.(); } catch {}
+      for (const key of ['__agPrismPromptEnhancer','__agPrismPromptEnhancerBridge','__agPrismPromptEnhancerResolve','__agPrismPromptEnhancerSettingsUi','__prismMountPromptEnhancerUi','__agPrismPromptEnhancerFactory','__agPrismPromptEnhancerI18n']) { try { delete window[key]; } catch {} try { delete globalThis[key]; } catch {} }
+      try { document.getElementById?.('ag-prism-prompt-enhancer-css')?.remove?.(); } catch {}
+      try { document.querySelectorAll?.('[data-testid="prism-prompt-enhancer-trigger"],[data-testid="prism-prompt-enhancer-host"],[data-testid="prism-prompt-enhancer-panel"]')?.forEach?.((n) => n.remove()); } catch {}
+      try { const slot = document.querySelector?.('[data-testid="prism-prompt-enhancer-slot"]'); if (slot) { slot.__agPrismPeUiHandle?.destroy?.(); slot.__agPrismPeUiHandle = null; while (slot.firstChild) slot.removeChild(slot.firstChild); } } catch {}
+    };
+    const mountSettings = () => {
+      try {
+        const sec = document.getElementById?.('ag-cs-settings-sec') || document.getElementById?.('ag-prism-settings-sec');
+        sec?.__prismMountPromptEnhancerUi?.();
+      } catch {}
+    };
+    const existing = window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer;
+    if (existing && !existing.getDebugState?.()?.destroyed && existing.__prismCodeHash === targetHash) { try { mountSettings(); } catch {} return { ok: true, reused: true, codeHash: targetHash }; }
+    cleanup();
+    ;${minRuntime};
+    let mounted = window.__agPrismPromptEnhancer || globalThis.__agPrismPromptEnhancer;
+    const factory = window.__agPrismPromptEnhancerFactory || globalThis.__agPrismPromptEnhancerFactory;
+    if (!mounted && typeof factory === 'function') { try { mounted = factory({ window, document }); } catch {} }
+    if (mounted && typeof mounted === 'object') { mounted.__prismCodeHash = targetHash; try { window.__agPrismPromptEnhancer = mounted; } catch {} try { globalThis.__agPrismPromptEnhancer = mounted; } catch {} }
+    mountSettings();
+    return { ok: true, status: 'mounted', codeHash: targetHash };
+  } catch (err) { return { ok: false, status: 'error', channel: 'promptEnhancer', error: String(err && err.message || err).slice(0, 300), stack: String(err && err.stack || err).slice(0, 600) }; }
+  })()`;
+  }
+
+  function shouldEnablePromptEnhancer(config = null) {
+    const cfg = config && typeof config === 'object' ? reconcileConfigAliases(config) : readConfig();
+    return cfg?.promptEnhancer === 'on';
+  }
+
   return {
     shouldEnableThought,
     buildThoughtExpression,
@@ -626,6 +698,8 @@ ${CHANNEL_MAIN_FRAME_HOST_GUARD}
     shouldEnableMascot,
     buildMascotChannelExpression,
     buildSuggesterExpression,
+    buildPromptEnhancerExpression,
+    shouldEnablePromptEnhancer,
   };
 }
 

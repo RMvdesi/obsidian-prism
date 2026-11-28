@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 "use strict";
 
 /**
@@ -5,7 +6,7 @@
  *
  * 职责：
  * 1. 将 obsidian-prism 完整同步部署至 ~/.gemini/config/plugins/obsidian-prism
- *    （含 plugin.json、assets/logo.svg、THIRD_PARTY_NOTICES.md、sidecars/daemon/sidecar.json、全部运行时与 vendor/）；
+ *    （含 plugin.json、LICENSE、NOTICE、CITATION.cff、THIRD_PARTY_NOTICES.md、sidecars/daemon/sidecar.json、全部运行时与 vendor/）；
  * 2. 自动停用并清理旧临时插件目录 ~/.gemini/config/plugins/antigravity-prism（若存在用户配置则平滑迁入新目录）；
  * 3. 写入 repo-meta.json 链接本地 Git 源码目录，支持设置面板「检查 / 同步 Git 更新」；
  * 4. 通过纯 Node detached + windowsHide 脱离派生确保后台守护实例已启动并接管当前 CDP 窗口！
@@ -32,6 +33,7 @@ const {
 } = require(path.join(ROOT_DIR, "cdp.js"));
 const im = require(path.join(ROOT_DIR, "src", "platform", "install-manifest.cjs"));
 const repoSync = require(path.join(ROOT_DIR, "src", "platform", "repo-sync.cjs"));
+const { CHANNEL_STATIC_SPECS } = require("../src/channels/registry.cjs");
 
 function resolveDefaultPluginVersion(sourceDir = ROOT_DIR) {
   try {
@@ -1783,6 +1785,7 @@ async function installPlugin(opts = {}) {
   const selfCheck = {
     hasThoughtTranslator: statusSnap.hasThoughtTranslator,
     hasWallpaperChannel: statusSnap.hasWallpaperChannel,
+    hasPromptEnhancer: statusSnap.hasPromptEnhancer,
     bareAntigravityRunning: statusSnap.bareAntigravityRunning,
     watcherInstalled: statusSnap.watcherInstalled,
     thoughtTranslateMode: statusSnap.thoughtTranslateMode,
@@ -2113,6 +2116,13 @@ function getPluginInstallStatus(opts = {}) {
 
   const hasThoughtTranslator = fs.existsSync(thoughtServicePath);
   const hasWallpaperChannel = fs.existsSync(wallpaperServicePath);
+  const enhancerChannel = CHANNEL_STATIC_SPECS.find(({ id }) => id === "promptEnhancer");
+  const hasPromptEnhancer = Boolean(enhancerChannel && [
+    ...enhancerChannel.files,
+    "vendor/prompt-enhancer/prompt-enhancer-service.mjs",
+    "src/daemon/prompt-enhancer-rpc.mjs",
+    "src/runtime/prompt-enhancer-settings-ext.js",
+  ].every((file) => fs.statSync(path.join(targetDir, file), { throwIfNoEntry: false })?.isFile()));
   const bareAntigravityRunning = detectBareAntigravityRunningSync(opts);
   const watcherInstalled = isStandaloneWatcherInstalled(opts);
   const thoughtTranslateMode = readThoughtTranslateMode(targetDir);
@@ -2126,6 +2136,7 @@ function getPluginInstallStatus(opts = {}) {
     hasSidebarClient: fs.existsSync(sidebarClientPath),
     hasThoughtTranslator,
     hasWallpaperChannel,
+    hasPromptEnhancer,
     bareAntigravityRunning,
     watcherInstalled,
     thoughtTranslateMode,
@@ -2149,6 +2160,7 @@ function formatInstallSelfCheckSummary(res) {
     "",
     "================ Obsidian Prism 安装自检摘要 / Self-Check Summary ================",
     `[中文] 插件目录: ${res?.targetDir || getDefaultPluginTargetDir()}`,
+    `[中文] 提示词增强器文件: ${sc.hasPromptEnhancer ? "已安装" : "缺失"}`,
     `[中文] 后台守护: ${daemonAlive ? "运行中 (PID " + (res?.daemon?.pid || "?") + ")" : "未启动"} | 已连接窗口: ${attachedCount} | 思考翻译模块: ${sc.hasThoughtTranslator ? "已就绪" : "缺失"} | 壁纸通道(Ch7): ${sc.hasWallpaperChannel ? "已就绪" : "缺失"} | 独立Watcher: ${sc.watcherInstalled ? "已安装" : "未安装(原生Sidecar/源码模式)"}`,
     `[中文] 快捷方式 --remote-debugging-port=0: 本次新补齐 ${patchedCount} 个，已就绪 ${alreadySetCount} 个${shadowCount > 0 ? `（含 ${shadowCount} 个 XDG 影子覆写，零 root 权限，卸载自动撤回）` : ""}${skippedCount > 0 ? `，权限不足跳过 ${skippedCount} 个（系统目录需管理员权限或安全拦截）` : ""}。`,
     ...(res?.registrySynced === false
@@ -2174,6 +2186,7 @@ function formatInstallSelfCheckSummary(res) {
       ? "[中文] 重要提醒: 检测到当前 Antigravity 为无调试端口裸启实例（常见于客户端在线更新后），请关闭并通过已修补的桌面/应用菜单快捷方式重新打开 Antigravity 一次即可自动激活！"
       : "[中文] 当前未检测到裸启冲突；随时可运行 `node tools/install-plugin.cjs --status` 复核插件状态。",
     `[EN] Plugin Dir: ${res?.targetDir || getDefaultPluginTargetDir()}`,
+    `[EN] Prompt Enhancer files: ${sc.hasPromptEnhancer ? "installed" : "missing"}`,
     `[EN] Daemon: ${daemonAlive ? "alive (PID " + (res?.daemon?.pid || "?") + ")" : "stopped"} | Attached Windows: ${attachedCount} | ThoughtTranslator: ${sc.hasThoughtTranslator ? "ready" : "missing"} | Wallpaper(Ch7): ${sc.hasWallpaperChannel ? "ready" : "missing"} | Watcher: ${sc.watcherInstalled ? "installed" : "not-installed"}`,
     ...(shadowCount > 0
       ? [`[EN] XDG Shadow Override: created ${shadowCount} user-level override(s) in ~/.local/share/applications (rootless, fully reverted on uninstall).`]

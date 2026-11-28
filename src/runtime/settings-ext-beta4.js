@@ -1,3 +1,4 @@
+// Modified by Yaniuan on 2026-11-28: integrate downstream Prompt Enhancer support.
 // Beta.4 设置面板独立扩展模块（Issue #98 自定义正文/代码字体 + Issue #101 忽略系统减弱动效）
 // 严格遵循 0 HTML-sink 写入规范，按需挂载于 Ch9 设置面板，不挤占老文件棘轮
 (function (root, factory) {
@@ -550,6 +551,7 @@
     const extUi = getExtStrings(lang, rawCtx && rawCtx.ui);
     const ctx = Object.assign({}, rawCtx || {}, { doc, win, lang, ui: extUi });
     const runMut = typeof ctx.runGuardedMut === 'function' ? ctx.runGuardedMut : (fn) => fn();
+    try { G.__agPrismPromptEnhancerSettingsExt?.sync?.(rootEl, ctx); } catch {}
 
     const perfMode = normPerfMode(readLiveCfg(ctx, 'performanceMode', 'balanced'));
     const ignoreRm = Boolean(readLiveCfg(ctx, 'ignoreReducedMotion', false));
@@ -744,6 +746,7 @@
     try { doc.getElementById?.(STYLE_ID)?.remove?.(); } catch {}
     try { doc.getElementById?.(DATALIST_ID)?.remove?.(); } catch {}
     try { doc.querySelectorAll?.('[data-ag-cs-ext-owned="1"], [data-ag-cs-ext-custom]')?.forEach?.((n) => n.remove?.()); } catch {}
+    try { G.__agPrismPromptEnhancerSettingsExt?.dispose?.(doc); } catch {}
   }
 
   return {
