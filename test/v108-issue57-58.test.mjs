@@ -335,8 +335,8 @@ test('Issue #58 Bugs 3 & 5: focus outline suppression on conversation-view/autos
   assert.ok(subtleIdx > 0, 'subtle motion block must exist');
   const subtleSlice = css.slice(subtleIdx, css.indexOf('\n}\n', subtleIdx));
   assert.ok(
-    subtleSlice.includes('& :is(button,[role="button"]:not(.ag-v2-mascot-actor):not([data-no-press-spring="1"])):is(:hover,:active){transform:none !important;}'),
-    'subtle motion mode must exclude .ag-v2-mascot-actor from transform:none !important on :hover/:active'
+    subtleSlice.includes('& :is(button:not(.agy-scroll-bottom),[role="button"]:not(.ag-v2-mascot-actor):not([data-no-press-spring="1"])):is(:hover,:active){transform:none!important}'),
+    'subtle motion mode must exclude .agy-scroll-bottom and .ag-v2-mascot-actor from transform:none!important on :hover/:active'
   );
   assert.ok(
     subtleSlice.includes('[role="button"]:not(.ag-v2-mascot-actor):not([data-no-press-spring="1"])'),
